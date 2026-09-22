@@ -21,6 +21,9 @@ permissions:
   - action: execute
     resource: "*"
     effect: deny
+  - action: serena_*
+    resource: "*"
+    effect: deny
   - action: read
     resource: "*"
     effect: allow

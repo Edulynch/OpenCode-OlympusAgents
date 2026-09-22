@@ -9,6 +9,9 @@ permissions:
   - action: shell
     resource: "*"
     effect: deny
+  - action: serena_*
+    resource: "*"
+    effect: deny
   - action: edit
     resource: "*"
     effect: deny

@@ -1,7 +1,7 @@
 ---
 description: Primary OpenCode V2 orchestrator for direct answers, research, architecture, controlled writing, testing, review, barriers, and bounded parallel execution.
 mode: primary
-model: "openai/gpt-6-astra#high"
+model: "openai/gpt-6-astra#medium"
 permissions:
   - action: external_directory
     resource: "*"

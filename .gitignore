@@ -1,0 +1,29 @@
+# Local upstream reference; never commit it.
+.reference/
+
+# Secrets and local environment files.
+.env
+.env.*
+!.env.example
+
+# Runtime output and temporary files.
+*.log
+tmp/
+temp/
+
+# Common dependency and build directories.
+node_modules/
+dist/
+build/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Editor and operating-system files.
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

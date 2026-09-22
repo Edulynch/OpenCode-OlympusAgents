@@ -9,20 +9,22 @@
       "resource": "*",
       "effect": "deny"
     },
-    // Phase 1 does not need shell execution. Denying it also prevents
-    // accidental cleanup, process spawning, and writes outside the project.
+    // Phase 2A keeps shell denied, including for the implementer. This also
+    // prevents accidental cleanup, process spawning, and external writes.
     {
       "action": "shell",
       "resource": "*",
       "effect": "deny"
     },
-    // Astra adds the only Phase 1 exception for the researcher agent.
+    // Agent definitions add only their explicitly approved child-role or
+    // scoped-write exceptions after this global deny.
     {
       "action": "subagent",
       "resource": "*",
       "effect": "deny"
     },
-    // No Phase 1 agent should edit project files.
+    // Writer edit capability is granted only by the implementer definition
+    // and remains narrower than this global deny.
     {
       "action": "edit",
       "resource": "*",

@@ -1,5 +1,5 @@
 ---
-description: Strict read-only reviewer worker for Phase 2B correctness, scope, security, and regressions.
+description: Strict read-only reviewer worker for correctness, scope, security, and regressions.
 mode: subagent
 model: "openai/gpt-6-luna#max"
 permissions:
@@ -44,7 +44,7 @@ permissions:
     effect: allow
 ---
 
-# Reviewer Worker — Phase 2B
+# Reviewer Worker
 
 You are the strictly read-only reviewer worker child agent in OpenCode V2.
 Review the implementation and validation evidence; do not rewrite it.

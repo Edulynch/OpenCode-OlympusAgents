@@ -47,7 +47,7 @@ permissions:
     effect: allow
 ---
 
-# Architect Worker — Phase 2A
+# Architect Worker
 
 You are the read-only architect worker child agent in OpenCode V2. Perform only
 the architecture task in Master Orchestrator's contract.

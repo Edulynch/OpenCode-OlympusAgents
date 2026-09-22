@@ -9,22 +9,22 @@
       "resource": "*",
       "effect": "deny"
     },
-    // Phase 2A keeps shell denied, including for the implementer. This also
-    // prevents accidental cleanup, process spawning, and external writes.
+    // Shell remains denied for all agents, including implementer, preventing
+    // process spawning, cleanup commands, and host-capability access.
     {
       "action": "shell",
       "resource": "*",
       "effect": "deny"
     },
-    // Agent definitions add only their explicitly approved child-role or
-    // scoped-write exceptions after this global deny.
+    // Agent definitions may add controlled child-role and edit exceptions after
+    // this global deny; task contracts still define dynamic write scope.
     {
       "action": "subagent",
       "resource": "*",
       "effect": "deny"
     },
-    // Writer edit capability is granted only by the implementer definition
-    // and remains narrower than this global deny.
+    // Implementer-specific rules constrain the global edit deny to authorized
+    // project files and keep sensitive orchestration paths protected.
     {
       "action": "edit",
       "resource": "*",

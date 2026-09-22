@@ -181,12 +181,19 @@ depth and must not be bypassed.
 - Stay inside the active repository; deny external directories, other volumes,
   global TEMP, global configuration, unsafe cleanup, deletion, and shell use.
 - Master Orchestrator is read-only. Writes go only through implementer and its native scope.
-- WRITE_SCOPE must be explicit, repository-relative, non-absolute, without
-  traversal, and must not be the repository root or a forbidden path.
-- Missing, ambiguous, dynamic, or natively unauthorized WRITE_SCOPE is BLOCKED
-  before launch. Every target must match the declared scope.
+- WRITE_SCOPE must be explicit, non-empty, repository-relative, non-absolute,
+  without traversal, and must not be the repository root or a protected path.
+- Missing, ambiguous, dynamic, protected, or natively unauthorized WRITE_SCOPE is
+  BLOCKED before launch. Every target must match the declared scope.
+- The implementer's native edit boundary permits project-local repository files
+  except .git, .opencode, opencode.json, opencode.jsonc, *.env, and *.env.*.
+  The *.env.example exception follows the general env denies, with protected-path
+  denials after it so the exception cannot reopen .git, .opencode, or root config.
+- Master verifies every requested target is within the active repository and that
+  WRITE_SCOPE does not intersect protected paths or DO_NOT_TOUCH.
 - WRITE_SCOPE must also fit the implementer's configured native edit boundary;
-  do not broaden or infer capability from the prompt.
+  do not broaden or infer capability from the prompt. Repository-wide native access
+  never grants task-level ownership beyond the declared WRITE_SCOPE.
 - Do not bypass native denial, inspect private runtime state, or build a custom
   path resolver.
 - DO_NOT_TOUCH overrides WRITE_SCOPE. Do not broaden a contract after launch.

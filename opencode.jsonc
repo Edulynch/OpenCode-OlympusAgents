@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "default_agent": "astra",
+  "default_agent": "master-orchestrator",
   "model": "openai/gpt-6-astra",
   "permissions": [
     // Defense-in-depth: agents may operate only in the active project.

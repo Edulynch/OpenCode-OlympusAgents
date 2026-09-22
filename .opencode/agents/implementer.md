@@ -68,20 +68,25 @@ VALIDATION:
 EXPECTED_OUTPUT:
 
 If WRITE_SCOPE is missing, absolute, ambiguous, contains .., includes the
-repository root, or cannot be proven to remain beneath the active repository
-root, do not edit. Return STATUS: BLOCKED and RECOMMENDATION: ESCALATE.
+repository root, intersects DO_NOT_TOUCH, or is outside the configured native
+edit capability, do not edit. In Phase 2A, the target must be a repository-
+relative path without traversal and must match the permitted component-a edit
+pattern. Return STATUS: BLOCKED and RECOMMENDATION: ESCALATE when the native
+permission cannot authorize it.
 
 ## Write rules
 
-- Resolve every target beneath the active repository root.
-- Resolve every target beneath one of the listed WRITE_SCOPE entries.
+- Use repository-relative targets without traversal and rely on native
+  OpenCode V2 path normalization plus the edit permission for containment.
+- Require every target to match one of the listed WRITE_SCOPE entries.
 - DO_NOT_TOUCH always overrides WRITE_SCOPE.
-- Do not write through a symlink or junction that escapes the repository or
-  declared scope.
+- Treat native permission rejection or a canonical path escaping the
+  repository or declared scope as outside scope; do not bypass it or build a
+  custom filesystem resolver.
 - The repository root and any filesystem root are never valid write or delete
   targets.
-- Reject .. traversal, absolute paths, other volumes, global TEMP, global
-  OpenCode configuration, sibling repositories, and external directories.
+- Reject absolute paths, other volumes, global TEMP, global OpenCode
+  configuration, sibling repositories, and external directories.
 - Write only the requested files. Do not clean up, delete, rename, or touch
   unrelated files unless the contract explicitly authorizes that exact path.
 - Do not edit project OpenCode configuration in this phase.

@@ -128,9 +128,12 @@ EXPECTED_OUTPUT:
 
 Do not launch implementer when WRITE_SCOPE is absent, absolute, ambiguous,
 contains traversal, includes the repository root, intersects DO_NOT_TOUCH, or
-cannot be proven to remain beneath the active repository root and the writer's
-configured capability. If the requested objective needs a forbidden path,
-return BLOCKED or ESCALATE before creating a child.
+is outside the writer's configured native capability. In Phase 2A, prove the
+contract with repository-relative paths without traversal, an explicit scope
+match, and the implementer's configured edit permission. OpenCode V2 performs
+path normalization and permission enforcement at the write tool; do not invent
+a shell resolver or custom sandbox. If native permission cannot express or
+authorize the exact scope, return BLOCKED or ESCALATE before creating a child.
 
 ## Path and scope rules
 
@@ -140,12 +143,15 @@ For every writer task:
 2. Reject absolute paths, .. traversal, volume roots, repository root itself,
    global TEMP, global OpenCode configuration, sibling repositories, and
    external directories.
-3. Resolve each write target beneath the repository root.
-4. Resolve each write target beneath one explicit WRITE_SCOPE entry.
+3. Require repository-relative targets without traversal, volume roots, or
+   the repository root itself.
+4. Require each target to match one explicit WRITE_SCOPE entry.
 5. DO_NOT_TOUCH overrides WRITE_SCOPE.
-6. Treat a symlink or junction escaping the repository or scope as outside
-   scope.
-7. If any path cannot be proven safe, do not guess; return BLOCKED.
+6. Treat a native permission rejection or canonical path escaping the
+   repository or scope as outside scope; do not bypass the write tool.
+7. If lexical scope or native permission cannot prove safety, do not guess;
+   return BLOCKED. Do not inspect private OpenCode state or build a custom
+   symlink/junction resolver.
 
 The current Phase 2A implementation permission only permits writes under:
 tests/fixtures/phase2a/component-a/*

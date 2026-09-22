@@ -1,7 +1,7 @@
 ---
 description: Read-only tester worker for Phase 2B acceptance and validation evidence.
 mode: subagent
-model: "openai/gpt-5.6-luna#max"
+model: "openai/gpt-6-luna#max"
 permissions:
   - action: external_directory
     resource: "*"

@@ -1,7 +1,7 @@
 ---
 description: Strict read-only reviewer worker for Phase 2B correctness, scope, security, and regressions.
 mode: subagent
-model: "openai/gpt-5.6-luna#max"
+model: "openai/gpt-6-luna#max"
 permissions:
   - action: external_directory
     resource: "*"

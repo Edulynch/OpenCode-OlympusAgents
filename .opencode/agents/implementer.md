@@ -1,7 +1,7 @@
 ---
 description: Controlled implementer worker for explicitly scoped Phase 2A fixture changes.
 mode: subagent
-model: "openai/gpt-5.6-luna#max"
+model: "openai/gpt-6-luna#max"
 permissions:
   - action: external_directory
     resource: "*"

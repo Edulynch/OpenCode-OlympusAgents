@@ -1,0 +1,32 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "astra",
+  "model": "openai/gpt-6-astra",
+  "permissions": [
+    // Defense-in-depth: agents may operate only in the active project.
+    {
+      "action": "external_directory",
+      "resource": "*",
+      "effect": "deny"
+    },
+    // Phase 1 does not need shell execution. Denying it also prevents
+    // accidental cleanup, process spawning, and writes outside the project.
+    {
+      "action": "shell",
+      "resource": "*",
+      "effect": "deny"
+    },
+    // Astra adds the only Phase 1 exception for the researcher agent.
+    {
+      "action": "subagent",
+      "resource": "*",
+      "effect": "deny"
+    },
+    // No Phase 1 agent should edit project files.
+    {
+      "action": "edit",
+      "resource": "*",
+      "effect": "deny"
+    }
+  ]
+}

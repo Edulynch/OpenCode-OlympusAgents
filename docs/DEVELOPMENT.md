@@ -8,7 +8,7 @@ OpenCode is the runtime; Olympus is the orchestration and decision layer. Kael c
 
 ## Local/bootstrap installation
 
-From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The v0.1.1 public installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`:
+From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The v0.1.2 public installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project' -DryRun
@@ -19,7 +19,9 @@ pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project'
 
 ## Managed installation and recovery
 
-The target's `.opencode/orchestrator-install.json` records installed source commit, managed paths and SHA-256 hashes, plus project detection metadata. Managed assets include the root `opencode.jsonc`, Olympus agents, `/maintain` command, and Activity HUD plugin under `.opencode/`. On reinstall, unchanged managed assets yield `NO_CHANGES` (after effective-agent validation). Missing or modified owned files yield `MANAGED_FILE_DRIFT` rather than a silent overwrite; a destination that already exists without ownership metadata yields `INSTALL_CONFLICT`. Unrelated project files are not installer-owned, although target Git cleanliness is checked before installation.
+The target's `.opencode/orchestrator-install.json` records installed source commit, managed paths and SHA-256 hashes, plus project detection metadata. Managed assets include the root `opencode.jsonc`, Olympus agents, `/maintain` command, and Activity HUD plugin under `.opencode/`. On reinstall, unchanged managed assets yield `NO_CHANGES` (after effective-agent validation). Missing or modified owned files yield `MANAGED_FILE_DRIFT` rather than a silent overwrite; a destination that already exists without ownership metadata yields `INSTALL_CONFLICT` (including protected foreign OpenCode configuration).
+
+Olympus does **not** require a globally clean target Git worktree. Unrelated modified, staged, untracked and tool-generated files (including unrelated content under `.opencode/`) are allowed and preserved. Safety is based on explicit managed destinations and ownership hashes, Git-root validation, and path containment; unsafe targets and unmanaged destination collisions still block. The installer never stashes, resets, cleans, stages, or normalizes user work.
 
 If drift occurs, inspect the reported path and manifest, back up any intentional edits, then restore the affected owned file from a known-good installation/revision before retrying. Do not delete the manifest or force an overwrite to bypass ownership checks. If the manifest itself is damaged or you cannot establish the installed baseline, stop and investigate before reinstalling; preserve unrelated work.
 
@@ -34,9 +36,10 @@ pwsh -NoProfile -File ./tests/adaptive-concurrency/qualify.ps1
 pwsh -NoProfile -File ./tests/autonomy/qualify.ps1
 pwsh -NoProfile -File ./tests/release/qualify.ps1
 pwsh -NoProfile -File ./tests/release/installer-compatibility.ps1
+pwsh -NoProfile -File ./tests/release/dirty-worktree.ps1
 ```
 
-Phase 4C covers bootstrap security and static Maintenance Plane checks; there is no separate Maintenance qualifier. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Adaptive Concurrency / FAST checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release and installer compatibility harnesses use **local source**, not the remote tag, and do not test the interactive UI. The compatibility harness launches the installer via both Windows PowerShell 5.1 (when present) and PowerShell 7 into separate disposable Git projects, and tests missing `pwsh` with a process-local PATH. Some harnesses retain disposable fixtures; check their output. The adaptive-concurrency harness's `DOC` check verifies that the README describes NORMAL as the default using only useful parallelism, FAST as explicitly requested with up to four agents, and FAST as preserving checks and task dependencies.
+Phase 4C covers bootstrap security and static Maintenance Plane checks; there is no separate Maintenance qualifier. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Adaptive Concurrency / FAST checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release, dirty-worktree, and installer compatibility harnesses use **local source**, not the remote tag, and do not test the interactive UI. The dirty-worktree harness checks unrelated bytes, Git status, index diffs, managed conflict/drift, reinstall and a local-source managed update. The compatibility harness launches the installer via both Windows PowerShell 5.1 (when present) and PowerShell 7 into separate disposable Git projects, and tests missing `pwsh` with a process-local PATH. Some harnesses retain disposable fixtures; check their output. The adaptive-concurrency harness's `DOC` check verifies that the README describes NORMAL as the default using only useful parallelism, FAST as explicitly requested with up to four agents, and FAST as preserving checks and task dependencies.
 
 ## Trusted-project execution
 
@@ -52,4 +55,4 @@ Kael → Maintenance: **DENIED** (not an automatic escalation path). User → `/
 
 ## Release process
 
-Run qualification → review release readiness (including remaining static-vs-interactive gaps and documentation) → tag the reviewed commit → validate the installer against the **tagged** source/URL in a clean Git project → publish the release. `tests/release/qualify.ps1` is a local-source check, not a substitute for tagged installer validation. Do not move an existing release tag or change released content as part of documentation maintenance.
+Run qualification → review release readiness (including remaining static-vs-interactive gaps and documentation) → tag the reviewed commit → validate the installer against the **tagged** source/URL in disposable Git projects → publish the release. `tests/release/qualify.ps1` is a local-source check, not a substitute for tagged installer validation. Do not move an existing release tag or change released content as part of documentation maintenance.

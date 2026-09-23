@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+$')]
-    [string]$Version = 'v0.1.1',
+    [string]$Version = 'v0.1.2',
     [string]$Target = (Get-Location).Path,
     [switch]$DryRun,
     # Qualification-only: use a local source checkout before the release tag exists.
@@ -13,7 +13,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $owned = $null
 try {
-    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'PLATFORM_UNQUALIFIED: v0.1.1 installer is Windows-qualified only.' }
+    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'PLATFORM_UNQUALIFIED: v0.1.2 installer is Windows-qualified only.' }
     $pwsh = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue
     if (-not $pwsh) { throw 'OLYMPUS_REQUIRES_POWERSHELL_7: PowerShell 7 (pwsh) is required. Install PowerShell 7 and run this command again.' }
     if ($SourceRoot) {

@@ -1,3 +1,11 @@
+# 0.1.2
+
+Installer/bootstrap hotfix:
+
+- Installation and reinstall no longer require an otherwise clean project worktree.
+- Preserve unrelated modified, staged, untracked and tool-generated project files without touching their index state.
+- Keep managed destination conflict, ownership, unsafe-target and managed-file drift protections enforced.
+
 # 0.1.1
 
 Windows installer hotfix:

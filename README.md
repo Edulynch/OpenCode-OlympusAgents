@@ -127,6 +127,23 @@ it may relay a completed result but cannot automatically expand the task.
 
 ---
 
+## ⚡ Live Activity
+
+In the OpenCode TUI, Olympus shows native running child sessions just above the
+composer in the primary Kael session:
+
+~~~text
+⚡ Olympus · 2 active
+● Orin   Designing boundaries
+● Kovan   Implementing feature
+~~~
+
+The display is read-only and disappears when no direct children are running.
+It uses OpenCode session state, not a custom scheduler; there is no need to enter
+child sessions just to check activity. Hidden Maintenance appears while running.
+
+---
+
 ## 🤖 Meet the Team
 
 | Role | Current qualified model | What it owns |

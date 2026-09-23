@@ -17,7 +17,9 @@ $ManagedPaths = @(
     '.opencode/agents/orin.md', '.opencode/agents/kovan.md',
     '.opencode/agents/nox.md', '.opencode/agents/vera.md',
     '.opencode/agents/sorin.md', '.opencode/agents/maintenance.md',
-    '.opencode/commands/maintain.md', '.opencode/orchestrator-install.json'
+    '.opencode/commands/maintain.md',
+    '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx',
+    '.opencode/orchestrator-install.json'
 )
 $SafeGit = @(
     'git status', 'git status --short', 'git status --porcelain', 'git status --porcelain=v2',
@@ -572,7 +574,9 @@ try {
         $scenarioDir = New-ScenarioHome 'maintainer-upgrade'
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'legacy fixture' + [Environment]::NewLine })
         [void](Assert-Installed $repo 'READY')
-        $newPaths = @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md')
+        # Reconstruct the pre-Maintainer Plane managed set (before the HUD too).
+        $newPaths = @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md',
+            '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
         $manifestPath = Join-Path $repo '.opencode/orchestrator-install.json'
         $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -Depth 100
         $manifest.managed_files = @($manifest.managed_files | Where-Object { $_.path -notin $newPaths })

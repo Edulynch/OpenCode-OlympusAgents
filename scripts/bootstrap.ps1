@@ -21,9 +21,12 @@ $Managed = @(
     ".opencode/agents/vera.md",
     ".opencode/agents/sorin.md",
     ".opencode/agents/maintenance.md",
-    ".opencode/commands/maintain.md"
+    ".opencode/commands/maintain.md",
+    ".opencode/plugins/olympus-activity/activity.ts",
+    ".opencode/plugins/olympus-activity/tui.tsx"
 )
-$NewManaged = @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md')
+$NewManaged = @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md',
+    '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
 $SafeGit = @(
     "git status",
     "git status --short",
@@ -199,12 +202,15 @@ function Assert-Managed([string]$Repo, $Manifest) {
     $expected = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $Managed | ForEach-Object { [void]$expected.Add($_) }
     $entries = @($Manifest.managed_files)
-    $legacy = $entries.Count -eq ($Managed.Count - $NewManaged.Count)
-    if ($entries.Count -ne $Managed.Count -and -not $legacy) { Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Managed file set changed." }
+    $previous = @('.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
+    $legacy = @(if ($entries.Count -eq ($Managed.Count - $NewManaged.Count)) { $NewManaged }
+        elseif ($entries.Count -eq ($Managed.Count - $previous.Count)) { $previous }
+        elseif ($entries.Count -eq $Managed.Count) { @() }
+        else { Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Managed file set changed." })
     $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($e in $entries) {
         $p = Rel ([string]$e.path)
-        if (-not $expected.Contains($p) -or ($legacy -and $p -in $NewManaged) -or -not $seen.Add($p)) {
+        if (-not $expected.Contains($p) -or ($p -in $legacy) -or -not $seen.Add($p)) {
             Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Unexpected or duplicate managed path: $p"
         }
         $full = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
@@ -213,8 +219,8 @@ function Assert-Managed([string]$Repo, $Manifest) {
             Fail "MANAGED_FILE_DRIFT" "Managed file modified: $p"
         }
     }
-    if ($legacy) {
-        foreach ($p in $NewManaged) {
+    if ($legacy.Count -gt 0) {
+        foreach ($p in $legacy) {
             if (Test-Path -LiteralPath (Join-Path $Repo ($p -replace '/', [IO.Path]::DirectorySeparatorChar))) {
                 Fail "INSTALL_CONFLICT" "New destination exists without ownership metadata: $p"
             }

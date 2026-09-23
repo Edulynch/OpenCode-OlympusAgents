@@ -537,12 +537,16 @@ try {
         Assert-Condition ($lifecycle -match '(?i)final response|overall request' -and $lifecycle -match '(?i)finished|complete' -and $lifecycle -match '(?is)nothing.*running') 'Kael completion visibility policy missing.' 'BOOTSTRAP_BUG'
         Assert-Condition ($lifecycle -match '(?i)orchestration work|required children' -and $lifecycle -match '(?i)still running|in progress' -and $lifecycle -match '(?i)next step|follow-up') 'Kael remaining-work visibility policy missing.' 'BOOTSTRAP_BUG'
         Assert-Condition ($lifecycle -match '(?i)internal coordination' -and $lifecycle -match '(?i)raw orchestration' -and $lifecycle -match '(?i)relay-only') 'Kael human-facing, non-raw relay policy missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition ($handoff -match '(?i)already finished' -and $handoff -match '(?is)present.*directly' -and $handoff -match '(?i)never merely prepend' -and $handoff -match '(?i)remains running') 'Kael natural Maintenance handoff policy missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($handoff -match '(?i)already finished' -and $handoff -match '(?is)present.*directly' -and $handoff -match '(?i)never\s+merely prepend' -and $handoff -match '(?i)remains running') 'Kael natural Maintenance handoff policy missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($lifecycle -match '(?i)lead the final response with' -and $lifecycle -match '(?i)scan-friendly' -and $lifecycle -match '(?i)passed checks' -and $lifecycle -match '(?i)intentionally\s+unperformed actions' -and $lifecycle -match '(?i)one concrete "Next:"') 'Kael compact, outcome-first engineering summary policy missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($lifecycle -match '(?is)optional smoke.*COMPLETE\s+and idle' -and $lifecycle -match '(?i)required validation is pending' -and $lifecycle -match '(?i)if it failed or a blocker exists' -and $lifecycle -match '(?i)required workers remain active') 'Kael finished-versus-unverified or active-work policy missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($lifecycle -match '(?i)surrounding user-facing conversation' -and $lifecycle -match '(?i)pasted technical specifications' -and $lifecycle -match '(?i)current direct request' -and $lifecycle -match '(?i)do not translate commands') 'Kael conversational-language policy missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($handoff -match '(?i)normal user-facing style' -and $handoff -match '(?i)reproduce its prose as a relay' -and $handoff -match '(?i)idle, not in progress') 'Kael Maintenance result consumption policy missing.' 'BOOTSTRAP_BUG'
         $command = [IO.File]::ReadAllText((Join-Path $repo '.opencode/commands/maintain.md'))
         Assert-Condition ($command -match '(?m)^agent: maintenance\s*$' -and $command -match '(?m)^subagent: true\s*$' -and $command.Contains('$ARGUMENTS') -and $command -match '(?m)^description:') 'M4: installed project command frontmatter or argument forwarding missing.' 'BOOTSTRAP_BUG'
         $manifest = [IO.File]::ReadAllText((Join-Path $repo '.opencode/orchestrator-install.json')) | ConvertFrom-Json -Depth 100
         Assert-Condition (@($manifest.managed_files).Count -eq ($ManagedPaths.Count - 1)) 'Managed asset count mismatch.' 'BOOTSTRAP_BUG'
-        foreach ($path in @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md')) {
+        foreach ($path in @('.opencode/agents/kael.md', '.opencode/agents/maintenance.md', '.opencode/commands/maintain.md')) {
             $entry = @($manifest.managed_files | Where-Object path -eq $path)
             Assert-Condition ($entry.Count -eq 1 -and $entry[0].sha256 -eq (Get-Hash (Join-Path $repo $path))) ('Manifest does not own/hash ' + $path) 'BOOTSTRAP_BUG'
         }
@@ -551,7 +555,7 @@ try {
     }
 
     Run-Scenario 'M7-MANAGED_DRIFT' {
-        foreach ($path in @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md')) {
+        foreach ($path in @('.opencode/agents/kael.md', '.opencode/agents/maintenance.md', '.opencode/commands/maintain.md')) {
             $scenarioDir = New-ScenarioHome ('maintainer-drift-' + [IO.Path]::GetFileNameWithoutExtension($path))
             $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'drift fixture' + [Environment]::NewLine })
             [void](Assert-Installed $repo 'READY')

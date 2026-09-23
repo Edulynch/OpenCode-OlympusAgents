@@ -531,6 +531,13 @@ try {
         $children = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object resource | Select-Object -Unique)
         $normal = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'sorin')
         Assert-Condition (Has-Rule $kael 'subagent' '*' 'deny' -and $children.Count -eq $normal.Count -and @($children | Where-Object { $_ -notin $normal }).Count -eq 0 -and @($normal | Where-Object { $children -notcontains $_ }).Count -eq 0) 'M3/M6: Kael delegation boundary changed.' 'BOOTSTRAP_BUG'
+        $kaelPrompt = [IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/kael.md'))
+        $lifecycle = [regex]::Match($kaelPrompt, '(?s)## User-facing lifecycle communication\s*(.*?)(?=\r?\n## |\z)').Groups[1].Value
+        $handoff = [regex]::Match($kaelPrompt, '(?s)## Explicit maintenance result handoff\s*(.*?)(?=\r?\n## |\z)').Groups[1].Value
+        Assert-Condition ($lifecycle -match '(?i)final response|overall request' -and $lifecycle -match '(?i)finished|complete' -and $lifecycle -match '(?is)nothing.*running') 'Kael completion visibility policy missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($lifecycle -match '(?i)orchestration work|required children' -and $lifecycle -match '(?i)still running|in progress' -and $lifecycle -match '(?i)next step|follow-up') 'Kael remaining-work visibility policy missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($lifecycle -match '(?i)internal coordination' -and $lifecycle -match '(?i)raw orchestration' -and $lifecycle -match '(?i)relay-only') 'Kael human-facing, non-raw relay policy missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($handoff -match '(?i)already finished' -and $handoff -match '(?is)present.*directly' -and $handoff -match '(?i)never merely prepend' -and $handoff -match '(?i)remains running') 'Kael natural Maintenance handoff policy missing.' 'BOOTSTRAP_BUG'
         $command = [IO.File]::ReadAllText((Join-Path $repo '.opencode/commands/maintain.md'))
         Assert-Condition ($command -match '(?m)^agent: maintenance\s*$' -and $command -match '(?m)^subagent: true\s*$' -and $command.Contains('$ARGUMENTS') -and $command -match '(?m)^description:') 'M4: installed project command frontmatter or argument forwarding missing.' 'BOOTSTRAP_BUG'
         $manifest = [IO.File]::ReadAllText((Join-Path $repo '.opencode/orchestrator-install.json')) | ConvertFrom-Json -Depth 100

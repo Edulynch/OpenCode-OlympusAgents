@@ -11,7 +11,7 @@ function Check([string]$id, [bool]$valid) {
     Write-Output "$id PASS"
 }
 function Install([string]$target) {
-    $output = (& pwsh -NoProfile -File $installer -Version v0.1.1 -Target $target -SourceRoot $source 2>&1 | Out-String)
+    $output = (& pwsh -NoProfile -File $installer -Version v0.1.2 -Target $target -SourceRoot $source 2>&1 | Out-String)
     [pscustomobject]@{ Text=$output; Code=$LASTEXITCODE }
 }
 try {
@@ -25,7 +25,7 @@ try {
     Check 'R0_GIT_FIXTURE' ($LASTEXITCODE -eq 0)
 
     $first = Install $target
-    Check 'R1_FRESH_INSTALL' ($first.Code -eq 0 -and $first.Text -match '(?m)^READY\s*$' -and $first.Text -match 'OLYMPUS_INSTALL: v0.1.1 READY_OR_NO_CHANGES')
+    Check 'R1_FRESH_INSTALL' ($first.Code -eq 0 -and $first.Text -match '(?m)^READY\s*$' -and $first.Text -match 'OLYMPUS_INSTALL: v0.1.2 READY_OR_NO_CHANGES')
     $paths = @('opencode.jsonc', '.opencode/orchestrator-install.json', '.opencode/commands/maintain.md',
         '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
     $paths += @('kael','veyra','orin','kovan','nox','vera','sorin','maintenance' | ForEach-Object { ".opencode/agents/$_.md" })

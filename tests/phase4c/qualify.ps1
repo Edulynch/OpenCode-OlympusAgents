@@ -358,11 +358,13 @@ try {
     Run-Scenario 'P4C-8' {
         $scenarioDir = New-ScenarioHome 'p4c-08'
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'clean fixture' + [Environment]::NewLine })
-        [IO.File]::AppendAllText((Join-Path $repo 'README.md'), 'uncommitted change' + [Environment]::NewLine, $Utf8)
+        $userFile = Join-Path $repo 'README.md'
+        [IO.File]::AppendAllText($userFile, 'uncommitted change' + [Environment]::NewLine, $Utf8)
+        $before = Get-Hash $userFile
         $result = Invoke-Bootstrap $repo
-        Assert-BootstrapError $result 'TARGET_WORKTREE_DIRTY'
-        Assert-NoInstallFiles $repo
-        Assert-Condition ([IO.File]::ReadAllText((Join-Path $repo 'README.md')).Contains('uncommitted change')) 'Dirty target change was altered.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($result.ExitCode -eq 0 -and $result.Text -match '(?m)^READY\s*$') ('Dirty target install failed: ' + $result.Text) 'BOOTSTRAP_BUG'
+        Assert-Condition ((Get-Hash $userFile) -eq $before) 'Unrelated modified file was altered.' 'BOOTSTRAP_BUG'
+        Assert-Condition ((Invoke-Git $repo @('status','--porcelain=v1','--','README.md')) -eq 'M README.md') 'Unrelated Git modification was normalized.' 'BOOTSTRAP_BUG'
     }
 
     Run-Scenario 'P4C-9' {

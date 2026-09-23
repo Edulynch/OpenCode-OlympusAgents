@@ -40,10 +40,81 @@ function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
 function Rel([string]$Path) { ($Path -replace "\\", "/").TrimStart([char[]]@('/')) }
 function Has-Cmd([string]$Name) { $null -ne (Get-Command $Name -ErrorAction SilentlyContinue) }
 
+$ReparseTagCache = @{}
+
+function Normalize-Path([string]$Path) {
+    $full = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetPathRoot($full)
+    if (-not [string]::Equals($full, $root, [StringComparison]::OrdinalIgnoreCase)) {
+        $full = $full.TrimEnd([char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar))
+    }
+    return $full
+}
+
+function Get-ReparseTag([string]$Path) {
+    $full = Normalize-Path $Path
+    if ($ReparseTagCache.ContainsKey($full)) { return [uint32]$ReparseTagCache[$full] }
+    $fsutil = Get-Command fsutil.exe -ErrorAction SilentlyContinue
+    if (-not $fsutil) { throw ('REPARSE_PATH_UNVERIFIABLE: fsutil.exe is unavailable for ' + $full) }
+    $output = & $fsutil.Source reparsepoint query $full 2>&1
+    $exitCode = $LASTEXITCODE
+    $match = [regex]::Match(($output | Out-String), '(?i)0x([0-9a-f]{8})')
+    if ($exitCode -ne 0 -or -not $match.Success) {
+        throw ('REPARSE_PATH_UNVERIFIABLE: cannot read the reparse tag for ' + $full)
+    }
+    $tag = [Convert]::ToUInt32($match.Groups[1].Value, 16)
+    $ReparseTagCache[$full] = $tag
+    return $tag
+}
+
+function Resolve-PhysicalPath([string]$Path) {
+    $full = Normalize-Path $Path
+    $volumeRoot = [IO.Path]::GetPathRoot($full)
+    $parts = $full.Substring($volumeRoot.Length).Split(
+        [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar),
+        [StringSplitOptions]::RemoveEmptyEntries)
+    $current = $volumeRoot
+    for ($i = 0; $i -lt $parts.Count; $i++) {
+        $next = Join-Path $current $parts[$i]
+        $entry = Get-Item -LiteralPath $next -Force -ErrorAction SilentlyContinue
+        if ($null -eq $entry) {
+            $remaining = @()
+            for ($j = $i; $j -lt $parts.Count; $j++) { $remaining += $parts[$j] }
+            $current = Join-Path $current ($remaining -join [IO.Path]::DirectorySeparatorChar)
+            break
+        }
+        if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            $tag = Get-ReparseTag $next
+            if (($tag -band [uint32]0x20000000) -ne 0) {
+                try { $resolved = $entry.ResolveLinkTarget($true) }
+                catch { throw ('REPARSE_PATH_UNVERIFIABLE: cannot resolve ' + $next + ': ' + $_.Exception.Message) }
+                if ($null -eq $resolved) { throw ('REPARSE_PATH_UNVERIFIABLE: no redirect target for ' + $next) }
+                $current = Normalize-Path $resolved.FullName
+            } else {
+                # Cloud Files and other non-name-surrogate reparse tags annotate files;
+                # they do not redirect path traversal.
+                $current = Normalize-Path $entry.FullName
+            }
+        } else {
+            $current = Normalize-Path $entry.FullName
+        }
+    }
+    return Normalize-Path $current
+}
+
+function Path-Is-Within([string]$Candidate, [string]$Base, [switch]$AllowEqual) {
+    $candidatePath = Resolve-PhysicalPath $Candidate
+    $basePath = Resolve-PhysicalPath $Base
+    if ([string]::Equals($candidatePath, $basePath, [StringComparison]::OrdinalIgnoreCase)) { return [bool]$AllowEqual }
+    $prefix = if ($basePath.EndsWith([IO.Path]::DirectorySeparatorChar)) { $basePath } else { $basePath + [IO.Path]::DirectorySeparatorChar }
+    return $candidatePath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
+}
+
 function Canonical-Dir([string]$Path) {
-    $item = Get-Item -LiteralPath (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path -Force
+    $resolved = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
+    $item = Get-Item -LiteralPath $resolved -Force
     if (-not $item.PSIsContainer) { Fail "TARGET_NOT_DIRECTORY" $Path }
-    return [IO.Path]::GetFullPath($item.FullName).TrimEnd([char[]]@('\','/'))
+    return Resolve-PhysicalPath $item.FullName
 }
 
 function Sha-Bytes([byte[]]$Bytes) {
@@ -68,7 +139,7 @@ function Assert-Target([string]$Raw) {
         Fail "UNSAFE_TARGET" "Filesystem root is not allowed."
     }
     $homes = @($HOME, [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)) |
-        Where-Object { $_ } | ForEach-Object { [IO.Path]::GetFullPath($_).TrimEnd([char[]]@('\','/')) }
+        Where-Object { $_ } | ForEach-Object { Resolve-PhysicalPath $_ }
     if ($homes | Where-Object { [string]::Equals($_, $target, [System.StringComparison]::OrdinalIgnoreCase) }) {
         Fail "UNSAFE_TARGET" "User home/profile is not allowed."
     }
@@ -80,12 +151,22 @@ function Assert-Target([string]$Raw) {
     }
     $oc = Join-Path $target ".opencode"
     if (Test-Path -LiteralPath $oc) {
-        $item = Get-Item -LiteralPath $oc -Force
-        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
-            Fail "UNSAFE_TARGET_PATH" ".opencode is a reparse point."
+        $ocItem = Get-Item -LiteralPath $oc -Force
+        if (-not $ocItem.PSIsContainer) { Fail "UNSAFE_TARGET_PATH" ".opencode is not a directory." }
+        if (-not (Path-Is-Within $oc $target -AllowEqual)) {
+            Fail "UNSAFE_TARGET_PATH" ".opencode resolves outside the target repository."
         }
     }
     return $target
+}
+
+function Assert-Install-Destinations([string]$Repo) {
+    foreach ($p in @($Managed) + @($ManifestRel)) {
+        $path = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
+        if (-not (Path-Is-Within $path $Repo)) {
+            Fail "UNSAFE_TARGET_PATH" "Install destination escapes the target repository: $p"
+        }
+    }
 }
 
 function Dirty-Paths([string]$Repo) {
@@ -379,15 +460,6 @@ function Report([string]$Repo, $Detection, $Plan, [string]$Status, [string]$Vers
 }
 
 function Validate-Install([string]$Repo) {
-    Push-Location $Repo
-    try {
-        & opencode debug config *> $null
-        if ($LASTEXITCODE -ne 0) { Fail "OPENCODE_VALIDATION_FAILED" "debug config failed." }
-        $json = (& opencode debug agents 2>$null | Out-String)
-        if ($LASTEXITCODE -ne 0) { Fail "OPENCODE_VALIDATION_FAILED" "debug agents failed." }
-    } finally { Pop-Location }
-    try { $agents = $json | ConvertFrom-Json -Depth 100 }
-    catch { Fail "OPENCODE_VALIDATION_FAILED" "debug agents output is not JSON." }
     $expected = @{
         "master-orchestrator"=@("gpt-6-sol","high","primary")
         "Sorin"=@("gpt-6-sol","xhigh","subagent")
@@ -397,20 +469,46 @@ function Validate-Install([string]$Repo) {
         "tester"=@("gpt-6-luna","max","subagent")
         "reviewer"=@("gpt-6-luna","max","subagent")
     }
-    foreach ($name in $expected.Keys) {
-        $a = @($agents | Where-Object id -eq $name)
-        if ($a.Count -ne 1 -or $a[0].model.id -ne $expected[$name][0] -or
-            $a[0].model.variant -ne $expected[$name][1] -or $a[0].mode -ne $expected[$name][2]) {
-            Fail "OPENCODE_VALIDATION_FAILED" "Unexpected effective agent: $name"
-        }
-    }
-}
+    $lastMismatch = $null
+    Push-Location $Repo
+    try {
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+            & opencode debug config *> $null
+            if ($LASTEXITCODE -ne 0) { Fail "OPENCODE_VALIDATION_FAILED" "debug config failed." }
+            $json = (& opencode debug agents 2>$null | Out-String)
+            if ($LASTEXITCODE -ne 0) { Fail "OPENCODE_VALIDATION_FAILED" "debug agents failed." }
+            try { $agents = $json | ConvertFrom-Json -Depth 100 }
+            catch { Fail "OPENCODE_VALIDATION_FAILED" "debug agents output is not JSON." }
 
+            $lastMismatch = $null
+            foreach ($name in $expected.Keys) {
+                $a = @($agents | Where-Object id -eq $name)
+                if ($a.Count -ne 1) {
+                    $lastMismatch = "Unexpected effective agent: $name (count=$($a.Count); attempt=$attempt)."
+                    break
+                }
+                $modelId = [string]$a[0].model.id
+                $variant = [string]$a[0].model.variant
+                $mode = [string]$a[0].mode
+                if ($modelId -ne $expected[$name][0] -or $variant -ne $expected[$name][1] -or $mode -ne $expected[$name][2]) {
+                    $actual = "$modelId#$variant/$mode"
+                    $wanted = "$($expected[$name][0])#$($expected[$name][1])/$($expected[$name][2])"
+                    $lastMismatch = "Unexpected effective agent: $name (got $actual; expected $wanted; attempt=$attempt)."
+                    break
+                }
+            }
+            if ($null -eq $lastMismatch) { return }
+            if ($attempt -lt 5) { Start-Sleep -Milliseconds 250 }
+        }
+    } finally { Pop-Location }
+    Fail "OPENCODE_VALIDATION_FAILED" $lastMismatch
+}
 try {
     if (-not (Has-Cmd "git")) { Fail "GIT_UNAVAILABLE" "git is required." }
     if (-not (Has-Cmd "opencode")) { Fail "OPENCODE_UNAVAILABLE" "opencode is required." }
 
     $Repo = Assert-Target $Target
+    Assert-Install-Destinations $Repo
     $Version = (& opencode --version 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) { Fail "OPENCODE_UNAVAILABLE" "opencode --version failed." }
 

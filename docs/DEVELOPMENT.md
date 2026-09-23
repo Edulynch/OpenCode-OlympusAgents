@@ -8,7 +8,7 @@ OpenCode is the runtime; Olympus is the orchestration and decision layer. Kael c
 
 ## Local/bootstrap installation
 
-From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available:
+From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The v0.1.1 public installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project' -DryRun
@@ -33,9 +33,10 @@ pwsh -NoProfile -File ./tests/activity-hud/qualify.ps1
 pwsh -NoProfile -File ./tests/adaptive-concurrency/qualify.ps1
 pwsh -NoProfile -File ./tests/autonomy/qualify.ps1
 pwsh -NoProfile -File ./tests/release/qualify.ps1
+pwsh -NoProfile -File ./tests/release/installer-compatibility.ps1
 ```
 
-Phase 4C covers bootstrap security and static Maintenance Plane checks; there is no separate Maintenance qualifier. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Adaptive Concurrency / FAST checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release harness uses **local source**, not the remote tag, and does not test the interactive UI. Some harnesses retain disposable fixtures; check their output. The adaptive-concurrency harness's `DOC` check verifies that the README describes NORMAL as the default using only useful parallelism, FAST as explicitly requested with up to four agents, and FAST as preserving checks and task dependencies.
+Phase 4C covers bootstrap security and static Maintenance Plane checks; there is no separate Maintenance qualifier. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Adaptive Concurrency / FAST checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release and installer compatibility harnesses use **local source**, not the remote tag, and do not test the interactive UI. The compatibility harness launches the installer via both Windows PowerShell 5.1 (when present) and PowerShell 7 into separate disposable Git projects, and tests missing `pwsh` with a process-local PATH. Some harnesses retain disposable fixtures; check their output. The adaptive-concurrency harness's `DOC` check verifies that the README describes NORMAL as the default using only useful parallelism, FAST as explicitly requested with up to four agents, and FAST as preserving checks and task dependencies.
 
 ## Trusted-project execution
 

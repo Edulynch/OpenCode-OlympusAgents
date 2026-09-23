@@ -6,9 +6,9 @@
 
 **Install once. Open OpenCode. Start building.**
 
-[![Release v0.1.0](https://img.shields.io/badge/release-v0.1.0-7c3aed?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.1.0)
+[![Release v0.1.1](https://img.shields.io/badge/release-v0.1.1-7c3aed?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.1.1)
 [![OpenCode V2](https://img.shields.io/badge/OpenCode-V2-f97316?style=flat-square)](https://opencode.ai/docs/)
-[![Windows Qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.1.0)
+[![Windows Qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.1.1)
 [![MIT License](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
 
 <p><a href="#-install">Install</a> · <a href="#-start-building">Start Building</a> · <a href="#-the-team">Agents</a> · <a href="#-normal-vs-fast">NORMAL vs FAST</a> · <a href="#-live-activity">Live Activity</a> · <a href="#-update">Update</a> · <a href="#-documentation">Docs</a></p>
@@ -19,17 +19,17 @@
 
 ### Requirements
 
-- Windows and PowerShell 7 (`pwsh`)
+- Windows with PowerShell 7 installed
 - Git and an existing Git project
 - OpenCode V2 with GPT-6 Sol and GPT-6 Luna available (including the variants Olympus uses)
 
 Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Run:
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.1.0/install.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.1.1/install.ps1 | iex
 ```
 
-This installs Olympus into that project, not globally. Only run downloaded scripts in projects you trust; [review the installer](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.1.0/install.ps1) first if you prefer.
+This installs Olympus into that project, not globally. Only run downloaded scripts in projects you trust; [review the installer](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.1.1/install.ps1) first if you prefer.
 
 ## 💬 Start Building
 
@@ -88,11 +88,12 @@ Olympus treats an installed project as trusted. Kovan and Nox can run commands f
 
 ## 🔄 Update
 
-Olympus is installed per project. To reinstall **v0.1.0** in the same project, run the [Install](#-install) command again from its Git root. The installer checks for local changes to files it manages and will not silently overwrite them. This command is pinned to v0.1.0; it will not automatically install future releases.
+Olympus is installed per project. To reinstall **v0.1.1** in the same project, run the [Install](#-install) command again from its Git root. The installer checks for local changes to files it manages and will not silently overwrite them. This command is pinned to v0.1.1; it will not automatically install future releases.
 
 ## 🆘 Troubleshooting
 
 - **`opencode` command unavailable?** Install and configure [OpenCode](https://opencode.ai/docs/) first.
+- **`OLYMPUS_REQUIRES_POWERSHELL_7`?** Install PowerShell 7 and run the same install command again.
 - **Not a valid Git project root?** Open PowerShell in the root folder of your Git project and run the installer again.
 - **`MANAGED_FILE_DRIFT`?** Olympus found a manually changed file it manages and refused to overwrite it silently. See [Development & qualification](docs/DEVELOPMENT.md) for recovery details.
 
@@ -100,7 +101,7 @@ Olympus is installed per project. To reinstall **v0.1.0** in the same project, r
 
 - [OpenCode documentation](https://opencode.ai/docs/) — install and learn OpenCode.
 - [Development & qualification](docs/DEVELOPMENT.md) — maintainer docs, bootstrap internals, qualification, and release workflow.
-- [Olympus v0.1.0 release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.1.0) and [changelog](CHANGELOG.md) — release information.
+- [Olympus v0.1.1 release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.1.1) and [changelog](CHANGELOG.md) — release information.
 - [License](LICENSE) — MIT.
 
 Olympus is an independent OpenCode V2 project, not a fork. The idea of a specialized agent team was informed in part by [donvito/codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).

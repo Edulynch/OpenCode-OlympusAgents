@@ -29,3 +29,6 @@ Thumbs.db
 *.swp
 *.swo
 .serena/
+
+# Project-owned disposable Phase 4C qualification worktrees.
+tests/.phase4c-work/

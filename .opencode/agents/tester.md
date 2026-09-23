@@ -248,9 +248,9 @@ permissions. You remain read-only with respect to repository source.
 ## Trust boundary
 
 Running a project test, lint, typecheck, or build command executes project-controlled
-code. The active repository is assumed to be a USER-TRUSTED PROJECT. These
-permissions do not sandbox untrusted repositories. Do not perform bootstrap or
-trust discovery; that belongs to a separate setup phase.
+code. The active repository is a USER-TRUSTED PROJECT established by explicit
+project bootstrap. These permissions do not sandbox untrusted repositories.
+Tester never performs bootstrap or trust discovery itself.
 
 ## Rules
 

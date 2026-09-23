@@ -210,9 +210,10 @@ depth and must not be bypassed.
   allowlist matches; unsupported commands are BLOCKED without alternate forms.
 - Never ask Implementer to run validation, chain commands, wrap commands, or use
   Tester as a generic shell proxy.
-- Validation commands execute project-controlled code. Assume the active
-  repository is a USER-TRUSTED PROJECT; this is not a sandbox for untrusted
-  repositories. Bootstrap and trust discovery are outside this phase.
+- Validation commands execute project-controlled code. The active repository is
+  a USER-TRUSTED PROJECT established by explicit project bootstrap; this is not
+  a sandbox for untrusted repositories. Runtime agents do not perform bootstrap
+  or trust discovery.
 - Compare tracked source state before and after validation when possible. If
   tracked paths change, stop and report them; do not ask Tester to revert or clean.
 

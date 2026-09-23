@@ -161,20 +161,6 @@ function Assert-Install-Destinations([string]$Repo) {
     }
 }
 
-function Dirty-Paths([string]$Repo) {
-    $set = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($argsList in @(
-        @("diff","--name-only"),
-        @("diff","--cached","--name-only"),
-        @("ls-files","--others","--exclude-standard")
-    )) {
-        $out = & git -C $Repo @argsList 2>$null
-        if ($LASTEXITCODE -ne 0) { Fail "GIT_INSPECTION_FAILED" "Cannot inspect target." }
-        foreach ($p in $out) { if ($p) { [void]$set.Add((Rel $p)) } }
-    }
-    @($set)
-}
-
 function Read-Manifest([string]$Repo) {
     $path = Join-Path $Repo ($ManifestRel -replace "/", [IO.Path]::DirectorySeparatorChar)
     if (-not (Test-Path -LiteralPath $path)) { return $null }
@@ -227,17 +213,6 @@ function Assert-No-Conflicts([string]$Repo, $Manifest) {
             }
         }
     }
-}
-
-function Assert-Git-State([string]$Repo, $Manifest) {
-    $dirty = @(Dirty-Paths $Repo)
-    if ($dirty.Count -eq 0) { return }
-    if ($null -eq $Manifest) { Fail "TARGET_WORKTREE_DIRTY" ($dirty -join ", ") }
-    $allowed = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $Managed | ForEach-Object { [void]$allowed.Add($_) }
-    [void]$allowed.Add($ManifestRel)
-    $unexpected = @($dirty | Where-Object { -not $allowed.Contains((Rel $_)) })
-    if ($unexpected.Count) { Fail "TARGET_WORKTREE_DIRTY" ($unexpected -join ", ") }
 }
 
 function Add-Unique([System.Collections.Generic.List[string]]$List, [System.Collections.Generic.HashSet[string]]$Seen, [string]$Value) {
@@ -503,7 +478,8 @@ try {
     $manifest = Read-Manifest $Repo
     Assert-Managed $Repo $manifest
     Assert-No-Conflicts $Repo $manifest
-    Assert-Git-State $Repo $manifest
+    # Ownership and destination checks above, not repository-wide Git status,
+    # decide whether installation is safe. Unrelated work stays untouched.
 
     $detection = Detect-Project $Repo
     $content = Managed-Content $detection

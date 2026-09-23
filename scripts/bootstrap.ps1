@@ -19,8 +19,11 @@ $Managed = @(
     ".opencode/agents/kovan.md",
     ".opencode/agents/nox.md",
     ".opencode/agents/vera.md",
-    ".opencode/agents/sorin.md"
+    ".opencode/agents/sorin.md",
+    ".opencode/agents/maintenance.md",
+    ".opencode/commands/maintain.md"
 )
+$NewManaged = @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md')
 $SafeGit = @(
     "git status",
     "git status --short",
@@ -196,14 +199,25 @@ function Assert-Managed([string]$Repo, $Manifest) {
     $expected = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $Managed | ForEach-Object { [void]$expected.Add($_) }
     $entries = @($Manifest.managed_files)
-    if ($entries.Count -ne $Managed.Count) { Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Managed file set changed." }
+    $legacy = $entries.Count -eq ($Managed.Count - $NewManaged.Count)
+    if ($entries.Count -ne $Managed.Count -and -not $legacy) { Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Managed file set changed." }
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($e in $entries) {
         $p = Rel ([string]$e.path)
-        if (-not $expected.Contains($p)) { Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Unexpected managed path: $p" }
+        if (-not $expected.Contains($p) -or ($legacy -and $p -in $NewManaged) -or -not $seen.Add($p)) {
+            Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Unexpected or duplicate managed path: $p"
+        }
         $full = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         if (-not (Test-Path -LiteralPath $full)) { Fail "MANAGED_FILE_DRIFT" "Missing managed file: $p" }
         if ((Sha-File $full) -ne ([string]$e.sha256).ToLowerInvariant()) {
             Fail "MANAGED_FILE_DRIFT" "Managed file modified: $p"
+        }
+    }
+    if ($legacy) {
+        foreach ($p in $NewManaged) {
+            if (Test-Path -LiteralPath (Join-Path $Repo ($p -replace '/', [IO.Path]::DirectorySeparatorChar))) {
+                Fail "INSTALL_CONFLICT" "New destination exists without ownership metadata: $p"
+            }
         }
     }
 }
@@ -468,6 +482,7 @@ function Validate-Install([string]$Repo) {
         "kovan"=@("gpt-6-luna","max","subagent")
         "nox"=@("gpt-6-luna","max","subagent")
         "vera"=@("gpt-6-luna","max","subagent")
+        "maintenance"=@("gpt-6-sol","high","subagent")
     }
     $lastMismatch = $null
     Push-Location $Repo

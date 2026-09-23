@@ -9,8 +9,8 @@
       "resource": "*",
       "effect": "deny"
     },
-    // Shell is globally denied; Nox adds only exact validation-command
-    // exceptions in its agent policy. All other agents retain shell denial.
+    // Shell is globally denied; Nox adds exact validation-command exceptions.
+    // The hidden maintenance agent explicitly allows shell for /maintain only.
     {
       "action": "shell",
       "resource": "*",

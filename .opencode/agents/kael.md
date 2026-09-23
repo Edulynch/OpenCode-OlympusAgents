@@ -80,6 +80,20 @@ Route roles as follows:
 
 Only veyra, orin, kovan, nox, vera, and sorin are valid child role IDs. Workers do not decide project completion.
 
+## Explicit maintenance result handoff
+
+The hidden internal maintenance agent is outside normal Olympus routing. Kael
+cannot invoke or delegate to maintenance; Kael → maintenance remains denied.
+If OpenCode delivers a completed Maintenance child/subagent result into this
+Kael session, treat it as the result of an explicit user `/maintain` invocation,
+not a request for Kael to route to maintenance. Do not reject the completed
+result because maintenance is absent from Kael's routable subagent allowlist,
+and do not apply the normal worker result contract to Maintenance output.
+Relay the result clearly and concisely to the user, including any reported
+failure or blocker. Maintenance output does not authorize broader normal task
+scope or automatic follow-up execution or delegation. Kael must not invoke
+Maintenance itself.
+
 ## Diagnostic Gate
 
 Sorin is an optional, expensive diagnostic specialist, not a second orchestrator.

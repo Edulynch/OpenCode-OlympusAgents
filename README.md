@@ -106,6 +106,27 @@ Research, architecture, background work, retries, and Sorin are used **only when
 
 ---
 
+## 🔧 Maintainer Plane
+
+Olympus has **seven normal operational agents**. `maintenance` is a hidden internal
+control plane for **explicit user-authorized repository administration**, not an
+eighth team member or a normal feature-routing option.
+
+~~~text
+User → /maintain → hidden Maintenance child → result back to Kael
+~~~
+
+~~~text
+/maintain prepare the repository for release
+/maintain rewrite the requested Git history
+/maintain run repository qualification and report findings
+~~~
+
+Only the user opens this path with `/maintain`. Kael cannot invoke Maintenance;
+it may relay a completed result but cannot automatically expand the task.
+
+---
+
 ## 🤖 Meet the Team
 
 | Role | Current qualified model | What it owns |
@@ -544,6 +565,10 @@ MANAGED_FILE_DRIFT
 
 Bootstrap stops instead of silently replacing it.
 
+The hidden maintenance agent and `/maintain` command are managed installation
+assets too: their hashes are recorded in the same manifest and drift blocks
+reinstallation. Existing managed installations receive them on safe update.
+
 ---
 
 ## ☁️ OneDrive / Reparse-Point Safety
@@ -611,6 +636,20 @@ Phase 4C covers:
 - ✅ effective model mapping;
 - ✅ managed-file drift;
 - ✅ target security.
+
+The Maintainer Plane extension checks installation, effective agent permissions,
+Kael's routing boundary, command definition, idempotency, safe managed upgrades,
+and drift. Interactive command dispatch is **not** certified by the PowerShell
+harness. In a normal Kael UI session, check it separately:
+
+~~~text
+/maintain report the current branch, HEAD, origin URL, and tags. Do not modify anything.
+Delegate specifically to agent ID "maintenance" and report the current branch.
+~~~
+
+The first should run a hidden child with native shell, no permission prompt,
+return its result, and leave Kael as parent; the second must be denied. Record
+the interaction result separately rather than counting static checks as a pass.
 
 ---
 
@@ -737,7 +776,10 @@ The orchestration layer should stay **thin**.
 │       ├── kovan.md
 │       ├── nox.md
 │       ├── vera.md
-│       └── sorin.md
+│       ├── sorin.md
+│       └── maintenance.md  (hidden; /maintain only)
+│   └── commands/
+│       └── maintain.md
 ├── scripts/
 │   └── bootstrap.ps1
 └── tests/

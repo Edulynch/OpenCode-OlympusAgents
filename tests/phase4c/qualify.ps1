@@ -16,7 +16,8 @@ $ManagedPaths = @(
     '.opencode/agents/kael.md', '.opencode/agents/veyra.md',
     '.opencode/agents/orin.md', '.opencode/agents/kovan.md',
     '.opencode/agents/nox.md', '.opencode/agents/vera.md',
-    '.opencode/agents/sorin.md', '.opencode/orchestrator-install.json'
+    '.opencode/agents/sorin.md', '.opencode/agents/maintenance.md',
+    '.opencode/commands/maintain.md', '.opencode/orchestrator-install.json'
 )
 $SafeGit = @(
     'git status', 'git status --short', 'git status --porcelain', 'git status --porcelain=v2',
@@ -512,6 +513,79 @@ try {
         Assert-Condition (@($shellRules | Where-Object { $_.effect -eq 'allow' -and $_.resource -eq 'npm run deploy' }).Count -eq 0) 'Unapproved script is allowed effectively.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $nox 'read' '*' 'allow') 'Nox source-read permission missing.' 'BOOTSTRAP_BUG'
     }
+
+    # Maintainer Plane extension: static/bootstrap assertions only. The interactive
+    # command callback, parent session identity and permission-prompt behavior must
+    # be checked in a normal Kael UI session; this harness does not emulate them.
+    Run-Scenario 'M1-M4-M6-STATIC_BOOTSTRAP_ASSERTION' {
+        $scenarioDir = New-ScenarioHome 'maintainer-static'
+        $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'maintainer fixture' + [Environment]::NewLine })
+        $diagnostics = Assert-Installed $repo 'READY'
+        $agent = Get-Agent $diagnostics.Agents 'maintenance'
+        Assert-Condition ($agent.mode -eq 'subagent' -and $agent.hidden -eq $true -and $agent.model.providerID -eq 'openai' -and $agent.model.id -eq 'gpt-6-sol' -and $agent.model.variant -eq 'high') 'M1/M6: maintenance mode, hidden status, or model mismatch.' 'BOOTSTRAP_BUG'
+        foreach ($action in @('read', 'glob', 'grep', 'list', 'lsp', 'shell', 'edit', 'external_directory')) {
+            Assert-Condition (Has-Rule $agent $action '*' 'allow') ('M2: maintenance ' + $action + ' allow missing.') 'BOOTSTRAP_BUG'
+        }
+        Assert-Condition (Has-Rule $agent 'subagent' '*' 'deny' -and -not (Has-Rule $agent 'subagent' '*' 'allow')) 'M2: maintenance child deny missing.' 'BOOTSTRAP_BUG'
+        $kael = Get-Agent $diagnostics.Agents 'kael'
+        $children = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object resource | Select-Object -Unique)
+        $normal = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'sorin')
+        Assert-Condition (Has-Rule $kael 'subagent' '*' 'deny' -and $children.Count -eq $normal.Count -and @($children | Where-Object { $_ -notin $normal }).Count -eq 0 -and @($normal | Where-Object { $children -notcontains $_ }).Count -eq 0) 'M3/M6: Kael delegation boundary changed.' 'BOOTSTRAP_BUG'
+        $command = [IO.File]::ReadAllText((Join-Path $repo '.opencode/commands/maintain.md'))
+        Assert-Condition ($command -match '(?m)^agent: maintenance\s*$' -and $command -match '(?m)^subagent: true\s*$' -and $command.Contains('$ARGUMENTS') -and $command -match '(?m)^description:') 'M4: installed project command frontmatter or argument forwarding missing.' 'BOOTSTRAP_BUG'
+        $manifest = [IO.File]::ReadAllText((Join-Path $repo '.opencode/orchestrator-install.json')) | ConvertFrom-Json -Depth 100
+        Assert-Condition (@($manifest.managed_files).Count -eq ($ManagedPaths.Count - 1)) 'Managed asset count mismatch.' 'BOOTSTRAP_BUG'
+        foreach ($path in @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md')) {
+            $entry = @($manifest.managed_files | Where-Object path -eq $path)
+            Assert-Condition ($entry.Count -eq 1 -and $entry[0].sha256 -eq (Get-Hash (Join-Path $repo $path))) ('Manifest does not own/hash ' + $path) 'BOOTSTRAP_BUG'
+        }
+        $again = Invoke-Bootstrap $repo
+        Assert-Condition ($again.ExitCode -eq 0 -and $again.Text -match '(?m)^NO_CHANGES\s*$') ('Maintenance reinstall is not idempotent: ' + $again.Text) 'BOOTSTRAP_BUG'
+    }
+
+    Run-Scenario 'M7-MANAGED_DRIFT' {
+        foreach ($path in @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md')) {
+            $scenarioDir = New-ScenarioHome ('maintainer-drift-' + [IO.Path]::GetFileNameWithoutExtension($path))
+            $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'drift fixture' + [Environment]::NewLine })
+            [void](Assert-Installed $repo 'READY')
+            $file = Join-Path $repo $path
+            [IO.File]::AppendAllText($file, '# changed by qualification' + [Environment]::NewLine, $Utf8)
+            $hash = Get-Hash $file
+            $result = Invoke-Bootstrap $repo
+            Assert-BootstrapError $result 'MANAGED_FILE_DRIFT'
+            Assert-Condition ((Get-Hash $file) -eq $hash) ('Drift was overwritten: ' + $path) 'BOOTSTRAP_BUG'
+        }
+    }
+
+    Run-Scenario 'M-LEGACY-MANAGED-UPGRADE' {
+        $scenarioDir = New-ScenarioHome 'maintainer-upgrade'
+        $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'legacy fixture' + [Environment]::NewLine })
+        [void](Assert-Installed $repo 'READY')
+        $newPaths = @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md')
+        $manifestPath = Join-Path $repo '.opencode/orchestrator-install.json'
+        $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -Depth 100
+        $manifest.managed_files = @($manifest.managed_files | Where-Object { $_.path -notin $newPaths })
+        [IO.File]::WriteAllText($manifestPath, (($manifest | ConvertTo-Json -Depth 100) + "`n"), $Utf8)
+        foreach ($path in $newPaths) { [IO.File]::Delete((Join-Path $repo $path)) }
+        $upgrade = Invoke-Bootstrap $repo
+        Assert-Condition ($upgrade.ExitCode -eq 0 -and $upgrade.Text -match '(?m)^READY\s*$') ('Managed legacy upgrade failed: ' + $upgrade.Text) 'BOOTSTRAP_BUG'
+        [void](Assert-Installed $repo 'NO_CHANGES')
+
+        $conflictRepo = New-CleanRepo $scenarioDir 'conflict' ([ordered]@{ 'README.md' = 'legacy conflict fixture' + [Environment]::NewLine })
+        [void](Assert-Installed $conflictRepo 'READY')
+        $conflictManifestPath = Join-Path $conflictRepo '.opencode/orchestrator-install.json'
+        $conflictManifest = [IO.File]::ReadAllText($conflictManifestPath) | ConvertFrom-Json -Depth 100
+        $conflictManifest.managed_files = @($conflictManifest.managed_files | Where-Object { $_.path -notin $newPaths })
+        [IO.File]::WriteAllText($conflictManifestPath, (($conflictManifest | ConvertTo-Json -Depth 100) + "`n"), $Utf8)
+        $foreign = Join-Path $conflictRepo $newPaths[0]
+        [IO.File]::Delete((Join-Path $conflictRepo $newPaths[1]))
+        $before = Get-Hash $foreign
+        $conflict = Invoke-Bootstrap $conflictRepo
+        Assert-BootstrapError $conflict 'INSTALL_CONFLICT'
+        Assert-Condition ((Get-Hash $foreign) -eq $before -and -not (Test-Path (Join-Path $conflictRepo $newPaths[1]))) 'Unowned maintenance path was overwritten or new path installed.' 'BOOTSTRAP_BUG'
+    }
+
+    Write-Output 'M5-RUNTIME_INTERACTION_ASSERTION: NOT AUTOMATED — run the documented two-command smoke from a normal Kael UI session; static/bootstrap assertions are not a runtime PASS.'
 
     $failed = @($Results | Where-Object Status -eq 'FAIL')
     foreach ($result in $Results) {

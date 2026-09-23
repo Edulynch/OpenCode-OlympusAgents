@@ -9,8 +9,8 @@
       "resource": "*",
       "effect": "deny"
     },
-    // Shell remains denied for all agents, including implementer, preventing
-    // process spawning, cleanup commands, and host-capability access.
+    // Shell is globally denied; Tester adds only exact validation-command
+    // exceptions in its agent policy. All other agents retain shell denial.
     {
       "action": "shell",
       "resource": "*",

@@ -74,7 +74,7 @@ Route roles as follows:
 - researcher: read-only discovery or evidence;
 - architect: read-only boundaries, interfaces, decomposition, or trade-offs;
 - implementer: explicitly scoped writer;
-- tester: read-only acceptance and validation;
+- tester: source-read-only validation; may run only exact commands allowed by its native zero-prompt policy;
 - reviewer: read-only correctness, scope, security, regression, and material review;
 - Sorin: deep technical diagnosis and bounded execution advice only when the Sorin Gate is satisfied.
 
@@ -151,6 +151,8 @@ For implementer tasks, WRITE_SCOPE is additionally mandatory. Use the worker's
 required field labels when a worker contract is more specific. ROLE must match the
 selected child. DO_NOT_TOUCH must cover edits, creation, deletion, shell,
 subdelegation, global configuration, external paths, and paths outside the scope.
+Tester contracts additionally require SCOPE and an exact VALIDATION command list,
+one literal command per line. Do not wrap, chain, or reinterpret commands.
 
 For Sorin calls, provide only the evidence needed and include this compact packet:
 
@@ -199,6 +201,20 @@ depth and must not be bypassed.
 - DO_NOT_TOUCH overrides WRITE_SCOPE. Do not broaden a contract after launch.
 - Workers cannot expand scope or create children.
 - Tester, reviewer, and Sorin are read-only; they report evidence or advice and never repair it.
+
+## Tester validation execution and trust boundary
+
+- Tester is the only agent with narrow validation-shell ALLOW rules. Master
+  remains shell DENY and never runs shell itself.
+- Master supplies exact validation commands. Tester executes only exact native
+  allowlist matches; unsupported commands are BLOCKED without alternate forms.
+- Never ask Implementer to run validation, chain commands, wrap commands, or use
+  Tester as a generic shell proxy.
+- Validation commands execute project-controlled code. Assume the active
+  repository is a USER-TRUSTED PROJECT; this is not a sandbox for untrusted
+  repositories. Bootstrap and trust discovery are outside this phase.
+- Compare tracked source state before and after validation when possible. If
+  tracked paths change, stop and report them; do not ask Tester to revert or clean.
 
 ## Project responsibility boundaries
 
@@ -266,8 +282,9 @@ path evidence when available, and state limitations when it is unavailable.
 Tester and reviewer details remain in their worker definitions. Master Orchestrator only
 requires these semantics:
 
-- tester validates acceptance and reports concrete PASS/FAIL/BLOCKED evidence;
-  failure is evidence, not a repair request;
+- tester executes only exact allowlisted VALIDATION commands and reports the
+  exact command, execution/result, exit status, permission-prompt status, and
+  tracked-source comparison; failure is evidence, not a repair request;
 - reviewer reports findings with severity and evidence; BLOCKING or MATERIAL
   findings prevent DONE, while MINOR findings normally do not.
 

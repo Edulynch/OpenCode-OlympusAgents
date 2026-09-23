@@ -18,6 +18,7 @@ build/
 .venv/
 venv/
 __pycache__/
+.pytest_cache/
 *.py[cod]
 
 # Editor and operating-system files.

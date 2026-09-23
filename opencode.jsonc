@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "default_agent": "master-orchestrator",
+  "default_agent": "kael",
   "model": "openai/gpt-6-sol",
   "permissions": [
     // Defense-in-depth: agents may operate only in the active project.
@@ -9,7 +9,7 @@
       "resource": "*",
       "effect": "deny"
     },
-    // Shell is globally denied; Tester adds only exact validation-command
+    // Shell is globally denied; Nox adds only exact validation-command
     // exceptions in its agent policy. All other agents retain shell denial.
     {
       "action": "shell",
@@ -23,7 +23,7 @@
       "resource": "*",
       "effect": "deny"
     },
-    // Implementer-specific rules constrain the global edit deny to authorized
+    // Kovan-specific rules constrain the global edit deny to authorized
     // project files and keep sensitive orchestration paths protected.
     {
       "action": "edit",

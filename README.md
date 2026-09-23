@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎛️ OpenCode Orchestrator
+# 🏛️ OpenCode Olympus Agents
 
 ### Give OpenCode a team — not one giant prompt.
 
@@ -62,7 +62,7 @@ or:
 → human becomes the approval button 🤦
 ~~~
 
-OpenCode Orchestrator takes another route:
+The OpenCode Olympus Agents team takes another route:
 
 > **Delegate narrowly, write inside explicit scope, validate with evidence, and escalate only when the problem is actually hard.**
 
@@ -76,14 +76,14 @@ Give each role one job.
 You
  │
  ▼
-🎛️ Master Orchestrator
+👑 Kael — Master Orchestrator
  │
- ├── 🔎 Researcher      → discover evidence
- ├── 🏗️ Architect       → define boundaries
- ├── 🛠️ Implementer     → write inside WRITE_SCOPE
- ├── 🧪 Tester          → run approved validation
- ├── 👀 Reviewer        → review without rewriting
- └── 🔮 Sorin          → diagnose only when things get weird
+ ├── 🔭 Veyra — Researcher      → discover evidence
+ ├── 📐 Orin — Architect       → define boundaries
+ ├── 🔨 Kovan — Implementer     → write inside WRITE_SCOPE
+ ├── 👁️ Nox — Tester          → run approved validation
+ ├── ⚖️ Vera — Reviewer        → review without rewriting
+ └── 🧭 Sorin — Deep Diagnostician → advise through the Diagnostic Gate
 ~~~
 
 The normal path stays intentionally boring:
@@ -91,13 +91,13 @@ The normal path stays intentionally boring:
 ~~~text
 request
   ↓
-Master
+Kael
   ↓
-Implementer
+Kovan
   ↓
-Tester
+Nox
   ↓
-Reviewer
+Vera
   ↓
 DONE ✅
 ~~~
@@ -110,13 +110,13 @@ Research, architecture, background work, retries, and Sorin are used **only when
 
 | Role | Current qualified model | What it owns |
 |---|---|---|
-| 🎛️ **Master Orchestrator** | GPT-6 Sol High | Routing, contracts, barriers, retries, completion |
-| 🔎 **Researcher** | GPT-6 Luna Max | Read-only discovery and evidence |
-| 🏗️ **Architect** | GPT-6 Luna Max | Read-only design, boundaries and decomposition |
-| 🛠️ **Implementer** | GPT-6 Luna Max | The only normal repository writer |
-| 🧪 **Tester** | GPT-6 Luna Max | Read-only source + exact validation commands |
-| 👀 **Reviewer** | GPT-6 Luna Max | Correctness, scope, security and regression review |
-| 🔮 **Sorin** | GPT-6 Sol XHigh | Exceptional deep diagnosis and execution advice |
+| 👑 **Kael — Master Orchestrator** | GPT-6 Sol High | Routing, contracts, barriers, retries, completion |
+| 🔭 **Veyra — Researcher** | GPT-6 Luna Max | Read-only discovery and evidence |
+| 📐 **Orin — Architect** | GPT-6 Luna Max | Read-only design, boundaries and decomposition |
+| 🔨 **Kovan — Implementer** | GPT-6 Luna Max | The only normal repository writer |
+| 👁️ **Nox — Tester** | GPT-6 Luna Max | Read-only source + exact validation commands |
+| ⚖️ **Vera — Reviewer** | GPT-6 Luna Max | Correctness, scope, security and regression review |
+| 🧭 **Sorin — Deep Diagnostician** | GPT-6 Sol XHigh | Exceptional deep diagnosis and execution advice |
 
 > 🧩 The roles are the architecture. The model IDs are configuration.
 
@@ -214,7 +214,7 @@ Tester:      ❌ failure
 Implementer: 🔁 bounded retry
 Tester:      ❌ same unexplained symptom
 Master:      root cause still unclear
-Sorin:      🔮 diagnostic advisory
+Sorin:      🧭 diagnostic advisory
 Master:      RETRY / ESCALATE / BLOCKED
 ~~~
 
@@ -294,7 +294,7 @@ shell  → DENY
 
 Master coordinates. It does not secretly become the implementer.
 
-### 🛠️ Implementer is the writer
+### 🔨 Kovan — Implementer
 
 Each write task requires an explicit scope:
 
@@ -360,7 +360,7 @@ Example:
 
 ~~~text
 TASK_ID: user-validation-01
-ROLE: implementer
+ROLE: kovan
 
 WRITE_SCOPE:
 src/users/UserValidator.ts
@@ -412,7 +412,7 @@ The project does not build its own scheduler, daemon, mailbox, session database,
 
 ---
 
-## 🔮 Sorin: Expensive on Purpose
+## 🧭 Sorin — Deep Diagnostician
 
 Sorin is not "the smart model for big tasks."
 
@@ -576,7 +576,7 @@ The current baseline has been qualified in stages.
 | Phase | Focus | Result |
 |---|---|---:|
 | 3A | Model + orchestration baseline | ✅ PASS |
-| 3B | Sorin diagnostic escalation | ✅ PASS |
+| 3B | Diagnostic escalation | ✅ PASS |
 | 4A | Generic real-repository writes | ✅ 10/10 |
 | 4B | Zero-prompt safe validation | ✅ 12/12 |
 | 4C | Bootstrap + stack-aware installation | ✅ 14/14 |
@@ -665,18 +665,18 @@ If bounded retries stop explaining the problem, that can become evidence for Sor
 
 ~~~mermaid
 flowchart TD
-    U[🧑 Developer request] --> M[🎛️ Master Orchestrator]
-    M -->|when useful| R[🔎 Researcher]
-    M -->|when useful| A[🏗️ Architect]
+    U[🧑 Developer request] --> M[👑 Kael — Master Orchestrator]
+    M -->|when useful| R[🔭 Veyra — Researcher]
+    M -->|when useful| A[📐 Orin — Architect]
     R --> M
     A --> M
-    M --> I[🛠️ Implementer]
-    I --> T[🧪 Tester]
-    I --> V[👀 Reviewer]
+    M --> I[🔨 Kovan — Implementer]
+    I --> T[👁️ Nox — Tester]
+    I --> V[⚖️ Vera — Reviewer]
     T --> M
     V --> M
-    M -->|hard diagnostic gate| O[🔮 Sorin]
-    O --> M
+    M -->|Diagnostic Gate| S[🧭 Sorin]
+    S --> M
     M --> D{Completion Gate}
     D -->|pass| DONE[✅ DONE]
     D -->|bounded defect| RETRY[🔁 RETRY]
@@ -687,7 +687,7 @@ flowchart TD
 
 ## 🧩 Responsibility Boundaries
 
-OpenCode Orchestrator owns **coordination**, not the entire software lifecycle.
+OpenCode Olympus Agents owns **coordination**, not the entire software lifecycle.
 
 ~~~text
 EvoDriven        → decide WHY / WHAT
@@ -731,13 +731,13 @@ The orchestration layer should stay **thin**.
 ├── opencode.jsonc
 ├── .opencode/
 │   └── agents/
-│       ├── master-orchestrator.md
-│       ├── Sorin.md
-│       ├── architect.md
-│       ├── researcher.md
-│       ├── implementer.md
-│       ├── tester.md
-│       └── reviewer.md
+│       ├── kael.md
+│       ├── veyra.md
+│       ├── orin.md
+│       ├── kovan.md
+│       ├── nox.md
+│       ├── vera.md
+│       └── sorin.md
 ├── scripts/
 │   └── bootstrap.ps1
 └── tests/
@@ -782,7 +782,7 @@ pwsh ./scripts/bootstrap.ps1 `
 
 ### ✅ Qualified
 
-Core orchestration, generic writing, zero-prompt validation, Sorin escalation, and project bootstrap are qualified.
+Core orchestration, generic writing, zero-prompt validation, diagnostic escalation, and project bootstrap are qualified.
 
 ### 🐕 Next: real-world dogfood
 

@@ -13,13 +13,13 @@ $Utf8NoBom = [Text.UTF8Encoding]::new($false)
 $ManifestRel = ".opencode/orchestrator-install.json"
 $Managed = @(
     "opencode.jsonc",
-    ".opencode/agents/master-orchestrator.md",
-    ".opencode/agents/Sorin.md",
-    ".opencode/agents/architect.md",
-    ".opencode/agents/researcher.md",
-    ".opencode/agents/implementer.md",
-    ".opencode/agents/tester.md",
-    ".opencode/agents/reviewer.md"
+    ".opencode/agents/kael.md",
+    ".opencode/agents/veyra.md",
+    ".opencode/agents/orin.md",
+    ".opencode/agents/kovan.md",
+    ".opencode/agents/nox.md",
+    ".opencode/agents/vera.md",
+    ".opencode/agents/sorin.md"
 )
 $SafeGit = @(
     "git status",
@@ -377,17 +377,17 @@ function Detect-Project([string]$Repo) {
     }
 }
 
-function Target-Tester([string]$Source, [string[]]$Commands) {
+function Target-Nox([string]$Source, [string[]]$Commands) {
     $text = $Source.Replace("`r`n","`n")
     $marks = [regex]::Matches($text, "(?m)^---\s*$")
-    if ($marks.Count -lt 2) { Fail "SOURCE_TESTER_INVALID" "Missing frontmatter." }
+    if ($marks.Count -lt 2) { Fail "SOURCE_NOX_INVALID" "Missing frontmatter." }
     $front = $text.Substring($marks[0].Index + $marks[0].Length,
         $marks[1].Index - ($marks[0].Index + $marks[0].Length)).Trim("`n")
     $body = $text.Substring($marks[1].Index + $marks[1].Length)
     $front = [regex]::Replace($front,
         "(?m)^  - action: shell\r?\n    resource: [^\r\n]+\r?\n    effect: allow\r?\n?", "")
     if ($front -notmatch "(?ms)- action: shell\s+resource: [`"']\*[`"']\s+effect: deny") {
-        Fail "SOURCE_TESTER_INVALID" "Missing shell deny fallback."
+        Fail "SOURCE_NOX_INVALID" "Missing shell deny fallback."
     }
     $allow = [Text.StringBuilder]::new()
     foreach ($cmd in $Commands) {
@@ -396,10 +396,10 @@ function Target-Tester([string]$Source, [string[]]$Commands) {
     }
     $generated = "---`n$($front.TrimEnd())`n$($allow.ToString())---$body"
     if ($generated -match "(?ms)- action: shell\s+resource: [^\r\n]+\s+effect: ask") {
-        Fail "GENERATED_TESTER_UNSAFE" "Shell ASK is forbidden."
+        Fail "GENERATED_NOX_UNSAFE" "Shell ASK is forbidden."
     }
     if ($generated -match "(?ms)- action: shell\s+resource: [`"']\*[`"']\s+effect: allow") {
-        Fail "GENERATED_TESTER_UNSAFE" "Wildcard shell ALLOW is forbidden."
+        Fail "GENERATED_NOX_UNSAFE" "Wildcard shell ALLOW is forbidden."
     }
     $generated
 }
@@ -410,7 +410,7 @@ function Managed-Content($Detection) {
         $src = Join-Path $SourceRoot ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         if (-not (Test-Path $src)) { Fail "SOURCE_FILE_MISSING" $p }
         $text = [IO.File]::ReadAllText($src)
-        if ($p -eq ".opencode/agents/tester.md") { $text = Target-Tester $text $Detection.ValidationCommands }
+        if ($p -eq ".opencode/agents/nox.md") { $text = Target-Nox $text $Detection.ValidationCommands }
         $map[$p] = $text
     }
     $map
@@ -461,13 +461,13 @@ function Report([string]$Repo, $Detection, $Plan, [string]$Status, [string]$Vers
 
 function Validate-Install([string]$Repo) {
     $expected = @{
-        "master-orchestrator"=@("gpt-6-sol","high","primary")
-        "Sorin"=@("gpt-6-sol","xhigh","subagent")
-        "architect"=@("gpt-6-luna","max","subagent")
-        "researcher"=@("gpt-6-luna","max","subagent")
-        "implementer"=@("gpt-6-luna","max","subagent")
-        "tester"=@("gpt-6-luna","max","subagent")
-        "reviewer"=@("gpt-6-luna","max","subagent")
+        "kael"=@("gpt-6-sol","high","primary")
+        "sorin"=@("gpt-6-sol","xhigh","subagent")
+        "veyra"=@("gpt-6-luna","max","subagent")
+        "orin"=@("gpt-6-luna","max","subagent")
+        "kovan"=@("gpt-6-luna","max","subagent")
+        "nox"=@("gpt-6-luna","max","subagent")
+        "vera"=@("gpt-6-luna","max","subagent")
     }
     $lastMismatch = $null
     Push-Location $Repo

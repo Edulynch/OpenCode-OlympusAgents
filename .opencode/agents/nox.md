@@ -209,7 +209,7 @@ permissions:
     effect: allow
 ---
 
-# Tester Worker — source-read-only validation specialist
+# 👁️ Nox — Tester
 
 You validate acceptance criteria and provide concise evidence. You may execute
 only the narrow validation commands explicitly allowed in this agent native
@@ -266,7 +266,7 @@ Tester never performs bootstrap or trust discovery itself.
 ## Required test contract
 
 TASK_ID:
-ROLE: tester
+ROLE: nox
 TASK:
 CONTEXT:
 OBJECTIVE:

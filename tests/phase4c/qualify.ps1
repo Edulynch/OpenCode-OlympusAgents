@@ -12,10 +12,11 @@ $RunId = [Guid]::NewGuid().ToString('N')
 $RunRoot = Join-Path $WorkRoot ('run-' + $RunId)
 $Results = [System.Collections.Generic.List[object]]::new()
 $ManagedPaths = @(
-    'opencode.jsonc', '.opencode/agents/master-orchestrator.md', '.opencode/agents/Sorin.md',
-    '.opencode/agents/architect.md', '.opencode/agents/researcher.md',
-    '.opencode/agents/implementer.md', '.opencode/agents/tester.md',
-    '.opencode/agents/reviewer.md', '.opencode/orchestrator-install.json'
+    'opencode.jsonc',
+    '.opencode/agents/kael.md', '.opencode/agents/veyra.md',
+    '.opencode/agents/orin.md', '.opencode/agents/kovan.md',
+    '.opencode/agents/nox.md', '.opencode/agents/vera.md',
+    '.opencode/agents/sorin.md', '.opencode/orchestrator-install.json'
 )
 $SafeGit = @(
     'git status', 'git status --short', 'git status --porcelain', 'git status --porcelain=v2',
@@ -184,8 +185,8 @@ function Get-Hash([string]$Path) {
     finally { $sha.Dispose() }
 }
 
-function Get-TesterRules([string]$Repo) {
-    $text = [IO.File]::ReadAllText((Join-Path $Repo '.opencode/agents/tester.md'))
+function Get-NoxRules([string]$Repo) {
+    $text = [IO.File]::ReadAllText((Join-Path $Repo '.opencode/agents/nox.md'))
     $first = $text.IndexOf('---')
     $second = if ($first -ge 0) { $text.IndexOf('---', $first + 3) } else { -1 }
     Assert-Condition ($first -ge 0 -and $second -gt $first) 'Tester frontmatter is missing.' 'BOOTSTRAP_BUG'
@@ -242,13 +243,13 @@ function Get-OpenCodeDiagnostics([string]$Repo) {
 
 function Assert-ModelMapping($Agents) {
     $expected = [ordered]@{
-        'master-orchestrator' = @('gpt-6-sol', 'high', 'primary')
-        'Sorin' = @('gpt-6-sol', 'xhigh', 'subagent')
-        'architect' = @('gpt-6-luna', 'max', 'subagent')
-        'researcher' = @('gpt-6-luna', 'max', 'subagent')
-        'implementer' = @('gpt-6-luna', 'max', 'subagent')
-        'tester' = @('gpt-6-luna', 'max', 'subagent')
-        'reviewer' = @('gpt-6-luna', 'max', 'subagent')
+        'kael' = @('gpt-6-sol', 'high', 'primary')
+        'sorin' = @('gpt-6-sol', 'xhigh', 'subagent')
+        'veyra' = @('gpt-6-luna', 'max', 'subagent')
+        'orin' = @('gpt-6-luna', 'max', 'subagent')
+        'kovan' = @('gpt-6-luna', 'max', 'subagent')
+        'nox' = @('gpt-6-luna', 'max', 'subagent')
+        'vera' = @('gpt-6-luna', 'max', 'subagent')
     }
     foreach ($id in $expected.Keys) {
         $agent = Get-Agent $Agents $id
@@ -267,7 +268,7 @@ function Assert-Installed([string]$Repo, [string]$ExpectedStatus) {
 }
 
 function Get-ToolRules([string]$Repo) {
-    $rules = Get-TesterRules $Repo
+    $rules = Get-NoxRules $Repo
     return @($rules | Where-Object { $_.Effect -eq 'allow' } | ForEach-Object { $_.Resource })
 }
 
@@ -329,7 +330,7 @@ try {
         $second = Invoke-Bootstrap $repo
         Assert-Condition ($second.ExitCode -eq 0 -and $second.Text -match '(?m)^NO_CHANGES\s*$') ('Second run was not NO_CHANGES: ' + $second.Text) 'BOOTSTRAP_BUG'
         foreach ($relative in $ManagedPaths) { Assert-Condition ($before[$relative] -eq (Get-Hash (Join-Path $repo ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)))) ('Idempotent run changed ' + $relative) 'BOOTSTRAP_BUG' }
-        $duplicateRules = @(Get-TesterRules $repo | Group-Object Resource, Effect | Where-Object Count -gt 1)
+        $duplicateRules = @(Get-NoxRules $repo | Group-Object Resource, Effect | Where-Object Count -gt 1)
         Assert-Condition ($duplicateRules.Count -eq 0) 'Tester policy contains duplicate shell rules.' 'BOOTSTRAP_BUG'
     }
 
@@ -441,11 +442,11 @@ try {
         $repo = New-CleanRepo $scenarioDir 'target' $files
         $result = Invoke-Bootstrap $repo
         Assert-Condition ($result.ExitCode -eq 0) ('Policy target install failed: ' + $result.Text) 'BOOTSTRAP_BUG'
-        $rules = Get-TesterRules $repo
+        $rules = Get-NoxRules $repo
         $allows = @($rules | Where-Object Effect -eq 'allow' | ForEach-Object Resource)
         Assert-Condition (@($rules | Where-Object { $_.Resource -eq '*' -and $_.Effect -eq 'deny' }).Count -gt 0) 'Tester shell wildcard DENY fallback missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (@($rules | Where-Object Effect -eq 'ask').Count -eq 0) 'Tester shell ASK rule found.' 'BOOTSTRAP_BUG'
-        Assert-Condition (@($rules | Where-Object { $_.Effect -eq 'allow' -and $_.Resource -match '[*?]' }).Count -eq 0) 'Tester wildcard shell ALLOW found.' 'BOOTSTRAP_BUG'
+        Assert-Condition (@($rules | Where-Object { $_.Effect -eq 'allow' -and $_.Resource -match '[*?]' }).Count -eq 0) 'Nox wildcard shell ALLOW found.' 'BOOTSTRAP_BUG'
         foreach ($command in $SafeGit) { Assert-Condition ($allows -contains $command) ('Safe Git baseline missing: ' + $command) 'BOOTSTRAP_BUG' }
         Assert-Condition ($allows -contains 'npm test') 'Relevant test command missing.' 'BOOTSTRAP_BUG'
         Assert-Condition ($allows -notcontains 'npm run deploy' -and $allows -notcontains 'npm run banana') 'Unknown package script authorized.' 'BOOTSTRAP_BUG'
@@ -463,7 +464,7 @@ try {
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'drift fixture' + [Environment]::NewLine })
         $first = Invoke-Bootstrap $repo
         Assert-Condition ($first.ExitCode -eq 0) ('Initial drift fixture install failed: ' + $first.Text) 'BOOTSTRAP_BUG'
-        $managed = Join-Path $repo '.opencode/agents/reviewer.md'
+        $managed = Join-Path $repo '.opencode/agents/vera.md'
         [IO.File]::AppendAllText($managed, '# manually changed by qualification' + [Environment]::NewLine, $Utf8)
         $changedHash = Get-Hash $managed
         $second = Invoke-Bootstrap $repo
@@ -476,33 +477,40 @@ try {
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'security fixture' + [Environment]::NewLine; 'package.json' = '{"packageManager":"npm@10","scripts":{"test":"node test.js"}}' + [Environment]::NewLine; 'package-lock.json' = '{}' + [Environment]::NewLine })
         $diagnostics = Assert-Installed $repo 'READY'
         $agents = $diagnostics.Agents
-        foreach ($id in @('master-orchestrator', 'Sorin', 'architect', 'researcher', 'reviewer')) {
+        foreach ($id in @('kael', 'sorin', 'veyra', 'orin', 'vera')) {
             $agent = Get-Agent $agents $id
             Assert-Condition (Has-Rule $agent 'edit' '*' 'deny') ($id + ' edit DENY missing.') 'BOOTSTRAP_BUG'
             Assert-Condition (Has-Rule $agent 'shell' '*' 'deny') ($id + ' shell DENY missing.') 'BOOTSTRAP_BUG'
+            Assert-Condition (Has-Rule $agent 'subagent' '*' 'deny') ($id + ' subagent DENY missing.') 'BOOTSTRAP_BUG'
         }
-        $Sorin = Get-Agent $agents 'Sorin'
-        Assert-Condition (Has-Rule $Sorin 'subagent' '*' 'deny') 'Sorin subagent DENY missing.' 'BOOTSTRAP_BUG'
-        $implementer = Get-Agent $agents 'implementer'
-        Assert-Condition (Has-Rule $implementer 'edit' '*' 'allow') 'Implementer repository-local edit allow missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $implementer 'shell' '*' 'deny') 'Implementer shell DENY missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $implementer 'subagent' '*' 'deny') 'Implementer subagent DENY missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $implementer 'external_directory' '*' 'deny') 'Implementer external-directory DENY missing.' 'BOOTSTRAP_BUG'
+        $kael = Get-Agent $agents 'kael'
+        $allowedChildren = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object { $_.resource } | Select-Object -Unique)
+        $expectedChildren = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'sorin')
+        Assert-Condition ($allowedChildren.Count -eq $expectedChildren.Count -and @($allowedChildren | Where-Object { $_ -notin $expectedChildren }).Count -eq 0 -and @($expectedChildren | Where-Object { $allowedChildren -notcontains $_ }).Count -eq 0) 'Kael delegation allowlist mismatch.' 'BOOTSTRAP_BUG'
+        $sorinPrompt = [IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/sorin.md'))
+        Assert-Condition ($sorinPrompt -match 'invoked only through the Diagnostic Gate') 'Sorin Diagnostic Gate requirement missing.' 'BOOTSTRAP_BUG'
+        $sorin = Get-Agent $agents 'sorin'
+        Assert-Condition (Has-Rule $sorin 'subagent' '*' 'deny') 'Sorin subagent DENY missing.' 'BOOTSTRAP_BUG'
+        $kovan = Get-Agent $agents 'kovan'
+        Assert-Condition (Has-Rule $kovan 'edit' '*' 'allow') 'Kovan repository-local edit allow missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $kovan 'shell' '*' 'deny') 'Kovan shell DENY missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $kovan 'subagent' '*' 'deny') 'Kovan subagent DENY missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $kovan 'external_directory' '*' 'deny') 'Kovan external-directory DENY missing.' 'BOOTSTRAP_BUG'
         foreach ($resource in @('.git', '.git/*', '.opencode', '.opencode/*', 'opencode.json', 'opencode.jsonc', '*.env', '*.env.*')) {
-            Assert-Condition (Has-Rule $implementer 'edit' $resource 'deny') ('Implementer protected edit path missing: ' + $resource) 'BOOTSTRAP_BUG'
+            Assert-Condition (Has-Rule $kovan 'edit' $resource 'deny') ('Kovan protected edit path missing: ' + $resource) 'BOOTSTRAP_BUG'
         }
-        Assert-Condition (Has-Rule $implementer 'edit' '*.env.example' 'allow') 'Documented env-example exception missing.' 'BOOTSTRAP_BUG'
-        $tester = Get-Agent $agents 'tester'
-        Assert-Condition (Has-Rule $tester 'edit' '*' 'deny') 'Tester edit DENY missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $tester 'shell' '*' 'deny') 'Tester shell DENY fallback missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $tester 'subagent' '*' 'deny') 'Tester subagent DENY missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $tester 'external_directory' '*' 'deny') 'Tester external-directory DENY missing.' 'BOOTSTRAP_BUG'
-        $shellRules = @($tester.permissions | Where-Object { $_.action -eq 'shell' })
-        Assert-Condition (@($shellRules | Where-Object effect -eq 'ask').Count -eq 0) 'Effective Tester shell ASK exists.' 'BOOTSTRAP_BUG'
-        Assert-Condition (@($shellRules | Where-Object { $_.effect -eq 'allow' -and $_.resource -match '[*?]' }).Count -eq 0) 'Effective Tester wildcard shell ALLOW exists.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $kovan 'edit' '*.env.example' 'allow') 'Documented env-example exception missing.' 'BOOTSTRAP_BUG'
+        $nox = Get-Agent $agents 'nox'
+        Assert-Condition (Has-Rule $nox 'edit' '*' 'deny') 'Nox edit DENY missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $nox 'shell' '*' 'deny') 'Nox shell DENY fallback missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $nox 'subagent' '*' 'deny') 'Nox subagent DENY missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $nox 'external_directory' '*' 'deny') 'Nox external-directory DENY missing.' 'BOOTSTRAP_BUG'
+        $shellRules = @($nox.permissions | Where-Object { $_.action -eq 'shell' })
+        Assert-Condition (@($shellRules | Where-Object effect -eq 'ask').Count -eq 0) 'Effective Nox shell ASK exists.' 'BOOTSTRAP_BUG'
+        Assert-Condition (@($shellRules | Where-Object { $_.effect -eq 'allow' -and $_.resource -match '[*?]' }).Count -eq 0) 'Effective Nox wildcard shell ALLOW exists.' 'BOOTSTRAP_BUG'
         Assert-Condition (@($shellRules | Where-Object { $_.effect -eq 'allow' -and $_.resource -eq 'npm test' }).Count -gt 0) 'Effective target validation command is not allowed.' 'BOOTSTRAP_BUG'
         Assert-Condition (@($shellRules | Where-Object { $_.effect -eq 'allow' -and $_.resource -eq 'npm run deploy' }).Count -eq 0) 'Unapproved script is allowed effectively.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $tester 'read' '*' 'allow') 'Tester source-read permission missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $nox 'read' '*' 'allow') 'Nox source-read permission missing.' 'BOOTSTRAP_BUG'
     }
 
     $failed = @($Results | Where-Object Status -eq 'FAIL')

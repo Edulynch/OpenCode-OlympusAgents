@@ -21,11 +21,6 @@ $ManagedPaths = @(
     '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx',
     '.opencode/orchestrator-install.json'
 )
-$SafeGit = @(
-    'git status', 'git status --short', 'git status --porcelain', 'git status --porcelain=v2',
-    'git diff', 'git diff --check', 'git diff --cached', 'git diff --cached --check',
-    'git diff --name-only', 'git diff --raw', 'git rev-parse HEAD', 'git ls-files'
-)
 
 $ReparseTagCache = @{}
 
@@ -188,29 +183,6 @@ function Get-Hash([string]$Path) {
     finally { $sha.Dispose() }
 }
 
-function Get-NoxRules([string]$Repo) {
-    $text = [IO.File]::ReadAllText((Join-Path $Repo '.opencode/agents/nox.md'))
-    $first = $text.IndexOf('---')
-    $second = if ($first -ge 0) { $text.IndexOf('---', $first + 3) } else { -1 }
-    Assert-Condition ($first -ge 0 -and $second -gt $first) 'Tester frontmatter is missing.' 'BOOTSTRAP_BUG'
-    $front = $text.Substring($first + 3, $second - ($first + 3))
-    $lines = $front -split '\r?\n'
-    $rules = [System.Collections.Generic.List[object]]::new()
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i].Trim() -ne '- action: shell') { continue }
-        Assert-Condition ($i + 2 -lt $lines.Count) 'Truncated Tester shell rule.' 'BOOTSTRAP_BUG'
-        $resourceLine = $lines[$i + 1].Trim()
-        $effectLine = $lines[$i + 2].Trim()
-        if ($resourceLine -match '^resource:\s*"(.*)"$') { $resource = $Matches[1] }
-        elseif ($resourceLine -match '^resource:\s*''(.*)''$') { $resource = $Matches[1] }
-        else { throw ('HARNESS_BUG|Cannot parse Tester resource: ' + $resourceLine) }
-        if ($effectLine -notmatch '^effect:\s*(allow|deny|ask)$') { throw ('HARNESS_BUG|Cannot parse Tester effect: ' + $effectLine) }
-        $rules.Add([pscustomobject]@{ Resource = $resource; Effect = $Matches[1] })
-        $i += 2
-    }
-    return ,@($rules)
-}
-
 function Get-Agent($Agents, [string]$Id) {
     $matches = @($Agents | Where-Object { $_.id -eq $Id })
     Assert-Condition ($matches.Count -eq 1) ('Expected exactly one effective agent: ' + $Id) 'BOOTSTRAP_BUG'
@@ -268,11 +240,6 @@ function Assert-Installed([string]$Repo, [string]$ExpectedStatus) {
     $diagnostics = Get-OpenCodeDiagnostics $Repo
     Assert-ModelMapping $diagnostics.Agents
     return $diagnostics
-}
-
-function Get-ToolRules([string]$Repo) {
-    $rules = Get-NoxRules $Repo
-    return @($rules | Where-Object { $_.Effect -eq 'allow' } | ForEach-Object { $_.Resource })
 }
 
 function Run-Scenario([string]$Id, [scriptblock]$Body) {
@@ -333,8 +300,8 @@ try {
         $second = Invoke-Bootstrap $repo
         Assert-Condition ($second.ExitCode -eq 0 -and $second.Text -match '(?m)^NO_CHANGES\s*$') ('Second run was not NO_CHANGES: ' + $second.Text) 'BOOTSTRAP_BUG'
         foreach ($relative in $ManagedPaths) { Assert-Condition ($before[$relative] -eq (Get-Hash (Join-Path $repo ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)))) ('Idempotent run changed ' + $relative) 'BOOTSTRAP_BUG' }
-        $duplicateRules = @(Get-NoxRules $repo | Group-Object Resource, Effect | Where-Object Count -gt 1)
-        Assert-Condition ($duplicateRules.Count -eq 0) 'Tester policy contains duplicate shell rules.' 'BOOTSTRAP_BUG'
+        $nox = [IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/nox.md'))
+        Assert-Condition ($nox -eq [IO.File]::ReadAllText((Join-Path $RepoRoot '.opencode/agents/nox.md'))) 'Nox template was modified by bootstrap.' 'BOOTSTRAP_BUG'
     }
 
     Run-Scenario 'P4C-4' {
@@ -343,9 +310,9 @@ try {
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'node scripts fixture' + [Environment]::NewLine; 'package.json' = $package; 'package-lock.json' = '{}' + [Environment]::NewLine })
         $result = Invoke-Bootstrap $repo
         Assert-Condition ($result.ExitCode -eq 0 -and $result.Text -match '(?m)^READY\s*$') ('Node install failed: ' + $result.Text) 'BOOTSTRAP_BUG'
-        $allows = Get-ToolRules $repo
-        foreach ($expected in @('npm test', 'npm run lint', 'npm run build')) { Assert-Condition ($allows -contains $expected) ('Expected Node command missing: ' + $expected) 'BOOTSTRAP_BUG' }
-        Assert-Condition ($allows -notcontains 'npm run deploy' -and $allows -notcontains 'npm run test') 'An unapproved or unused script command was authorized.' 'BOOTSTRAP_BUG'
+        foreach ($expected in @('npm test', 'npm run lint', 'npm run build')) { Assert-Condition ($result.Text.Contains($expected)) ('Expected Node suggestion missing: ' + $expected) 'BOOTSTRAP_BUG' }
+        $manifest = [IO.File]::ReadAllText((Join-Path $repo '.opencode/orchestrator-install.json')) | ConvertFrom-Json
+        Assert-Condition (@($manifest.validation_commands).Count -eq 3 -and @($manifest.validation_commands | Where-Object { $_ -eq 'npm run deploy' }).Count -eq 0) 'Node validation suggestions are incorrect.' 'BOOTSTRAP_BUG'
     }
 
     Run-Scenario 'P4C-5' {
@@ -354,7 +321,7 @@ try {
         $resultA = Invoke-Bootstrap $caseA
         Assert-Condition ($resultA.ExitCode -eq 0 -and $resultA.Text -match '(?m)^READY\s*$') ('Clear package manager case failed: ' + $resultA.Text) 'BOOTSTRAP_BUG'
         Assert-Condition ($resultA.Text -match '(?m)^pnpm\s*$') 'pnpm lockfile was not selected.' 'BOOTSTRAP_BUG'
-        if (Get-Command pnpm -ErrorAction SilentlyContinue) { Assert-Condition ((Get-ToolRules $caseA) -contains 'pnpm test') 'pnpm test was not selected.' 'BOOTSTRAP_BUG' }
+        if (Get-Command pnpm -ErrorAction SilentlyContinue) { Assert-Condition ($resultA.Text.Contains('pnpm test')) 'pnpm test was not suggested.' 'BOOTSTRAP_BUG' }
         else { Assert-Condition ($resultA.Text -match 'VALIDATION_TOOL_UNAVAILABLE: pnpm') 'Missing pnpm was not reported.' 'BOOTSTRAP_BUG' }
         $caseB = New-CleanRepo $scenarioDir 'case-b' ([ordered]@{ 'README.md' = 'conflicting lockfiles' + [Environment]::NewLine; 'package.json' = '{"packageManager":"npm@10","scripts":{"test":"node test.js"}}' + [Environment]::NewLine; 'package-lock.json' = '{}' + [Environment]::NewLine; 'pnpm-lock.yaml' = 'lockfileVersion: 9' + [Environment]::NewLine })
         $resultB = Invoke-Bootstrap $caseB
@@ -369,12 +336,12 @@ try {
         $result = Invoke-Bootstrap $repo
         Assert-Condition ($result.ExitCode -eq 0 -and $result.Text -match '(?m)^READY\s*$') ('Multi-stack install failed: ' + $result.Text) 'BOOTSTRAP_BUG'
         Assert-Condition ($result.Text -match '(?m)^node\s*$' -and $result.Text -match '(?m)^python\s*$') 'Both stacks were not detected.' 'BOOTSTRAP_BUG'
-        $allows = Get-ToolRules $repo
-        if (Get-Command npm -ErrorAction SilentlyContinue) { Assert-Condition ($allows -contains 'npm test') 'Node validation missing from union.' 'BOOTSTRAP_BUG' }
+        if (Get-Command npm -ErrorAction SilentlyContinue) { Assert-Condition ($result.Text.Contains('npm test')) 'Node validation missing from union.' 'BOOTSTRAP_BUG' }
         else { Assert-Condition ($result.Text -match 'VALIDATION_TOOL_UNAVAILABLE: npm') 'Unavailable npm not reported.' 'BOOTSTRAP_BUG' }
-        if (Get-Command pytest -ErrorAction SilentlyContinue) { Assert-Condition ($allows -contains 'pytest') 'Python validation missing from union.' 'BOOTSTRAP_BUG' }
+        if (Get-Command pytest -ErrorAction SilentlyContinue) { Assert-Condition ($result.Text.Contains('pytest')) 'Python validation missing from union.' 'BOOTSTRAP_BUG' }
         else { Assert-Condition ($result.Text -match 'VALIDATION_TOOL_UNAVAILABLE: pytest') 'Unavailable pytest not reported.' 'BOOTSTRAP_BUG' }
-        Assert-Condition ($allows -notcontains 'npm run publish') 'Unapproved package script entered policy.' 'BOOTSTRAP_BUG'
+        $manifest = [IO.File]::ReadAllText((Join-Path $repo '.opencode/orchestrator-install.json')) | ConvertFrom-Json
+        Assert-Condition (@($manifest.validation_commands | Where-Object { $_ -eq 'npm run publish' }).Count -eq 0) 'Unrelated script entered default validation suggestions.' 'BOOTSTRAP_BUG'
     }
 
     Run-Scenario 'P4C-7' {
@@ -433,8 +400,8 @@ try {
         $result = Invoke-Bootstrap $repo
         Assert-Condition ($result.ExitCode -eq 0 -and $result.Text -match '(?m)^READY\s*$') ('Unavailable-tool project install failed: ' + $result.Text) 'BOOTSTRAP_BUG'
         Assert-Condition ($result.Text.Contains($fixture.Warning)) ('Unavailable tool was not reported: ' + $fixture.Name) 'BOOTSTRAP_BUG'
-        $allows = Get-ToolRules $repo
-        foreach ($command in $fixture.Commands) { Assert-Condition ($allows -notcontains $command) ('Unavailable command was authorized: ' + $command) 'BOOTSTRAP_BUG' }
+        $manifest = [IO.File]::ReadAllText((Join-Path $repo '.opencode/orchestrator-install.json')) | ConvertFrom-Json
+        foreach ($command in $fixture.Commands) { Assert-Condition (@($manifest.validation_commands | Where-Object { $_ -eq $command }).Count -eq 0) ('Unavailable command was suggested: ' + $command) 'BOOTSTRAP_BUG' }
         $source = [IO.File]::ReadAllText($Bootstrap)
         Assert-Condition ($source -notmatch '(?im)^\s*&\s*(npm|pnpm|yarn|bun|pip|uv|cargo|mvn|gradle)\s+(install|i|add|update|uninstall|remove)\b') 'Bootstrap contains a dependency-install invocation.' 'BOOTSTRAP_BUG'
     }
@@ -445,14 +412,13 @@ try {
         $repo = New-CleanRepo $scenarioDir 'target' $files
         $result = Invoke-Bootstrap $repo
         Assert-Condition ($result.ExitCode -eq 0) ('Policy target install failed: ' + $result.Text) 'BOOTSTRAP_BUG'
-        $rules = Get-NoxRules $repo
-        $allows = @($rules | Where-Object Effect -eq 'allow' | ForEach-Object Resource)
-        Assert-Condition (@($rules | Where-Object { $_.Resource -eq '*' -and $_.Effect -eq 'deny' }).Count -gt 0) 'Tester shell wildcard DENY fallback missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (@($rules | Where-Object Effect -eq 'ask').Count -eq 0) 'Tester shell ASK rule found.' 'BOOTSTRAP_BUG'
-        Assert-Condition (@($rules | Where-Object { $_.Effect -eq 'allow' -and $_.Resource -match '[*?]' }).Count -eq 0) 'Nox wildcard shell ALLOW found.' 'BOOTSTRAP_BUG'
-        foreach ($command in $SafeGit) { Assert-Condition ($allows -contains $command) ('Safe Git baseline missing: ' + $command) 'BOOTSTRAP_BUG' }
-        Assert-Condition ($allows -contains 'npm test') 'Relevant test command missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition ($allows -notcontains 'npm run deploy' -and $allows -notcontains 'npm run banana') 'Unknown package script authorized.' 'BOOTSTRAP_BUG'
+        $diagnostics = Get-OpenCodeDiagnostics $repo
+        $nox = Get-Agent $diagnostics.Agents 'nox'
+        Assert-Condition (Has-Rule $nox 'shell' '*' 'allow' -and -not (Has-Rule $nox 'shell' '*' 'ask')) 'Trusted-project Tester shell allow missing or ASK present.' 'BOOTSTRAP_BUG'
+        $manifest = [IO.File]::ReadAllText((Join-Path $repo '.opencode/orchestrator-install.json')) | ConvertFrom-Json
+        Assert-Condition (@($manifest.validation_commands | Where-Object { $_ -eq 'npm test' }).Count -eq 1) 'Relevant test suggestion missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (@($manifest.validation_commands | Where-Object { $_ -eq 'npm run deploy' }).Count -eq 0) 'Default suggestions include unrelated script.' 'BOOTSTRAP_BUG'
+        Assert-Condition ([IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/nox.md')) -eq [IO.File]::ReadAllText((Join-Path $RepoRoot '.opencode/agents/nox.md'))) 'Bootstrap generated a command ACL.' 'BOOTSTRAP_BUG'
     }
 
     Run-Scenario 'P4C-12' {
@@ -496,23 +462,21 @@ try {
         Assert-Condition (Has-Rule $sorin 'subagent' '*' 'deny') 'Sorin subagent DENY missing.' 'BOOTSTRAP_BUG'
         $kovan = Get-Agent $agents 'kovan'
         Assert-Condition (Has-Rule $kovan 'edit' '*' 'allow') 'Kovan repository-local edit allow missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $kovan 'shell' '*' 'deny') 'Kovan shell DENY missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $kovan 'shell' '*' 'allow') 'Kovan shell ALLOW missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $kovan 'subagent' '*' 'deny') 'Kovan subagent DENY missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $kovan 'external_directory' '*' 'deny') 'Kovan external-directory DENY missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $kovan 'external_directory' '*' 'allow') 'Kovan external-directory ALLOW missing.' 'BOOTSTRAP_BUG'
         foreach ($resource in @('.git', '.git/*', '.opencode', '.opencode/*', 'opencode.json', 'opencode.jsonc', '*.env', '*.env.*')) {
             Assert-Condition (Has-Rule $kovan 'edit' $resource 'deny') ('Kovan protected edit path missing: ' + $resource) 'BOOTSTRAP_BUG'
         }
         Assert-Condition (Has-Rule $kovan 'edit' '*.env.example' 'allow') 'Documented env-example exception missing.' 'BOOTSTRAP_BUG'
         $nox = Get-Agent $agents 'nox'
         Assert-Condition (Has-Rule $nox 'edit' '*' 'deny') 'Nox edit DENY missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $nox 'shell' '*' 'deny') 'Nox shell DENY fallback missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $nox 'shell' '*' 'allow') 'Nox shell ALLOW missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $nox 'subagent' '*' 'deny') 'Nox subagent DENY missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $nox 'external_directory' '*' 'deny') 'Nox external-directory DENY missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $nox 'external_directory' '*' 'allow') 'Nox external-directory ALLOW missing.' 'BOOTSTRAP_BUG'
         $shellRules = @($nox.permissions | Where-Object { $_.action -eq 'shell' })
         Assert-Condition (@($shellRules | Where-Object effect -eq 'ask').Count -eq 0) 'Effective Nox shell ASK exists.' 'BOOTSTRAP_BUG'
-        Assert-Condition (@($shellRules | Where-Object { $_.effect -eq 'allow' -and $_.resource -match '[*?]' }).Count -eq 0) 'Effective Nox wildcard shell ALLOW exists.' 'BOOTSTRAP_BUG'
-        Assert-Condition (@($shellRules | Where-Object { $_.effect -eq 'allow' -and $_.resource -eq 'npm test' }).Count -gt 0) 'Effective target validation command is not allowed.' 'BOOTSTRAP_BUG'
-        Assert-Condition (@($shellRules | Where-Object { $_.effect -eq 'allow' -and $_.resource -eq 'npm run deploy' }).Count -eq 0) 'Unapproved script is allowed effectively.' 'BOOTSTRAP_BUG'
+        Assert-Condition (@($shellRules | Where-Object { $_.effect -eq 'allow' -and $_.resource -eq '*' }).Count -gt 0) 'Effective Nox broad shell allow missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $nox 'read' '*' 'allow') 'Nox source-read permission missing.' 'BOOTSTRAP_BUG'
     }
 

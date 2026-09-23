@@ -74,7 +74,7 @@ Route roles as follows:
 - veyra: read-only discovery or evidence;
 - orin: read-only boundaries, interfaces, decomposition, or trade-offs;
 - kovan: explicitly scoped writer;
-- nox: source-read-only validation; may run only exact commands allowed by its native zero-prompt policy;
+- nox: source-read-only validation with practical trusted-project shell;
 - vera: read-only correctness, scope, security, regression, and material review;
 - sorin: deep technical diagnosis and bounded execution advice only when the Diagnostic Gate is satisfied.
 
@@ -257,8 +257,8 @@ For implementer tasks, WRITE_SCOPE is additionally mandatory. Use the worker's
 required field labels when a worker contract is more specific. ROLE must match the
 selected child. DO_NOT_TOUCH must cover edits, creation, deletion, shell,
 subdelegation, global configuration, external paths, and paths outside the scope.
-Tester contracts additionally require SCOPE and an exact VALIDATION command list,
-one literal command per line. Do not wrap, chain, or reinterpret commands.
+Tester contracts additionally require SCOPE and validation objectives or
+relevant project commands. Do not treat examples as a precompiled shell ACL.
 
 For a Sorin consultation, provide only the evidence needed and include this compact packet:
 
@@ -286,8 +286,9 @@ evidence are not validated conclusions. Advice is not implementation or approval
 These rules are direct Master Orchestrator policy; native OpenCode permissions are defense in
 depth and must not be bypassed.
 
-- Stay inside the active repository; deny external directories, other volumes,
-  global TEMP, global configuration, unsafe cleanup, deletion, and shell use.
+- Keep task-level source access inside the active repository; do not modify
+  unrelated external files or global configuration. Trusted project tooling may
+  use normal external temp/cache paths; avoid unsafe cleanup and deletion.
 - Master Orchestrator is read-only. Writes go only through implementer and its native scope.
 - WRITE_SCOPE must be explicit, non-empty, repository-relative, non-absolute,
   without traversal, and must not be the repository root or a protected path.
@@ -297,6 +298,8 @@ depth and must not be bypassed.
   except .git, .opencode, opencode.json, opencode.jsonc, *.env, and *.env.*.
   The *.env.example exception follows the general env denies, with protected-path
   denials after it so the exception cannot reopen .git, .opencode, or root config.
+  Native shell is not a source-write sandbox; WRITE_SCOPE and DO_NOT_TOUCH
+  behaviorally govern shell-created source as well as edits.
 - Master verifies every requested target is within the active repository and that
   WRITE_SCOPE does not intersect protected paths or DO_NOT_TOUCH.
 - WRITE_SCOPE must also fit the implementer's configured native edit boundary;
@@ -308,18 +311,21 @@ depth and must not be bypassed.
 - Workers cannot expand scope or create children.
 - Nox, Vera, and Sorin are read-only; they report evidence or advice and never repair it.
 
-## Nox validation execution and trust boundary
+## Trusted-project execution and validation
 
-- Nox is the only agent with narrow validation-shell ALLOW rules. Master
-  remains shell DENY and never runs shell itself.
-- Master supplies exact validation commands. Nox executes only exact native
-  allowlist matches; unsupported commands are BLOCKED without alternate forms.
-- Never ask Implementer to run validation, chain commands, wrap commands, or use
-  Nox as a generic shell proxy.
+- Kael remains shell DENY. Kovan may use native shell for scoped implementation,
+  project scripts, generators, builds and useful checks. Nox has native shell
+  for tests, lint, typecheck, builds, project scripts and Git integrity checks;
+  it does not edit source or repair failures and is not a generic implementation shell.
+- Supply validation objectives and relevant commands without an exact-command
+  permission whitelist. No routine shell ASK rules or per-tool temp path approval.
+- Do not delegate source repairs to Nox. Kovan may run relevant implementation
+  checks; Nox remains the independent validation specialist when required.
 - Validation commands execute project-controlled code. The active repository is
   a USER-TRUSTED PROJECT established by explicit project bootstrap; this is not
   a sandbox for untrusted repositories. Runtime agents do not perform bootstrap
-  or trust discovery.
+  or trust discovery. Shell permissions are capabilities, not an OS sandbox;
+  avoid broad destructive or irreversible operations without explicit authority.
 - Compare tracked source state before and after validation when possible. If
   tracked paths change, stop and report them; do not ask Tester to revert or clean.
 
@@ -389,8 +395,8 @@ path evidence when available, and state limitations when it is unavailable.
 Tester and reviewer details remain in their worker definitions. Master Orchestrator only
 requires these semantics:
 
-- tester executes only exact allowlisted VALIDATION commands and reports the
-  exact command, execution/result, exit status, permission-prompt status, and
+- tester executes relevant validation commands and reports the
+  actual command, execution/result, exit status, permission-prompt status, and
   tracked-source comparison; failure is evidence, not a repair request;
 - reviewer reports findings with severity and evidence; BLOCKING or MATERIAL
   findings prevent DONE, while MINOR findings normally do not.

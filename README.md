@@ -24,7 +24,7 @@ No custom scheduler. No agent database. No fake runtime inside the runtime.
 <p>
   <a href="#-quick-start">🚀 Quick Start</a> •
   <a href="#-meet-the-team">🤖 Agents</a> •
-  <a href="#-zero-prompt-validation">⚡ Validation</a> •
+  <a href="#-zero-prompt-trusted-project-execution">⚡ Validation</a> •
   <a href="#-safety-model">🛡️ Safety</a> •
   <a href="#-project-bootstrap">📦 Bootstrap</a> •
   <a href="#-qualification-status">🧪 Qualification</a>
@@ -81,7 +81,7 @@ You
  ├── 🔭 Veyra — Researcher      → discover evidence
  ├── 📐 Orin — Architect       → define boundaries
  ├── 🔨 Kovan — Implementer     → write inside WRITE_SCOPE
- ├── 👁️ Nox — Tester          → run approved validation
+  ├── 👁️ Nox — Tester          → run project validation, without source edits
  ├── ⚖️ Vera — Reviewer        → review without rewriting
  └── 🧭 Sorin — Deep Diagnostician → advise through the Diagnostic Gate
 ~~~
@@ -152,7 +152,7 @@ child sessions just to check activity. Hidden Maintenance appears while running.
 | 🔭 **Veyra — Researcher** | GPT-6 Luna Max | Read-only discovery and evidence |
 | 📐 **Orin — Architect** | GPT-6 Luna Max | Read-only design, boundaries and decomposition |
 | 🔨 **Kovan — Implementer** | GPT-6 Luna Max | The only normal repository writer |
-| 👁️ **Nox — Tester** | GPT-6 Luna Max | Read-only source + exact validation commands |
+| 👁️ **Nox — Tester** | GPT-6 Luna Max | Read-only source + trusted-project validation shell |
 | ⚖️ **Vera — Reviewer** | GPT-6 Luna Max | Correctness, scope, security and regression review |
 | 🧭 **Sorin — Deep Diagnostician** | GPT-6 Sol XHigh | Exceptional deep diagnosis and execution advice |
 
@@ -181,7 +181,7 @@ pwsh ./scripts/bootstrap.ps1 `
   -DryRun
 ~~~
 
-Dry run reports the target, detected stacks, validation policy, planned files, warnings, conflicts, and status.
+Dry run reports the target, detected stacks, suggested validation commands, planned files, warnings, conflicts, and status.
 
 No project files are installed during DryRun.
 
@@ -235,7 +235,7 @@ Implementer:
 → changes only the authorized files
 
 Tester:
-→ runs the exact project validation commands
+→ runs relevant project validation commands
 
 Reviewer:
 → checks correctness, scope and regressions
@@ -263,59 +263,19 @@ It advises.
 
 ---
 
-## ⚡ Zero-Prompt Validation
+## ⚡ Zero-Prompt Trusted-Project Execution
 
-The Tester can execute known validation commands without turning the user into a human CAPTCHA.
+Explicit bootstrap establishes a **USER-TRUSTED PROJECT**, not an OS sandbox.
+Kovan can edit within its task WRITE_SCOPE and run project commands, generators,
+scripts and useful build checks. Nox can run relevant tests, lint, typecheck,
+builds, validation scripts and Git inspection without editing source or repairing
+failures. Neither needs every literal shell command or normal tool/temp/cache
+path preapproved. There is no routine shell ASK loop or generated command ACL.
 
-~~~text
-known validation command
-        ↓
-      ALLOW ✅
-        ↓
-execute without permission prompt
-~~~
-
-Unknown or dangerous command:
-
-~~~text
-unknown / unsafe command
-        ↓
-      DENY ⛔
-        ↓
-no execution
-no interactive ASK
-~~~
-
-### Examples
-
-~~~text
-npm test        ✅
-npm run lint    ✅
-pytest          ✅
-flutter test    ✅
-cargo test      ✅
-go test ./...   ✅
-
-npm install     ⛔
-git clean       ⛔
-rm -rf ...      ⛔
-cmd /c *        ⛔
-pwsh -Command * ⛔
-~~~
-
-The generated Tester policy is:
-
-~~~text
-safe Git baseline
-+
-detected relevant validation commands
-+
-DENY everything else
-~~~
-
-No broad shell wildcard allow.  
-No shell ASK fallback.  
-No dependency installation.
+Broad native shell access is balanced by behavioral task boundaries. Neither
+role should perform broad destructive or irreversible work without explicit
+authority. Bootstrap installation containment remains stricter than runtime
+tooling; installing into an explicitly selected target is a separate operation.
 
 ---
 
@@ -342,13 +302,14 @@ src/users/UserService.java
 src/users/UserServiceTest.java
 ~~~
 
-Native edit capability is the outer repository boundary.
+Native edit rules protect sensitive project files; shell is not a path sandbox.
 
-**WRITE_SCOPE is the task-level ownership boundary.**
+**WRITE_SCOPE is the task-level ownership contract**, including source files
+created through shell. It is not an OS sandbox.
 
 ### 🔒 Protected paths
 
-The Implementer cannot normally modify:
+Native edit denies and task rules protect these paths from normal Implementer changes:
 
 ~~~text
 .git/
@@ -381,7 +342,7 @@ That is preferable to a "helpful" cleanup destroying user work. 🙂
 
 ## ✍️ WRITE_SCOPE
 
-Repository-wide native writer access does **not** mean task-wide ownership.
+Native shell and repository-wide edit access do **not** mean task-wide ownership.
 
 A writer contract must be:
 
@@ -496,7 +457,7 @@ It recommends the next bounded action. It does not implement the fix.
 
 ## 📦 Project Bootstrap
 
-The PowerShell bootstrap installs a project-specific orchestration setup and selects validation from repository evidence.
+The PowerShell bootstrap installs a project-specific orchestration setup and suggests validation from repository evidence.
 
 Supported detection currently includes:
 
@@ -510,7 +471,7 @@ Supported detection currently includes:
 | 🦀 Rust | Cargo.toml |
 | 🐹 Go | go.mod |
 
-### Node scripts are intentionally selective
+### Node validation defaults are intentionally selective
 
 Given:
 
@@ -526,7 +487,7 @@ Given:
 }
 ~~~
 
-Bootstrap may authorize:
+Bootstrap may suggest:
 
 ~~~text
 npm test
@@ -534,14 +495,15 @@ npm run lint
 npm run build
 ~~~
 
-It does **not** automatically authorize:
+It does **not** automatically suggest:
 
 ~~~text
 npm run deploy
 npm run banana
 ~~~
 
-just because those scripts exist. 🍌
+just because those scripts exist. Suggestions are **not** a shell permission
+allowlist: trusted-project agents may run other relevant commands as needed. 🍌
 
 ---
 
@@ -575,7 +537,7 @@ Bootstrap creates a small project-local installation manifest under:
 .opencode/orchestrator-install.json
 ~~~
 
-It records installation ownership, source commit, managed-file hashes, detected stacks, package manager, and generated validation commands.
+It records installation ownership, source commit, managed-file hashes, detected stacks, package manager, and validation suggestions.
 
 ### ♻️ Idempotency
 
@@ -634,7 +596,7 @@ The current baseline has been qualified in stages.
 | 3A | Model + orchestration baseline | ✅ PASS |
 | 3B | Diagnostic escalation | ✅ PASS |
 | 4A | Generic real-repository writes | ✅ 10/10 |
-| 4B | Zero-prompt safe validation | ✅ 12/12 |
+| 4B | Historical exact-command validation baseline | ✅ 12/12 (superseded by trusted-project shell) |
 | 4C | Bootstrap + stack-aware installation | ✅ 14/14 |
 
 Latest Phase 4C qualification environment:
@@ -663,7 +625,7 @@ Phase 4C covers:
 - ✅ dirty worktrees;
 - ✅ unsafe paths and escaping junctions;
 - ✅ unavailable validation tools;
-- ✅ generated Tester policy;
+- ✅ installed trusted-project Tester permissions and validation suggestions;
 - ✅ effective model mapping;
 - ✅ managed-file drift;
 - ✅ target security.
@@ -788,7 +750,7 @@ This project does **not** want to become:
 - ❌ a product-management framework;
 - ❌ an automatic dependency installer;
 - ❌ a sandbox for arbitrary untrusted repositories;
-- ❌ a "give every agent shell access and pray" framework.
+- ❌ shell access for read-only research, architecture, review or diagnosis roles.
 
 The orchestration layer should stay **thin**.
 
@@ -855,7 +817,7 @@ pwsh ./scripts/bootstrap.ps1 `
 
 ### ✅ Qualified
 
-Core orchestration, generic writing, zero-prompt validation, diagnostic escalation, and project bootstrap are qualified.
+Core orchestration, generic writing, trusted-project validation, diagnostic escalation, and project bootstrap are qualified.
 
 ### 🐕 Next: real-world dogfood
 

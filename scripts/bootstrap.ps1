@@ -27,20 +27,6 @@ $Managed = @(
 )
 $NewManaged = @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md',
     '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
-$SafeGit = @(
-    "git status",
-    "git status --short",
-    "git status --porcelain",
-    "git status --porcelain=v2",
-    "git diff",
-    "git diff --check",
-    "git diff --cached",
-    "git diff --cached --check",
-    "git diff --name-only",
-    "git diff --raw",
-    "git rev-parse HEAD",
-    "git ls-files"
-)
 
 function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
 function Rel([string]$Path) { ($Path -replace "\\", "/").TrimStart([char[]]@('/')) }
@@ -264,7 +250,6 @@ function Detect-Project([string]$Repo) {
     $warnings = [System.Collections.Generic.List[string]]::new()
     $stackSeen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $commandSeen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-    $SafeGit | ForEach-Object { Add-Unique $commands $commandSeen $_ }
     $packageManager = $null
 
     $packagePath = Join-Path $Repo "package.json"
@@ -397,40 +382,12 @@ function Detect-Project([string]$Repo) {
     }
 }
 
-function Target-Nox([string]$Source, [string[]]$Commands) {
-    $text = $Source.Replace("`r`n","`n")
-    $marks = [regex]::Matches($text, "(?m)^---\s*$")
-    if ($marks.Count -lt 2) { Fail "SOURCE_NOX_INVALID" "Missing frontmatter." }
-    $front = $text.Substring($marks[0].Index + $marks[0].Length,
-        $marks[1].Index - ($marks[0].Index + $marks[0].Length)).Trim("`n")
-    $body = $text.Substring($marks[1].Index + $marks[1].Length)
-    $front = [regex]::Replace($front,
-        "(?m)^  - action: shell\r?\n    resource: [^\r\n]+\r?\n    effect: allow\r?\n?", "")
-    if ($front -notmatch "(?ms)- action: shell\s+resource: [`"']\*[`"']\s+effect: deny") {
-        Fail "SOURCE_NOX_INVALID" "Missing shell deny fallback."
-    }
-    $allow = [Text.StringBuilder]::new()
-    foreach ($cmd in $Commands) {
-        $escaped = $cmd.Replace("'","''")
-        [void]$allow.Append("  - action: shell`n    resource: '$escaped'`n    effect: allow`n")
-    }
-    $generated = "---`n$($front.TrimEnd())`n$($allow.ToString())---$body"
-    if ($generated -match "(?ms)- action: shell\s+resource: [^\r\n]+\s+effect: ask") {
-        Fail "GENERATED_NOX_UNSAFE" "Shell ASK is forbidden."
-    }
-    if ($generated -match "(?ms)- action: shell\s+resource: [`"']\*[`"']\s+effect: allow") {
-        Fail "GENERATED_NOX_UNSAFE" "Wildcard shell ALLOW is forbidden."
-    }
-    $generated
-}
-
 function Managed-Content($Detection) {
     $map = [ordered]@{}
     foreach ($p in $Managed) {
         $src = Join-Path $SourceRoot ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         if (-not (Test-Path $src)) { Fail "SOURCE_FILE_MISSING" $p }
         $text = [IO.File]::ReadAllText($src)
-        if ($p -eq ".opencode/agents/nox.md") { $text = Target-Nox $text $Detection.ValidationCommands }
         $map[$p] = $text
     }
     $map

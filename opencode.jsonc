@@ -3,13 +3,14 @@
   "default_agent": "kael",
   "model": "openai/gpt-6-sol",
   "permissions": [
-    // Defense-in-depth: agents may operate only in the active project.
+    // Default for read-only agents; trusted-project Kovan/Nox opt into native
+    // external-directory access for normal tool-managed temp and caches.
     {
       "action": "external_directory",
       "resource": "*",
       "effect": "deny"
     },
-    // Shell is globally denied; Nox adds exact validation-command exceptions.
+    // Shell is globally denied; Kovan and Nox opt into trusted-project shell.
     // The hidden maintenance agent explicitly allows shell for /maintain only.
     {
       "action": "shell",
@@ -23,8 +24,8 @@
       "resource": "*",
       "effect": "deny"
     },
-    // Kovan-specific rules constrain the global edit deny to authorized
-    // project files and keep sensitive orchestration paths protected.
+    // Kovan-specific rules protect sensitive edit paths; WRITE_SCOPE remains
+    // a task ownership contract, not an OS sandbox.
     {
       "action": "edit",
       "resource": "*",

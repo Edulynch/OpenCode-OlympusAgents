@@ -420,6 +420,20 @@ Only proven **DISJOINT** writers may run concurrently.
 
 Independent tasks can run in parallel through native OpenCode child sessions.
 
+**NORMAL** is cost/context-aware: Kael uses the minimum useful number of children,
+adaptively from zero to four. **FAST** is an explicit user-selected latency-priority
+mode: Kael actively looks for safe independent work and may fan out up to four
+children. Four active Kael children is a ceiling, not a target. Dependencies and
+disjoint writer ownership still apply in either mode.
+
+~~~text
+FAST: 20 URLs → 4 researchers → 5 URLs each
+~~~
+
+Equivalent repetitive work receives the same output contract and balanced,
+non-overlapping item shards (7 items across 4 workers: 2/2/2/1). OpenCode remains
+the runtime; FAST is an orchestration decision, not another scheduler.
+
 ~~~text
         ┌─ Research A ─┐
 Master ─┤              ├─ barrier → continue

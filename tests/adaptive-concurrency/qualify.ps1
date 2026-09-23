@@ -22,7 +22,15 @@ try {
     Check AC8 ($kael -match 'Only DISJOINT writers may run concurrently' -and $kael -match 'OVERLAPPING:.*denied' -and $kael -match 'AMBIGUOUS:.*denied')
     Check AC9 ($kael -match '## Diagnostic Gate' -and $kael -match 'default limit is one Sorin consultation' -and $kael -match 'materially new evidence' -and $kael -match 'FAST never overrides.*Sorin Diagnostic Gate')
     Check AC10 ($hud -match 'active\(\)\.slice\(0, 4\)' -and $hud -match 'context\.data\.session\.status' -and $activity -match 'current\.parentID != null' -and $activity -match 'status\(session\.id\) === "running"' -and $hud -notmatch 'setInterval|setTimeout|spawn|schedule')
-    Check DOC ($readme -match 'FAST: 20 URLs.*4 researchers.*5 URLs each' -and $readme -match 'OpenCode remains')
+    $modes = [regex]::Match($readme, '(?ms)^##[^\r\n]*NORMAL vs FAST[^\r\n]*\r?\n(?<body>.*?)(?=^##\s|\z)')
+    $modeDocs = $modes.Groups['body'].Value
+    Check DOC ($modes.Success -and
+        $modeDocs -match '(?is)\bNORMAL\b.{0,40}\bdefault\b' -and
+        $modeDocs -match '(?is)\bNORMAL\b.{0,140}\bonly\b.{0,80}\bparallel\b.{0,80}\buseful\b' -and
+        $modeDocs -match '(?is)\bexplicit(?:ly)?\b.{0,40}\b(?:ask|request)\b.{0,40}\bFAST\b' -and
+        $modeDocs -match '(?is)\bup to\b.{0,20}\bfour\b.{0,20}\bagents\b' -and
+        $modeDocs -match '(?is)\bFAST\b.{0,100}\b(?:does not|doesn''t|never)\s+skip\s+checks\b' -and
+        $modeDocs -match '(?is)\b(?:does not|doesn''t|never)\b.{0,70}\bdependent\s+tasks\b.{0,30}\bparallel\b')
     Write-Output 'ADAPTIVE CONCURRENCY QUALIFICATION: PASS (static; interactive selection and fan-out pending)'
     exit 0
 } catch {

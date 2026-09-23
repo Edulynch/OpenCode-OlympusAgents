@@ -2,95 +2,72 @@
 
 # 🏛️ OpenCode Olympus Agents
 
-### Give OpenCode a team — not one giant prompt.
+### Give OpenCode a team.
 
-A thin multi-agent orchestration layer for **OpenCode V2**. **OpenCode is the runtime. Olympus coordinates specialized agents.**
+**Install once. Open OpenCode. Start building.**
 
-Native OpenCode child sessions · bounded orchestration · adaptive parallelism · explicit FAST fan-out · live activity · zero-prompt trusted-project execution.
+[![Release v0.1.0](https://img.shields.io/badge/release-v0.1.0-7c3aed?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.1.0)
+[![OpenCode V2](https://img.shields.io/badge/OpenCode-V2-f97316?style=flat-square)](https://opencode.ai/docs/)
+[![Windows Qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.1.0)
+[![MIT License](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
 
-**v0.1.0: Windows-first / Windows-qualified.**
+<p><a href="#-install">Install</a> · <a href="#-start-building">Start Building</a> · <a href="#-the-team">Agents</a> · <a href="#-normal-vs-fast">NORMAL vs FAST</a> · <a href="#-live-activity">Live Activity</a> · <a href="#-update">Update</a> · <a href="#-documentation">Docs</a></p>
 
 </div>
 
----
+## 🚀 Install
 
-## 🚀 Quick Start
+### Requirements
 
-**Requirements:** Windows, PowerShell 7 (`pwsh`), Git, OpenCode V2 (qualified with `opencode v2.0.14`), access to `openai/gpt-6-sol` and `openai/gpt-6-luna` with the configured variants. Linux/macOS installation has not been qualified.
+- Windows and PowerShell 7 (`pwsh`)
+- Git and an existing Git project
+- OpenCode V2 with access to `openai/gpt-6-sol` and `openai/gpt-6-luna` (including the configured variants)
 
-After the `v0.1.0` tag is created and verified, install into the **current Git worktree root**:
+Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Run:
 
 ```powershell
 irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.1.0/install.ps1 | iex
 ```
 
-This versioned URL is **not live until the tag is published**. Review the script before piping remote code to `iex`. If the repository is private, GitHub's anonymous raw URL will not work; use Manual Install instead. The installer defaults to the current directory, which must pass bootstrap's Git-root and destination checks. Prefer an explicit target when running a local script:
+This installs Olympus into that project, not globally. Only run downloaded scripts in projects you trust; [review the installer](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.1.0/install.ps1) first if you prefer.
+
+## 💬 Start Building
+
+In the same project folder, run:
 
 ```powershell
-pwsh ./install.ps1 -Version v0.1.0 -Target 'C:\path\to\your-project' -DryRun
-pwsh ./install.ps1 -Version v0.1.0 -Target 'C:\path\to\your-project'
+opencode
 ```
 
-Once installed, `cd` into the project, run `opencode`, and describe the work. Installation is the explicit project trust action.
+Then describe what you want to build in plain language. For example:
 
-### 📦 Manual Install / pre-release preview
+> Add a search bar to my app. Make it keyboard-accessible and run the relevant tests.
 
-From a local copy of this repository (before the tag exists, do **not** use the public one-liner):
+Kael coordinates the team as needed: research, implementation, testing, and review. You don't have to choose agents yourself.
 
-```powershell
-pwsh ./scripts/bootstrap.ps1 -Target 'C:\path\to\your-project' -DryRun
-pwsh ./scripts/bootstrap.ps1 -Target 'C:\path\to\your-project'
-```
+## 🧭 The Team
 
-Bootstrap requires an existing Git worktree root, rejects unsafe targets and redirect escapes, checks conflicts and project worktree state, then validates effective OpenCode agents. `-DryRun` previews without installing. The local development installer can be qualified with `-SourceRoot <local-checkout>`; this is not the public installation path.
+| Agent | What they do |
+|---|---|
+| 👑 **Kael** | Understands your request and coordinates the work. |
+| 🔭 **Veyra** | Researches the project and gathers context. |
+| 📐 **Orin** | Plans tricky changes. |
+| 🔨 **Kovan** | Writes code. |
+| 👁️ **Nox** | Runs checks and tests. |
+| ⚖️ **Vera** | Reviews the result. |
+| 🧭 **Sorin** | Helps diagnose difficult problems when needed. |
 
-**Update/reinstall:** run the versioned installer again with the desired `-Version` and the same target (or run local bootstrap). The manifest at `.opencode/orchestrator-install.json` owns installed files; unchanged managed files yield `NO_CHANGES`, while `MANAGED_FILE_DRIFT` refuses a silent overwrite. Resolve drift deliberately before upgrading; unrelated files are not installer-owned. To remove Olympus, manually remove only the files listed in that manifest and then the manifest itself, after checking for local edits; no automatic uninstaller is provided. Never delete an entire `.opencode` directory without reviewing its contents.
+OpenCode is the runtime. Olympus is the orchestration and decision layer that helps this team work together.
 
----
+## ⚡ NORMAL vs FAST
 
-## 🧭 The team
+**NORMAL** is the default: Olympus uses only as much parallel work as is useful for your task.
 
-```text
-Kael
-├─ Veyra   research
-├─ Orin    architecture
-├─ Kovan   implementation
-├─ Nox     validation
-├─ Vera    review
-└─ Sorin   exceptional diagnosis
+If speed matters, explicitly ask for **FAST** in your request (for example, “FAST: check these independent modules and fix the issues”). Olympus can split independent work across up to four agents at a time when it is safe to do so. FAST does not skip checks or make dependent tasks run in parallel.
 
-User
-└─ /maintain
-   └─ hidden Maintenance
-```
+## 👀 Live Activity
 
-The **seven-agent cast** runs ordinary work. The hidden Maintenance Plane handles only explicit user-authorized `/maintain` tasks; Kael cannot route work to it automatically.
-
-| Agent | Role | Model | Writes? | Shell? |
-|---|---|---|---|---|
-| 👑 Kael | Orchestrator | `openai/gpt-6-sol#high` | No | No |
-| 🔭 Veyra | Researcher | `openai/gpt-6-luna#max` | No | No |
-| 📐 Orin | Architect | `openai/gpt-6-luna#max` | No | No |
-| 🔨 Kovan | Implementer | `openai/gpt-6-luna#max` | Yes, within task ownership | Yes |
-| 👁️ Nox | Tester | `openai/gpt-6-luna#max` | No source edits | Yes |
-| ⚖️ Vera | Reviewer | `openai/gpt-6-luna#max` | No | No |
-| 🧭 Sorin | Deep diagnostician | `openai/gpt-6-sol#xhigh` | No | No |
-
-**Separate, hidden control plane:** Maintenance · `openai/gpt-6-sol#high` · repository administration under `/maintain` only; may edit and use shell when explicitly authorized.
-
-### ⚡ NORMAL vs FAST
-
-- **NORMAL:** adaptive 0–4 active Kael children; minimum useful parallelism, cost/context conscious.
-- **FAST:** explicitly user-selected, latency-oriented; up to four children when safe independent partitions exist, including repetitive item/source fan-out.
-- **Four is a maximum, not a target.** Dependencies and disjoint writer ownership still apply.
-
-```text
-FAST: 20 URLs → 4 researchers → 5 URLs each
-```
-
-OpenCode remains the runtime; Olympus makes orchestration decisions, not a new scheduler.
-
-### 👀 Live Activity HUD
+When agents are working, OpenCode can show who is active and what they're doing:
 
 ```text
 ⚡ Olympus · 3 active
@@ -99,36 +76,16 @@ OpenCode remains the runtime; Olympus makes orchestration decisions, not a new s
 ● Kovan   Implementing feature
 ```
 
-The passive, read-only TUI display uses native OpenCode session state. It does **not** control execution. It lets you check child progress without entering child sessions just to see status; it disappears when no direct children are running.
+The activity display is read-only and disappears when no agents are working.
 
----
+## 🔄 Update
 
-## 🛡️ Trust & ownership
+Olympus is installed per project. To reinstall **v0.1.0** in the same project, run the [Install](#-install) command again from its Git root. The installer checks for local changes to files it manages and will not silently overwrite them. This command is pinned to v0.1.0; it will not automatically install future releases.
 
-An explicitly bootstrapped project is **USER-TRUSTED** at Olympus runtime. Kovan may execute project-controlled commands and edit within a task's `WRITE_SCOPE`; Nox may run project-controlled tests/builds and inspect Git without source edits. Trusted-project shell and normal tool/temp/cache access do not prompt for each routine command. **Olympus is not an OS sandbox.** `WRITE_SCOPE` is an orchestration ownership contract, not filesystem isolation. Do not bootstrap untrusted projects. Bootstrap target safety is stricter and separate: it checks Git roots, containment, redirects, ownership, and drift before installation. Avoid broad destructive commands without explicit authority.
+## 📚 Documentation
 
-Kael owns completion: implementation + passing validation + no material review findings + acceptance evidence. Research, design, retries and Sorin are used only when useful. No custom scheduler, daemon, agent database, or replacement for OpenCode permissions.
+- [OpenCode documentation](https://opencode.ai/docs/) — install and learn OpenCode.
+- [Olympus v0.1.0 release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.1.0) and [changelog](CHANGELOG.md) — release information.
+- [License](LICENSE) — MIT.
 
----
-
-## 🧪 Qualification
-
-Windows qualification uses OpenCode v2.0.14 and PowerShell 7.6.6. Run:
-
-```powershell
-pwsh ./tests/phase4c/qualify.ps1
-pwsh ./tests/activity-hud/qualify.ps1
-pwsh ./tests/adaptive-concurrency/qualify.ps1
-pwsh ./tests/autonomy/qualify.ps1
-pwsh ./tests/release/qualify.ps1
-```
-
-These check bootstrap target safety, stacks, managed drift and idempotency, effective agents/models, hidden Maintenance permissions/command, HUD discovery/presentation behavior, adaptive/FAST policy, and trusted-project Kovan/Nox permissions. Release checks exercise the installer against a disposable Git project. **Headless/static checks do not prove interactive child dispatch, live TUI rendering, real FAST selection, or agent runtime execution.** Validate those manually in an OpenCode session before publication; Maintenance interactive routing must be explicitly exercised with `/maintain` and denied when Kael attempts direct delegation.
-
----
-
-## 🙏 Acknowledgements & provenance
-
-The concept of a more expensive orchestrator coordinating specialized workers was informed in part by [donvito/codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0). Olympus is an independent OpenCode V2 implementation, **not a fork**; no upstream code inheritance was identified in the repository audit. OpenCode provides the runtime; Olympus provides the orchestration/decision layer.
-
-Licensed under [MIT](LICENSE). See [CHANGELOG.md](CHANGELOG.md) for release highlights.
+Olympus is an independent OpenCode V2 project, not a fork. The idea of a specialized agent team was informed in part by [donvito/codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).

@@ -21,7 +21,7 @@
 
 - Windows and PowerShell 7 (`pwsh`)
 - Git and an existing Git project
-- OpenCode V2 with access to `openai/gpt-6-sol` and `openai/gpt-6-luna` (including the configured variants)
+- OpenCode V2 with GPT-6 Sol and GPT-6 Luna available (including the variants Olympus uses)
 
 Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Run:
 
@@ -59,6 +59,10 @@ Kael coordinates the team as needed: research, implementation, testing, and revi
 
 OpenCode is the runtime. Olympus is the orchestration and decision layer that helps this team work together.
 
+## 🔧 Maintenance
+
+For advanced repository administration, use `/maintain <task>` (for example, release preparation, Git maintenance, Olympus configuration maintenance, or repository-level administration). Maintenance is separate from the normal seven-agent team: Kael cannot invoke it automatically. Ordinary feature development does not require `/maintain`.
+
 ## ⚡ NORMAL vs FAST
 
 **NORMAL** is the default: Olympus uses only as much parallel work as is useful for your task.
@@ -78,13 +82,24 @@ When agents are working, OpenCode can show who is active and what they're doing:
 
 The activity display is read-only and disappears when no agents are working.
 
+## 🛡️ Trust
+
+Olympus treats an installed project as trusted. Kovan and Nox can run commands from that project while implementing and validating work. Only install Olympus into repositories you trust; see [Development & qualification](docs/DEVELOPMENT.md) for details.
+
 ## 🔄 Update
 
 Olympus is installed per project. To reinstall **v0.1.0** in the same project, run the [Install](#-install) command again from its Git root. The installer checks for local changes to files it manages and will not silently overwrite them. This command is pinned to v0.1.0; it will not automatically install future releases.
 
+## 🆘 Troubleshooting
+
+- **`opencode` command unavailable?** Install and configure [OpenCode](https://opencode.ai/docs/) first.
+- **Not a valid Git project root?** Open PowerShell in the root folder of your Git project and run the installer again.
+- **`MANAGED_FILE_DRIFT`?** Olympus found a manually changed file it manages and refused to overwrite it silently. See [Development & qualification](docs/DEVELOPMENT.md) for recovery details.
+
 ## 📚 Documentation
 
 - [OpenCode documentation](https://opencode.ai/docs/) — install and learn OpenCode.
+- [Development & qualification](docs/DEVELOPMENT.md) — maintainer docs, bootstrap internals, qualification, and release workflow.
 - [Olympus v0.1.0 release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.1.0) and [changelog](CHANGELOG.md) — release information.
 - [License](LICENSE) — MIT.
 

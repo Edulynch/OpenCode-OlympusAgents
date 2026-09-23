@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+$')]
-    [string]$Version = 'v0.1.0',
+    [string]$Version = 'v0.1.1',
     [string]$Target = (Get-Location).Path,
     [switch]$DryRun,
     # Qualification-only: use a local source checkout before the release tag exists.
@@ -13,7 +13,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $owned = $null
 try {
-    if (-not $IsWindows) { throw 'PLATFORM_UNQUALIFIED: v0.1.0 installer is Windows-qualified only.' }
+    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'PLATFORM_UNQUALIFIED: v0.1.1 installer is Windows-qualified only.' }
+    $pwsh = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue
+    if (-not $pwsh) { throw 'OLYMPUS_REQUIRES_POWERSHELL_7: PowerShell 7 (pwsh) is required. Install PowerShell 7 and run this command again.' }
     if ($SourceRoot) {
         $source = (Resolve-Path -LiteralPath $SourceRoot -ErrorAction Stop).Path
         if (-not (Test-Path -LiteralPath $source -PathType Container)) { throw 'SOURCE_INVALID: SourceRoot must be a directory.' }
@@ -36,7 +38,7 @@ try {
     # Keep bootstrap's own process semantics, drift checks, containment and effective-agent validation.
     $args = @('-NoProfile', '-File', $bootstrap, '-Target', $Target)
     if ($DryRun) { $args += '-DryRun' }
-    & pwsh @args
+    & $pwsh.Source @args
     if ($LASTEXITCODE -ne 0) { throw "BOOTSTRAP_FAILED: bootstrap exited $LASTEXITCODE; no installer cleanup touches the target." }
     if ($DryRun) { Write-Output "OLYMPUS_INSTALL: $Version DRY_RUN_READY" }
     else { Write-Output "OLYMPUS_INSTALL: $Version READY_OR_NO_CHANGES" }

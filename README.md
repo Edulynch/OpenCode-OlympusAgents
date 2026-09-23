@@ -4,847 +4,131 @@
 
 ### Give OpenCode a team — not one giant prompt.
 
-**One task ≠ one model doing everything.**
+A thin multi-agent orchestration layer for **OpenCode V2**. **OpenCode is the runtime. Olympus coordinates specialized agents.**
 
-<p>
-  <img src="https://img.shields.io/badge/OpenCode-V2-F97316?style=flat-square" alt="OpenCode V2" />
-  <img src="https://img.shields.io/badge/Master-GPT--6%20Sol%20High-7C3AED?style=flat-square" alt="GPT-6 Sol High" />
-  <img src="https://img.shields.io/badge/Workers-GPT--6%20Luna%20Max-2563EB?style=flat-square" alt="GPT-6 Luna Max" />
-  <img src="https://img.shields.io/badge/Sorin-GPT--6%20Sol%20XHigh-B91C1C?style=flat-square" alt="GPT-6 Sol XHigh" />
-  <img src="https://img.shields.io/badge/Validation-zero--prompt-16A34A?style=flat-square" alt="Zero-prompt validation" />
-  <img src="https://img.shields.io/badge/Phase%204C-14%2F14%20PASS-059669?style=flat-square" alt="Phase 4C 14/14 PASS" />
-  <img src="https://img.shields.io/badge/Windows-PowerShell%207-0078D4?style=flat-square&logo=powershell&logoColor=white" alt="Windows PowerShell 7" />
-</p>
+Native OpenCode child sessions · bounded orchestration · adaptive parallelism · explicit FAST fan-out · live activity · zero-prompt trusted-project execution.
 
-A thin orchestration layer for **OpenCode V2** that coordinates specialized agents, bounded writes, real validation, review, parallel work, and deep diagnostic escalation.
-
-No custom scheduler. No agent database. No fake runtime inside the runtime.  
-**OpenCode executes. The orchestrator decides who should do what.**
-
-<p>
-  <a href="#-quick-start">🚀 Quick Start</a> •
-  <a href="#-meet-the-team">🤖 Agents</a> •
-  <a href="#-zero-prompt-trusted-project-execution">⚡ Validation</a> •
-  <a href="#-safety-model">🛡️ Safety</a> •
-  <a href="#-project-bootstrap">📦 Bootstrap</a> •
-  <a href="#-qualification-status">🧪 Qualification</a>
-</p>
+**v0.1.0: Windows-first / Windows-qualified.**
 
 </div>
-
----
-
-## 💥 The Problem
-
-A single coding agent can do a lot.
-
-It can also become the researcher, architect, programmer, tester, reviewer, debugger, project manager, and shell operator **all at once**. 😵‍💫
-
-That often becomes one of these:
-
-~~~text
-"Do everything."
-
-→ giant context
-→ mixed responsibilities
-→ unclear ownership
-→ hard-to-review changes
-~~~
-
-or:
-
-~~~text
-"Can I run this?"
-"Can I edit that?"
-"Can I run the test?"
-"Can I run the same test again?"
-
-→ human becomes the approval button 🤦
-~~~
-
-The OpenCode Olympus Agents team takes another route:
-
-> **Delegate narrowly, write inside explicit scope, validate with evidence, and escalate only when the problem is actually hard.**
-
----
-
-## 🧠 The Solution
-
-Give each role one job.
-
-~~~text
-You
- │
- ▼
-👑 Kael — Master Orchestrator
- │
- ├── 🔭 Veyra — Researcher      → discover evidence
- ├── 📐 Orin — Architect       → define boundaries
- ├── 🔨 Kovan — Implementer     → write inside WRITE_SCOPE
-  ├── 👁️ Nox — Tester          → run project validation, without source edits
- ├── ⚖️ Vera — Reviewer        → review without rewriting
- └── 🧭 Sorin — Deep Diagnostician → advise through the Diagnostic Gate
-~~~
-
-The normal path stays intentionally boring:
-
-~~~text
-request
-  ↓
-Kael
-  ↓
-Kovan
-  ↓
-Nox
-  ↓
-Vera
-  ↓
-DONE ✅
-~~~
-
-Research, architecture, background work, retries, and Sorin are used **only when they add value**.
-
----
-
-## 🔧 Maintainer Plane
-
-Olympus has **seven normal operational agents**. `maintenance` is a hidden internal
-control plane for **explicit user-authorized repository administration**, not an
-eighth team member or a normal feature-routing option.
-
-~~~text
-User → /maintain → hidden Maintenance child → result back to Kael
-~~~
-
-~~~text
-/maintain prepare the repository for release
-/maintain rewrite the requested Git history
-/maintain run repository qualification and report findings
-~~~
-
-Only the user opens this path with `/maintain`. Kael cannot invoke Maintenance;
-it may relay a completed result but cannot automatically expand the task.
-
----
-
-## ⚡ Live Activity
-
-In the OpenCode TUI, Olympus shows native running child sessions just above the
-composer in the primary Kael session:
-
-~~~text
-⚡ Olympus · 2 active
-● Orin   Designing boundaries
-● Kovan   Implementing feature
-~~~
-
-The display is read-only and disappears when no direct children are running.
-It uses OpenCode session state, not a custom scheduler; there is no need to enter
-child sessions just to check activity. Hidden Maintenance appears while running.
-
----
-
-## 🤖 Meet the Team
-
-| Role | Current qualified model | What it owns |
-|---|---|---|
-| 👑 **Kael — Master Orchestrator** | GPT-6 Sol High | Routing, contracts, barriers, retries, completion |
-| 🔭 **Veyra — Researcher** | GPT-6 Luna Max | Read-only discovery and evidence |
-| 📐 **Orin — Architect** | GPT-6 Luna Max | Read-only design, boundaries and decomposition |
-| 🔨 **Kovan — Implementer** | GPT-6 Luna Max | The only normal repository writer |
-| 👁️ **Nox — Tester** | GPT-6 Luna Max | Read-only source + trusted-project validation shell |
-| ⚖️ **Vera — Reviewer** | GPT-6 Luna Max | Correctness, scope, security and regression review |
-| 🧭 **Sorin — Deep Diagnostician** | GPT-6 Sol XHigh | Exceptional deep diagnosis and execution advice |
-
-> 🧩 The roles are the architecture. The model IDs are configuration.
-
-The current GPT-6 mapping is the **qualified baseline**, not a permanent architectural dependency on those names.
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Requirements
+**Requirements:** Windows, PowerShell 7 (`pwsh`), Git, OpenCode V2 (qualified with `opencode v2.0.14`), access to `openai/gpt-6-sol` and `openai/gpt-6-luna` with the configured variants. Linux/macOS installation has not been qualified.
 
-- Git
-- OpenCode V2
-- PowerShell 7 on Windows
-- Access to the configured OpenAI models
+After the `v0.1.0` tag is created and verified, install into the **current Git worktree root**:
 
-### 2. Preview installation
+```powershell
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.1.0/install.ps1 | iex
+```
 
-From this repository:
+This versioned URL is **not live until the tag is published**. Review the script before piping remote code to `iex`. If the repository is private, GitHub's anonymous raw URL will not work; use Manual Install instead. The installer defaults to the current directory, which must pass bootstrap's Git-root and destination checks. Prefer an explicit target when running a local script:
 
-~~~powershell
-pwsh ./scripts/bootstrap.ps1 `
-  -Target "C:\path\to\your-project" `
-  -DryRun
-~~~
+```powershell
+pwsh ./install.ps1 -Version v0.1.0 -Target 'C:\path\to\your-project' -DryRun
+pwsh ./install.ps1 -Version v0.1.0 -Target 'C:\path\to\your-project'
+```
 
-Dry run reports the target, detected stacks, suggested validation commands, planned files, warnings, conflicts, and status.
+Once installed, `cd` into the project, run `opencode`, and describe the work. Installation is the explicit project trust action.
 
-No project files are installed during DryRun.
+### 📦 Manual Install / pre-release preview
 
-### 3. Bootstrap the project
+From a local copy of this repository (before the tag exists, do **not** use the public one-liner):
 
-~~~powershell
-pwsh ./scripts/bootstrap.ps1 `
-  -Target "C:\path\to\your-project"
-~~~
+```powershell
+pwsh ./scripts/bootstrap.ps1 -Target 'C:\path\to\your-project' -DryRun
+pwsh ./scripts/bootstrap.ps1 -Target 'C:\path\to\your-project'
+```
 
-Running bootstrap is the explicit trust action for that repository.
+Bootstrap requires an existing Git worktree root, rejects unsafe targets and redirect escapes, checks conflicts and project worktree state, then validates effective OpenCode agents. `-DryRun` previews without installing. The local development installer can be qualified with `-SourceRoot <local-checkout>`; this is not the public installation path.
 
-No extra approval loop:
-
-~~~text
-"Do you trust this project? Y/N"
-~~~
-
-### 4. Open the target repository
-
-~~~powershell
-cd C:\path\to\your-project
-opencode
-~~~
-
-Then ask for real work normally:
-
-~~~text
-Add pagination to the users endpoint.
-
-Keep the existing response contract.
-Add tests for the new pagination behavior.
-~~~
-
-The orchestration layer decides the smallest useful execution path.
+**Update/reinstall:** run the versioned installer again with the desired `-Version` and the same target (or run local bootstrap). The manifest at `.opencode/orchestrator-install.json` owns installed files; unchanged managed files yield `NO_CHANGES`, while `MANAGED_FILE_DRIFT` refuses a silent overwrite. Resolve drift deliberately before upgrading; unrelated files are not installer-owned. To remove Olympus, manually remove only the files listed in that manifest and then the manifest itself, after checking for local edits; no automatic uninstaller is provided. Never delete an entire `.opencode` directory without reviewing its contents.
 
 ---
 
-## 💬 Show Me the Flow
+## 🧭 The team
 
-A normal feature:
+```text
+Kael
+├─ Veyra   research
+├─ Orin    architecture
+├─ Kovan   implementation
+├─ Nox     validation
+├─ Vera    review
+└─ Sorin   exceptional diagnosis
 
-~~~text
-You:
-"Add validation for duplicate usernames."
+User
+└─ /maintain
+   └─ hidden Maintenance
+```
 
-Master:
-→ defines a bounded implementation contract
+The **seven-agent cast** runs ordinary work. The hidden Maintenance Plane handles only explicit user-authorized `/maintain` tasks; Kael cannot route work to it automatically.
 
-Implementer:
-→ changes only the authorized files
+| Agent | Role | Model | Writes? | Shell? |
+|---|---|---|---|---|
+| 👑 Kael | Orchestrator | `openai/gpt-6-sol#high` | No | No |
+| 🔭 Veyra | Researcher | `openai/gpt-6-luna#max` | No | No |
+| 📐 Orin | Architect | `openai/gpt-6-luna#max` | No | No |
+| 🔨 Kovan | Implementer | `openai/gpt-6-luna#max` | Yes, within task ownership | Yes |
+| 👁️ Nox | Tester | `openai/gpt-6-luna#max` | No source edits | Yes |
+| ⚖️ Vera | Reviewer | `openai/gpt-6-luna#max` | No | No |
+| 🧭 Sorin | Deep diagnostician | `openai/gpt-6-sol#xhigh` | No | No |
 
-Tester:
-→ runs relevant project validation commands
+**Separate, hidden control plane:** Maintenance · `openai/gpt-6-sol#high` · repository administration under `/maintain` only; may edit and use shell when explicitly authorized.
 
-Reviewer:
-→ checks correctness, scope and regressions
+### ⚡ NORMAL vs FAST
 
-Master:
-→ verifies evidence
-→ DONE ✅
-~~~
+- **NORMAL:** adaptive 0–4 active Kael children; minimum useful parallelism, cost/context conscious.
+- **FAST:** explicitly user-selected, latency-oriented; up to four children when safe independent partitions exist, including repetitive item/source fan-out.
+- **Four is a maximum, not a target.** Dependencies and disjoint writer ownership still apply.
 
-A harder failure:
-
-~~~text
-Tester:      ❌ failure
-Implementer: 🔁 bounded retry
-Tester:      ❌ same unexplained symptom
-Master:      root cause still unclear
-Sorin:      🧭 diagnostic advisory
-Master:      RETRY / ESCALATE / BLOCKED
-~~~
-
-Sorin does not take over the workflow.
-
-It advises.  
-**Master remains the coordinator.**
-
----
-
-## ⚡ Zero-Prompt Trusted-Project Execution
-
-Explicit bootstrap establishes a **USER-TRUSTED PROJECT**, not an OS sandbox.
-Kovan can edit within its task WRITE_SCOPE and run project commands, generators,
-scripts and useful build checks. Nox can run relevant tests, lint, typecheck,
-builds, validation scripts and Git inspection without editing source or repairing
-failures. Neither needs every literal shell command or normal tool/temp/cache
-path preapproved. There is no routine shell ASK loop or generated command ACL.
-
-Broad native shell access is balanced by behavioral task boundaries. Neither
-role should perform broad destructive or irreversible work without explicit
-authority. Bootstrap installation containment remains stricter than runtime
-tooling; installing into an explicitly selected target is a separate operation.
-
----
-
-## 🛡️ Safety Model
-
-Security is layered.
-
-### 🎛️ Master is read-only
-
-~~~text
-edit   → DENY
-shell  → DENY
-~~~
-
-Master coordinates. It does not secretly become the implementer.
-
-### 🔨 Kovan — Implementer
-
-Each write task requires an explicit scope:
-
-~~~text
-WRITE_SCOPE:
-src/users/UserService.java
-src/users/UserServiceTest.java
-~~~
-
-Native edit rules protect sensitive project files; shell is not a path sandbox.
-
-**WRITE_SCOPE is the task-level ownership contract**, including source files
-created through shell. It is not an OS sandbox.
-
-### 🔒 Protected paths
-
-Native edit denies and task rules protect these paths from normal Implementer changes:
-
-~~~text
-.git/
-.opencode/
-opencode.json
-opencode.jsonc
-*.env
-*.env.*
-~~~
-
-The env example exception remains available for documentation/example configuration.
-
-### 🧹 No mystery cleanup
-
-The runtime does not solve problems by reaching for:
-
-~~~text
-git clean
-git reset --hard
-rm -rf
-rd /s /q
-Remove-Item -Recurse <mystery path>
-~~~
-
-Validation may leave normal ignored build/cache output behind.
-
-That is preferable to a "helpful" cleanup destroying user work. 🙂
-
----
-
-## ✍️ WRITE_SCOPE
-
-Native shell and repository-wide edit access do **not** mean task-wide ownership.
-
-A writer contract must be:
-
-- repository-relative;
-- explicit;
-- non-empty;
-- non-absolute;
-- non-traversing;
-- outside protected paths;
-- compatible with DO_NOT_TOUCH;
-- available under the writer ownership ledger.
-
-Example:
-
-~~~text
-TASK_ID: user-validation-01
-ROLE: kovan
-
-WRITE_SCOPE:
-src/users/UserValidator.ts
-tests/users/UserValidator.test.ts
-
-DO_NOT_TOUCH:
-package.json
-database/**
-.opencode/**
-~~~
-
-If another writer already owns an overlapping or ambiguous scope, concurrent writing is denied.
-
-Only proven **DISJOINT** writers may run concurrently.
-
----
-
-## ⚙️ Parallel Work & Barriers
-
-Independent tasks can run in parallel through native OpenCode child sessions.
-
-**NORMAL** is cost/context-aware: Kael uses the minimum useful number of children,
-adaptively from zero to four. **FAST** is an explicit user-selected latency-priority
-mode: Kael actively looks for safe independent work and may fan out up to four
-children. Four active Kael children is a ceiling, not a target. Dependencies and
-disjoint writer ownership still apply in either mode.
-
-~~~text
+```text
 FAST: 20 URLs → 4 researchers → 5 URLs each
-~~~
+```
 
-Equivalent repetitive work receives the same output contract and balanced,
-non-overlapping item shards (7 items across 4 workers: 2/2/2/1). OpenCode remains
-the runtime; FAST is an orchestration decision, not another scheduler.
+OpenCode remains the runtime; Olympus makes orchestration decisions, not a new scheduler.
 
-~~~text
-        ┌─ Research A ─┐
-Master ─┤              ├─ barrier → continue
-        └─ Research B ─┘
-~~~
+### 👀 Live Activity HUD
 
-Disjoint writers:
+```text
+⚡ Olympus · 3 active
+● Veyra   Researching repository
+● Orin    Designing boundaries
+● Kovan   Implementing feature
+```
 
-~~~text
-writer A → src/a/**     ┐
-                        ├─ parallel ✅
-writer B → src/b/**     ┘
-~~~
-
-Overlapping writers:
-
-~~~text
-writer A → src/**
-writer B → src/a/file.ts
-
-→ overlap ⛔
-→ serialize
-~~~
-
-The project does not build its own scheduler, daemon, mailbox, session database, or polling runtime.
-
-**OpenCode V2 remains the runtime.**
+The passive, read-only TUI display uses native OpenCode session state. It does **not** control execution. It lets you check child progress without entering child sessions just to see status; it disappears when no direct children are running.
 
 ---
 
-## 🧭 Sorin — Deep Diagnostician
+## 🛡️ Trust & ownership
 
-Sorin is not "the smart model for big tasks."
+An explicitly bootstrapped project is **USER-TRUSTED** at Olympus runtime. Kovan may execute project-controlled commands and edit within a task's `WRITE_SCOPE`; Nox may run project-controlled tests/builds and inspect Git without source edits. Trusted-project shell and normal tool/temp/cache access do not prompt for each routine command. **Olympus is not an OS sandbox.** `WRITE_SCOPE` is an orchestration ownership contract, not filesystem isolation. Do not bootstrap untrusted projects. Bootstrap target safety is stricter and separate: it checks Git roots, containment, redirects, ownership, and drift before installation. Avoid broad destructive commands without explicit authority.
 
-It exists for evidence-backed uncertainty:
-
-- 🕵️ root cause unknown;
-- ⚔️ conflicting evidence;
-- 🔁 repeated bounded failures;
-- 🖥️ CI/local mismatch;
-- 🎲 intermittent or flaky behavior;
-- 🤔 retry vs escalation ambiguity;
-- ⚠️ high-risk execution ambiguity;
-- 🧑‍💻 explicit deep-diagnosis request.
-
-A big feature alone is **not** a reason to invoke Sorin.
-
-Sorin stays:
-
-~~~text
-read-only
-shell denied
-edit denied
-subagent denied
-~~~
-
-It recommends the next bounded action. It does not implement the fix.
+Kael owns completion: implementation + passing validation + no material review findings + acceptance evidence. Research, design, retries and Sorin are used only when useful. No custom scheduler, daemon, agent database, or replacement for OpenCode permissions.
 
 ---
 
-## 📦 Project Bootstrap
+## 🧪 Qualification
 
-The PowerShell bootstrap installs a project-specific orchestration setup and suggests validation from repository evidence.
+Windows qualification uses OpenCode v2.0.14 and PowerShell 7.6.6. Run:
 
-Supported detection currently includes:
-
-| Stack | Evidence examples |
-|---|---|
-| 🟢 Node | package.json, lockfiles |
-| 🐍 Python | pyproject.toml, pytest.ini, related config |
-| ☕ Maven | pom.xml, Maven wrapper |
-| 🐘 Gradle | build.gradle, build.gradle.kts, Gradle wrapper |
-| 🦋 Flutter / Dart | pubspec.yaml |
-| 🦀 Rust | Cargo.toml |
-| 🐹 Go | go.mod |
-
-### Node validation defaults are intentionally selective
-
-Given:
-
-~~~json
-{
-  "scripts": {
-    "test": "...",
-    "lint": "...",
-    "build": "...",
-    "deploy": "...",
-    "banana": "..."
-  }
-}
-~~~
-
-Bootstrap may suggest:
-
-~~~text
-npm test
-npm run lint
-npm run build
-~~~
-
-It does **not** automatically suggest:
-
-~~~text
-npm run deploy
-npm run banana
-~~~
-
-just because those scripts exist. Suggestions are **not** a shell permission
-allowlist: trusted-project agents may run other relevant commands as needed. 🍌
-
----
-
-## 🧭 Package Manager Detection
-
-Node package-manager evidence includes:
-
-~~~text
-package-lock.json  → npm
-pnpm-lock.yaml     → pnpm
-yarn.lock          → yarn
-bun.lock / bun.lockb → bun
-packageManager     → declared manager
-~~~
-
-Conflicting evidence fails safely:
-
-~~~text
-AMBIGUOUS_PACKAGE_MANAGER
-~~~
-
-It does not flip a coin and hope for the best. 🎲❌
-
----
-
-## 🧾 Managed Installation
-
-Bootstrap creates a small project-local installation manifest under:
-
-~~~text
-.opencode/orchestrator-install.json
-~~~
-
-It records installation ownership, source commit, managed-file hashes, detected stacks, package manager, and validation suggestions.
-
-### ♻️ Idempotency
-
-~~~text
-bootstrap
-bootstrap again
-
-→ NO_CHANGES ✅
-~~~
-
-### 🚨 Drift detection
-
-If a managed installed file was manually changed:
-
-~~~text
-MANAGED_FILE_DRIFT
-~~~
-
-Bootstrap stops instead of silently replacing it.
-
-The hidden maintenance agent and `/maintain` command are managed installation
-assets too: their hashes are recorded in the same manifest and drift blocks
-reinstallation. Existing managed installations receive them on safe update.
-
----
-
-## ☁️ OneDrive / Reparse-Point Safety
-
-Windows cloud folders can carry reparse metadata even when they do **not** redirect outside the repository.
-
-Qualification verified the distinction between:
-
-~~~text
-OneDrive / cloud-files reparse metadata
-→ containment preserved
-→ allowed ✅
-~~~
-
-and:
-
-~~~text
-junction / redirect escaping target
-→ rejected before installation ⛔
-~~~
-
-Because on Windows, "ReparsePoint" does not automatically mean "dangerous symlink."
-
----
-
-## 🧪 Qualification Status
-
-The current baseline has been qualified in stages.
-
-| Phase | Focus | Result |
-|---|---|---:|
-| 3A | Model + orchestration baseline | ✅ PASS |
-| 3B | Diagnostic escalation | ✅ PASS |
-| 4A | Generic real-repository writes | ✅ 10/10 |
-| 4B | Historical exact-command validation baseline | ✅ 12/12 (superseded by trusted-project shell) |
-| 4C | Bootstrap + stack-aware installation | ✅ 14/14 |
-
-Latest Phase 4C qualification environment:
-
-~~~text
-OpenCode   v2.0.14
-PowerShell 7.6.6
-Windows
-~~~
-
-Run the qualification harness:
-
-~~~powershell
+```powershell
 pwsh ./tests/phase4c/qualify.ps1
-~~~
+pwsh ./tests/activity-hud/qualify.ps1
+pwsh ./tests/adaptive-concurrency/qualify.ps1
+pwsh ./tests/autonomy/qualify.ps1
+pwsh ./tests/release/qualify.ps1
+```
 
-Phase 4C covers:
-
-- ✅ dry run;
-- ✅ fresh install;
-- ✅ idempotency;
-- ✅ Node script selection;
-- ✅ package-manager ambiguity;
-- ✅ multi-stack projects;
-- ✅ foreign config conflicts;
-- ✅ dirty worktrees;
-- ✅ unsafe paths and escaping junctions;
-- ✅ unavailable validation tools;
-- ✅ installed trusted-project Tester permissions and validation suggestions;
-- ✅ effective model mapping;
-- ✅ managed-file drift;
-- ✅ target security.
-
-The Maintainer Plane extension checks installation, effective agent permissions,
-Kael's routing boundary, command definition, idempotency, safe managed upgrades,
-and drift. Interactive command dispatch is **not** certified by the PowerShell
-harness. In a normal Kael UI session, check it separately:
-
-~~~text
-/maintain report the current branch, HEAD, origin URL, and tags. Do not modify anything.
-Delegate specifically to agent ID "maintenance" and report the current branch.
-~~~
-
-The first should run a hidden child with native shell, no permission prompt,
-return its result, and leave Kael as parent; the second must be denied. Record
-the interaction result separately rather than counting static checks as a pass.
+These check bootstrap target safety, stacks, managed drift and idempotency, effective agents/models, hidden Maintenance permissions/command, HUD discovery/presentation behavior, adaptive/FAST policy, and trusted-project Kovan/Nox permissions. Release checks exercise the installer against a disposable Git project. **Headless/static checks do not prove interactive child dispatch, live TUI rendering, real FAST selection, or agent runtime execution.** Validate those manually in an OpenCode session before publication; Maintenance interactive routing must be explicitly exercised with `/maintain` and denied when Kael attempts direct delegation.
 
 ---
 
-## ✅ Completion Gate
+## 🙏 Acknowledgements & provenance
 
-"Agent finished typing" is not DONE.
+The concept of a more expensive orchestrator coordinating specialized workers was informed in part by [donvito/codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0). Olympus is an independent OpenCode V2 implementation, **not a fork**; no upstream code inheritance was identified in the repository audit. OpenCode provides the runtime; Olympus provides the orchestration/decision layer.
 
-~~~text
-IMPLEMENTED
-+
-VALIDATION PASSED
-+
-NO BLOCKING / MATERIAL REVIEW FINDINGS
-+
-ACCEPTANCE VERIFIED
-=
-DONE ✅
-~~~
-
-Master returns the smallest evidence-backed decision:
-
-~~~text
-ACCEPT
-RETRY
-ESCALATE
-BLOCKED
-~~~
-
-Worker recommendations are evidence.
-
-**Master owns completion.**
-
----
-
-## 🔁 Bounded Retries
-
-A corrective retry requires:
-
-- concrete new evidence;
-- same role/task/scope;
-- a bounded defect.
-
-Whenever possible, the same Implementer session continues.
-
-The orchestrator does not keep sending the same prompt and hoping the universe feels different this time. 😅
-
-If bounded retries stop explaining the problem, that can become evidence for Sorin.
-
----
-
-## 🧬 How It Works
-
-~~~mermaid
-flowchart TD
-    U[🧑 Developer request] --> M[👑 Kael — Master Orchestrator]
-    M -->|when useful| R[🔭 Veyra — Researcher]
-    M -->|when useful| A[📐 Orin — Architect]
-    R --> M
-    A --> M
-    M --> I[🔨 Kovan — Implementer]
-    I --> T[👁️ Nox — Tester]
-    I --> V[⚖️ Vera — Reviewer]
-    T --> M
-    V --> M
-    M -->|Diagnostic Gate| S[🧭 Sorin]
-    S --> M
-    M --> D{Completion Gate}
-    D -->|pass| DONE[✅ DONE]
-    D -->|bounded defect| RETRY[🔁 RETRY]
-    D -->|authority or uncertainty| ESC[🚨 ESCALATE / BLOCKED]
-~~~
-
----
-
-## 🧩 Responsibility Boundaries
-
-OpenCode Olympus Agents owns **coordination**, not the entire software lifecycle.
-
-~~~text
-EvoDriven        → decide WHY / WHAT
-EvoSpec          → define + track specifications
-ChangeBudget     → govern allowed change
-ProjectMemory    → remember durable project knowledge
-OpenCode
-Orchestrator     → coordinate execution
-~~~
-
-**One noun → one authority.**
-
-This repository does not try to absorb product strategy, specification authority, persistent project memory, or change-budget governance.
-
----
-
-## 🚫 Deliberate Non-Goals
-
-This project does **not** want to become:
-
-- ❌ another coding-agent runtime;
-- ❌ a scheduler or daemon;
-- ❌ a session database;
-- ❌ an agent mailbox;
-- ❌ a workflow DSL;
-- ❌ a custom runtime replacing OpenCode permissions;
-- ❌ a persistent memory database;
-- ❌ a product-management framework;
-- ❌ an automatic dependency installer;
-- ❌ a sandbox for arbitrary untrusted repositories;
-- ❌ shell access for read-only research, architecture, review or diagnosis roles.
-
-The orchestration layer should stay **thin**.
-
----
-
-## 🗂️ Project Structure
-
-~~~text
-.
-├── opencode.jsonc
-├── .opencode/
-│   └── agents/
-│       ├── kael.md
-│       ├── veyra.md
-│       ├── orin.md
-│       ├── kovan.md
-│       ├── nox.md
-│       ├── vera.md
-│       ├── sorin.md
-│       └── maintenance.md  (hidden; /maintain only)
-│   └── commands/
-│       └── maintain.md
-├── scripts/
-│   └── bootstrap.ps1
-└── tests/
-    ├── fixtures/
-    └── phase4c/
-        └── qualify.ps1
-~~~
-
----
-
-## 🛠️ Development
-
-Inspect effective agents:
-
-~~~powershell
-opencode debug agents
-~~~
-
-Inspect effective config:
-
-~~~powershell
-opencode debug config
-~~~
-
-Run bootstrap qualification:
-
-~~~powershell
-pwsh ./tests/phase4c/qualify.ps1
-~~~
-
-Preview a target installation:
-
-~~~powershell
-pwsh ./scripts/bootstrap.ps1 `
-  -Target "C:\path\to\project" `
-  -DryRun
-~~~
-
----
-
-## 🚦 Current Status
-
-### ✅ Qualified
-
-Core orchestration, generic writing, trusted-project validation, diagnostic escalation, and project bootstrap are qualified.
-
-### 🐕 Next: real-world dogfood
-
-The next milestone is deliberately **not another architecture phase**.
-
-~~~text
-bootstrap a real project
-        ↓
-give it a real feature
-        ↓
-watch the full workflow
-        ↓
-fix only problems reality exposes
-~~~
-
-The real success metric is not "how many agents can run."
-
-It is:
-
-> **Can you give the system meaningful work and mostly leave it alone?** 🚀
-
----
-
-<div align="center">
-
-### 🎛️ Coordinate narrowly. Validate for real. Escalate only when necessary.
-
-**OpenCode runs the agents. The orchestrator keeps them from becoming a committee meeting.** 😄
-
-</div>
+Licensed under [MIT](LICENSE). See [CHANGELOG.md](CHANGELOG.md) for release highlights.

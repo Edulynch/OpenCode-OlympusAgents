@@ -32,3 +32,12 @@ Thumbs.db
 
 # Project-owned disposable Phase 4C qualification worktrees.
 tests/.phase4c-work/
+tests/.release-work/
+
+# Local OpenCode runtime state and disposable qualification output.
+.opencode/sessions/
+.opencode/state/
+.opencode/.cache/
+*.tmp
+*.bak
+*~

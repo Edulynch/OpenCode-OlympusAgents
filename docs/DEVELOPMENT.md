@@ -35,7 +35,7 @@ pwsh -NoProfile -File ./tests/autonomy/qualify.ps1
 pwsh -NoProfile -File ./tests/release/qualify.ps1
 ```
 
-Phase 4C covers bootstrap security and static Maintenance Plane checks; there is no separate Maintenance qualifier. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Adaptive Concurrency / FAST checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release harness uses **local source**, not the remote tag, and does not test the interactive UI. Some harnesses retain disposable fixtures; check their output. The current adaptive-concurrency harness also still expects an older README FAST example, so its `DOC` assertion needs a separate test-maintenance update after the beginner README rewrite; do not interpret that mismatch as a runtime failure.
+Phase 4C covers bootstrap security and static Maintenance Plane checks; there is no separate Maintenance qualifier. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Adaptive Concurrency / FAST checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release harness uses **local source**, not the remote tag, and does not test the interactive UI. Some harnesses retain disposable fixtures; check their output. The adaptive-concurrency harness's `DOC` check verifies that the README describes NORMAL as the default using only useful parallelism, FAST as explicitly requested with up to four agents, and FAST as preserving checks and task dependencies.
 
 ## Trusted-project execution
 

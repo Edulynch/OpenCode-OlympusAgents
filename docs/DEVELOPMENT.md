@@ -6,6 +6,8 @@ For Olympus maintainers, contributors, installation debugging, qualification, an
 
 OpenCode is the runtime; Olympus is the orchestration and decision layer. Kael coordinates seven normal agents (including itself); the hidden Maintenance Plane is separate.
 
+Kael checks feasibility and plane routing from the request **before** delegated research or planning. Known Maintenance-only operations receive a user-facing `/maintain <task>` handoff, not automatic delegation. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
+
 ## Local/bootstrap installation
 
 From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The v0.1.2 public installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`:
@@ -37,9 +39,10 @@ pwsh -NoProfile -File ./tests/autonomy/qualify.ps1
 pwsh -NoProfile -File ./tests/release/qualify.ps1
 pwsh -NoProfile -File ./tests/release/installer-compatibility.ps1
 pwsh -NoProfile -File ./tests/release/dirty-worktree.ps1
+pwsh -NoProfile -File ./tests/preflight/qualify.ps1
 ```
 
-Phase 4C covers bootstrap security and static Maintenance Plane checks; there is no separate Maintenance qualifier. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Adaptive Concurrency / FAST checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release, dirty-worktree, and installer compatibility harnesses use **local source**, not the remote tag, and do not test the interactive UI. The dirty-worktree harness checks unrelated bytes, Git status, index diffs, managed conflict/drift, reinstall and a local-source managed update. The compatibility harness launches the installer via both Windows PowerShell 5.1 (when present) and PowerShell 7 into separate disposable Git projects, and tests missing `pwsh` with a process-local PATH. Some harnesses retain disposable fixtures; check their output. The adaptive-concurrency harness's `DOC` check verifies that the README describes NORMAL as the default using only useful parallelism, FAST as explicitly requested with up to four agents, and FAST as preserving checks and task dependencies.
+Phase 4C covers bootstrap security and static Maintenance Plane checks; there is no separate Maintenance qualifier. The Preflight harness checks policy ordering, boundaries and a small cart/auth fixture **statically**; it does not execute agents or verify actual child count, discovery tool calls or latency. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Adaptive Concurrency / FAST checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release, dirty-worktree, and installer compatibility harnesses use **local source**, not the remote tag, and do not test the interactive UI. The dirty-worktree harness checks unrelated bytes, Git status, index diffs, managed conflict/drift, reinstall and a local-source managed update. The compatibility harness launches the installer via both Windows PowerShell 5.1 (when present) and PowerShell 7 into separate disposable Git projects, and tests missing `pwsh` with a process-local PATH. Some harnesses retain disposable fixtures; check their output. The adaptive-concurrency harness's `DOC` check verifies that the README describes NORMAL as the default using only useful parallelism, FAST as explicitly requested with up to four agents, and FAST as preserving checks and task dependencies.
 
 ## Trusted-project execution
 
@@ -52,6 +55,8 @@ The passive, read-only plugin uses native OpenCode child-session list and status
 ## Maintenance Plane
 
 Kael → Maintenance: **DENIED** (not an automatic escalation path). User → `/maintain <task>` → Maintenance: **ALLOWED** for explicit repository administration. Maintenance is hidden and outside the ordinary seven-agent routing.
+
+Maintenance separates repository administration from software-development investigation. Git-only operations start with Git-scoped non-mutating feasibility checks (target, scope, state, remote and tools as relevant), not application architecture. Read/authentication evidence alone does not prove remote write permission.
 
 ## Release process
 

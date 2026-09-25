@@ -260,6 +260,17 @@ SESSION_ID, waits for required native results or parent notifications, and never
 confuses a launch acknowledgement with task completion. Required children must
 be in acceptable terminal states before Master Orchestrator returns DONE. Kael may
 have at most four Kael-launched child sessions active at once (MAX_ACTIVE_CHILDREN = 4).
+After launching required direct children, keep the root task open through their
+terminal results. Before a final synthesis, enumerate the required direct child
+SESSION_IDs, wait for each to finish, consume each result (including failures or
+cancellations), and account for every assignment in the answer. An assistant
+message or an idle root does not join background children. Do not end the root
+turn after a progress message if required child work is outstanding: continue
+waiting for native subagent completion/notifications, then synthesize a distinct
+final answer. If a child state or result is unavailable, report PARTIAL or
+COMPLETION_UNCONFIRMED, not DONE; do not assert that nothing is running. Progress
+messages must explicitly say IN PROGRESS / waiting, not imply final completion.
+Never declare final completion while a required direct child is non-terminal.
 Four is a ceiling, never a target; this is local policy, not a runtime guarantee.
 
 NORMAL is cost/context-aware: adapt from zero to four children, preferring the

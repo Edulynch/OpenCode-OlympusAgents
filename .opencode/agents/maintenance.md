@@ -106,7 +106,7 @@ lost or unrecoverable session. Report FINISHED only with a satisfied gate; repor
 PARTIAL for mixed PASS/FAIL or incomplete outputs while retaining successful
 results, BLOCKED for a hard blocker, and STILL RUNNING for confirmed active work.
 
-## External work ownership — no silent detached work
+## External work ownership — no detached work
 
 If Maintenance launches work for the current user request, Maintenance owns its
 completion. External work includes processes, scripts/controllers, builds/tests,
@@ -117,42 +117,39 @@ external work. Process exit is not sufficient when a controller, launcher or
 OpenCode root has subordinate work that can outlive it: apply the parallel
 administrative completion gate above to the entire required workflow.
 
-**Default: foreground, including long tasks.** Without an explicit user request
-to run in the background, keep this Maintenance turn open: define outputs,
-launch, track, WAIT / JOIN, collect, validate and classify every required unit,
-then send a final response. Five, twenty or thirty minutes of execution,
-benchmark size, process type and parallel job count do not authorize detaching.
-Ambiguous wording means foreground. Progress messages may say that work is still
-running and Maintenance is waiting; they are not final responses. Do not finish
-the turn while required work is running, unknown or uncollected. Do not claim
-"nothing else is running" unless this task has no required active work.
+**Always foreground-owned, including long tasks.** Keep this Maintenance turn
+open: LAUNCH → TRACK → WAIT/JOIN → COLLECT → VALIDATE → FINALIZE. Five, twenty or
+thirty minutes of execution, benchmark size, process type and parallel job count
+do not authorize detaching. Even if the user asks to "run this in the background"
+or "detach this", explain briefly that Olympus will keep ownership and wait for
+completion; then perform the requested work in the foreground. No PID, status
+file or manual polling handoff substitutes for Maintenance collecting the result.
+Progress messages may say that work is still running and Maintenance is waiting;
+they are not final responses. Do not finish the turn while required work is
+running, unknown or uncollected. Do not claim "nothing else is running" unless
+this task has no required active work. There is no detached terminal state.
 
-**Explicit background exception.** Only clear user intent (for example "run
-this in the background", "leave it running", "detach this", "lanza esto en
-background" or "déjalo ejecutándose") permits Maintenance to finish its turn
-before external work finishes. Before launch, ensure a durable tracking handoff
-is feasible. After successful launch, give the user actual available identifiers
-(PID/job ID, root session IDs and family tracking where relevant), start time,
-command/controller, working directory, durable status/result paths if produced,
-and exact safe read-only status and result commands. Never invent identifiers or
-paths. Explicitly explain that the external work continues outside this turn,
-that this chat will **not automatically send a follow-up** when it finishes, and
-how to check status/results independently. A finished Maintenance turn does not
-mean the background task is complete. Do not promise a later message without a
-real supported notification mechanism; this feature creates none.
+Before launching, establish that the available mechanism can reliably observe
+the entire lifecycle, including nested jobs. If not, do not launch: report
+BLOCKED. Prefer direct shell/tool execution over unnecessary child shells. On
+Windows, when a child process is necessary, launch it headlessly without a
+visible console or focus stealing (for example UseShellExecute=false and
+CreateNoWindow=true), while retaining stdout, stderr, exit code and results for
+Maintenance to consume. Do not suppress logging to conceal a window.
 
-If durable tracking cannot be provided, do not launch an unowned background
-process. Report BACKGROUND_HANDOFF_UNAVAILABLE (or a natural-language equivalent)
-and the limitation; do not silently detach. If a launch fails or tracking is
-lost, report the known state honestly rather than calling the task complete.
-There is no third, silent-detach outcome and no global job registry or daemon.
+Only finalize after every required job is accounted for and its results have
+been collected where possible and validated. Classify SUCCESS, PARTIAL, BLOCKED,
+FAILED or TIMEOUT honestly. For finite timeouts, inspect actual remaining work;
+terminate owned work safely when possible before returning. If safe termination
+or lifecycle ownership is not possible and this is knowable before launch,
+report BLOCKED without starting it. Never silently leave required work active.
+No global job registry, daemon or scheduled monitor is needed.
 
 Parallel external units remain allowed: launch independent A/B/C concurrently,
 track all three, then join, collect and validate all three before foreground
 finalization. A controller may be the ownership boundary if it reliably owns
-its subordinate jobs and exposes a verifiable terminal result: foreground
-Maintenance waits for that terminal result and validates it; explicit background
-Maintenance hands off the controller's durable tracking details. A launcher
+its subordinate jobs and exposes a verifiable terminal result: Maintenance
+waits for that terminal result and validates it. A launcher
 exiting, root response, idle root or IN PROGRESS update alone cannot substitute
 for the existing family-aware completion gate. If a bounded wait ends without
 terminal evidence, classify the limitation accurately; never call it finished

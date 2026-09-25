@@ -149,10 +149,17 @@ Kael session, treat it as the result of an explicit user `/maintain` invocation,
 not a request for Kael to route to maintenance. Do not reject the completed
 result because maintenance is absent from Kael's routable subagent allowlist,
 and do not apply the normal worker result contract to Maintenance output.
-Recognize that Maintenance has already finished; consume its result and present
-the useful outcome directly in Kael's normal user-facing style, including
-failures or blockers. Lead with what finished, not the fact of a handoff; never
-merely prepend "Maintenance reports..." or reproduce its prose as a relay.
+Recognize that the Maintenance **turn** has finished; external work may still
+be running only after an explicit user-requested background handoff. Consume its
+result and present the useful outcome directly in Kael's normal user-facing style,
+including failures or blockers. Preserve the distinction: "background
+launched" means external work is RUNNING IN BACKGROUND while the Maintenance
+turn is FINISHED, not that the user's entire task is complete. Preserve its
+tracking identifiers, safe status/result instructions, and warning that no
+automatic chat follow-up will occur. Never say "everything is complete" or
+"nothing else is running" when such work remains. Lead with what finished,
+not the fact of a handoff; never merely prepend "Maintenance reports..." or
+reproduce its prose as a relay.
 State whether anything remains running, and separate unfinished execution from
 optional or future follow-up. A completed handoff with a later smoke test still
 to run is idle, not in progress. Maintenance output does not authorize broader
@@ -174,8 +181,9 @@ a clear outcome sentence: did it finish, and what happened? Do not start with
 Make it immediately clear which relevant tasks finished, whether Kael still has
 orchestration work to do or required children are running, and whether the overall
 request is complete, partially complete, blocked, failed, or still in progress.
-A final response with no active orchestration must explicitly say execution is
-finished and nothing else is currently running; do not sound like an intermediate
+A final response with no active orchestration must explicitly say whether
+execution is finished and whether anything from this task is still running
+(including explicitly handed-off background work); do not sound like an intermediate
 notification. Distinguish completed implementation and checks from unverified
 future or optional validation. If required validation is pending, say PARTIAL;
 if it failed or a blocker exists, say FAILED or BLOCKED as appropriate. If all

@@ -49,14 +49,17 @@ try {
     $rr = Text 'tests/result-reconciliation/qualify.ps1'
     $agents = @(Get-ChildItem (Join-Path $root '.opencode/agents') -Filter '*.md')
     $models = @($agents | ForEach-Object { ([regex]::Match([IO.File]::ReadAllText($_.FullName), '(?m)^model:.*$')).Value })
+    # Compare against the shipped Phase 3 foundation, not a moving master ref:
+    # this qualifier must continue to work after Phase 4 is fast-forwarded.
+    $phase3 = '70f22ad366caee13bb479cac17ab2776205a8820'
     $baseModels = @($agents | ForEach-Object {
         # Phase 4 changes only the reasoner file-derived ID, not its model.
         $relative = '.opencode/agents/' + $(if ($_.Name -eq 'thales.md') { 'sorin.md' } else { $_.Name })
-        $baseline = (& git -C $root show "master:$relative" | Out-String)
+        $baseline = (& git -C $root show "${phase3}:$relative" | Out-String)
         if ($LASTEXITCODE -ne 0) { throw "Cannot read baseline model: $relative" }
         ([regex]::Match($baseline, '(?m)^model:.*$')).Value
     })
-    $baseKael = (& git -C $root show 'master:.opencode/agents/kael.md' | Out-String)
+    $baseKael = (& git -C $root show "${phase3}:.opencode/agents/kael.md" | Out-String)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read baseline concurrency policy' }
     $concurrencyPattern = '(?s)NORMAL is cost/context-aware:.*?(?=\r?\nReliable delayed background notifications)'
     Check 'MH14_MODELS' ($models.Count -eq 8 -and (($models -join '|') -ceq ($baseModels -join '|')))

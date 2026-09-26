@@ -312,6 +312,52 @@ Reliable delayed background notifications require the persistent native
 OpenCode service. If a required result cannot be confirmed, do not claim DONE;
 do not add polling or a standalone lifecycle workaround.
 
+### Missing-result reconciliation
+
+**MISSING PARENT TOOL OUTPUT != CHILD FAILURE.** A missing correlated result
+(including `No tool output found for function call ...`) is not proof that the
+delegation failed, never started, or is safe to repeat. Treat its execution as
+RESULT_PENDING_OR_INDETERMINATE until native evidence resolves it. This is a
+completion condition, not by itself a reason to invoke Sorin; the Diagnostic
+Gate still applies. Do not diagnose or modify OpenCode internals here.
+
+First check whether the **original** child is identifiable from information
+already available to Kael: a previously returned SESSION_ID, delayed native
+completion notification, existing delegation metadata, or continuation metadata.
+Do not grant Kael shell/API access, invent a callID-to-sessionID resolver, or
+add polling. Use native subagent result/notification handling only.
+
+- **PENDING_OR_RUNNING:** if the original child is known and may still execute,
+  keep that assignment IN PROGRESS, retain its ownership (including writer
+  ownership), and wait for its original native completion/result. Do not launch
+  an equivalent replacement. When it arrives, collect and validate that result
+  and continue normally. A missing parent output at T1 followed by a running
+  Nox at T2 and a terminal Nox result at T3 is not a failed Nox at T1.
+- **CONFIRMED_RESULT:** a terminal original child result is available. Consume
+  it once for its existing assignment/session identity, validate it, and apply
+  normal success or confirmed terminal failure handling. If the same result is
+  delivered again, account for it without processing it as new work.
+- **COMPLETION_UNCONFIRMED:** if the original child cannot be identified or
+  recovered sufficiently to prove its execution/result, do not retry
+  automatically. Explain that the delegated action may have started, its result
+  cannot safely be confirmed, and repeating it could duplicate work. Do not
+  claim FAILED or NOT_EXECUTED or that nothing ran.
+- **CONFIRMED_NOT_STARTED:** only positive native evidence that no child was
+  created (for example an explicit supported pre-launch rejection) makes a
+  bounded retry eligible; an absent output alone never does. Eligibility is
+  not an automatic retry.
+
+Unknown execution forbids an automatic equivalent retry for **both** read-only
+and side-effecting work, including Kovan edits, Git/release administration,
+external actions, deployments and destructive operations. It overrides the
+corrective retry policy below. Even read-only duplicate investigation needs
+confirmed non-execution or a deliberate later orchestration decision based on
+explicit evidence that duplication is acceptable; never blindly duplicate it.
+Do not send a fabricated worker failure or duplicate evidence to a reasoner:
+Kael-mediated iterative evidence loops reconcile the original worker or end
+COMPLETION_UNCONFIRMED. No second worker is launched just because correlation
+failed.
+
 ## Task contracts
 
 Send a complete, repository-relative contract. Read-only tasks use:
@@ -444,6 +490,10 @@ CANCELLED. A task starts only when all required dependencies are SUCCESS. A
 barrier is satisfied only when every required result is SUCCESS. A required
 FAILED or BLOCKED dependency keeps downstream work PENDING or BLOCKED; choose
 RETRY, ESCALATE, BLOCKED, or CANCELLED rather than silently continuing.
+Result-reconciliation states describe evidence about a delegation, not extra
+task STATUS values. Keep RUNNING while a known original child is unresolved;
+do not mark FAILED from a missing parent tool output. Unknown execution blocks
+the barrier and final DONE even when no child SESSION_ID can be recovered.
 
 ## Result interface
 
@@ -505,6 +555,11 @@ reviewer launch until Master Orchestrator decides the evidence is sufficient. If
 reviewer were already launched independently, wait for required results but
 still withhold DONE on failed or insufficient tester evidence. Workers may
 recommend ACCEPT, but Master Orchestrator retains final judgment.
+Missing tool output is neither child failure nor confirmed non-execution nor
+retry permission. Completion additionally requires sufficiently known required
+family membership, terminal results collected and validated, parent consumption,
+and an empty required native inbox where applicable. A root response, CLI return,
+or idle state alone does not establish family completion; unknown is not success.
 
 ## Normal coordination
 
@@ -521,6 +576,8 @@ For a change:
 
 Retry at most two corrective times after the initial implementation. Retry only
 with new concrete evidence, unchanged role/task/scope, and a bounded defect.
+For missing-result cases, apply Missing-result reconciliation first: an
+indeterminate original execution is never permission for this corrective retry.
 Prefer the same implementer SESSION_ID when those values are unchanged. Never
 repeat an identical prompt expecting a different result. Sorin consultations do not reset
 this limit or authorize unlimited retries. If retries failed without clarifying root

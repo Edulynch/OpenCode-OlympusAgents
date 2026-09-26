@@ -20,6 +20,7 @@ $Managed = @(
     ".opencode/agents/nox.md",
     ".opencode/agents/vera.md",
     ".opencode/agents/thales.md",
+    ".opencode/agents/atlas.md",
     ".opencode/agents/maintenance.md",
     ".opencode/commands/maintain.md",
     ".opencode/plugins/olympus-activity/activity.ts",
@@ -178,10 +179,16 @@ function Assert-Managed([string]$Repo, $Manifest) {
     # manifests. Counts alone cannot distinguish the old and new reasoner identity.
     $allowed = @()
     foreach ($reasoner in @($OldReasoner, '.opencode/agents/thales.md')) {
-        $base = @($Managed | ForEach-Object { if ($_ -eq '.opencode/agents/thales.md') { $reasoner } else { $_ } })
+        $base = @($Managed | Where-Object { $_ -ne '.opencode/agents/atlas.md' } |
+            ForEach-Object { if ($_ -eq '.opencode/agents/thales.md') { $reasoner } else { $_ } })
         foreach ($missing in @(@(), $previous, $NewManaged)) {
             $allowed += ,@($base | Where-Object { $_ -notin $missing })
         }
+    }
+    # Some focused upgrade fixtures simulate pre-HUD/pre-Maintenance ownership
+    # from a currently installed candidate, retaining its Atlas-owned path.
+    foreach ($missing in @(@(), $previous, $NewManaged)) {
+        $allowed += ,@($Managed | Where-Object { $_ -notin $missing })
     }
     $actual = @($entries | ForEach-Object { Rel ([string]$_.path) })
     $matchCount = 0
@@ -429,6 +436,7 @@ function Validate-Install([string]$Repo) {
     $expected = @{
         "kael"=@("gpt-6-sol","high","primary")
         "thales"=@("gpt-6-sol","xhigh","subagent")
+        "atlas"=@("gpt-6-sol","high","subagent")
         "veyra"=@("gpt-6-luna","max","subagent")
         "orin"=@("gpt-6-luna","max","subagent")
         "kovan"=@("gpt-6-luna","max","subagent")

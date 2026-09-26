@@ -1,5 +1,7 @@
-# External manual integration test only. Never invoke from an Olympus agent session.
-# OpenCode v2.0.15: session.list supports search (exact title verified locally)
+# Historical launcher: manual integration test only; never invoke its default
+# launch mode from an Olympus agent session. SchemaSmoke/InspectSession are
+# read-only v2.0.18 infrastructure modes and launch no agent scenario.
+# Original OpenCode v2.0.15: session.list supports search (exact title verified locally)
 # and parentID (native direct-child filter); root sessions omit parentID entirely.
 # List/get/message objects have different optional properties. CLI JSON events
 # and session.get provide independent ID evidence, but not family completion.
@@ -11,7 +13,11 @@ param(
     [ValidateRange(60,7200)][int]$TimeoutSeconds = 1200,
     [ValidateRange(2,120)][int]$PollSeconds = 8,
     [switch]$SmallProbe,
-    [switch]$ParserTests
+    [switch]$ParserTests,
+    [switch]$SchemaSmoke,
+    [string]$SmokeSession,
+    [string]$InspectSession,
+    [ValidateSet('A','B')][string]$InspectCase = 'A'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -56,7 +62,8 @@ function Api([string]$path, [string[]]$parameters = @()) {
 function Listed([string[]]$parameters) {
     $found = @(); $cursor = $null
     for ($page = 0; $page -lt 50; $page++) {
-        $p = @($parameters + @('limit=100'))
+        $p = @($parameters)
+        if (-not @($p | Where-Object { $_ -like 'limit=*' }).Count) { $p += 'limit=100' }
         if ($cursor) { $p += "cursor=$cursor" }
         $reply = Api '/api/session' $p
         if ($reply.data -isnot [array]) { Schema "session.list data is not an array: $($reply.data.GetType().FullName)" }
@@ -128,6 +135,135 @@ if ($ParserTests) {
     Write-Host "PARSER TEST ERRORS: $errors"
     if ($errors) { exit 1 }
     exit 0
+}
+
+# Read-only infrastructure check; never launches an agent or a root. Reuses the
+# native observer parser and API calls rather than certifying from CLI exit/idle.
+if ($SchemaSmoke) {
+    try {
+        $version = (& opencode --version | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $version -notmatch '^opencode v2\.0\.18$') { Schema "Version not inspected: $version" }
+        $active = (Api '/api/session/active').data
+        if ($active -isnot [pscustomobject]) { Schema 'session.active is not an object' }
+        $none = @(Listed @('search=olympus-phase3-schema-smoke-unlikely-49391'))
+        if ($none.Count) { Schema 'Exact search unexpectedly matched' }
+        $parents = @(Listed @('parentID=ses_nonexistent_phase3_smoke'))
+        if ($parents.Count) { Schema 'Nonexistent parentID returned children' }
+        if (-not $SmokeSession -or $SmokeSession -notmatch '^ses_') { Schema 'Provide -SmokeSession for an existing root session' }
+        $id = $SmokeSession
+        $root = Session $id
+        if (Optional $root 'parentID') { Schema 'Smoke root unexpectedly has parentID' }
+        $messages = @(Messages $id)
+        $inbox = @(Inbox $id)
+        if (-not (Has $root 'time') -or -not (Has $root 'outcome') -or
+            -not ($messages | Where-Object { (Optional $_ 'type') -eq 'assistant' })) {
+            Schema 'Root/outcome/message observation fields missing'
+        }
+        $search = @(Listed @("search=$(Optional $root 'title')", 'limit=2'))
+        if (-not ($search | Where-Object { (Optional $_ 'id') -eq $id })) { Schema 'Search did not find exact root' }
+        $direct = @(Listed @("parentID=$id", 'limit=2'))
+        # Listed checks every parentID and walks cursor.next up to 50 pages.
+        $terminalObserved = $false; $continuationObserved = $false
+        foreach ($child in $direct) {
+            $info = Session (Require-ID $child 'smoke child')
+            if ((Optional $info 'parentID') -cne $id) { Schema 'Child get parentID mismatch' }
+            $childMessages = @(Messages $child.id)
+            $null = @(Inbox $child.id)
+            if ((Optional $info 'outcome') -eq 'succeeded' -and (Optional (Optional $info 'time') 'idle') -and
+                @($childMessages | Where-Object { (Optional $_ 'type') -eq 'assistant' -and (TextOf $_) }).Count) {
+                $terminalObserved = $true
+            }
+            if (@($childMessages | Where-Object { (Optional $_ 'type') -eq 'assistant' -and (TextOf $_) }).Count -ge 2) {
+                $continuationObserved = $true
+            }
+        }
+        $continuations = @($messages | Where-Object { (Optional $_ 'type') -eq 'assistant' -and (TextOf $_) }).Count
+        if (-not $terminalObserved -or -not $continuationObserved -or $continuations -lt 2 -or
+            (Optional $root 'outcome') -ne 'succeeded' -or -not (Optional (Optional $root 'time') 'idle')) {
+            Schema 'Historical terminal/root-response/same-session-continuation fields not observable'
+        }
+        Write-Host "SCHEMA SMOKE PASS: $version root=$id rootMessages=$($messages.Count) assistantResponses=$continuations directChildren=$($direct.Count) inbox=$($inbox.Count) terminalChild=$terminalObserved continuedChild=$continuationObserved search=$($search.Count) activeKeys=$(@($active.PSObject.Properties).Count)"
+        Write-Host 'No live Phase 3 scenarios executed; historical messages validate only observer shape, not new policy behavior.'
+        $wait = & opencode api experimental.session.wait --param "sessionID=$($direct | Where-Object { (Optional (Session $_.id) 'outcome') -eq 'succeeded' } | Select-Object -First 1 -ExpandProperty id)" 2>&1
+        if ($LASTEXITCODE -ne 0) { Schema "experimental.session.wait unavailable: $($wait -join ' ')" }
+        Write-Host 'Completed child experimental.session.wait PASS (wait/idle is not a completion signal).'
+        exit 0
+    } catch { Write-Host "SCHEMA SMOKE FAIL: $($_.Exception.Message)"; exit 1 }
+}
+
+# Inspection mode for user-run Phase 3 roots. This does not launch agents. A
+# returning CLI, first root reply, or idle child never establishes completion.
+if ($InspectSession) {
+    try {
+        if ($InspectSession -notmatch '^ses_') { Schema 'Provide an exact root session ID' }
+        $root = Session $InspectSession
+        if ((Optional $root 'parentID') -or (Optional $root 'agent') -ne 'kael') { Schema 'Not a Kael root' }
+        $seen = @{}; $complete = $false
+        do {
+            $root = Session $InspectSession
+            $active = (Api '/api/session/active').data
+            if ($active -isnot [pscustomobject]) { Schema 'session.active is not an object' }
+            $direct = @(Listed @("parentID=$InspectSession"))
+            $all = @{}; $queue = [Collections.Generic.Queue[object]]::new()
+            foreach ($child in $direct) { $queue.Enqueue($child) }
+            while ($queue.Count) {
+                $child = $queue.Dequeue()
+                if ($all.ContainsKey($child.id)) { continue }
+                $all[$child.id] = $child
+                foreach ($nested in @(Listed @("parentID=$($child.id)"))) { $queue.Enqueue($nested) }
+            }
+            $pending = 0; $unknown = 0; $terminal = @{}
+            foreach ($child in $all.Values) {
+                $id = Require-ID $child 'Phase 3 child'
+                $info = Session $id; $cm = @(Messages $id); $inbox = @(Inbox $id)
+                if ((Optional $info 'parentID') -ne $InspectSession) { Schema "Nested/invalid parent: $id" }
+                $texts = @($cm | Where-Object { (Optional $_ 'type') -eq 'assistant' -and (TextOf $_) })
+                if (Has $active $id) { $pending++; continue }
+                $wait = & opencode api experimental.session.wait --param "sessionID=$id" 2>&1
+                if ($LASTEXITCODE -ne 0) { Schema "wait failed for $id : $($wait -join ' ')" }
+                if (-not (Optional $info 'outcome') -or -not (Optional (Optional $info 'time') 'idle') -or
+                    -not $texts.Count -or $inbox.Count) { $unknown++; continue }
+                $terminal[$id] = [pscustomobject]@{ Info=$info; Messages=$cm; Texts=$texts; Final=TextOf $texts[-1] }
+                $seen[$id] = $terminal[$id]
+            }
+            $rootInbox = @(Inbox $InspectSession); $rm = @(Messages $InspectSession)
+            $responses = @($rm | Where-Object { (Optional $_ 'type') -eq 'assistant' -and (TextOf $_) })
+            $complete = $pending -eq 0 -and $unknown -eq 0 -and $rootInbox.Count -eq 0 -and
+                $terminal.Count -eq $all.Count -and $responses.Count -gt 0 -and
+                (Optional $root 'outcome') -eq 'succeeded' -and (Optional (Optional $root 'time') 'idle') -and
+                -not (Has $active $InspectSession)
+            if ($complete) {
+                $last = [long](Optional (Optional $responses[-1] 'time') 'completed')
+                foreach ($entry in $terminal.GetEnumerator()) {
+                    if ($last -lt [long](Optional (Optional $entry.Value.Info 'time') 'idle')) { $complete = $false }
+                }
+                if ($complete) {
+                    $again = @(Listed @("parentID=$InspectSession"))
+                    if ($again.Count -ne $direct.Count -or @($again | Where-Object { -not $terminal.ContainsKey($_.id) }).Count) { $complete = $false }
+                    foreach ($child in $again) { if (@(Listed @("parentID=$($child.id)")).Count) { $complete = $false } }
+                }
+            }
+            if ($complete -or [DateTimeOffset]::UtcNow -ge $deadline) { break }
+            Start-Sleep -Seconds $PollSeconds
+        } while ($true)
+        $sorin = @($terminal.GetEnumerator() | Where-Object { (Optional $_.Value.Info 'agent') -eq 'sorin' })
+        $workers = @($terminal.GetEnumerator() | Where-Object { (Optional $_.Value.Info 'agent') -in @('veyra','orin','nox','vera','kovan') })
+        $lastRoot = if ($responses.Count) { TextOf $responses[-1] } else { '' }
+        $ok = $complete -and $all.Count -eq $terminal.Count -and $lastRoot
+        if ($InspectCase -eq 'A') {
+            $ok = $ok -and $sorin.Count -eq 1 -and $workers.Count -eq 1 -and
+                $sorin[0].Value.Texts.Count -ge 2 -and $sorin[0].Value.Final -match 'STATUS:\s*ADVICE' -and
+                @($sorin[0].Value.Texts | Where-Object { (TextOf $_) -match 'STATUS:\s*EVIDENCE_REQUEST' }).Count -ge 1 -and
+                $lastRoot.Contains($sorin[0].Key) -and $lastRoot.Contains($workers[0].Key)
+        } else { $ok = $ok -and $sorin.Count -eq 0 -and $workers.Count -ge 1 }
+        Write-Host "PHASE3 INSPECT case=$InspectCase root=$InspectSession complete=$complete children=$($all.Count) terminal=$($terminal.Count) pending=$pending unknown=$unknown sorinSessions=$($sorin.Count) workers=$($workers.Count) rootResponses=$($responses.Count)"
+        foreach ($item in $terminal.GetEnumerator()) {
+            Write-Host "CHILD=$($item.Key) AGENT=$(Optional $item.Value.Info 'agent') PARENT=$InspectSession OUTCOME=$(Optional $item.Value.Info 'outcome') RESPONSES=$($item.Value.Texts.Count)"
+        }
+        Write-Host 'Inspect raw session messages for actual tool chronology, request fields, consultation count, role purity, exact evidence and Kael consumption; do not infer these from session counts.'
+        Write-Host "PHASE3 OBSERVER: $(if ($ok) { 'STRUCTURAL_PASS_REVIEW_REQUIRED' } else { 'FAIL_OR_UNCONFIRMED' })"
+        if (-not $ok) { exit 1 }; exit 0
+    } catch { Write-Host "PHASE3 OBSERVER FAIL: $($_.Exception.Message)"; exit 1 }
 }
 
 try {

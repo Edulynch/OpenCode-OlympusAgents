@@ -1,4 +1,9 @@
-# Phase 3 v2 manual live qualification — NOT executed by Maintenance
+# Historical Phase 3 v2 manual plan — NOT executed by Maintenance
+
+For the final candidate on current master use `tests/role-purity/RUNME.md`.
+This historical plan is retained as provenance, not as an executable command
+for the final fixture. Its original v2.0.15 observer warning is superseded by
+the final v2.0.18 schema smoke; neither plan is Phase 3 live evidence.
 
 Source: candidate `feature/role-purity-iterative-evidence-v2` at the recorded
 `SOURCE_HEAD` only. Target: fresh disposable trusted Git project in

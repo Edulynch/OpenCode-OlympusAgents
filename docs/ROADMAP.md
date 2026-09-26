@@ -67,7 +67,7 @@ Existing `/maintain` enters the explicit Maintenance plane. Candidate concepts b
 | 0 — Foundation | **SHIPPED** | OpenCode V2 runtime, preflight/discovery, completion and external-work gates, HUD, trusted-project execution, Maintenance Plane, NORMAL/FAST up to four. |
 | 1 — Adaptive Concurrency finalization | **IN VALIDATION** | NORMAL 4 / FAST 6 candidate; qualify and review before merging. Not on `master`. |
 | 2 — Current Sorin baseline qualification | **PLANNED** | Explicit invocation, automatic Diagnostic Gate, and negative control where Sorin must **not** activate. |
-| 3 — Role Purity + Iterative Evidence | **IN VALIDATION** (candidate branch only) | Kael-mediated policy, same-session Sorin follow-up, no-progress stop, static/synthetic qualification; manual live candidate validation still required before promotion. A second evidence round cannot produce a third automatic Sorin consultation under the current conservative budget. |
+| 3 — Role Purity + Iterative Evidence | **IN VALIDATION** (final candidate branch only) | Kael-mediated policy on current master, same-session Sorin follow-up, no-progress stop, Issue #1/#2 reconciliation, static/synthetic qualification; manual live validation still required before promotion. A second evidence round cannot produce a third automatic Sorin consultation under the conservative budget. |
 | 4 — Thales evolution | **PLANNED** | Sorin visible identity → Thales The Sage; preserve XHigh deep-escalation role; qualify routing. |
 | 5 — Atlas The Planner | **PLANNED** | Sol High, smallest sufficient execution plan; no implementation/discovery ownership; gated use. |
 | 6 — Argus The Bug Hunter | **PLANNED** | Functional bugs only, evidence-driven diagnosis, budget, third-party containment policy. |

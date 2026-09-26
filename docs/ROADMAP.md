@@ -67,7 +67,7 @@ Existing `/maintain` enters the explicit Maintenance plane. Candidate concepts b
 | 0 — Foundation | **SHIPPED** | OpenCode V2 runtime, preflight/discovery, completion and external-work gates, HUD, trusted-project execution, Maintenance Plane, NORMAL/FAST up to four. |
 | 1 — Adaptive Concurrency finalization | **IN VALIDATION** | NORMAL 4 / FAST 6 candidate; qualify and review before merging. Not on `master`. |
 | 2 — Current Sorin baseline qualification | **PLANNED** | Explicit invocation, automatic Diagnostic Gate, and negative control where Sorin must **not** activate. |
-| 3 — Role Purity + Iterative Evidence | **PLANNED** | Qualify orchestration topology before enabling specialized orchestration; do not yet choose direct specialist child sessions vs requests through Kael. Prove role purity, iterative focused follow-up, descendant completion ownership, no orchestration cycles, no duplicate broad discovery, and bounded routing overhead; establish no-progress rule and diagnostic budget foundations. |
+| 3 — Role Purity + Iterative Evidence | **PLANNED** (3A topology selected) | Live qualification selected Kael-mediated orchestration; implementation and integrated role-purity/iterative-evidence qualification remain ahead. Prove focused follow-up, completion ownership, no cycles or duplicate broad discovery, and bounded routing overhead; establish no-progress rule and diagnostic budget foundations. |
 | 4 — Thales evolution | **PLANNED** | Sorin visible identity → Thales The Sage; preserve XHigh deep-escalation role; qualify routing. |
 | 5 — Atlas The Planner | **PLANNED** | Sol High, smallest sufficient execution plan; no implementation/discovery ownership; gated use. |
 | 6 — Argus The Bug Hunter | **PLANNED** | Functional bugs only, evidence-driven diagnosis, budget, third-party containment policy. |
@@ -77,6 +77,12 @@ Existing `/maintain` enters the explicit Maintenance plane. Candidate concepts b
 | 10 — Command UX | **EXPLORATION** | Validate a small useful repertoire: candidate `/power`, `/plan`, `/fast`, `/performance`; avoid command sprawl. |
 | 11 — Integrated Routing Qualification | **PLANNED** | Fixtures: simple edit, complex feature, functional bug, security bug, operational/build issue, difficult/flaky diagnosis, third-party bug, optimization request, explicit planning, power mode, maintenance boundary. |
 | 12 — Release | **PLANNED** | Only after integrated qualification. |
+
+### Phase 3A topology qualification — selected, not implemented
+
+**KAEL_MEDIATED** passed offline certification of a completed live run: specialized reasoners request bounded evidence through Kael; Kael owns worker sessions, routes focused follow-up to Veyra/Nox, and re-consults the **same** reasoner with collected evidence. Reasoners remain diagnostic rather than implementing; workers stay direct children of Kael. This respects native subagent depth, simplifies cycle prevention, keeps Completion Gates root-owned, and needs no custom scheduler/runtime. Production routing and Role Purity implementation have **not** changed.
+
+**DIRECT_NESTED** is **RUNTIME-INCOMPATIBLE** with current OpenCode native subagent depth (`Subagent depth limit reached (1)`), not a prompt failure. No bypass or custom runtime is recommended.
 
 ## Premortem guardrails
 

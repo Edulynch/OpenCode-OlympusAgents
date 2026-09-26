@@ -51,7 +51,8 @@ Kael coordinates the team as needed: research, implementation, testing, and revi
 |---|---|
 | 👑 **Kael** | Understands your request and coordinates the work. |
 | 🔭 **Veyra** | Researches the project and gathers context. |
-| 📐 **Orin** | Plans tricky changes. |
+| 📐 **Orin** | Decides architecture and interface boundaries. |
+| 🗺️ **Atlas The Planner** | Optionally plans the execution order of already-scoped changes. |
 | 🔨 **Kovan** | Writes code. |
 | 👁️ **Nox** | Runs checks and tests. |
 | ⚖️ **Vera** | Reviews the result. |
@@ -61,7 +62,7 @@ OpenCode is the runtime. Olympus is the orchestration and decision layer that he
 
 ## 🔧 Maintenance
 
-For advanced repository administration, use `/maintain <task>` (for example, release preparation, Git maintenance, Olympus configuration maintenance, or repository-level administration). Maintenance is separate from the normal seven-agent team: Kael cannot invoke it automatically. Ordinary feature development does not require `/maintain`.
+For advanced repository administration, use `/maintain <task>` (for example, release preparation, Git maintenance, Olympus configuration maintenance, or repository-level administration). Maintenance is separate from the normal eight-agent team: Kael cannot invoke it automatically. Ordinary feature development does not require `/maintain`.
 
 ## ⚡ NORMAL vs FAST
 

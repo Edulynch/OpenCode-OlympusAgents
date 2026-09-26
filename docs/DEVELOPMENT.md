@@ -13,7 +13,7 @@ Kael checks feasibility and plane routing from the request **before** delegated 
 **DO YOUR ROLE; DO NOT ABSORB ANOTHER ROLE TO SAVE A HANDOFF.** Kael owns Preflight,
 routing, dependencies, session families, reconciliation, retry decisions and final
 synthesis. Veyra supplies discovery; Orin architecture; Kovan implementation;
-Nox runtime/test evidence; Vera independent review. Thales reasons over actual
+Nox runtime/test evidence; Vera independent review. Atlas optionally plans execution order for already-scoped, already-architected changes without discovering, editing or validating; Thales reasons over actual
 evidence under the existing Diagnostic Gate; straightforward bugs do not trigger
 Thales. Reasoners identify hypotheses and discriminating evidence, not execute
 specialist work or self-review in place of Vera.

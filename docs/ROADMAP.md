@@ -36,7 +36,7 @@ The table distinguishes existing roles from proposed identities. Model entries a
 | 👁️ Nox The Tester | GPT-6 Luna Max | Testing/runtime evidence | SHIPPED; evolving |
 | ⚖️ Vera The Judge | GPT-6 Luna Max | Independent review | SHIPPED; evolving |
 | 🛡️ Talos The Sentinel | GPT-6 Sol High | Security defect/exploitability reasoning | PLANNED; proposed |
-| 🧠 Thales The Sage | GPT-6 Sol XHigh | High-uncertainty diagnostic escalation | IN VALIDATION: native evolution of Sorin; live routing qualification pending |
+| 🧠 Thales The Sage | GPT-6 Sol XHigh | High-uncertainty diagnostic escalation | SHIPPED: native evolution of Sorin; live routing qualified |
 | ☀️ Helios The Optimizer | GPT-6 Sol High | Explicit optimization analysis/orchestration | PLANNED; proposed |
 | 🛡️ Aegis The Keeper | GPT-6 Luna Max target | Explicit Maintenance/admin execution | PLANNED visible identity/model adjustment of current Maintenance |
 
@@ -68,7 +68,7 @@ Existing `/maintain` enters the explicit Maintenance plane. Candidate concepts b
 | 1 — Adaptive Concurrency finalization | **IN VALIDATION** | NORMAL 4 / FAST 6 candidate; qualify and review before merging. Not on `master`. |
 | 2 — Current Sorin baseline qualification | **PLANNED** | Explicit invocation, automatic Diagnostic Gate, and negative control where Sorin must **not** activate. |
 | 3 — Role Purity + Iterative Evidence | **SHIPPED** | Kael-mediated Role Purity, same-session Sorin evidence follow-up, no-progress stop, completion ownership, Issue #1 reconciliation and Issue #2 Maintenance safety. Static/synthetic/full regression passed; user-executed live Cases A and B passed. No third automatic Sorin consultation. |
-| 4 — Thales evolution | **IN VALIDATION** | Sorin visible identity → Thales The Sage; preserve XHigh deep-escalation role; live routing qualification pending. |
+| 4 — Thales evolution | **SHIPPED** | Sorin visible identity → Thales The Sage; Sol XHigh deep-escalation role, user-executed live routing and deterministic negative control passed. |
 | 5 — Atlas The Planner | **PLANNED** | Sol High, smallest sufficient execution plan; no implementation/discovery ownership; gated use. |
 | 6 — Argus The Bug Hunter | **PLANNED** | Functional bugs only, evidence-driven diagnosis, budget, third-party containment policy. |
 | 7 — Talos The Sentinel | **PLANNED** | Security defects, exploitability/blast-radius reasoning; not general functional debugging. |
@@ -83,6 +83,10 @@ Existing `/maintain` enters the explicit Maintenance plane. Candidate concepts b
 **KAEL_MEDIATED** passed offline topology certification and the user-executed Phase 3 live qualification: specialized reasoners request bounded evidence through Kael; Kael owns worker sessions, routes focused follow-up to direct children, and re-consults the **same** reasoner with collected evidence. Case A (`ses_f21e09d97ffeiyjqAvmZuDRxa9`) confirmed one bounded Veyra evidence round, two consultations in one Sorin session, Role Purity and complete family reconciliation (unresolved/unknown = 0). Case B (`ses_f21dad776ffevU6A5qKcenexjh`) confirmed the deterministic negative control with Sorin sessions/consultations = 0 and complete family reconciliation. The captured session/message review satisfied the manual structural-review gate. Evidence class: **USER_EXECUTED_LIVE_EVIDENCE**, not task-executed live evidence. No case was rerun during integration. Reasoners remain diagnostic rather than implementing; workers stay direct children of Kael. This respects native subagent depth, simplifies cycle prevention, keeps Completion Gates root-owned, and needs no custom scheduler/runtime.
 
 **DIRECT_NESTED** is **RUNTIME-INCOMPATIBLE** with current OpenCode native subagent depth (`Subagent depth limit reached (1)`), not a prompt failure. No bypass or custom runtime is recommended.
+
+### Phase 4 Thales The Sage — SHIPPED
+
+Offline/static, fresh-install, v0.2.0-to-candidate upgrade and full non-live regression passed. User-executed live Case A (Kael `ses_f217c2a55ffeXgwTNO96v5Ybzr`, Thales `ses_f217bf452ffe50smZ2Ad30z8z3`, Veyra `ses_f217b9d60ffeOvaDBJN71MxUCc`) verified runtime agent ID `thales` at `openai/gpt-6-sol#xhigh`, one Thales session, two consultations in that same session (EVIDENCE_REQUEST then calibrated ADVICE), direct Kael-owned worker evidence and no Sorin sessions. User-executed live Case B (Kael `ses_f216b02a1ffe0N79YjA86GUgL6`, Veyra `ses_f216ae227ffewhO6EdE35g0cLr`) verified a bounded `REDA` → `READY` deterministic correction recommendation with Thales, Sorin and Maintenance counts all zero. Both families completed with pending and unknown counts zero. Evidence class: **USER_EXECUTED_LIVE_EVIDENCE**, not task-executed live evidence. Neither case was rerun for integration; no third automatic consultation is authorized.
 
 ## Premortem guardrails
 

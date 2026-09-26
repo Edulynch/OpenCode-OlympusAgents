@@ -1,6 +1,6 @@
 # Thales The Sage — focused live routing qualification (user-executed only)
 
-Phase 4 remains **IN VALIDATION**. Maintenance prepares these instructions; it does not execute either live case. Use a disposable trusted Git repository and install the candidate from `feature/thales-the-sage` (see commands below). Run each case in a **new Kael root session**. Inspect the native session family and message/tool chronology, not merely the final prose. No implementation or changes to the incident evidence are requested.
+Historical manual qualification fixture: both cases were executed by the user and passed before Phase 4 shipped. **Do not rerun for integration.** The steps below record the original candidate procedure (a disposable trusted Git repository installed from `feature/thales-the-sage`, with a fresh Kael root per case). Inspect native session families and message/tool chronology rather than final prose alone. No implementation or changes to incident evidence are requested. Evidence class: **USER_EXECUTED_LIVE_EVIDENCE**, not task-executed live evidence.
 
 ## Read-only uncertain case
 
@@ -46,4 +46,4 @@ opencode debug agents
 Pop-Location
 ```
 
-Capture root/child IDs, parentIDs, agent IDs and effective models; actual EVIDENCE_REQUEST text and five fields; worker terminal evidence; the two Thales messages sharing one ID; Kael's final consumption/synthesis; and the negative-control Thales count. Verify no queued or running family work remains. Report PASS/FAIL and any limitations to the user. **Only the user can approve Phase 4 shipping after live qualification.**
+The user captured root/child IDs, parentIDs, agent IDs and effective models; EVIDENCE_REQUEST and five required fields; worker terminal evidence; two consultations sharing one Thales ID; Kael's final synthesis; and the negative-control Thales count. Both families had zero pending/unknown work. Phase 4 shipping was explicitly authorized after this user-executed qualification.

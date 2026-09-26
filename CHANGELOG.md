@@ -1,3 +1,23 @@
+# 0.2.0
+
+## Added
+
+- Capability Preflight decides routing boundaries before unnecessary research or delegation.
+- Task-scoped, progressive repository discovery starts narrow and expands only when warranted.
+- Reliable completion gates require delegated results to be terminal, collected and consumed before claiming completion.
+- Maintenance keeps external work foreground-owned through its terminal outcome, including parallel work.
+- A maintainer-facing [development roadmap](docs/ROADMAP.md).
+
+## Changed
+
+- Repository administration can be redirected to explicit `/maintain` before application research.
+- Missing parent tool output does not imply child failure or authorize a blind retry: Olympus reconciles the original child when possible and reports `COMPLETION_UNCONFIRMED` when execution cannot be established safely.
+
+## Known limitations
+
+- The intermittent OpenCode result-correlation trigger tracked by Issue #1 remains unidentified and unfixed; v0.2.0 mitigates unsafe retry behavior.
+- NORMAL and FAST remain capped at four concurrent children. Planned Role Purity and new specialist agents are not included.
+
 # 0.1.2
 
 Installer/bootstrap hotfix:

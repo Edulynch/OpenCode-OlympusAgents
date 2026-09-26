@@ -35,7 +35,7 @@ function Install([string]$repo, [string]$root = $source) {
     $out = (& pwsh -NoProfile -File (Join-Path $root 'install.ps1') -SourceRoot $root -Target $repo 2>&1 | Out-String)
     [pscustomobject]@{ Code=$LASTEXITCODE; Text=$out }
 }
-function Ready($result) { $result.Code -eq 0 -and $result.Text -match '(?m)^READY\s*$' -and $result.Text -match 'OLYMPUS_INSTALL: v0.1.2 READY_OR_NO_CHANGES' }
+function Ready($result) { $result.Code -eq 0 -and $result.Text -match '(?m)^READY\s*$' -and $result.Text -match 'OLYMPUS_INSTALL: v0.2.0 READY_OR_NO_CHANGES' }
 function Untracked([string]$repo, [string]$path) { (Fixture-Git $repo @('status','--porcelain=v1','-uall','--',$path)).Trim() -eq "?? $path" }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null

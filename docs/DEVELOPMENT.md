@@ -10,7 +10,7 @@ Kael checks feasibility and plane routing from the request **before** delegated 
 
 ## Local/bootstrap installation
 
-From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The v0.1.2 public installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`:
+From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The v0.2.0 public installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project' -DryRun

@@ -101,6 +101,7 @@ Olympus is installed per project. To reinstall **v0.1.2** in the same project, r
 
 - [OpenCode documentation](https://opencode.ai/docs/) — install and learn OpenCode.
 - [Development & qualification](docs/DEVELOPMENT.md) — maintainer docs, bootstrap internals, qualification, and release workflow.
+- [Roadmap](docs/ROADMAP.md) — planned agent evolution and future qualification work.
 - [Olympus v0.1.2 release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.1.2) and [changelog](CHANGELOG.md) — release information.
 - [License](LICENSE) — MIT.
 

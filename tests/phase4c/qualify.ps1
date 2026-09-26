@@ -16,7 +16,7 @@ $ManagedPaths = @(
     '.opencode/agents/kael.md', '.opencode/agents/veyra.md',
     '.opencode/agents/orin.md', '.opencode/agents/kovan.md',
     '.opencode/agents/nox.md', '.opencode/agents/vera.md',
-    '.opencode/agents/thales.md', '.opencode/agents/maintenance.md',
+    '.opencode/agents/thales.md', '.opencode/agents/atlas.md', '.opencode/agents/maintenance.md',
     '.opencode/commands/maintain.md',
     '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx',
     '.opencode/orchestrator-install.json'
@@ -448,7 +448,7 @@ try {
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'security fixture' + [Environment]::NewLine; 'package.json' = '{"packageManager":"npm@10","scripts":{"test":"node test.js"}}' + [Environment]::NewLine; 'package-lock.json' = '{}' + [Environment]::NewLine })
         $diagnostics = Assert-Installed $repo 'READY'
         $agents = $diagnostics.Agents
-        foreach ($id in @('kael', 'thales', 'veyra', 'orin', 'vera')) {
+        foreach ($id in @('kael', 'thales', 'atlas', 'veyra', 'orin', 'vera')) {
             $agent = Get-Agent $agents $id
             Assert-Condition (Has-Rule $agent 'edit' '*' 'deny') ($id + ' edit DENY missing.') 'BOOTSTRAP_BUG'
             Assert-Condition (Has-Rule $agent 'shell' '*' 'deny') ($id + ' shell DENY missing.') 'BOOTSTRAP_BUG'
@@ -456,7 +456,7 @@ try {
         }
         $kael = Get-Agent $agents 'kael'
         $allowedChildren = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object { $_.resource } | Select-Object -Unique)
-        $expectedChildren = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'thales')
+        $expectedChildren = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'thales', 'atlas')
         Assert-Condition ($allowedChildren.Count -eq $expectedChildren.Count -and @($allowedChildren | Where-Object { $_ -notin $expectedChildren }).Count -eq 0 -and @($expectedChildren | Where-Object { $allowedChildren -notcontains $_ }).Count -eq 0) 'Kael delegation allowlist mismatch.' 'BOOTSTRAP_BUG'
         $thalesPrompt = [IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/thales.md'))
         Assert-Condition ($thalesPrompt -match 'invoked only through the Diagnostic Gate') 'Thales Diagnostic Gate requirement missing.' 'BOOTSTRAP_BUG'

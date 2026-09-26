@@ -8,6 +8,48 @@ OpenCode is the runtime; Olympus is the orchestration and decision layer. Kael c
 
 Kael checks feasibility and plane routing from the request **before** delegated research or planning. Known Maintenance-only operations receive a user-facing `/maintain <task>` handoff, not automatic delegation. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
 
+### Phase 3 final candidate — role purity and iterative evidence (not shipped)
+
+**DO YOUR ROLE; DO NOT ABSORB ANOTHER ROLE TO SAVE A HANDOFF.** Kael owns Preflight,
+routing, dependencies, session families, reconciliation, retry decisions and final
+synthesis. Veyra supplies discovery; Orin architecture; Kovan implementation;
+Nox runtime/test evidence; Vera independent review. Sorin reasons over actual
+evidence under the existing Diagnostic Gate; straightforward bugs do not trigger
+Sorin. Reasoners identify hypotheses and discriminating evidence, not execute
+specialist work or self-review in place of Vera.
+
+The certified **KAEL_MEDIATED** topology is USER/ROOT → Kael → Sorin →
+EVIDENCE_REQUEST → Kael → worker → evidence → Kael → SAME Sorin session → decision
+→ Kael → execution/finalization. Reasoners and workers are direct Kael children;
+reasoner-to-worker subagents hit the native depth limit (1). A bounded request
+names TARGET_ROLE, QUESTION, SCOPE, WHY_NEEDED and EXPECTED_DISCRIMINATION.
+Kael checks role, scope, novelty, dependencies and plane boundaries. Follow up
+narrowly only when material new information is expected. The first Sorin call
+requires the Diagnostic Gate, the second requires completed bounded action and
+material new evidence; no third automatic call.
+
+An open evidence round inherits Issue #1 safety: missing tool output never means
+FAILED worker evidence or retry permission. Retain the known original worker,
+wait, reconcile, consume once and only then re-consult the SAME Sorin session.
+Pending or indeterminate evidence does not complete the round. Unknown execution
+stops as COMPLETION_UNCONFIRMED without an invented empty packet or replacement
+worker. Kael finalizes only after terminal reconciled workers, actual evidence,
+consumed reasoner final result, root synthesis and zero unresolved/unknown work.
+The conservative two-consultation Sorin budget remains in force: initial request,
+worker evidence, then a final Sorin consultation is possible. If Sorin asks for
+a second evidence round on call two, a third automatic consultation to conclude
+is **not** allowed. Stop for explicit user authorization before any third Sorin
+consultation, and require a terminal/reconciled/validated second evidence round;
+do not count an unconsulted reasoner conclusion as complete.
+Static/synthetic qualification: `pwsh -NoProfile -File ./tests/role-purity/qualify.ps1`.
+Live qualification of the prepared disposable fixture is separate and not yet run.
+The original Issue #1 normal-worker and Issue #2 explicit Maintenance result
+reconciliation remain authoritative. Evidence requests cannot route Maintenance;
+an identified running Maintenance child stays PENDING despite an early error,
+and its later original result controls the actual task outcome. The historical
+Issue #2 live evidence is USER_EXECUTED_LIVE_EVIDENCE; the Phase 3 live cases
+are NOT_EXECUTED. See `tests/role-purity/RUNME.md` for the final manual fixture.
+
 ## Local/bootstrap installation
 
 From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The v0.2.0 public installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`:

@@ -160,6 +160,8 @@ implementation instructions, out-of-scope paths, unrelated or duplicate evidence
 without a material justification, unsatisfied dependencies, and Preflight/plane
 violations. If invalid, re-consult about the contract defect only within the
 existing consultation budget or conclude BLOCKED/INCONCLUSIVE; never mechanically route.
+Maintenance is outside normal evidence routing and cannot be TARGET_ROLE;
+only the explicit user `/maintain` handoff uses its separate result rules.
 
 If valid and budget permits, Kael launches the worker as its **direct child**.
 Treat the worker assignment as an open evidence round until its original result
@@ -180,7 +182,7 @@ a new session only if native constraints require it. For an already inspected
 domain prefer a focused follow-up (same worker session if cleanly supported,
 otherwise a fresh worker with narrow prior context). NO BROAD RESTART WITHOUT
 MATERIAL JUSTIFICATION. New rounds must be expected to buy materially new
-information: NEW_EVIDENCE_NEEDED, CLARIFICATION, CONFLICT_RESOLUTION,
+information: NEW_EVIDENCE, CLARIFICATION, CONFLICT_RESOLUTION,
 DISCRIMINATING_EXPERIMENT, SCOPE_NARROWING or VALIDATION_OF_NEW_FACT. An identical
 question, repeated broad discovery, unchanged experiment, retry of an
 indeterminate worker, or unjustified second opinion is NO_PROGRESS; stop rather
@@ -192,6 +194,8 @@ automatically consult Sorin a third time to obtain final advice. Report the
 remaining uncertainty and stop for explicit user authorization; only a new
 user-authorized continuation after the second evidence is terminal, collected,
 reconciled and validated may consult Sorin a third time in the same session.
+`/power`, FAST mode, complexity, and worker/reasoner requests do not constitute
+the user's explicit authorization for an additional deep-diagnosis consultation.
 Do not manufacture a final reasoner result or mislabel the root as complete.
 
 Topology: USER/ROOT → Kael → Sorin → EVIDENCE_REQUEST → Kael → worker → evidence

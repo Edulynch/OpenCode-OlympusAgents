@@ -35,7 +35,7 @@ try {
     Check AU3_STATIC ((Has $k shell allow) -and (Has $k edit allow) -and ([IO.File]::ReadAllText((Join-Path $fixture '.opencode/agents/kovan.md')) -match 'Project scripts created as'))
     Check AU4_STATIC ((Has $n shell allow) -and @($n.permissions | Where-Object { $_.action -eq 'shell' -and $_.resource -eq 'pwsh -NoProfile -File ./safe-validation.ps1' -and $_.effect -eq 'allow' }).Count -eq 0)
     Check AU5 (Has $n edit deny)
-    foreach ($case in @(@('AU6','kael'), @('AU7','veyra'), @('AU8','orin'), @('AU9','vera'), @('AU10','sorin'))) {
+    foreach ($case in @(@('AU6','kael'), @('AU7','veyra'), @('AU8','orin'), @('AU9','vera'), @('AU10','thales'))) {
         $a = @($agents | Where-Object id -eq $case[1])[0]
         Check $case[0] ((Has $a shell deny) -and (Has $a edit deny) -and -not (Has $a shell allow))
     }

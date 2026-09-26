@@ -50,7 +50,8 @@ try {
     $agents = @(Get-ChildItem (Join-Path $root '.opencode/agents') -Filter '*.md')
     $models = @($agents | ForEach-Object { ([regex]::Match([IO.File]::ReadAllText($_.FullName), '(?m)^model:.*$')).Value })
     $baseModels = @($agents | ForEach-Object {
-        $relative = '.opencode/agents/' + $_.Name
+        # Phase 4 changes only the reasoner file-derived ID, not its model.
+        $relative = '.opencode/agents/' + $(if ($_.Name -eq 'thales.md') { 'sorin.md' } else { $_.Name })
         $baseline = (& git -C $root show "master:$relative" | Out-String)
         if ($LASTEXITCODE -ne 0) { throw "Cannot read baseline model: $relative" }
         ([regex]::Match($baseline, '(?m)^model:.*$')).Value
@@ -59,10 +60,11 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read baseline concurrency policy' }
     $concurrencyPattern = '(?s)NORMAL is cost/context-aware:.*?(?=\r?\nReliable delayed background notifications)'
     Check 'MH14_MODELS' ($models.Count -eq 8 -and (($models -join '|') -ceq ($baseModels -join '|')))
-    Check 'MH15_CONCURRENCY' (([regex]::Match($kael, $concurrencyPattern).Value) -ceq ([regex]::Match($baseKael, $concurrencyPattern).Value) -and $kael -match 'MAX_ACTIVE_CHILDREN = 4')
+    $baselineConcurrency = ([regex]::Match($baseKael, $concurrencyPattern).Value).Replace('Sorin','Thales')
+    Check 'MH15_CONCURRENCY' (([regex]::Match($kael, $concurrencyPattern).Value) -ceq $baselineConcurrency -and $kael -match 'MAX_ACTIVE_CHILDREN = 4')
     Check 'MH10_ROUTING' ($kael -match 'Kael → maintenance remains denied' -and
         $kael -match 'Kael → maintenance remains DENIED' -and $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: maintenance' -and
-        $kael -match 'Only veyra, orin, kovan, nox, vera, and sorin are valid child role IDs')
+        $kael -match 'Only veyra, orin, kovan, nox, vera, and thales are valid child role IDs')
     Check 'MH11_EXPLICIT' ($command -match '(?m)^agent: maintenance$' -and $command -match '(?m)^subagent: true$' -and
         $command -match 'user explicitly invoked `/maintain`' -and $kael -match 'user → `/maintain`\s+remains explicit-only')
     Check 'MH12_UI_BOUNDARY' ($kael -match 'not\s+OpenCode.s rendered "Maintenance failed" badge' -and

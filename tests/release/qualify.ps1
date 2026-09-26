@@ -28,7 +28,7 @@ try {
     Check 'R1_FRESH_INSTALL' ($first.Code -eq 0 -and $first.Text -match '(?m)^READY\s*$' -and $first.Text -match 'OLYMPUS_INSTALL: v0.2.0 READY_OR_NO_CHANGES')
     $paths = @('opencode.jsonc', '.opencode/orchestrator-install.json', '.opencode/commands/maintain.md',
         '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
-    $paths += @('kael','veyra','orin','kovan','nox','vera','sorin','maintenance' | ForEach-Object { ".opencode/agents/$_.md" })
+    $paths += @('kael','veyra','orin','kovan','nox','vera','thales','maintenance' | ForEach-Object { ".opencode/agents/$_.md" })
     Check 'R2_ASSETS' (@($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path $target $_) -PathType Leaf) }).Count -eq 0)
     $manifest = Get-Content -LiteralPath (Join-Path $target '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json
     Check 'R2_MANIFEST_OWNERSHIP' ($manifest.schema_version -eq 1 -and $manifest.managed_files.Count -eq 12)
@@ -36,12 +36,12 @@ try {
     Push-Location $target
     try {
         $agents = (& opencode debug agents 2>&1 | Out-String) | ConvertFrom-Json -Depth 100
-        Check 'R3_EFFECTIVE_AGENTS' ($LASTEXITCODE -eq 0 -and @($agents | Where-Object { $_.id -in @('kael','veyra','orin','kovan','nox','vera','sorin','maintenance') }).Count -eq 8)
+        Check 'R3_EFFECTIVE_AGENTS' ($LASTEXITCODE -eq 0 -and @($agents | Where-Object { $_.id -in @('kael','veyra','orin','kovan','nox','vera','thales','maintenance') }).Count -eq 8)
         $plugins = (& opencode plugin list 2>&1 | Out-String)
         Check 'R9_HUD_DISCOVERY' ($LASTEXITCODE -eq 0 -and $plugins -match 'olympus-activity')
     } finally { Pop-Location }
     $expected = @{
-        kael=@('gpt-6-sol','high','primary'); sorin=@('gpt-6-sol','xhigh','subagent'); maintenance=@('gpt-6-sol','high','subagent')
+        kael=@('gpt-6-sol','high','primary'); thales=@('gpt-6-sol','xhigh','subagent'); maintenance=@('gpt-6-sol','high','subagent')
         veyra=@('gpt-6-luna','max','subagent'); orin=@('gpt-6-luna','max','subagent'); kovan=@('gpt-6-luna','max','subagent')
         nox=@('gpt-6-luna','max','subagent'); vera=@('gpt-6-luna','max','subagent')
     }

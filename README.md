@@ -55,7 +55,7 @@ Kael coordinates the team as needed: research, implementation, testing, and revi
 | 🔨 **Kovan** | Writes code. |
 | 👁️ **Nox** | Runs checks and tests. |
 | ⚖️ **Vera** | Reviews the result. |
-| 🧭 **Sorin** | Helps diagnose difficult problems when needed. |
+| 🧠 **Thales The Sage** | Helps diagnose difficult problems when needed. |
 
 OpenCode is the runtime. Olympus is the orchestration and decision layer that helps this team work together.
 

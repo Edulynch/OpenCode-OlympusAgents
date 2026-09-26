@@ -63,14 +63,14 @@ try {
     $modelLines = @($agents | ForEach-Object { ([regex]::Match([IO.File]::ReadAllText($_.FullName), '(?m)^model:.*$')).Value })
     Check 'RR13_MODELS' ($modelLines.Count -eq 8 -and
         $kael -match 'model: "openai/gpt-6-sol#high"' -and
-        (Text '.opencode/agents/sorin.md') -match 'model: openai/gpt-6-sol#xhigh' -and
+        (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6-sol#xhigh' -and
         (Text '.opencode/agents/maintenance.md') -match 'model: openai/gpt-6-sol#high' -and
         @(@('veyra','orin','kovan','nox','vera') | ForEach-Object { (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max' }) -notcontains $false)
     Check 'RR14_CONCURRENCY' ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kael -match 'FAST is an explicit user-selected latency-priority profile' -and
         $kael -match 'FAST never overrides writer ownership')
     Check 'RR15_NO_LUNA_FAST' ($allAgentText -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
-    Check 'NO_SORIN_ON_ERROR' ($kael -match 'not by itself a reason to invoke Sorin')
+    Check 'NO_THALES_ON_ERROR' ($kael -match 'not by itself a reason to invoke Thales')
     Check 'PHASE3_INHERITS' ($kael -match 'Kael-mediated iterative evidence loops reconcile the original worker')
 
     # Historical Issue #1 event ORDERING only; no private trace/session data is embedded.

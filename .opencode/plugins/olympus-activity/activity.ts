@@ -4,7 +4,7 @@ type Row = { id: string; agent: string; title: string }
 
 const names: Record<string, string> = {
   kael: "Kael", veyra: "Veyra", orin: "Orin", kovan: "Kovan",
-  nox: "Nox", vera: "Vera", sorin: "Sorin", maintenance: "Maintenance",
+  nox: "Nox", vera: "Vera", thales: "Thales", maintenance: "Maintenance",
 }
 
 function label(agent?: string): string {

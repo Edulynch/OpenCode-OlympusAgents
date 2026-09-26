@@ -36,7 +36,7 @@ The table distinguishes existing roles from proposed identities. Model entries a
 | 👁️ Nox The Tester | GPT-6 Luna Max | Testing/runtime evidence | SHIPPED; evolving |
 | ⚖️ Vera The Judge | GPT-6 Luna Max | Independent review | SHIPPED; evolving |
 | 🛡️ Talos The Sentinel | GPT-6 Sol High | Security defect/exploitability reasoning | PLANNED; proposed |
-| 🧠 Thales The Sage | GPT-6 Sol XHigh | High-uncertainty diagnostic escalation | PLANNED evolution/rename of current Sorin |
+| 🧠 Thales The Sage | GPT-6 Sol XHigh | High-uncertainty diagnostic escalation | IN VALIDATION: native evolution of Sorin; live routing qualification pending |
 | ☀️ Helios The Optimizer | GPT-6 Sol High | Explicit optimization analysis/orchestration | PLANNED; proposed |
 | 🛡️ Aegis The Keeper | GPT-6 Luna Max target | Explicit Maintenance/admin execution | PLANNED visible identity/model adjustment of current Maintenance |
 
@@ -68,7 +68,7 @@ Existing `/maintain` enters the explicit Maintenance plane. Candidate concepts b
 | 1 — Adaptive Concurrency finalization | **IN VALIDATION** | NORMAL 4 / FAST 6 candidate; qualify and review before merging. Not on `master`. |
 | 2 — Current Sorin baseline qualification | **PLANNED** | Explicit invocation, automatic Diagnostic Gate, and negative control where Sorin must **not** activate. |
 | 3 — Role Purity + Iterative Evidence | **SHIPPED** | Kael-mediated Role Purity, same-session Sorin evidence follow-up, no-progress stop, completion ownership, Issue #1 reconciliation and Issue #2 Maintenance safety. Static/synthetic/full regression passed; user-executed live Cases A and B passed. No third automatic Sorin consultation. |
-| 4 — Thales evolution | **PLANNED** | Sorin visible identity → Thales The Sage; preserve XHigh deep-escalation role; qualify routing. |
+| 4 — Thales evolution | **IN VALIDATION** | Sorin visible identity → Thales The Sage; preserve XHigh deep-escalation role; live routing qualification pending. |
 | 5 — Atlas The Planner | **PLANNED** | Sol High, smallest sufficient execution plan; no implementation/discovery ownership; gated use. |
 | 6 — Argus The Bug Hunter | **PLANNED** | Functional bugs only, evidence-driven diagnosis, budget, third-party containment policy. |
 | 7 — Talos The Sentinel | **PLANNED** | Security defects, exploitability/blast-radius reasoning; not general functional debugging. |

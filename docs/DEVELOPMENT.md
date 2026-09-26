@@ -13,32 +13,32 @@ Kael checks feasibility and plane routing from the request **before** delegated 
 **DO YOUR ROLE; DO NOT ABSORB ANOTHER ROLE TO SAVE A HANDOFF.** Kael owns Preflight,
 routing, dependencies, session families, reconciliation, retry decisions and final
 synthesis. Veyra supplies discovery; Orin architecture; Kovan implementation;
-Nox runtime/test evidence; Vera independent review. Sorin reasons over actual
+Nox runtime/test evidence; Vera independent review. Thales reasons over actual
 evidence under the existing Diagnostic Gate; straightforward bugs do not trigger
-Sorin. Reasoners identify hypotheses and discriminating evidence, not execute
+Thales. Reasoners identify hypotheses and discriminating evidence, not execute
 specialist work or self-review in place of Vera.
 
-The certified **KAEL_MEDIATED** topology is USER/ROOT → Kael → Sorin →
-EVIDENCE_REQUEST → Kael → worker → evidence → Kael → SAME Sorin session → decision
+The certified **KAEL_MEDIATED** topology is USER/ROOT → Kael → Thales →
+EVIDENCE_REQUEST → Kael → worker → evidence → Kael → SAME Thales session → decision
 → Kael → execution/finalization. Reasoners and workers are direct Kael children;
 reasoner-to-worker subagents hit the native depth limit (1). A bounded request
 names TARGET_ROLE, QUESTION, SCOPE, WHY_NEEDED and EXPECTED_DISCRIMINATION.
 Kael checks role, scope, novelty, dependencies and plane boundaries. Follow up
-narrowly only when material new information is expected. The first Sorin call
+narrowly only when material new information is expected. The first Thales call
 requires the Diagnostic Gate, the second requires completed bounded action and
 material new evidence; no third automatic call.
 
 An open evidence round inherits Issue #1 safety: missing tool output never means
 FAILED worker evidence or retry permission. Retain the known original worker,
-wait, reconcile, consume once and only then re-consult the SAME Sorin session.
+wait, reconcile, consume once and only then re-consult the SAME Thales session.
 Pending or indeterminate evidence does not complete the round. Unknown execution
 stops as COMPLETION_UNCONFIRMED without an invented empty packet or replacement
 worker. Kael finalizes only after terminal reconciled workers, actual evidence,
 consumed reasoner final result, root synthesis and zero unresolved/unknown work.
-The conservative two-consultation Sorin budget remains in force: initial request,
-worker evidence, then a final Sorin consultation is possible. If Sorin asks for
+The conservative two-consultation Thales budget remains in force: initial request,
+worker evidence, then a final Thales consultation is possible. If Thales asks for
 a second evidence round on call two, a third automatic consultation to conclude
-is **not** allowed. Stop for explicit user authorization before any third Sorin
+is **not** allowed. Stop for explicit user authorization before any third Thales
 consultation, and require a terminal/reconciled/validated second evidence round;
 do not count an unconsulted reasoner conclusion as complete.
 Static/synthetic qualification: `pwsh -NoProfile -File ./tests/role-purity/qualify.ps1`.
@@ -69,6 +69,8 @@ pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project'
 ## Managed installation and recovery
 
 The target's `.opencode/orchestrator-install.json` records installed source commit, managed paths and SHA-256 hashes, plus project detection metadata. Managed assets include the root `opencode.jsonc`, Olympus agents, `/maintain` command, and Activity HUD plugin under `.opencode/`. On reinstall, unchanged managed assets yield `NO_CHANGES` (after effective-agent validation). Missing or modified owned files yield `MANAGED_FILE_DRIFT` rather than a silent overwrite; a destination that already exists without ownership metadata yields `INSTALL_CONFLICT` (including protected foreign OpenCode configuration).
+
+Phase 4 candidate upgrades recognize the exact historical Sorin managed-file set (including earlier pre-HUD/pre-Maintenance sets). The owned Sorin file must still match its manifest hash; the installer then installs Thales, removes the verified owned Sorin file, and writes a Thales-only manifest. A user-modified Sorin file fails drift protection; an unowned Sorin or Thales path fails conflict protection. Fresh installs create Thales only. Qualification: `pwsh -NoProfile -File ./tests/thales/qualify.ps1`. The focused, **not-yet-executed** user live routing fixture is `tests/thales/RUNME.md`; Phase 4 remains IN VALIDATION.
 
 Olympus does **not** require a globally clean target Git worktree. Unrelated modified, staged, untracked and tool-generated files (including unrelated content under `.opencode/`) are allowed and preserved. Safety is based on explicit managed destinations and ownership hashes, Git-root validation, and path containment; unsafe targets and unmanaged destination collisions still block. The installer never stashes, resets, cleans, stages, or normalizes user work.
 

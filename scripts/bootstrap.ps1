@@ -19,7 +19,7 @@ $Managed = @(
     ".opencode/agents/kovan.md",
     ".opencode/agents/nox.md",
     ".opencode/agents/vera.md",
-    ".opencode/agents/sorin.md",
+    ".opencode/agents/thales.md",
     ".opencode/agents/maintenance.md",
     ".opencode/commands/maintain.md",
     ".opencode/plugins/olympus-activity/activity.ts",
@@ -27,6 +27,7 @@ $Managed = @(
 )
 $NewManaged = @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md',
     '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
+$OldReasoner = '.opencode/agents/sorin.md'
 
 function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
 function Rel([string]$Path) { ($Path -replace "\\", "/").TrimStart([char[]]@('/')) }
@@ -153,7 +154,7 @@ function Assert-Target([string]$Raw) {
 }
 
 function Assert-Install-Destinations([string]$Repo) {
-    foreach ($p in @($Managed) + @($ManifestRel)) {
+    foreach ($p in @($Managed) + @($ManifestRel, $OldReasoner)) {
         $path = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         if (-not (Path-Is-Within $path $Repo)) {
             Fail "UNSAFE_TARGET_PATH" "Install destination escapes the target repository: $p"
@@ -169,20 +170,31 @@ function Read-Manifest([string]$Repo) {
 }
 
 function Assert-Managed([string]$Repo, $Manifest) {
-    if ($null -eq $Manifest) { return }
+    if ($null -eq $Manifest) { return @() }
     if ($Manifest.schema_version -ne 1) { Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Unsupported manifest schema." }
-    $expected = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $Managed | ForEach-Object { [void]$expected.Add($_) }
     $entries = @($Manifest.managed_files)
     $previous = @('.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
-    $legacy = @(if ($entries.Count -eq ($Managed.Count - $NewManaged.Count)) { $NewManaged }
-        elseif ($entries.Count -eq ($Managed.Count - $previous.Count)) { $previous }
-        elseif ($entries.Count -eq $Managed.Count) { @() }
-        else { Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Managed file set changed." })
+    # Recognize exact historical owned sets, including pre-maintenance and pre-HUD
+    # manifests. Counts alone cannot distinguish the old and new reasoner identity.
+    $allowed = @()
+    foreach ($reasoner in @($OldReasoner, '.opencode/agents/thales.md')) {
+        $base = @($Managed | ForEach-Object { if ($_ -eq '.opencode/agents/thales.md') { $reasoner } else { $_ } })
+        foreach ($missing in @(@(), $previous, $NewManaged)) {
+            $allowed += ,@($base | Where-Object { $_ -notin $missing })
+        }
+    }
+    $actual = @($entries | ForEach-Object { Rel ([string]$_.path) })
+    $matchCount = 0
+    foreach ($candidate in $allowed) {
+        if ($candidate.Count -eq $actual.Count -and
+            @($actual | Where-Object { $_ -notin $candidate }).Count -eq 0) { $matchCount++ }
+    }
+    if ($matchCount -ne 1) { Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Managed file set changed." }
+    $legacy = @($Managed | Where-Object { $_ -notin $actual })
     $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($e in $entries) {
         $p = Rel ([string]$e.path)
-        if (-not $expected.Contains($p) -or ($p -in $legacy) -or -not $seen.Add($p)) {
+        if (-not $seen.Add($p)) {
             Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Unexpected or duplicate managed path: $p"
         }
         $full = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
@@ -198,6 +210,7 @@ function Assert-Managed([string]$Repo, $Manifest) {
             }
         }
     }
+    return @($actual | Where-Object { $_ -eq $OldReasoner })
 }
 
 function Assert-No-Conflicts([string]$Repo, $Manifest) {
@@ -207,7 +220,7 @@ function Assert-No-Conflicts([string]$Repo, $Manifest) {
         }
     }
     if ($null -eq $Manifest) {
-        foreach ($p in $Managed) {
+        foreach ($p in @($Managed) + @($OldReasoner)) {
             if (Test-Path -LiteralPath (Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar))) {
                 Fail "INSTALL_CONFLICT" "Destination exists without ownership metadata: $p"
             }
@@ -382,7 +395,7 @@ function Manifest-Text($Detection, $Content) {
     } | ConvertTo-Json -Depth 20) + "`n"
 }
 
-function Plan([string]$Repo, $Content, [string]$ManifestText) {
+function Plan([string]$Repo, $Content, [string]$ManifestText, [string[]]$Retired) {
     $create = [System.Collections.Generic.List[string]]::new()
     $update = [System.Collections.Generic.List[string]]::new()
     foreach ($p in $Managed) {
@@ -393,7 +406,7 @@ function Plan([string]$Repo, $Content, [string]$ManifestText) {
     $mf = Join-Path $Repo ($ManifestRel -replace "/", [IO.Path]::DirectorySeparatorChar)
     if (-not (Test-Path $mf)) { $create.Add($ManifestRel) }
     elseif ((Sha-File $mf) -ne (Sha-Text $ManifestText)) { $update.Add($ManifestRel) }
-    [pscustomobject]@{ Creates=@($create); Updates=@($update) }
+    [pscustomobject]@{ Creates=@($create); Updates=@($update); Removes=@($Retired) }
 }
 
 function Report([string]$Repo, $Detection, $Plan, [string]$Status, [string]$Version, [string]$ModelCheck) {
@@ -405,6 +418,7 @@ function Report([string]$Repo, $Detection, $Plan, [string]$Status, [string]$Vers
     Write-Output "WARNINGS:"; if ($Detection.Warnings.Count) { $Detection.Warnings } else { "(none)" }
     Write-Output "FILES_TO_CREATE:"; if ($Plan.Creates.Count) { $Plan.Creates } else { "(none)" }
     Write-Output "FILES_TO_UPDATE:"; if ($Plan.Updates.Count) { $Plan.Updates } else { "(none)" }
+    Write-Output "FILES_TO_REMOVE:"; if ($Plan.Removes.Count) { $Plan.Removes } else { "(none)" }
     Write-Output "CONFLICTS:"; Write-Output "(none)"
     Write-Output "OPENCODE:"; Write-Output $Version
     Write-Output "MODEL_CHECK:"; Write-Output $ModelCheck
@@ -414,7 +428,7 @@ function Report([string]$Repo, $Detection, $Plan, [string]$Status, [string]$Vers
 function Validate-Install([string]$Repo) {
     $expected = @{
         "kael"=@("gpt-6-sol","high","primary")
-        "sorin"=@("gpt-6-sol","xhigh","subagent")
+        "thales"=@("gpt-6-sol","xhigh","subagent")
         "veyra"=@("gpt-6-luna","max","subagent")
         "orin"=@("gpt-6-luna","max","subagent")
         "kovan"=@("gpt-6-luna","max","subagent")
@@ -450,6 +464,9 @@ function Validate-Install([string]$Repo) {
                     break
                 }
             }
+            if ($null -eq $lastMismatch -and @($agents | Where-Object id -eq 'sorin').Count -gt 0) {
+                $lastMismatch = 'Retired sorin agent remains active.'
+            }
             if ($null -eq $lastMismatch) { return }
             if ($attempt -lt 5) { Start-Sleep -Milliseconds 250 }
         }
@@ -476,7 +493,7 @@ try {
     }
 
     $manifest = Read-Manifest $Repo
-    Assert-Managed $Repo $manifest
+    $retired = @(Assert-Managed $Repo $manifest)
     Assert-No-Conflicts $Repo $manifest
     # Ownership and destination checks above, not repository-wide Git status,
     # decide whether installation is safe. Unrelated work stays untouched.
@@ -484,14 +501,14 @@ try {
     $detection = Detect-Project $Repo
     $content = Managed-Content $detection
     $manifestText = Manifest-Text $detection $content
-    $plan = Plan $Repo $content $manifestText
+    $plan = Plan $Repo $content $manifestText $retired
 
     if ($DryRun) {
         Report $Repo $detection $plan "DRY_RUN_READY" $Version $ModelCheck
         exit 0
     }
 
-    if (-not $plan.Creates.Count -and -not $plan.Updates.Count) {
+    if (-not $plan.Creates.Count -and -not $plan.Updates.Count -and -not $plan.Removes.Count) {
         Validate-Install $Repo
         Report $Repo $detection $plan "NO_CHANGES" $Version $ModelCheck
         exit 0
@@ -500,6 +517,18 @@ try {
     foreach ($p in $Managed) {
         $full = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         Write-Text $full ([string]$content[$p])
+    }
+    $retiredPath = Join-Path $Repo ($OldReasoner -replace '/', [IO.Path]::DirectorySeparatorChar)
+    if ((Test-Path -LiteralPath $retiredPath) -and
+        ($null -eq $Manifest -or $OldReasoner -notin @($Manifest.managed_files | ForEach-Object { Rel ([string]$_.path) }))) {
+        Fail 'INSTALL_CONFLICT' "Unowned retired agent exists: $OldReasoner"
+    }
+    foreach ($p in $plan.Removes) {
+        $full = Join-Path $Repo ($p -replace '/', [IO.Path]::DirectorySeparatorChar)
+        if ((Sha-File $full) -ne ([string]@($manifest.managed_files | Where-Object { (Rel ([string]$_.path)) -eq $p })[0].sha256).ToLowerInvariant()) {
+            Fail 'MANAGED_FILE_DRIFT' "Managed file modified before removal: $p"
+        }
+        [IO.File]::Delete($full)
     }
     Write-Text (Join-Path $Repo ($ManifestRel -replace "/", [IO.Path]::DirectorySeparatorChar)) $manifestText
 

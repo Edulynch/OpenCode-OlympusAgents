@@ -20,7 +20,7 @@ try {
     Check AC6 ($kael -match 'balanced shards: 20 items / 4 workers = 5/5/5/5; 7 / 4 = 2/2/2/1' -and $kael -match 'exactly one owner')
     Check AC7 ($kael -match 'FAST never overrides writer ownership' -and $kael -match 'bypass dependencies')
     Check AC8 ($kael -match 'Only DISJOINT writers may run concurrently' -and $kael -match 'OVERLAPPING:.*denied' -and $kael -match 'AMBIGUOUS:.*denied')
-    Check AC9 ($kael -match '## Diagnostic Gate' -and $kael -match 'default limit is one Sorin consultation' -and $kael -match 'materially new evidence' -and $kael -match 'FAST never overrides.*Sorin Diagnostic Gate')
+    Check AC9 ($kael -match '## Diagnostic Gate' -and $kael -match 'default limit is one Thales consultation' -and $kael -match 'materially new evidence' -and $kael -match 'FAST never overrides.*Thales Diagnostic Gate')
     Check AC10 ($hud -match 'active\(\)\.slice\(0, 4\)' -and $hud -match 'context\.data\.session\.status' -and $activity -match 'current\.parentID != null' -and $activity -match 'status\(session\.id\) === "running"' -and $hud -notmatch 'setInterval|setTimeout|spawn|schedule')
     $modes = [regex]::Match($readme, '(?ms)^##[^\r\n]*NORMAL vs FAST[^\r\n]*\r?\n(?<body>.*?)(?=^##\s|\z)')
     $modeDocs = $modes.Groups['body'].Value

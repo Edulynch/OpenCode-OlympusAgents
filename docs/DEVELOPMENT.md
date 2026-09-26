@@ -8,7 +8,7 @@ OpenCode is the runtime; Olympus is the orchestration and decision layer. Kael c
 
 Kael checks feasibility and plane routing from the request **before** delegated research or planning. Known Maintenance-only operations receive a user-facing `/maintain <task>` handoff, not automatic delegation. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
 
-### Phase 3 final candidate — role purity and iterative evidence (not shipped)
+### Phase 3 — role purity and iterative evidence (shipped)
 
 **DO YOUR ROLE; DO NOT ABSORB ANOTHER ROLE TO SAVE A HANDOFF.** Kael owns Preflight,
 routing, dependencies, session families, reconciliation, retry decisions and final
@@ -42,13 +42,18 @@ is **not** allowed. Stop for explicit user authorization before any third Sorin
 consultation, and require a terminal/reconciled/validated second evidence round;
 do not count an unconsulted reasoner conclusion as complete.
 Static/synthetic qualification: `pwsh -NoProfile -File ./tests/role-purity/qualify.ps1`.
-Live qualification of the prepared disposable fixture is separate and not yet run.
+Live qualification was executed by the user, not by this integration task.
 The original Issue #1 normal-worker and Issue #2 explicit Maintenance result
 reconciliation remain authoritative. Evidence requests cannot route Maintenance;
 an identified running Maintenance child stays PENDING despite an early error,
 and its later original result controls the actual task outcome. The historical
-Issue #2 live evidence is USER_EXECUTED_LIVE_EVIDENCE; the Phase 3 live cases
-are NOT_EXECUTED. See `tests/role-purity/RUNME.md` for the final manual fixture.
+Issue #2 live evidence is USER_EXECUTED_LIVE_EVIDENCE. Phase 3 user-executed
+live Case A (`ses_f21e09d97ffeiyjqAvmZuDRxa9`) confirmed Kael-mediated,
+role-pure one-round evidence and the same Sorin session continuing twice;
+Case B (`ses_f21dad776ffevU6A5qKcenexjh`) confirmed zero Sorin consultations
+on a simple deterministic defect. Both families completed with zero unknown or
+unresolved work. Phase 3 evidence class: USER_EXECUTED_LIVE_EVIDENCE; see
+`tests/role-purity/RUNME.md` for the historical manual fixture instructions.
 
 ## Local/bootstrap installation
 

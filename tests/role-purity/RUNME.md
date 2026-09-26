@@ -1,11 +1,15 @@
-# Final Phase 3 — USER MANUAL LIVE QUALIFICATION
+# Final Phase 3 — historical USER MANUAL LIVE QUALIFICATION instructions
 
 Candidate: `feature/role-purity-iterative-evidence-final`. Fixture:
 `$env:TEMP\opencode\olympus-phase3-final-live`. The fixture is installed
 from the **committed candidate HEAD**, not from a development worktree.
-OpenCode v2.0.18 read-only schema smoke passed; **no Phase 3 live case has run**.
-Evidence for these cases is `NOT_EXECUTED` until the user runs them. The earlier
-Issue #2 evidence is `USER_EXECUTED_LIVE_EVIDENCE`, not a task-executed test.
+OpenCode v2.0.18 read-only schema smoke passed. These are the original pre-run
+instructions, retained for provenance; **the user subsequently ran both cases**.
+Case A root: `ses_f21e09d97ffeiyjqAvmZuDRxa9`; Case B root:
+`ses_f21dad776ffevU6A5qKcenexjh`. Both passed captured session/message review;
+evidence class: `USER_EXECUTED_LIVE_EVIDENCE`, not task-executed evidence. The
+earlier Issue #2 evidence is also `USER_EXECUTED_LIVE_EVIDENCE`. Do not rerun
+either Phase 3 case as part of integration.
 
 Run these commands in PowerShell 7 **from the candidate repository root**.
 Run each `opencode run` in the foreground, then inspect its original root and

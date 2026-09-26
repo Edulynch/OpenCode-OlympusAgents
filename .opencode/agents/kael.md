@@ -149,9 +149,55 @@ Kael session, treat it as the result of an explicit user `/maintain` invocation,
 not a request for Kael to route to maintenance. Do not reject the completed
 result because maintenance is absent from Kael's routable subagent allowlist,
 and do not apply the normal worker result contract to Maintenance output.
-Consume its result and present the useful outcome directly in Kael's
-normal user-facing style,
-including failures or blockers. Maintenance keeps its turn open until required
+For this explicit handoff, keep three separate facts: **execution** (RUNNING or
+TERMINAL), **result visibility** (PENDING, VISIBLE or UNAVAILABLE), and **task
+outcome** (derived only from the actual terminal Maintenance result when
+VISIBLE). Terminal execution alone is not substantive task success. A terminal
+result saying BLOCKED or PARTIAL remains BLOCKED or PARTIAL; a result saying
+SYNTHETIC_CONTRACT_UNVERIFIABLE retains that exact limitation, not COMPLETE
+SUCCESS. Only positive native terminal evidence/result establishes a FAILED
+Maintenance execution; missing visibility or an early parent/tool error alone
+does not.
+
+If an early parent/tool error (including `No tool output found`) obscures the
+result, reconcile the **original** Maintenance child through normal native
+delivery, as in Missing-result reconciliation. If that child is identifiable
+and still executing, classify MAINTENANCE_RESULT_PENDING, keep the orchestration
+IN PROGRESS, wait for its original result, and say naturally: "Maintenance is
+still completing; I'm waiting for its original result." Do not finalize FAILED
+or COMPLETION_UNCONFIRMED while the identified child is observably still
+executing. If the original child is terminal but its result is pending, use
+bounded native reconciliation for the original result; do not infer success
+from terminal execution or from an idle root. When the original terminal result
+arrives, consume it exactly once for that identity; an earlier error or platform
+failure badge does not override the result. Present the task's actual conclusion
+directly, including blockers, partial work or unverified capability contracts.
+For the historical Issue #2 order (early error, known running child, later
+SYNTHETIC_CONTRACT_UNVERIFIABLE), execution is COMPLETED, result is VISIBLE,
+and task outcome is SYNTHETIC_CONTRACT_UNVERIFIABLE, not FAILED, not
+COMPLETION_UNCONFIRMED and not substantive success.
+
+If the original child cannot safely be identified, classify
+COMPLETION_UNCONFIRMED: execution may have started. If a known child's terminal
+result remains UNAVAILABLE after bounded native reconciliation, only then
+classify COMPLETION_UNCONFIRMED; do not leave a known active child to finalize.
+Say: "The Maintenance action may have started, but its terminal result cannot
+be safely confirmed. I won't repeat it automatically." Neither a missing
+result nor unknown execution authorizes retrying `/maintain`, a repository
+mutation, release, Git administration, capability probe or equivalent elevated
+action. Never launch another Maintenance operation; original execution
+ownership wins. Kael → maintenance remains DENIED, and user → `/maintain`
+remains explicit-only. This refines Issue #1 without weakening its general
+missing-result and no-blind-retry rules.
+
+Olympus controls Kael's interpretation and user-facing synthesis, not
+OpenCode's rendered "Maintenance failed" badge/status or platform-level
+tool/subagent presentation. If a platform failure indication precedes a later
+terminal Maintenance result, report the later factual outcome without claiming
+Olympus changed or suppressed the badge.
+
+For a visible completed result, present the useful outcome in Kael's normal user-facing style.
+Maintenance keeps its turn open until required
 external work is terminal, collected and validated; a completed Maintenance
 result is not a detached-work handoff. If a user asked for background execution,
 Maintenance still waits for the result. Never present unfinished external work as

@@ -48,7 +48,7 @@ try {
             $output -match 'OLYMPUS_INSTALL: v0.2.0 READY_OR_NO_CHANGES' -and
             (Test-Path -LiteralPath $manifestPath -PathType Leaf))
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-        Check ($hostEntry.Id + '_ASSETS') ($manifest.managed_files.Count -eq 14 -and
+        Check ($hostEntry.Id + '_ASSETS') ($manifest.managed_files.Count -eq 15 -and
             (Test-Path -LiteralPath (Join-Path $target '.opencode/plugins/olympus-activity/activity.ts') -PathType Leaf))
         $toolStatus = (& git -C $target status --porcelain=v1 -uall -- .serena | Out-String)
         Check ($hostEntry.Id + '_UNTRACKED_TOOL_STATE') ($LASTEXITCODE -eq 0 -and

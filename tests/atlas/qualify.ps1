@@ -54,7 +54,7 @@ try {
     $r = [IO.File]::ReadAllText((Join-Path $source 'docs/ROADMAP.md'))
     Check AT1 ((Test-Path (Join-Path $source '.opencode/agents/atlas.md')) -and $a -match 'mode: subagent' -and $a -match '(?m)^# 🗺️ Atlas The Planner\r?$')
     Check AT2 ($a -match 'model: openai/gpt-6-sol#high')
-    Check AT3 ($k -match '(?s)action: subagent\s+resource: atlas\s+effect: allow' -and $k -match 'atlas, and argus are valid child role IDs')
+    Check AT3 ($k -match '(?s)action: subagent\s+resource: atlas\s+effect: allow' -and $k -match 'atlas, argus, and talos are valid child role IDs')
     foreach ($pair in @(@('AT4','shell'),@('AT5','edit'),@('AT6','subagent'))) {
         Check $pair[0] ($a -match ('(?s)action: ' + $pair[1] + '\s+resource: "\*"\s+effect: deny'))
     }

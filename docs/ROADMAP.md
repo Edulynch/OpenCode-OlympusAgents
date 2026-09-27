@@ -35,14 +35,14 @@ The table distinguishes existing roles from proposed identities. Model entries a
 | 🐞 Argus The Bug Hunter | GPT-6 Sol High | Functional defect reasoning | SHIPPED; optional, Functional Bug Routing Gate only |
 | 👁️ Nox The Tester | GPT-6 Luna Max | Testing/runtime evidence | SHIPPED; evolving |
 | ⚖️ Vera The Judge | GPT-6 Luna Max | Independent review | SHIPPED; evolving |
-| 🛡️ Talos The Sentinel | GPT-6 Sol High | Security defect/exploitability reasoning | PLANNED; proposed |
+| 🛡️ Talos The Sentinel | GPT-6 Sol High | Security defect and trust-boundary reasoning | IN VALIDATION; optional, Security Routing Gate only |
 | 🧠 Thales The Sage | GPT-6 Sol XHigh | High-uncertainty diagnostic escalation | SHIPPED: native evolution of Sorin; live routing qualified |
 | ☀️ Helios The Optimizer | GPT-6 Sol High | Explicit optimization analysis/orchestration | PLANNED; proposed |
 | 🛡️ Aegis The Keeper | GPT-6 Luna Max target | Explicit Maintenance/admin execution | PLANNED visible identity/model adjustment of current Maintenance |
 
 ## Defect routing and diagnostic budget — Phase 6 shipped
 
-- **FUNCTIONAL_BUG → optional Argus** only if cause/fix direction is not obvious; deterministic trivial bugs bypass him. **SECURITY_BUG** is excluded (Talos remains planned); **OPERATIONAL_ISSUE** (build/deploy/tooling/test infrastructure) → low-cost unblock/containment by default. A **GAP / FEATURE / OPTIMIZATION** is not a bug.
+- **FUNCTIONAL_BUG → optional Argus** only if cause/fix direction is not obvious; deterministic trivial bugs bypass him. **SECURITY_BUG → optional Talos** only when materially security-specific reasoning remains; qualification pending, not shipped. **OPERATIONAL_ISSUE** (build/deploy/tooling/test infrastructure) → low-cost unblock/containment by default. A **GAP / FEATURE / OPTIMIZATION** is not a bug.
 - Thales is **not** a bug category: escalate to this specialist when ordinary diagnosis reaches high uncertainty or stops making useful progress.
 - Argus normally uses up to two consultations, with a third only after a second materially discriminating evidence round; a fourth automatic call is denied. Kael alone considers Thales under the independent Diagnostic Gate if diagnosis stays unresolved. Stop on no progress.
 - Third-party resolution ladder: correct usage/configuration → available fixed version → upgrade/downgrade/pin → adapter/wrapper → fallback/feature flag → local reversible workaround → patch/vendor/fork **only with explicit approval**. Give workarounds a removal condition when practical.
@@ -71,7 +71,7 @@ Existing `/maintain` enters the explicit Maintenance plane. Candidate concepts b
 | 4 — Thales evolution | **SHIPPED** | Sorin visible identity → Thales The Sage; Sol XHigh deep-escalation role, user-executed live routing and deterministic negative control passed. |
 | 5 — Atlas The Planner | **SHIPPED** | Sol High, smallest sufficient execution plan; no implementation/discovery ownership; gated use. User-executed live planning and negative control passed. |
 | 6 — Argus The Bug Hunter | **SHIPPED** | Optional functional diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. No implementation or direct discovery. |
-| 7 — Talos The Sentinel | **PLANNED** | Security defects, exploitability/blast-radius reasoning; not general functional debugging. |
+| 7 — Talos The Sentinel | **IN VALIDATION** | Bounded security defect and trust-boundary diagnosis; static/synthetic and non-live qualification before user live review. Not shipped. |
 | 8 — Helios The Optimizer | **PLANNED** | Explicit-only analyze/propose/approval/delegate/measure flow. |
 | 9 — Aegis evolution | **PLANNED** | Maintenance visible identity, Luna Max target; executor, not strategist. |
 | 10 — Command UX | **EXPLORATION** | Validate a small useful repertoire: candidate `/power`, `/plan`, `/fast`, `/performance`; avoid command sprawl. |
@@ -99,6 +99,10 @@ User-executed live Case A (Kael `ses_f1e1eef3cffeV8KbtBWzwZbDVm`, Atlas `ses_f1e
 Argus is one optional `argus` subagent at `openai/gpt-6-sol#high`, with no direct repository discovery, edits or tests. Veyra/Nox collect bounded evidence as direct Kael children; Argus compares hypotheses and returns a calibrated diagnosis or bounded request in the same session. Normal limit two consultations; a third needs a second discriminating evidence round; no automatic fourth. Security, operational failures, unpromised features, optimization and trivial deterministic bugs bypass Argus. Static/synthetic, fresh-install, managed-upgrade and all 16 applicable post-merge non-live suites passed.
 
 **USER_EXECUTED_LIVE_EVIDENCE**: Case A (Kael `ses_f1daec63fffe9KIz6iwZVDMlwd`, Argus `ses_f1dae9029ffe99un2V7aOy5kRZ`, Veyra `ses_f1dae4cd7ffemKeV6WP0EGVCTW`) verified runtime Argus ID and Sol High model, one Argus session with two consultations, EVIDENCE_REQUEST followed by an evidence-backed BUG_DIAGNOSIS in that **same** session after bounded `bug/shipping-rule.txt` evidence from direct Kael-owned Veyra. Diagnosis identified strict `>` excluding threshold 50 against the established `>= 50` contract, suggested inclusive threshold semantics, and bounded validation to 49/50/51. No third consultation, Argus direct discovery, implementation, Atlas, Thales or Maintenance; family complete with pending/unknown zero. Case B (Kael `ses_f1da3bab2ffefQIzpvzR03Awsq`, Kovan `ses_f1da36c9dffefQSzUcybi9eg74`) corrected `REEDY` to `READY` with **Argus count zero**; family complete with pending/unknown zero. Neither valid case was rerun for integration. Earlier attempted Case A (`ses_f1dc6f099ffep6VsmAj6yz4vG7`) was **INFRA_OR_TEST_INSTRUCTION_BLOCKED**, not an Argus failure: root assistant was `build` rather than Kael, with zero Argus/Veyra executions. `tests/argus/RUNME.md` now requires a fresh explicit Kael root, native agent verification and stop on wrong-agent roots without blind retry. Disposable live fixtures remain retained.
+
+### Phase 7 Talos The Sentinel — IN VALIDATION
+
+Talos is an optional pure security-defect reasoner, not an auditor, implementer or orchestrator. Kael applies the Security Routing Gate only when an evidenced security boundary violation still needs specialist classification, trust-boundary, exploitability, cause, impact or bounded fix-direction reasoning. Functional-only bugs remain Argus territory; operational tooling failures, unpromised security features and optimization do not automatically route Talos. Talos receives Kael-supplied evidence, requests one bounded fact from Veyra or Nox through Kael when needed, and continues in the same session; two consultations normally suffice, three require a second discriminating round and a fourth automatic consultation is denied. No whole-repository audit or exploit execution is required. Vera still independently reviews a change, Thales remains a separate high-uncertainty gate, Atlas plans when needed, Kovan implements, and Kael owns completion. Static/synthetic and non-live installer/regression qualification is separate from **NOT_EXECUTED** live cases in `tests/talos/RUNME.md`. Do not mark Phase 7 shipped without explicit-Kael live evidence and manual quality review.
 
 ## Premortem guardrails
 

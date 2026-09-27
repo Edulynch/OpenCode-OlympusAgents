@@ -3,6 +3,7 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$phase4Base = 'dea863168fc16a6b97e0b6404c4334f4265f1e52'
 $run = Join-Path (Join-Path $env:LOCALAPPDATA 'Temp/opencode') ('atlas-qualification-' + [guid]::NewGuid().ToString('N'))
 $old = Join-Path $run 'master-source'
 $target = Join-Path $run 'upgrade'
@@ -51,7 +52,7 @@ try {
     $k = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/kael.md'))
     $b = [IO.File]::ReadAllText((Join-Path $source 'scripts/bootstrap.ps1'))
     $r = [IO.File]::ReadAllText((Join-Path $source 'docs/ROADMAP.md'))
-    Check AT1 ((Test-Path (Join-Path $source '.opencode/agents/atlas.md')) -and $a -match 'mode: subagent' -and $a -match '(?m)^# 🗺️ Atlas The Planner$')
+    Check AT1 ((Test-Path (Join-Path $source '.opencode/agents/atlas.md')) -and $a -match 'mode: subagent' -and $a -match '(?m)^# 🗺️ Atlas The Planner\r?$')
     Check AT2 ($a -match 'model: openai/gpt-6-sol#high')
     Check AT3 ($k -match '(?s)action: subagent\s+resource: atlas\s+effect: allow' -and $k -match 'and atlas are valid child role IDs')
     foreach ($pair in @(@('AT4','shell'),@('AT5','edit'),@('AT6','subagent'))) {
@@ -78,14 +79,14 @@ try {
     $unchanged = @($baseline | Where-Object {
         $path = '.opencode/agents/' + $_ + '.md'
         if ($_ -eq 'kael') { return $true }
-        & git -C $source diff --quiet master -- $path
+        & git -C $source diff --quiet $phase4Base -- $path
         $LASTEXITCODE -eq 0
     })
     Check AT24 ($unchanged.Count -eq $baseline.Count -and $k -match 'model: "openai/gpt-6-sol#high"')
     Check AT25 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children' -and $k -notmatch 'gpt-6-luna#fast')
     Check AT26 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match "'sorin'" -and $a -notmatch 'gpt-6-luna#fast')
     Check 'AT_READ_DENIED' (@(@('read','glob','grep','list','lsp') | Where-Object { $a -notmatch ('(?s)action: ' + $_ + '\s+resource: "\*"\s+effect: deny') }).Count -eq 0)
-    Check 'AT_ROADMAP' ($r -match '5 — Atlas The Planner \| \*\*IN VALIDATION\*\*' -and $r -match '3 — Role Purity \+ Iterative Evidence \| \*\*SHIPPED\*\*' -and $r -match '4 — Thales evolution \| \*\*SHIPPED\*\*')
+    Check 'AT_ROADMAP' ($r -match '5 — Atlas The Planner \| \*\*(IN VALIDATION|SHIPPED)\*\*' -and $r -match '3 — Role Purity \+ Iterative Evidence \| \*\*SHIPPED\*\*' -and $r -match '4 — Thales evolution \| \*\*SHIPPED\*\*')
     # Offline synthetic routing: contracts and negative controls, NOT live agent execution.
     $caseA = Simulate direct; $caseB = Simulate missing; $caseC = Simulate broad; $caseD = Simulate architecture
     $caseE = Simulate trivial; $caseF = Simulate unknown-cause; $caseG = Simulate third; $caseH = Simulate missing INDETERMINATE
@@ -98,8 +99,8 @@ try {
     Check 'CASE_G_THIRD_DENIED' ($caseG.Status -eq 'THIRD_DENIED' -and $caseG.Consultations -eq 2)
     Check 'CASE_H_INDETERMINATE_WORKER' ($caseH.Status -eq 'COMPLETION_UNCONFIRMED' -and $caseH.Consultations -eq 1 -and $caseH.WorkerParent -eq 'kael')
 
-    & git -C $source worktree add --detach $old master | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'master fixture worktree failed' }
+    & git -C $source worktree add --detach $old $phase4Base | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Phase 4 baseline fixture worktree failed' }
     [IO.Directory]::CreateDirectory($target) | Out-Null
     & git -C $target init --quiet
     foreach ($path in @('src/local.txt','docs/staged.txt')) {

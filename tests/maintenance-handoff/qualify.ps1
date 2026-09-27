@@ -64,7 +64,7 @@ try {
     $concurrencyPattern = '(?s)NORMAL is cost/context-aware:.*?(?=\r?\nReliable delayed background notifications)'
     $historicalModels = @($agents | Where-Object Name -ne 'atlas.md' | ForEach-Object { ([regex]::Match([IO.File]::ReadAllText($_.FullName), '(?m)^model:.*$')).Value })
     Check 'MH14_MODELS' ($models.Count -eq 9 -and (($historicalModels -join '|') -ceq ($baseModels -join '|')) -and
-        ([regex]::Match((Text '.opencode/agents/atlas.md'), '(?m)^model:.*$')).Value -eq 'model: openai/gpt-6-sol#high')
+        (Text '.opencode/agents/atlas.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$')
     $baselineConcurrency = ([regex]::Match($baseKael, $concurrencyPattern).Value).Replace('Sorin','Thales')
     Check 'MH15_CONCURRENCY' (([regex]::Match($kael, $concurrencyPattern).Value) -ceq $baselineConcurrency -and $kael -match 'MAX_ACTIVE_CHILDREN = 4')
     Check 'MH10_ROUTING' ($kael -match 'Kael → maintenance remains denied' -and

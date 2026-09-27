@@ -31,7 +31,7 @@ try {
     Check 'TH1_TH2_TH17_SINGLE_IDENTITY' ((Test-Path (Join-Path $source '.opencode/agents/thales.md')) -and
         -not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')))
     Check 'TH3_TH4_ROUTING' ($kael -match 'resource: thales' -and $kael -notmatch '(?i)\bsorin\b' -and
-        $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, and talos are valid child role IDs')
+        $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
     Check 'TH5_TH8_MODEL_PERMISSIONS' ($thales -match 'model: openai/gpt-6-sol#xhigh' -and
         @(@('shell','edit','subagent') | ForEach-Object { $thales -match ('(?s)action: ' + $_ + '\s+resource: "?\*"?\s+effect: deny') }) -notcontains $false)
     Check 'TH9_GATE' ($kael -match '## Diagnostic Gate' -and $kael -match 'evidence-backed condition' -and

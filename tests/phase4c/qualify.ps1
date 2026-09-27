@@ -16,7 +16,7 @@ $ManagedPaths = @(
     '.opencode/agents/kael.md', '.opencode/agents/veyra.md',
     '.opencode/agents/orin.md', '.opencode/agents/kovan.md',
     '.opencode/agents/nox.md', '.opencode/agents/vera.md',
-    '.opencode/agents/thales.md', '.opencode/agents/atlas.md', '.opencode/agents/argus.md', '.opencode/agents/talos.md', '.opencode/agents/maintenance.md',
+    '.opencode/agents/thales.md', '.opencode/agents/atlas.md', '.opencode/agents/argus.md', '.opencode/agents/talos.md', '.opencode/agents/helios.md', '.opencode/agents/maintenance.md',
     '.opencode/commands/maintain.md',
     '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx',
     '.opencode/orchestrator-install.json'
@@ -448,7 +448,7 @@ try {
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'security fixture' + [Environment]::NewLine; 'package.json' = '{"packageManager":"npm@10","scripts":{"test":"node test.js"}}' + [Environment]::NewLine; 'package-lock.json' = '{}' + [Environment]::NewLine })
         $diagnostics = Assert-Installed $repo 'READY'
         $agents = $diagnostics.Agents
-        foreach ($id in @('kael', 'thales', 'atlas', 'argus', 'talos', 'veyra', 'orin', 'vera')) {
+        foreach ($id in @('kael', 'thales', 'atlas', 'argus', 'talos', 'helios', 'veyra', 'orin', 'vera')) {
             $agent = Get-Agent $agents $id
             Assert-Condition (Has-Rule $agent 'edit' '*' 'deny') ($id + ' edit DENY missing.') 'BOOTSTRAP_BUG'
             Assert-Condition (Has-Rule $agent 'shell' '*' 'deny') ($id + ' shell DENY missing.') 'BOOTSTRAP_BUG'
@@ -456,7 +456,7 @@ try {
         }
         $kael = Get-Agent $agents 'kael'
         $allowedChildren = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object { $_.resource } | Select-Object -Unique)
-        $expectedChildren = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'thales', 'atlas', 'argus', 'talos')
+        $expectedChildren = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'thales', 'atlas', 'argus', 'talos', 'helios')
         Assert-Condition ($allowedChildren.Count -eq $expectedChildren.Count -and @($allowedChildren | Where-Object { $_ -notin $expectedChildren }).Count -eq 0 -and @($expectedChildren | Where-Object { $allowedChildren -notcontains $_ }).Count -eq 0) 'Kael delegation allowlist mismatch.' 'BOOTSTRAP_BUG'
         $thalesPrompt = [IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/thales.md'))
         Assert-Condition ($thalesPrompt -match 'invoked only through the Diagnostic Gate') 'Thales Diagnostic Gate requirement missing.' 'BOOTSTRAP_BUG'
@@ -497,7 +497,7 @@ try {
         Assert-Condition (Has-Rule $agent 'subagent' '*' 'deny' -and -not (Has-Rule $agent 'subagent' '*' 'allow')) 'M2: maintenance child deny missing.' 'BOOTSTRAP_BUG'
         $kael = Get-Agent $diagnostics.Agents 'kael'
         $children = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object resource | Select-Object -Unique)
-        $normal = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'thales', 'atlas', 'argus', 'talos')
+        $normal = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'thales', 'atlas', 'argus', 'talos', 'helios')
         Assert-Condition (Has-Rule $kael 'subagent' '*' 'deny' -and $children.Count -eq $normal.Count -and @($children | Where-Object { $_ -notin $normal }).Count -eq 0 -and @($normal | Where-Object { $children -notcontains $_ }).Count -eq 0) 'M3/M6: Kael delegation boundary changed.' 'BOOTSTRAP_BUG'
         $kaelPrompt = [IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/kael.md'))
         $lifecycle = [regex]::Match($kaelPrompt, '(?s)## User-facing lifecycle communication\s*(.*?)(?=\r?\n## |\z)').Groups[1].Value

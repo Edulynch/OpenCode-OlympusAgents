@@ -109,7 +109,7 @@ try {
     Check RP13_NO_FALSE_FAILURE_EVIDENCE ($k -match 'missing parent\s+tool output is not FAILED evidence' -and $k -match 'Never re-consult Thales using\s+fabricated failure')
     Check RP14_NO_INDETERMINATE_RETRY ($k -match 'permission to\s+launch a replacement' -and $k -match 'No second worker is launched')
     Check RP15_MAINTENANCE_PENDING ($k -match 'Maintenance is\s+still completing' -and $handoff -match 'MH3_KNOWN_NOT_UNCONFIRMED')
-    Check RP16_MAINTENANCE_OUTSIDE_ROUTING ($k -match 'Kael → Maintenance remains DENIED' -and $k -match 'cannot be TARGET_ROLE' -and $s -match '(?s)Never directly invoke.*?Maintenance' -and $k -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, and talos are valid child role IDs')
+    Check RP16_MAINTENANCE_OUTSIDE_ROUTING ($k -match 'Kael → Maintenance remains DENIED' -and $k -match 'cannot be TARGET_ROLE' -and $s -match '(?s)Never directly invoke.*?Maintenance' -and $k -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
     Check RP17_THIRD_AUTO_DENIED ($k -match 'No third automatic consultation' -and $k -match 'explicit user authorization' -and $k -match '`/power`, FAST mode, complexity')
     Check RP18_COMPLETION_OWNERSHIP ($k -match 'reasoner final result consumed' -and $k -match 'zero unresolved required work')
     Check RP19_MODELS ($k -match 'model: "openai/gpt-6-sol#high"' -and $s -match 'model: openai/gpt-6-sol#xhigh' -and $m -match 'model: openai/gpt-6-sol#high' -and @($workers | Where-Object { $_ -notmatch 'model: "openai/gpt-6-luna#max"' }).Count -eq 0)

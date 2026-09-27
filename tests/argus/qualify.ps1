@@ -56,7 +56,7 @@ try {
     $r = [IO.File]::ReadAllText((Join-Path $source 'docs/ROADMAP.md'))
     Check AR1 ($a -match '(?m)^# 🐞 Argus The Bug Hunter\r?$' -and $a -match 'mode: subagent' -and $b -match '".opencode/agents/argus.md"')
     Check AR2 ($a -match 'model: openai/gpt-6-sol#high')
-    Check AR3 ($k -match '(?s)action: subagent\s+resource: argus\s+effect: allow' -and $k -match 'atlas, argus, and talos are valid child role IDs')
+    Check AR3 ($k -match '(?s)action: subagent\s+resource: argus\s+effect: allow' -and $k -match 'atlas, argus, talos, and helios are valid child role IDs')
     foreach ($pair in @(@('AR4','shell'),@('AR5','edit'),@('AR6','subagent'))) { Check $pair[0] ($a -match ('(?s)action: ' + $pair[1] + '\s+resource: "\*"\s+effect: deny')) }
     Check AR7 (@('read','glob','grep','list','lsp' | Where-Object { $a -notmatch ('(?s)action: ' + $_ + '\s+resource: "\*"\s+effect: deny') }).Count -eq 0)
     Check AR8 ($k -match '## Functional Bug Routing Gate' -and $k -match 'FUNCTIONAL_CAUSE_UNKNOWN' -and $k -match 'MULTIPLE_PLAUSIBLE_CAUSES' -and $k -match 'FIX_DIRECTION_AMBIGUOUS')

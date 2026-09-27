@@ -31,7 +31,7 @@ try {
     $paths += @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','maintenance' | ForEach-Object { ".opencode/agents/$_.md" })
     Check 'R2_ASSETS' (@($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path $target $_) -PathType Leaf) }).Count -eq 0)
     $manifest = Get-Content -LiteralPath (Join-Path $target '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json
-    Check 'R2_MANIFEST_OWNERSHIP' ($manifest.schema_version -eq 1 -and $manifest.managed_files.Count -eq 15)
+    Check 'R2_MANIFEST_OWNERSHIP' ($manifest.schema_version -eq 1 -and $manifest.managed_files.Count -eq 16 -and @($manifest.managed_files | Where-Object path -eq '.opencode/agents/helios.md').Count -eq 1)
 
     Push-Location $target
     try {

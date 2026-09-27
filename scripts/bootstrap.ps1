@@ -23,6 +23,7 @@ $Managed = @(
     ".opencode/agents/atlas.md",
     ".opencode/agents/argus.md",
     ".opencode/agents/talos.md",
+    ".opencode/agents/helios.md",
     ".opencode/agents/maintenance.md",
     ".opencode/commands/maintain.md",
     ".opencode/plugins/olympus-activity/activity.ts",
@@ -177,8 +178,9 @@ function Assert-Managed([string]$Repo, $Manifest) {
     if ($Manifest.schema_version -ne 1) { Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Unsupported manifest schema." }
     $entries = @($Manifest.managed_files)
     $previous = @('.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
-    $currentBeforeArgus = @($Managed | Where-Object { $_ -notin @('.opencode/agents/argus.md', '.opencode/agents/talos.md') })
-    $currentBeforeTalos = @($Managed | Where-Object { $_ -ne '.opencode/agents/talos.md' })
+    $currentBeforeArgus = @($Managed | Where-Object { $_ -notin @('.opencode/agents/argus.md', '.opencode/agents/talos.md', '.opencode/agents/helios.md') })
+    $currentBeforeTalos = @($Managed | Where-Object { $_ -notin @('.opencode/agents/talos.md', '.opencode/agents/helios.md') })
+    $currentBeforeHelios = @($Managed | Where-Object { $_ -ne '.opencode/agents/helios.md' })
     # Recognize exact historical owned sets, including pre-maintenance and pre-HUD
     # manifests. Counts alone cannot distinguish the old and new reasoner identity.
     $allowed = @()
@@ -199,6 +201,9 @@ function Assert-Managed([string]$Repo, $Manifest) {
     # still govern every existing path; unowned new destinations still conflict.
     foreach ($missing in @(@(), $previous, $NewManaged)) {
         $allowed += ,@($currentBeforeTalos | Where-Object { $_ -notin $missing })
+    }
+    foreach ($missing in @(@(), $previous, $NewManaged)) {
+        $allowed += ,@($currentBeforeHelios | Where-Object { $_ -notin $missing })
     }
     foreach ($missing in @(@(), $previous, $NewManaged)) {
         $allowed += ,@($Managed | Where-Object { $_ -notin $missing })
@@ -451,6 +456,8 @@ function Validate-Install([string]$Repo) {
         "thales"=@("gpt-6-sol","xhigh","subagent")
         "atlas"=@("gpt-6-sol","high","subagent")
         "argus"=@("gpt-6-sol","high","subagent")
+        "talos"=@("gpt-6-sol","high","subagent")
+        "helios"=@("gpt-6-sol","high","subagent")
         "veyra"=@("gpt-6-luna","max","subagent")
         "orin"=@("gpt-6-luna","max","subagent")
         "kovan"=@("gpt-6-luna","max","subagent")

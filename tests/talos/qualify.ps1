@@ -54,7 +54,7 @@ try {
     $r = [IO.File]::ReadAllText((Join-Path $source 'docs/ROADMAP.md'))
     Check TA1 ($t -match '(?m)^# 🛡️ Talos The Sentinel\r?$' -and $t -match 'mode: subagent' -and $b -match '".opencode/agents/talos.md"')
     Check TA2 ($t -match 'model: openai/gpt-6-sol#high')
-    Check TA3 ($k -match '(?s)action: subagent\s+resource: talos\s+effect: allow' -and $k -match 'argus, and talos are valid child role IDs')
+    Check TA3 ($k -match '(?s)action: subagent\s+resource: talos\s+effect: allow' -and $k -match 'argus, talos, and helios are valid child role IDs')
     foreach ($pair in @(@('TA4','shell'),@('TA5','edit'),@('TA6','subagent'))) { Check $pair[0] ($t -match ('(?s)action: ' + $pair[1] + '\s+resource: "\*"\s+effect: deny')) }
     Check TA7 (@('read','glob','grep','list','lsp' | Where-Object { $t -notmatch ('(?s)action: ' + $_ + '\s+resource: "\*"\s+effect: deny') }).Count -eq 0)
     Check TA8 ($k -match '## Security Routing Gate' -and $k -match 'TRUST_BOUNDARY_UNCLEAR' -and $k -match 'EXPLOITABILITY_UNCLEAR' -and $k -match 'FIX_BOUNDARY_AMBIGUOUS' -and $t -match 'strongly evidenced SECURITY_BUG')

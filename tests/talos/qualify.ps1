@@ -86,7 +86,7 @@ try {
     Check TA33 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
     Check TA34 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match '\$OldReasoner = ''.opencode/agents/sorin.md''')
     Check TA35 ((& git -C $source grep -n -i 'gpt-6-luna#fast' -- '.opencode/agents' 'opencode.jsonc' | Out-String).Length -eq 0)
-    Check TA_ROADMAP ($r -match '7 — Talos The Sentinel \| \*\*IN VALIDATION\*\*' -and @('3 — Role Purity + Iterative Evidence','4 — Thales evolution','5 — Atlas The Planner','6 — Argus The Bug Hunter' | Where-Object { $r -notmatch ([regex]::Escape($_) + ' \| \*\*SHIPPED\*\*') }).Count -eq 0)
+    Check TA_ROADMAP ($r -match '7 — Talos The Sentinel \| \*\*(IN VALIDATION|SHIPPED)\*\*' -and @('3 — Role Purity + Iterative Evidence','4 — Thales evolution','5 — Atlas The Planner','6 — Argus The Bug Hunter' | Where-Object { $r -notmatch ([regex]::Escape($_) + ' \| \*\*SHIPPED\*\*') }).Count -eq 0)
 
     $a = Simulate one-round; $c = Simulate second-round; $fourth = Simulate fourth
     Check CASE_A ($a.Status -eq 'SECURITY_DIAGNOSIS' -and $a.Sessions -eq 1 -and $a.Consultations -eq 2 -and $a.WorkerParent -eq 'kael')

@@ -1,4 +1,4 @@
-# Talos The Sentinel — manual live qualification (NOT EXECUTED)
+# Talos The Sentinel — manual live qualification (USER_EXECUTED_LIVE_EVIDENCE: PASS)
 
 Prepare the disposable trusted Git fixture from the candidate repository root, once:
 
@@ -30,4 +30,4 @@ Expected one Talos session at `openai/gpt-6-sol#high`, consultation #1 `EVIDENCE
 opencode run --agent kael --format json 'In simple/label.txt, change the visible typo REEDY to its established required value READY and perform bounded validation. This is a straightforward functional-only defect; use the normal smallest path. Report Talos session and consultation counts after collecting all required results. Do not use Maintenance.'
 ```
 
-Expected **TALOS COUNT = 0**, normal smallest-path route. Review native family, not just prose. Both cases require user-run live evidence and independent manual quality review before Phase 7 may ship; preserve accepted fixtures/evidence rather than rerunning valid cases.
+Expected **TALOS COUNT = 0**, normal smallest-path route. Review native family, not just prose. Both cases passed user-run live evidence and independent manual quality review; preserve accepted fixtures/evidence rather than rerunning valid cases. See `docs/ROADMAP.md` for session IDs and accepted findings.

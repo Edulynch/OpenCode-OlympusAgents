@@ -52,7 +52,7 @@ try {
     # Compare against the shipped Phase 3 foundation, not a moving master ref:
     # this qualifier must continue to work after Phase 4 is fast-forwarded.
     $phase3 = '70f22ad366caee13bb479cac17ab2776205a8820'
-    $baseModels = @($agents | Where-Object Name -ne 'atlas.md' | ForEach-Object {
+    $baseModels = @($agents | Where-Object Name -notin @('atlas.md','argus.md') | ForEach-Object {
         # Phase 4 changes only the reasoner file-derived ID, not its model.
         $relative = '.opencode/agents/' + $(if ($_.Name -eq 'thales.md') { 'sorin.md' } else { $_.Name })
         $baseline = (& git -C $root show "${phase3}:$relative" | Out-String)
@@ -62,14 +62,15 @@ try {
     $baseKael = (& git -C $root show "${phase3}:.opencode/agents/kael.md" | Out-String)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read baseline concurrency policy' }
     $concurrencyPattern = '(?s)NORMAL is cost/context-aware:.*?(?=\r?\nReliable delayed background notifications)'
-    $historicalModels = @($agents | Where-Object Name -ne 'atlas.md' | ForEach-Object { ([regex]::Match([IO.File]::ReadAllText($_.FullName), '(?m)^model:.*$')).Value })
-    Check 'MH14_MODELS' ($models.Count -eq 9 -and (($historicalModels -join '|') -ceq ($baseModels -join '|')) -and
-        (Text '.opencode/agents/atlas.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$')
+    $historicalModels = @($agents | Where-Object Name -notin @('atlas.md','argus.md') | ForEach-Object { ([regex]::Match([IO.File]::ReadAllText($_.FullName), '(?m)^model:.*$')).Value })
+    Check 'MH14_MODELS' ($models.Count -eq 10 -and (($historicalModels -join '|') -ceq ($baseModels -join '|')) -and
+        (Text '.opencode/agents/atlas.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$' -and
+        (Text '.opencode/agents/argus.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$')
     $baselineConcurrency = ([regex]::Match($baseKael, $concurrencyPattern).Value).Replace('Sorin','Thales')
     Check 'MH15_CONCURRENCY' (([regex]::Match($kael, $concurrencyPattern).Value) -ceq $baselineConcurrency -and $kael -match 'MAX_ACTIVE_CHILDREN = 4')
     Check 'MH10_ROUTING' ($kael -match 'Kael → maintenance remains denied' -and
         $kael -match 'Kael → maintenance remains DENIED' -and $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: maintenance' -and
-        $kael -match 'Only veyra, orin, kovan, nox, vera, thales, and atlas are valid child role IDs')
+        $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, and argus are valid child role IDs')
     Check 'MH11_EXPLICIT' ($command -match '(?m)^agent: maintenance$' -and $command -match '(?m)^subagent: true$' -and
         $command -match 'user explicitly invoked `/maintain`' -and $kael -match 'user → `/maintain`\s+remains explicit-only')
     Check 'MH12_UI_BOUNDARY' ($kael -match 'not\s+OpenCode.s rendered "Maintenance failed" badge' -and

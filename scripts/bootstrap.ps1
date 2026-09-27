@@ -21,6 +21,7 @@ $Managed = @(
     ".opencode/agents/vera.md",
     ".opencode/agents/thales.md",
     ".opencode/agents/atlas.md",
+    ".opencode/agents/argus.md",
     ".opencode/agents/maintenance.md",
     ".opencode/commands/maintain.md",
     ".opencode/plugins/olympus-activity/activity.ts",
@@ -175,11 +176,12 @@ function Assert-Managed([string]$Repo, $Manifest) {
     if ($Manifest.schema_version -ne 1) { Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Unsupported manifest schema." }
     $entries = @($Manifest.managed_files)
     $previous = @('.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
+    $currentBeforeArgus = @($Managed | Where-Object { $_ -ne '.opencode/agents/argus.md' })
     # Recognize exact historical owned sets, including pre-maintenance and pre-HUD
     # manifests. Counts alone cannot distinguish the old and new reasoner identity.
     $allowed = @()
     foreach ($reasoner in @($OldReasoner, '.opencode/agents/thales.md')) {
-        $base = @($Managed | Where-Object { $_ -ne '.opencode/agents/atlas.md' } |
+        $base = @($currentBeforeArgus | Where-Object { $_ -ne '.opencode/agents/atlas.md' } |
             ForEach-Object { if ($_ -eq '.opencode/agents/thales.md') { $reasoner } else { $_ } })
         foreach ($missing in @(@(), $previous, $NewManaged)) {
             $allowed += ,@($base | Where-Object { $_ -notin $missing })
@@ -187,6 +189,12 @@ function Assert-Managed([string]$Repo, $Manifest) {
     }
     # Some focused upgrade fixtures simulate pre-HUD/pre-Maintenance ownership
     # from a currently installed candidate, retaining its Atlas-owned path.
+    foreach ($missing in @(@(), $previous, $NewManaged)) {
+        $allowed += ,@($currentBeforeArgus | Where-Object { $_ -notin $missing })
+    }
+    # Focused legacy fixtures can retain the already-owned current reasoner while
+    # reconstructing pre-HUD/pre-Maintenance ownership. Exact sets and hashes
+    # still govern every existing path; unowned new destinations still conflict.
     foreach ($missing in @(@(), $previous, $NewManaged)) {
         $allowed += ,@($Managed | Where-Object { $_ -notin $missing })
     }
@@ -437,6 +445,7 @@ function Validate-Install([string]$Repo) {
         "kael"=@("gpt-6-sol","high","primary")
         "thales"=@("gpt-6-sol","xhigh","subagent")
         "atlas"=@("gpt-6-sol","high","subagent")
+        "argus"=@("gpt-6-sol","high","subagent")
         "veyra"=@("gpt-6-luna","max","subagent")
         "orin"=@("gpt-6-luna","max","subagent")
         "kovan"=@("gpt-6-luna","max","subagent")

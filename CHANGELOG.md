@@ -1,3 +1,9 @@
+# Unreleased
+
+## Changed
+
+- Rename the hidden privileged executor identity to Aegis while preserving `/maintain`; Kael cannot invoke it automatically. Bootstrap migrates hash-verified owned legacy installs and rejects unowned or modified retired-agent files.
+
 # 0.2.0
 
 ## Added

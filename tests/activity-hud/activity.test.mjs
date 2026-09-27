@@ -23,14 +23,14 @@ test("H5 running direct children appear and disappear on native status transitio
 })
 
 test("H6 duplicate sessions remain distinct rows", () => {
-  const rows = activeChildren("root", [root, child("a", "maintenance"), child("b", "maintenance")], status(["a", "b"]))
+  const rows = activeChildren("root", [root, child("a", "aegis"), child("b", "aegis")], status(["a", "b"]))
   assert.deepEqual(rows.map((row) => row.id), ["a", "b"])
-  assert.deepEqual(rows.map((row) => row.agent), ["Maintenance", "Maintenance"])
+  assert.deepEqual(rows.map((row) => row.agent), ["🛡️ Aegis The Keeper", "🛡️ Aegis The Keeper"])
 })
 
-test("H7 Maintenance, fallback, truncation and Olympus display names", () => {
-  const rows = activeChildren("root", [root, child("a", "maintenance", "New session"), child("b", "veyra", "x".repeat(90))], status(["a", "b"]))
-  assert.equal(rows[0].title, "Maintenance task")
+test("H7 Aegis, fallback, truncation and Olympus display names", () => {
+  const rows = activeChildren("root", [root, child("a", "aegis", "New session"), child("b", "veyra", "x".repeat(90))], status(["a", "b"]))
+  assert.equal(rows[0].title, "Aegis task")
   assert.equal(rows[1].agent, "Veyra")
   assert.ok(rows[1].title.length <= 64)
 })

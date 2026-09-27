@@ -44,6 +44,7 @@ function Observe($handoff, [bool]$running, [bool]$terminal, [string]$result,
 }
 try {
     $kael = Text '.opencode/agents/kael.md'
+    $aegis = Text '.opencode/agents/aegis.md'
     $docs = Text 'docs/DEVELOPMENT.md'
     $command = Text '.opencode/commands/maintain.md'
     $rr = Text 'tests/result-reconciliation/qualify.ps1'
@@ -52,7 +53,7 @@ try {
     # Compare against the shipped Phase 3 foundation, not a moving master ref:
     # this qualifier must continue to work after Phase 4 is fast-forwarded.
     $phase3 = '70f22ad366caee13bb479cac17ab2776205a8820'
-    $baseModels = @($agents | Where-Object Name -notin @('atlas.md','argus.md','talos.md','helios.md') | ForEach-Object {
+    $baseModels = @($agents | Where-Object Name -notin @('atlas.md','argus.md','talos.md','helios.md','aegis.md') | ForEach-Object {
         # Phase 4 changes only the reasoner file-derived ID, not its model.
         $relative = '.opencode/agents/' + $(if ($_.Name -eq 'thales.md') { 'sorin.md' } else { $_.Name })
         $baseline = (& git -C $root show "${phase3}:$relative" | Out-String)
@@ -62,31 +63,37 @@ try {
     $baseKael = (& git -C $root show "${phase3}:.opencode/agents/kael.md" | Out-String)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read baseline concurrency policy' }
     $concurrencyPattern = '(?s)NORMAL is cost/context-aware:.*?(?=\r?\nReliable delayed background notifications)'
-    $historicalModels = @($agents | Where-Object Name -notin @('atlas.md','argus.md','talos.md','helios.md') | ForEach-Object { ([regex]::Match([IO.File]::ReadAllText($_.FullName), '(?m)^model:.*$')).Value })
+    $historicalModels = @($agents | Where-Object Name -notin @('atlas.md','argus.md','talos.md','helios.md','aegis.md') | ForEach-Object { ([regex]::Match([IO.File]::ReadAllText($_.FullName), '(?m)^model:.*$')).Value })
     Check 'MH14_MODELS' ($models.Count -eq 12 -and (($historicalModels -join '|') -ceq ($baseModels -join '|')) -and
         (Text '.opencode/agents/atlas.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$' -and
         (Text '.opencode/agents/argus.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$' -and
         (Text '.opencode/agents/talos.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$' -and
-        (Text '.opencode/agents/helios.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$')
+        (Text '.opencode/agents/helios.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$' -and
+        (Text '.opencode/agents/aegis.md') -match '(?m)^model: openai/gpt-6-luna#max\r?$')
     $baselineConcurrency = ([regex]::Match($baseKael, $concurrencyPattern).Value).Replace('Sorin','Thales')
     Check 'MH15_CONCURRENCY' (([regex]::Match($kael, $concurrencyPattern).Value) -ceq $baselineConcurrency -and $kael -match 'MAX_ACTIVE_CHILDREN = 4')
-    Check 'MH10_ROUTING' ($kael -match 'Kael → maintenance remains denied' -and
-        $kael -match 'Kael → maintenance remains DENIED' -and $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: maintenance' -and
+    Check 'MH10_ROUTING' ($kael -match 'Kael → Aegis remains denied' -and
+        $kael -match 'Kael → Aegis remains DENIED' -and $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: aegis' -and
         $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
-    Check 'MH11_EXPLICIT' ($command -match '(?m)^agent: maintenance$' -and $command -match '(?m)^subagent: true$' -and
+    Check 'MH11_EXPLICIT' ($command -match '(?m)^agent: aegis$' -and $command -match '(?m)^subagent: true$' -and
         $command -match 'user explicitly invoked `/maintain`' -and $kael -match 'user → `/maintain`\s+remains explicit-only')
+    Check 'MH16_TEMPLATE_AUTHORIZATION' ($command -match 'The user explicitly invoked `/maintain` and authorizes this maintenance task:' -and
+        $aegis -match 'when the `/maintain` command template starts this agent and states that the user invoked `/maintain` and authorized the described task' -and
+        $aegis -match 'treat that template declaration as authoritative proof of authorization' -and
+        $aegis -match 'Do not require the literal `/maintain` event to appear in this isolated child session.s history' -and
+        $aegis -match 'This recognizes the explicit user invocation; it does not create a new authorization mechanism or widen Aegis.s authority')
     Check 'MH12_UI_BOUNDARY' ($kael -match 'not\s+OpenCode.s rendered "Maintenance failed" badge' -and
         $docs -match 'does not claim to change or suppress' -and $docs -match 'persisted after terminal completion is unproven')
     Check 'MH13_ISSUE1' ($kael -match 'MISSING PARENT TOOL OUTPUT != CHILD FAILURE' -and
         $kael -match 'CONFIRMED_NOT_STARTED' -and $kael -match 'Kael-mediated iterative evidence loops reconcile the original worker' -and
         $rr -match 'CASE_A_HISTORICAL_ORDER' -and $docs -match 'Issue #2 applies Issue #1')
     Check 'MH_POLICY' ($kael -match 'execution.*?RUNNING or\s+TERMINAL' -and $kael -match 'result visibility.*?PENDING, VISIBLE or UNAVAILABLE' -and
-        $kael -match 'task\s+outcome.*?actual terminal Maintenance result' -and $kael -match 'bounded native\s+reconciliation' -and
+        $kael -match 'task\s+outcome.*?actual terminal Aegis result' -and $kael -match 'bounded native\s+reconciliation' -and
         $kael -match 'consume it exactly once' -and $kael -match 'No tool output found' -and
-        $kael -match 'Maintenance is\s+still completing' -and $kael -match 'The Maintenance action may have started')
+        $kael -match 'Aegis is\s+still completing' -and $kael -match 'The Aegis action may have started')
 
     # A: known child, early error, still running, late original result, duplicate notification.
-    $a = New-Handoff 'original-maintenance'
+    $a = New-Handoff 'original-aegis'
     $t2 = Observe $a $true $false '' $false $false $true $false
     $t3 = Observe $a $true $false '' $false $false $true $true
     Check 'MH1_RUNNING_PENDING' ($t2.task -eq 'MAINTENANCE_RESULT_PENDING' -and $t3.execution -eq 'RUNNING' -and $t3.action -eq 'WAIT_ORIGINAL')
@@ -118,7 +125,7 @@ try {
         $success.action -eq 'CONSUME_ORIGINAL' -and $success.task -eq 'SUCCESS' -and
         $e.task -eq 'PARTIAL' -and $pendingTerminal.action -eq 'WAIT_ORIGINAL' -and -not $pendingTerminal.final -and
         $exhausted.task -eq 'COMPLETION_UNCONFIRMED' -and $exhausted.action -eq 'NO_RETRY' -and
-        $kael -match 'Never launch another Maintenance operation')
+        $kael -match 'Never launch another Aegis operation')
     Write-Output 'MAINTENANCE HANDOFF QUALIFICATION: PASS (static + synthetic; live control separate)'
     exit 0
 } catch {

@@ -37,7 +37,7 @@ an agent merely to satisfy schema smoke. Record any preflight limitation.
 
 ```powershell
 $promptA = @'
-Read-only deep diagnosis. The complete incident evidence is: expected ROUTE=BLUE for the same input; trace A observed ROUTE=RED; trace B observed ROUTE=BLUE; neither trace recorded the selector value. The cause is genuinely unknown from this packet alone. Consult Sorin under the existing Diagnostic Gate to identify the smallest discriminating fact; do not read observations/decision.txt yourself. If Sorin requests bounded evidence, validate its role/scope/value, route ONE direct Veyra evidence worker for observations/decision.txt, reconcile the ORIGINAL worker's actual terminal result, then continue the SAME Sorin session with that evidence for a final advisory result. Do not implement, edit, run unrelated tests, add a third automatic Sorin consultation, route Maintenance, or broaden outside observations/. Synthesize only after all required results are terminal, reconciled, collected and consumed. Report the Sorin ID and worker ID, plus any uncertainty rather than claiming completion prematurely.
+Read-only deep diagnosis. The complete incident evidence is: expected ROUTE=BLUE for the same input; trace A observed ROUTE=RED; trace B observed ROUTE=BLUE; neither trace recorded the selector value. The cause is genuinely unknown from this packet alone. Consult Sorin under the existing Diagnostic Gate to identify the smallest discriminating fact; do not read observations/decision.txt yourself. If Sorin requests bounded evidence, validate its role/scope/value, route ONE direct Veyra evidence worker for observations/decision.txt, reconcile the ORIGINAL worker's actual terminal result, then continue the SAME Sorin session with that evidence for a final advisory result. Do not implement, edit, run unrelated tests, add a third automatic Sorin consultation, route Aegis, or broaden outside observations/. Synthesize only after all required results are terminal, reconciled, collected and consumed. Report the Sorin ID and worker ID, plus any uncertainty rather than claiming completion prematurely.
 '@
 $titleA = 'phase3-final-A-' + [guid]::NewGuid().ToString('N')
 $eventsA = @(opencode run --agent kael --title $titleA --format json $promptA)
@@ -65,7 +65,7 @@ Record family complete, unresolved=0, unknown=0 and IDs/roles/parentIDs.
 ## Case B — deterministic negative control
 
 ```powershell
-$promptB = 'Read-only straightforward defect check of simple/header.txt: required value READY; identify its actual spelling and report the one bounded correction without editing. This is not deep diagnosis. Use normal bounded worker evidence where useful; do not consult Sorin or Maintenance. Reconcile all original children and synthesize only after family completion.'
+$promptB = 'Read-only straightforward defect check of simple/header.txt: required value READY; identify its actual spelling and report the one bounded correction without editing. This is not deep diagnosis. Use normal bounded worker evidence where useful; do not consult Sorin or Aegis. Reconcile all original children and synthesize only after family completion.'
 $titleB = 'phase3-final-B-' + [guid]::NewGuid().ToString('N')
 $eventsB = @(opencode run --agent kael --title $titleB --format json $promptB)
 if ($LASTEXITCODE -ne 0) { Write-Warning 'CLI failed: reconcile original; do not blindly retry' }
@@ -79,6 +79,6 @@ opencode api GET "/api/session?parentID=$rootB&limit=100"
 ```
 
 Require zero Sorin sessions and zero Sorin consultations, normal bounded worker
-flow, full family reconciliation, no Maintenance and no unrelated edits. User
+flow, full family reconciliation, no Aegis and no unrelated edits. User
 review of the messages is required; `STRUCTURAL_PASS_REVIEW_REQUIRED` is not a
 policy PASS or evidence that any of these agent cases ran during preparation.

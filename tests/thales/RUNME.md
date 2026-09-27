@@ -17,7 +17,7 @@ trace B REGION=east
 
 Prompt Kael (do not include the last three lines of the file in the prompt):
 
-> Diagnose a genuinely unresolved discrepancy: for the same nominal input the expected route is BLUE, trace A reports RED and trace B BLUE; neither trace packet contains the selector. This is read-only. Consult Thales **only if the shipped Diagnostic Gate is met**. Ask for the smallest discriminating evidence. Do not read `observations/decision.txt` yourself: if Thales issues an EVIDENCE_REQUEST, validate it and launch exactly one bounded direct Veyra evidence child to read that path. Reconcile the original worker and continue the **same** Thales session with real evidence. Synthesize the bounded advice only after all required native results are terminal, collected and consumed. Do not implement, spawn a third automatic consultation, or route Maintenance. Report root, Thales and worker session IDs.
+> Diagnose a genuinely unresolved discrepancy: for the same nominal input the expected route is BLUE, trace A reports RED and trace B BLUE; neither trace packet contains the selector. This is read-only. Consult Thales **only if the shipped Diagnostic Gate is met**. Ask for the smallest discriminating evidence. Do not read `observations/decision.txt` yourself: if Thales issues an EVIDENCE_REQUEST, validate it and launch exactly one bounded direct Veyra evidence child to read that path. Reconcile the original worker and continue the **same** Thales session with real evidence. Synthesize the bounded advice only after all required native results are terminal, collected and consumed. Do not implement, spawn a third automatic consultation, or route Aegis. Report root, Thales and worker session IDs.
 
 Require: Kael → one `thales` session using `openai/gpt-6-sol#xhigh` → `STATUS: EVIDENCE_REQUEST` (`TARGET_ROLE`, `QUESTION`, `SCOPE`, `WHY_NEEDED`, `EXPECTED_DISCRIMINATION`) → one direct worker with actual selector evidence → **same Thales ID** continued to `STATUS: ADVICE` → Kael final synthesis consuming both results. No `sorin` agent or session. A missing worker result is not a failure; reconcile the original, stop as COMPLETION_UNCONFIRMED if unknown, and do not fabricate evidence. A second evidence request does not authorize a third automatic consultation.
 
@@ -25,7 +25,7 @@ Require: Kael → one `thales` session using `openai/gpt-6-sol#xhigh` → `STATU
 
 Prepare `simple/header.txt` containing `REDA`, with required header `READY`. Prompt:
 
-> Read-only straightforward spelling defect: required `READY` but `simple/header.txt` differs. Identify the actual spelling and recommend one bounded correction, without editing. Use normal bounded worker evidence if useful; do not invoke Thales or Maintenance. Reconcile all children and synthesize.
+> Read-only straightforward spelling defect: required `READY` but `simple/header.txt` differs. Identify the actual spelling and recommend one bounded correction, without editing. Use normal bounded worker evidence if useful; do not invoke Thales or Aegis. Reconcile all children and synthesize.
 
 Require `THALES COUNT: 0`, `SORIN COUNT: 0`, no diagnosis escalation and no unknown required work. Fail the fixture if Kael invokes Thales for this deterministic bug.
 

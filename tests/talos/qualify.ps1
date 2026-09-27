@@ -78,10 +78,10 @@ try {
     Check TA26 ($k -match 'automatic whole-repository security audit' -and $t -match 'whole-repository security audit')
     Check TA27 ($k -match 'harmful/destructive exploitation is not required' -and $t -match 'destructive exploit execution')
     Check TA28 ($k -match 'MISSING OUTPUT != WORKER FAILURE' -and $k -match 'never blind retry, replace worker' -and $t -match 'COMPLETION_UNCONFIRMED')
-    Check TA29 ($k -match 'Issue #2 Maintenance reconciliation remain unchanged' -and $k -match 'MAINTENANCE_RESULT_PENDING')
-    Check TA30 ($k -match 'Kael → Maintenance DENIED' -and $t -match 'user → /maintain explicit only')
+    Check TA29 ($k -match 'Issue #2 Aegis reconciliation remain unchanged' -and $k -match 'MAINTENANCE_RESULT_PENDING')
+    Check TA30 ($k -match 'Kael → Aegis DENIED' -and $t -match 'user → /maintain explicit only')
     Check TA31 ($k -match 'SECURITY_DIAGNOSIS complete is diagnosis only' -and $t -match 'Kael alone routes normal workers')
-    $expected = @{ kael='gpt-6-sol#high'; atlas='gpt-6-sol#high'; argus='gpt-6-sol#high'; talos='gpt-6-sol#high'; thales='gpt-6-sol#xhigh'; maintenance='gpt-6-sol#high'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
+    $expected = @{ kael='gpt-6-sol#high'; atlas='gpt-6-sol#high'; argus='gpt-6-sol#high'; talos='gpt-6-sol#high'; helios='gpt-6-sol#high'; thales='gpt-6-sol#xhigh'; aegis='gpt-6-luna#max'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
     Check TA32 (@($expected.Keys | Where-Object { ([IO.File]::ReadAllText((Join-Path $source ".opencode/agents/$_.md"))) -notmatch ('(?m)^model: "?openai/' + [regex]::Escape($expected[$_]) + '"?\r?$') }).Count -eq 0)
     Check TA33 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
     Check TA34 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match '\$OldReasoner = ''.opencode/agents/sorin.md''')

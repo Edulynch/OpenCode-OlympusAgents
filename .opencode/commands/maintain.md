@@ -1,6 +1,6 @@
 ---
 description: Explicitly run an internal maintenance task outside Kael routing.
-agent: maintenance
+agent: aegis
 subagent: true
 ---
 
@@ -10,7 +10,7 @@ $ARGUMENTS
 
 Perform exactly the maintenance task described above.
 
-You are the hidden Maintenance agent running in an isolated child session outside
+You are the hidden 🛡️ Aegis The Keeper agent running in an isolated child session outside
 Kael's normal routing.
 
 Use your native shell, edit, and repository-maintenance capabilities when needed.

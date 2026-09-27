@@ -306,11 +306,11 @@ try {
 External read-only family-completion qualification, root $label. Work ONLY in this disposable fixture.
 Delegate EXACTLY $countWord independent Veyra child session(s), $delegations. Give each child a prompt naming only its assigned file and instructing it: After inspecting your assigned file, include exactly one line in your response:
 OLYMPUS_RESULT: <value found in the file>
-The marker MUST occupy its own separate line starting in column 1. Do not put it on the SUMMARY line or after any heading, bullet, label, indentation, or code fence; put it between paragraphs if using a report format. Do not emit more than one OLYMPUS_RESULT line. Normal prose outside this line is allowed. Each child must read ONLY its assigned file. Do not run shell, edit files, subdelegate from children, invoke Kovan or Maintenance, or discover unrelated paths.
+The marker MUST occupy its own separate line starting in column 1. Do not put it on the SUMMARY line or after any heading, bullet, label, indentation, or code fence; put it between paragraphs if using a report format. Do not emit more than one OLYMPUS_RESULT line. Normal prose outside this line is allowed. Each child must read ONLY its assigned file. Do not run shell, edit files, subdelegate from children, invoke Kovan or Aegis, or discover unrelated paths.
 You must collect all children and validate their exact values against the assigned files before declaring complete. Verify each child's own final response contains exactly one standalone line `OLYMPUS_RESULT: RESULT-XX` for its assigned file; a value embedded in prose or your own root synthesis is insufficient. If a child omits or malforms the marker, ask that SAME child for a corrected final response with one standalone marker before you declare completion. An early root response must be labeled IN PROGRESS and must NOT claim completion. On true completion your final response must say FAMILY COMPLETE and include all exact child session IDs and their exact RESULT-XX values. If a child fails or is unknown, report that explicitly; do NOT claim FAMILY COMPLETE.
 "@
         # Jobs run independent CLI processes; this is EXTERNAL controller parallelism,
-        # not Maintenance routing or Kael's internal MAX_ACTIVE_CHILDREN.
+        # not Aegis routing or Kael's internal MAX_ACTIVE_CHILDREN.
         $launched = [DateTimeOffset]::UtcNow
         $job = Start-Job -ScriptBlock {
             param($dir,$title,$prompt)

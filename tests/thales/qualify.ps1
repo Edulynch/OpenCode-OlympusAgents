@@ -42,7 +42,7 @@ try {
         $kael -match 'Topology: USER/ROOT → Kael → Thales → EVIDENCE_REQUEST → Kael → worker' -and
         $thales -match 'STATUS: EVIDENCE_REQUEST' -and $thales -match 'EXPECTED_DISCRIMINATION')
     Check 'TH14_TH15_BOUNDARIES' ($kael -match 'PENDING_OR_INDETERMINATE' -and $kael -match 'COMPLETION_UNCONFIRMED' -and
-        $kael -match 'Kael → Maintenance remains DENIED' -and $thales -match '(?s)Never directly invoke.*?Maintenance')
+        $kael -match 'Kael → Aegis remains DENIED' -and $thales -match '(?s)Never directly invoke.*?Aegis')
     Check 'TH20_TH22_MODELS_CONCURRENCY' ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kael -match 'fan out up to four useful children' -and $kael -notmatch 'gpt-6-luna#fast')
     & git -C $source worktree add --detach $old 'v0.2.0^{commit}' | Out-Null

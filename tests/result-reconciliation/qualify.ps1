@@ -68,7 +68,7 @@ try {
         (Text '.opencode/agents/talos.md') -match 'model: openai/gpt-6-sol#high' -and
         (Text '.opencode/agents/helios.md') -match 'model: openai/gpt-6-sol#high' -and
         (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6-sol#xhigh' -and
-        (Text '.opencode/agents/maintenance.md') -match 'model: openai/gpt-6-sol#high' -and
+        (Text '.opencode/agents/aegis.md') -match 'model: openai/gpt-6-luna#max' -and
         @(@('veyra','orin','kovan','nox','vera') | ForEach-Object { (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max' }) -notcontains $false)
     Check 'RR14_CONCURRENCY' ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kael -match 'FAST is an explicit user-selected latency-priority profile' -and

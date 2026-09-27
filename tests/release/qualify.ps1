@@ -28,7 +28,7 @@ try {
     Check 'R1_FRESH_INSTALL' ($first.Code -eq 0 -and $first.Text -match '(?m)^READY\s*$' -and $first.Text -match 'OLYMPUS_INSTALL: v0.2.0 READY_OR_NO_CHANGES')
     $paths = @('opencode.jsonc', '.opencode/orchestrator-install.json', '.opencode/commands/maintain.md',
         '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
-    $paths += @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','maintenance' | ForEach-Object { ".opencode/agents/$_.md" })
+    $paths += @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios','aegis' | ForEach-Object { ".opencode/agents/$_.md" })
     Check 'R2_ASSETS' (@($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path $target $_) -PathType Leaf) }).Count -eq 0)
     $manifest = Get-Content -LiteralPath (Join-Path $target '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json
     Check 'R2_MANIFEST_OWNERSHIP' ($manifest.schema_version -eq 1 -and $manifest.managed_files.Count -eq 16 -and @($manifest.managed_files | Where-Object path -eq '.opencode/agents/helios.md').Count -eq 1)
@@ -36,24 +36,29 @@ try {
     Push-Location $target
     try {
         $agents = (& opencode debug agents 2>&1 | Out-String) | ConvertFrom-Json -Depth 100
-        Check 'R3_EFFECTIVE_AGENTS' ($LASTEXITCODE -eq 0 -and @($agents | Where-Object { $_.id -in @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','maintenance') }).Count -eq 11)
+        Check 'R3_EFFECTIVE_AGENTS' ($LASTEXITCODE -eq 0 -and @($agents | Where-Object { $_.id -in @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios','aegis') }).Count -eq 12 -and @($agents | Where-Object { $_.id -in @('maintenance','sorin') }).Count -eq 0)
         $plugins = (& opencode plugin list 2>&1 | Out-String)
         Check 'R9_HUD_DISCOVERY' ($LASTEXITCODE -eq 0 -and $plugins -match 'olympus-activity')
     } finally { Pop-Location }
     $expected = @{
-        kael=@('gpt-6-sol','high','primary'); thales=@('gpt-6-sol','xhigh','subagent'); atlas=@('gpt-6-sol','high','subagent'); argus=@('gpt-6-sol','high','subagent'); talos=@('gpt-6-sol','high','subagent'); maintenance=@('gpt-6-sol','high','subagent')
+        kael=@('gpt-6-sol','high','primary'); thales=@('gpt-6-sol','xhigh','subagent'); atlas=@('gpt-6-sol','high','subagent'); argus=@('gpt-6-sol','high','subagent'); talos=@('gpt-6-sol','high','subagent'); helios=@('gpt-6-sol','high','subagent')
         veyra=@('gpt-6-luna','max','subagent'); orin=@('gpt-6-luna','max','subagent'); kovan=@('gpt-6-luna','max','subagent')
-        nox=@('gpt-6-luna','max','subagent'); vera=@('gpt-6-luna','max','subagent')
+        nox=@('gpt-6-luna','max','subagent'); vera=@('gpt-6-luna','max','subagent'); aegis=@('gpt-6-luna','max','subagent')
     }
     foreach ($id in $expected.Keys) {
         $agent = @($agents | Where-Object id -eq $id)
         Check "R5_MODEL_$id" ($agent.Count -eq 1 -and $agent[0].model.id -eq $expected[$id][0] -and
             $agent[0].model.variant -eq $expected[$id][1] -and $agent[0].mode -eq $expected[$id][2])
     }
-    $m = @($agents | Where-Object id -eq maintenance)[0]
-    Check 'R4_MAINTENANCE_HIDDEN' ($m.mode -eq 'subagent' -and $m.hidden -eq $true)
+    $m = @($agents | Where-Object id -eq aegis)[0]
+    Check 'R4_AEGIS_HIDDEN' ($m.mode -eq 'subagent' -and $m.hidden -eq $true)
+    $maintainCommand = [IO.File]::ReadAllText((Join-Path $target '.opencode/commands/maintain.md'))
+    Check 'R4_MAINTAIN_ROUTES_AEGIS' ($maintainCommand -match '(?m)^agent: aegis\s*$' -and $maintainCommand -match '(?m)^subagent: true\s*$')
     $k = @($agents | Where-Object id -eq kovan)[0]
     $n = @($agents | Where-Object id -eq nox)[0]
+    $kael = @($agents | Where-Object id -eq kael)[0]
+    $kaelChildren = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object resource)
+    Check 'R4_KAEL_CANNOT_ROUTE_AEGIS' (@($kaelChildren | Where-Object { $_ -eq 'aegis' -or $_ -eq '*' }).Count -eq 0)
     function Perm($a, [string]$action, [string]$effect) {
         @($a.permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq $effect }).Count -gt 0
     }

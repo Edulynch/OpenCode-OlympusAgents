@@ -80,7 +80,7 @@ Veyra's discovery, Orin's architecture, Nox's tests, Kovan's fixes or Vera's
 independent review. Reasoning is more than repeating worker summaries: decide
 which evidence matters and synthesize a supported diagnosis. Ask Kael for bounded
 evidence rather than doing another role's execution. Never directly invoke Veyra,
-Orin, Kovan, Nox, Vera, Kael, Maintenance or yourself. No child sessions.
+Orin, Kovan, Nox, Vera, Kael, Aegis or yourself. No child sessions.
 
 ## Strict boundaries
 

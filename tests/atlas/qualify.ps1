@@ -50,6 +50,7 @@ try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
     $a = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/atlas.md'))
     $k = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/kael.md'))
+    $t = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/thales.md'))
     $b = [IO.File]::ReadAllText((Join-Path $source 'scripts/bootstrap.ps1'))
     $r = [IO.File]::ReadAllText((Join-Path $source 'docs/ROADMAP.md'))
     Check AT1 ((Test-Path (Join-Path $source '.opencode/agents/atlas.md')) -and $a -match 'mode: subagent' -and $a -match '(?m)^# 🗺️ Atlas The Planner\r?$')
@@ -72,17 +73,17 @@ try {
     Check AT18 ($a -match 'Third automatic consultation DENIED' -and $k -match 'Third automatic Atlas consultation DENIED')
     Check AT19 ($a -match 'NO_PROGRESS:' -and $k -match 'NO_PROGRESS:')
     Check AT20 ($k -match 'reconcile the known original worker' -and $k -match 'COMPLETION_UNCONFIRMED' -and $k -match 'No blind replacement')
-    Check AT21 ($k -match 'Kael → Maintenance remains DENIED' -and $a -match 'user → /maintain')
-    Check AT22 ($a -match 'never maintenance' -and $k -match 'never request Maintenance as an evidence worker')
+    Check AT21 ($k -match 'Kael → Aegis remains DENIED' -and $a -match 'user → /maintain')
+    Check AT22 ($a -match 'never aegis' -and $k -match 'never request Aegis as an evidence worker')
     Check AT23 ($a -match 'Kael owns actual routing, reconciliation and final completion' -and $k -match 'A STATUS: PLAN is planning completed')
-    $baseline = @('kael','veyra','orin','kovan','nox','vera','thales','maintenance')
+    $baseline = @('kael','veyra','orin','kovan','nox','vera')
     $unchanged = @($baseline | Where-Object {
         $path = '.opencode/agents/' + $_ + '.md'
         if ($_ -eq 'kael') { return $true }
         & git -C $source diff --quiet $phase4Base -- $path
         $LASTEXITCODE -eq 0
     })
-    Check AT24 ($unchanged.Count -eq $baseline.Count -and $k -match 'model: "openai/gpt-6-sol#high"')
+    Check AT24 ($unchanged.Count -eq $baseline.Count -and $k -match 'model: "openai/gpt-6-sol#high"' -and $t -match 'model: openai/gpt-6-sol#xhigh')
     Check AT25 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children' -and $k -notmatch 'gpt-6-luna#fast')
     Check AT26 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match "'sorin'" -and $a -notmatch 'gpt-6-luna#fast')
     Check 'AT_READ_DENIED' (@(@('read','glob','grep','list','lsp') | Where-Object { $a -notmatch ('(?s)action: ' + $_ + '\s+resource: "\*"\s+effect: deny') }).Count -eq 0)

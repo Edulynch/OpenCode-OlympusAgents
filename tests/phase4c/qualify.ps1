@@ -16,7 +16,7 @@ $ManagedPaths = @(
     '.opencode/agents/kael.md', '.opencode/agents/veyra.md',
     '.opencode/agents/orin.md', '.opencode/agents/kovan.md',
     '.opencode/agents/nox.md', '.opencode/agents/vera.md',
-    '.opencode/agents/thales.md', '.opencode/agents/atlas.md', '.opencode/agents/argus.md', '.opencode/agents/talos.md', '.opencode/agents/helios.md', '.opencode/agents/maintenance.md',
+    '.opencode/agents/thales.md', '.opencode/agents/atlas.md', '.opencode/agents/argus.md', '.opencode/agents/talos.md', '.opencode/agents/helios.md', '.opencode/agents/aegis.md',
     '.opencode/commands/maintain.md',
     '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx',
     '.opencode/orchestrator-install.json'
@@ -225,6 +225,7 @@ function Assert-ModelMapping($Agents) {
         'kovan' = @('gpt-6-luna', 'max', 'subagent')
         'nox' = @('gpt-6-luna', 'max', 'subagent')
         'vera' = @('gpt-6-luna', 'max', 'subagent')
+        'aegis' = @('gpt-6-luna', 'max', 'subagent')
     }
     foreach ($id in $expected.Keys) {
         $agent = Get-Agent $Agents $id
@@ -482,49 +483,49 @@ try {
         Assert-Condition (Has-Rule $nox 'read' '*' 'allow') 'Nox source-read permission missing.' 'BOOTSTRAP_BUG'
     }
 
-    # Maintainer Plane extension: static/bootstrap assertions only. The interactive
+    # Aegis Plane extension: static/bootstrap assertions only. The interactive
     # command callback, parent session identity and permission-prompt behavior must
     # be checked in a normal Kael UI session; this harness does not emulate them.
     Run-Scenario 'M1-M4-M6-STATIC_BOOTSTRAP_ASSERTION' {
-        $scenarioDir = New-ScenarioHome 'maintainer-static'
-        $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'maintainer fixture' + [Environment]::NewLine })
+        $scenarioDir = New-ScenarioHome 'aegis-static'
+        $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'Aegis fixture' + [Environment]::NewLine })
         $diagnostics = Assert-Installed $repo 'READY'
-        $agent = Get-Agent $diagnostics.Agents 'maintenance'
-        Assert-Condition ($agent.mode -eq 'subagent' -and $agent.hidden -eq $true -and $agent.model.providerID -eq 'openai' -and $agent.model.id -eq 'gpt-6-sol' -and $agent.model.variant -eq 'high') 'M1/M6: maintenance mode, hidden status, or model mismatch.' 'BOOTSTRAP_BUG'
+        $agent = Get-Agent $diagnostics.Agents 'aegis'
+        Assert-Condition ($agent.mode -eq 'subagent' -and $agent.hidden -eq $true -and $agent.model.providerID -eq 'openai' -and $agent.model.id -eq 'gpt-6-luna' -and $agent.model.variant -eq 'max') 'M1/M6: Aegis mode, hidden status, or model mismatch.' 'BOOTSTRAP_BUG'
         foreach ($action in @('read', 'glob', 'grep', 'list', 'lsp', 'shell', 'edit', 'external_directory')) {
-            Assert-Condition (Has-Rule $agent $action '*' 'allow') ('M2: maintenance ' + $action + ' allow missing.') 'BOOTSTRAP_BUG'
+            Assert-Condition (Has-Rule $agent $action '*' 'allow') ('M2: Aegis ' + $action + ' allow missing.') 'BOOTSTRAP_BUG'
         }
-        Assert-Condition (Has-Rule $agent 'subagent' '*' 'deny' -and -not (Has-Rule $agent 'subagent' '*' 'allow')) 'M2: maintenance child deny missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $agent 'subagent' '*' 'deny' -and -not (Has-Rule $agent 'subagent' '*' 'allow')) 'M2: Aegis child deny missing.' 'BOOTSTRAP_BUG'
         $kael = Get-Agent $diagnostics.Agents 'kael'
         $children = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object resource | Select-Object -Unique)
         $normal = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'thales', 'atlas', 'argus', 'talos', 'helios')
         Assert-Condition (Has-Rule $kael 'subagent' '*' 'deny' -and $children.Count -eq $normal.Count -and @($children | Where-Object { $_ -notin $normal }).Count -eq 0 -and @($normal | Where-Object { $children -notcontains $_ }).Count -eq 0) 'M3/M6: Kael delegation boundary changed.' 'BOOTSTRAP_BUG'
         $kaelPrompt = [IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/kael.md'))
         $lifecycle = [regex]::Match($kaelPrompt, '(?s)## User-facing lifecycle communication\s*(.*?)(?=\r?\n## |\z)').Groups[1].Value
-        $handoff = [regex]::Match($kaelPrompt, '(?s)## Explicit maintenance result handoff\s*(.*?)(?=\r?\n## |\z)').Groups[1].Value
+        $handoff = [regex]::Match($kaelPrompt, '(?s)## Explicit Aegis result handoff\s*(.*?)(?=\r?\n## |\z)').Groups[1].Value
         Assert-Condition ($lifecycle -match '(?i)final response|overall request' -and $lifecycle -match '(?i)finished|complete' -and $lifecycle -match '(?is)nothing.*running') 'Kael completion visibility policy missing.' 'BOOTSTRAP_BUG'
         Assert-Condition ($lifecycle -match '(?i)orchestration work|required children' -and $lifecycle -match '(?i)still running|in progress' -and $lifecycle -match '(?i)next step|follow-up') 'Kael remaining-work visibility policy missing.' 'BOOTSTRAP_BUG'
         Assert-Condition ($lifecycle -match '(?i)internal coordination' -and $lifecycle -match '(?i)raw orchestration' -and $lifecycle -match '(?i)relay-only') 'Kael human-facing, non-raw relay policy missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition ($handoff -match '(?i)completed Maintenance' -and $handoff -match '(?is)present.*directly' -and $handoff -match '(?i)never\s+merely prepend' -and $handoff -match '(?i)remains running' -and $handoff -match '(?i)not a detached-work handoff') 'Kael natural Maintenance handoff policy missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($handoff -match '(?i)completed Aegis' -and $handoff -match '(?is)present.*directly' -and $handoff -match '(?i)never\s+merely prepend' -and $handoff -match '(?i)remains running' -and $handoff -match '(?i)not a detached-work handoff') 'Kael natural Aegis handoff policy missing.' 'BOOTSTRAP_BUG'
         Assert-Condition ($lifecycle -match '(?i)lead the final response with' -and $lifecycle -match '(?i)scan-friendly' -and $lifecycle -match '(?i)passed checks' -and $lifecycle -match '(?i)intentionally\s+unperformed actions' -and $lifecycle -match '(?i)one concrete "Next:"') 'Kael compact, outcome-first engineering summary policy missing.' 'BOOTSTRAP_BUG'
         Assert-Condition ($lifecycle -match '(?is)optional smoke.*COMPLETE\s+and idle' -and $lifecycle -match '(?i)required validation is pending' -and $lifecycle -match '(?i)if it failed or a blocker exists' -and $lifecycle -match '(?i)required workers remain active') 'Kael finished-versus-unverified or active-work policy missing.' 'BOOTSTRAP_BUG'
         Assert-Condition ($lifecycle -match '(?i)surrounding user-facing conversation' -and $lifecycle -match '(?i)pasted technical specifications' -and $lifecycle -match '(?i)current direct request' -and $lifecycle -match '(?i)do not translate commands') 'Kael conversational-language policy missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition ($handoff -match '(?i)normal user-facing style' -and $handoff -match '(?i)reproduce its prose\s+as a relay' -and $handoff -match '(?i)idle, not in progress') 'Kael Maintenance result consumption policy missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($handoff -match '(?i)normal user-facing style' -and $handoff -match '(?i)reproduce its prose\s+as a relay' -and $handoff -match '(?i)idle, not in progress') 'Kael Aegis result consumption policy missing.' 'BOOTSTRAP_BUG'
         $command = [IO.File]::ReadAllText((Join-Path $repo '.opencode/commands/maintain.md'))
-        Assert-Condition ($command -match '(?m)^agent: maintenance\s*$' -and $command -match '(?m)^subagent: true\s*$' -and $command.Contains('$ARGUMENTS') -and $command -match '(?m)^description:') 'M4: installed project command frontmatter or argument forwarding missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($command -match '(?m)^agent: aegis\s*$' -and $command -match '(?m)^subagent: true\s*$' -and $command.Contains('$ARGUMENTS') -and $command -match '(?m)^description:') 'M4: installed project command frontmatter or argument forwarding missing.' 'BOOTSTRAP_BUG'
         $manifest = [IO.File]::ReadAllText((Join-Path $repo '.opencode/orchestrator-install.json')) | ConvertFrom-Json -Depth 100
         Assert-Condition (@($manifest.managed_files).Count -eq ($ManagedPaths.Count - 1)) 'Managed asset count mismatch.' 'BOOTSTRAP_BUG'
-        foreach ($path in @('.opencode/agents/kael.md', '.opencode/agents/maintenance.md', '.opencode/commands/maintain.md')) {
+        foreach ($path in @('.opencode/agents/kael.md', '.opencode/agents/aegis.md', '.opencode/commands/maintain.md')) {
             $entry = @($manifest.managed_files | Where-Object path -eq $path)
             Assert-Condition ($entry.Count -eq 1 -and $entry[0].sha256 -eq (Get-Hash (Join-Path $repo $path))) ('Manifest does not own/hash ' + $path) 'BOOTSTRAP_BUG'
         }
         $again = Invoke-Bootstrap $repo
-        Assert-Condition ($again.ExitCode -eq 0 -and $again.Text -match '(?m)^NO_CHANGES\s*$') ('Maintenance reinstall is not idempotent: ' + $again.Text) 'BOOTSTRAP_BUG'
+        Assert-Condition ($again.ExitCode -eq 0 -and $again.Text -match '(?m)^NO_CHANGES\s*$') ('Aegis reinstall is not idempotent: ' + $again.Text) 'BOOTSTRAP_BUG'
     }
 
     Run-Scenario 'M7-MANAGED_DRIFT' {
-        foreach ($path in @('.opencode/agents/kael.md', '.opencode/agents/maintenance.md', '.opencode/commands/maintain.md')) {
-            $scenarioDir = New-ScenarioHome ('maintainer-drift-' + [IO.Path]::GetFileNameWithoutExtension($path))
+        foreach ($path in @('.opencode/agents/kael.md', '.opencode/agents/aegis.md', '.opencode/commands/maintain.md')) {
+            $scenarioDir = New-ScenarioHome ('aegis-drift-' + [IO.Path]::GetFileNameWithoutExtension($path))
             $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'drift fixture' + [Environment]::NewLine })
             [void](Assert-Installed $repo 'READY')
             $file = Join-Path $repo $path
@@ -537,11 +538,11 @@ try {
     }
 
     Run-Scenario 'M-LEGACY-MANAGED-UPGRADE' {
-        $scenarioDir = New-ScenarioHome 'maintainer-upgrade'
+        $scenarioDir = New-ScenarioHome 'aegis-upgrade'
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'legacy fixture' + [Environment]::NewLine })
         [void](Assert-Installed $repo 'READY')
-        # Reconstruct the pre-Maintainer Plane managed set (before the HUD too).
-        $newPaths = @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md',
+        # Reconstruct the pre-Maintenance Plane managed set (before the HUD too).
+        $newPaths = @('.opencode/agents/aegis.md', '.opencode/commands/maintain.md',
             '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
         $manifestPath = Join-Path $repo '.opencode/orchestrator-install.json'
         $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -Depth 100
@@ -563,7 +564,59 @@ try {
         $before = Get-Hash $foreign
         $conflict = Invoke-Bootstrap $conflictRepo
         Assert-BootstrapError $conflict 'INSTALL_CONFLICT'
-        Assert-Condition ((Get-Hash $foreign) -eq $before -and -not (Test-Path (Join-Path $conflictRepo $newPaths[1]))) 'Unowned maintenance path was overwritten or new path installed.' 'BOOTSTRAP_BUG'
+        Assert-Condition ((Get-Hash $foreign) -eq $before -and -not (Test-Path (Join-Path $conflictRepo $newPaths[1]))) 'Unowned legacy path was overwritten or new path installed.' 'BOOTSTRAP_BUG'
+    }
+
+    Run-Scenario 'M-AEGIS-IDENTITY-UPGRADE' {
+        $scenarioDir = New-ScenarioHome 'aegis-identity-upgrade'
+        $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'Aegis identity upgrade fixture' + [Environment]::NewLine })
+        [void](Assert-Installed $repo 'READY')
+
+        # Pin the pre-migration agent snapshot so this qualification still works
+        # after the migration is committed and HEAD no longer contains that path.
+        $legacyBaseline = '3ab1495fdfcdb8503e2411effe81e814da3f6eb6'
+        $oldAgentText = (& git -C $RepoRoot show "${legacyBaseline}:.opencode/agents/maintenance.md" | Out-String)
+        $oldAgentExit = $LASTEXITCODE
+        $oldCommandText = (& git -C $RepoRoot show "${legacyBaseline}:.opencode/commands/maintain.md" | Out-String)
+        $oldCommandExit = $LASTEXITCODE
+        $oldActivityText = (& git -C $RepoRoot show "${legacyBaseline}:.opencode/plugins/olympus-activity/activity.ts" | Out-String)
+        $oldActivityExit = $LASTEXITCODE
+        Assert-Condition ($oldAgentExit -eq 0 -and $oldAgentText -and $oldCommandExit -eq 0 -and $oldCommandText -and
+            $oldCommandText -match '(?m)^agent: maintenance\r?$' -and $oldActivityExit -eq 0 -and $oldActivityText -match 'maintenance:') 'Cannot load the historical owned Maintenance agent, command, and HUD fixture.' 'HARNESS_BUG'
+        $oldPath = Join-Path $repo '.opencode/agents/maintenance.md'
+        $newPath = Join-Path $repo '.opencode/agents/aegis.md'
+        $commandPath = Join-Path $repo '.opencode/commands/maintain.md'
+        $activityPath = Join-Path $repo '.opencode/plugins/olympus-activity/activity.ts'
+        [IO.File]::WriteAllText($oldPath, $oldAgentText, $Utf8)
+        [IO.File]::WriteAllText($commandPath, $oldCommandText, $Utf8)
+        [IO.File]::WriteAllText($activityPath, $oldActivityText, $Utf8)
+        [IO.File]::Delete($newPath)
+        $manifestPath = Join-Path $repo '.opencode/orchestrator-install.json'
+        $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -Depth 100
+        $oldManagedPath = '.opencode/agents/maintenance.md'
+        $newManagedPath = '.opencode/agents/aegis.md'
+        $manifest.managed_files = @($manifest.managed_files | ForEach-Object {
+            if ($_.path -eq $newManagedPath) {
+                [pscustomobject]@{ path=$oldManagedPath; sha256=(Get-Hash $oldPath) }
+            } elseif ($_.path -eq '.opencode/commands/maintain.md') {
+                [pscustomobject]@{ path=$_.path; sha256=(Get-Hash $commandPath) }
+            } elseif ($_.path -eq '.opencode/plugins/olympus-activity/activity.ts') {
+                [pscustomobject]@{ path=$_.path; sha256=(Get-Hash $activityPath) }
+            } else { $_ }
+        })
+        [IO.File]::WriteAllText($manifestPath, (($manifest | ConvertTo-Json -Depth 100) + "`n"), $Utf8)
+
+        [void](Assert-Installed $repo 'READY')
+        Assert-Condition (-not (Test-Path -LiteralPath $oldPath) -and (Test-Path -LiteralPath $newPath)) 'Owned retired agent was not replaced by Aegis.' 'BOOTSTRAP_BUG'
+        Assert-Condition ((Get-Hash $newPath) -eq (Get-Hash (Join-Path $RepoRoot '.opencode/agents/aegis.md'))) 'Installed Aegis content differs from the source agent.' 'BOOTSTRAP_BUG'
+        $command = [IO.File]::ReadAllText($commandPath)
+        Assert-Condition ($command -match '(?m)^agent: aegis\s*$') 'The installed /maintain command does not target Aegis.' 'BOOTSTRAP_BUG'
+        $activity = [IO.File]::ReadAllText($activityPath)
+        Assert-Condition ((Get-Hash $activityPath) -eq (Get-Hash (Join-Path $RepoRoot '.opencode/plugins/olympus-activity/activity.ts')) -and
+            $activity -match 'aegis:' -and $activity -notmatch '\bmaintenance\b') 'The installed Activity HUD still depends on the retired Maintenance ID.' 'BOOTSTRAP_BUG'
+        $agents = Get-OpenCodeDiagnostics $repo
+        Assert-Condition (@($agents.Agents | Where-Object id -eq 'maintenance').Count -eq 0) 'Retired maintenance agent ID remains effective after upgrade.' 'BOOTSTRAP_BUG'
+        [void](Get-Agent $agents.Agents 'aegis')
     }
 
     Write-Output 'M5-RUNTIME_INTERACTION_ASSERTION: NOT AUTOMATED — run the documented two-command smoke from a normal Kael UI session; static/bootstrap assertions are not a runtime PASS.'

@@ -83,16 +83,16 @@ try {
     Check RP13_RECOVER_ORIGINAL ($k -match 'wait for\s+the original native result and consume it once' -and $k -match 'After a successfully reconciled')
     Check RP14_UNKNOWN_STOPS ($k -match 'unknown/unrecoverable\s+execution stop as COMPLETION_UNCONFIRMED' -and $d -match 'Unknown execution\s+stops as COMPLETION_UNCONFIRMED')
     Check RP15_ISSUE1_INTACT ($k -match 'MISSING PARENT TOOL OUTPUT != CHILD FAILURE' -and $k -match 'only positive native evidence that no child was\s+created' -and $k -match 'No second worker is launched')
-    Check RP16_MODELS_UNCHANGED ($k -match 'model: "openai/gpt-6-sol#high"' -and $s -match 'model: openai/gpt-6-sol#xhigh' -and
-        (Text '.opencode/agents/maintenance.md') -match 'model: openai/gpt-6-sol#high' -and
+    Check RP16_MODEL_MAPPING ($k -match 'model: "openai/gpt-6-sol#high"' -and $s -match 'model: openai/gpt-6-sol#xhigh' -and
+        (Text '.opencode/agents/aegis.md') -match 'model: openai/gpt-6-luna#max' -and
         @($workers | Where-Object { $_ -notmatch 'model: "openai/gpt-6-luna#max"' }).Count -eq 0)
     Check RP17_CONCURRENCY_UNCHANGED ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $k -match 'fan out up to four useful children' -and $k -match 'NORMAL is cost/context-aware: adapt from zero to four children')
-    $allAgents = @($k,$s,(Text '.opencode/agents/maintenance.md')) + $workers
+    $allAgents = @($k,$s,(Text '.opencode/agents/aegis.md')) + $workers
     Check RP18_NO_LUNA_FAST (($allAgents -join "`n") -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
     Check 'THALES_READ_ONLY' ((Denied $s 'shell') -and (Denied $s 'edit') -and (Denied $s 'subagent'))
     Check 'BUDGET_AND_GATE' ($k -match 'No third automatic consultation' -and $k -match 'Diagnostic Gate')
-    $m=Text '.opencode/agents/maintenance.md'; $handoff=Text 'tests/maintenance-handoff/qualify.ps1'
+    $m=Text '.opencode/agents/aegis.md'; $handoff=Text 'tests/maintenance-handoff/qualify.ps1'
     $rr=Text 'tests/result-reconciliation/qualify.ps1'
     Check RP1_KAEL_OWNS_ROUTING_COMPLETION ($k -match 'MASTER ORCHESTRATOR' -and $k -match 'root synthesis last')
     Check RP2_REASONER_PURITY ($s -match 'Reasoning is more than repeating worker summaries' -and (Denied $s 'shell') -and (Denied $s 'edit'))
@@ -105,14 +105,14 @@ try {
     Check RP9_VERA_INDEPENDENT ($v -match 'independent review gate')
     Check RP10_NO_DIRECT_NESTING ($k -match 'never reasoner → worker nesting' -and (Denied $s 'subagent'))
     Check RP11_NORMAL_RECONCILIATION ($rr -match 'CASE_A_HISTORICAL_ORDER' -and $k -match 'Kael-mediated iterative evidence loops reconcile the original worker')
-    Check RP12_MAINTENANCE_RECONCILIATION ($handoff -match 'MH1_RUNNING_PENDING' -and $k -match 'explicit maintenance result handoff')
+    Check RP12_AEGIS_RECONCILIATION ($handoff -match 'MH1_RUNNING_PENDING' -and $k -match 'explicit Aegis result handoff')
     Check RP13_NO_FALSE_FAILURE_EVIDENCE ($k -match 'missing parent\s+tool output is not FAILED evidence' -and $k -match 'Never re-consult Thales using\s+fabricated failure')
     Check RP14_NO_INDETERMINATE_RETRY ($k -match 'permission to\s+launch a replacement' -and $k -match 'No second worker is launched')
-    Check RP15_MAINTENANCE_PENDING ($k -match 'Maintenance is\s+still completing' -and $handoff -match 'MH3_KNOWN_NOT_UNCONFIRMED')
-    Check RP16_MAINTENANCE_OUTSIDE_ROUTING ($k -match 'Kael → Maintenance remains DENIED' -and $k -match 'cannot be TARGET_ROLE' -and $s -match '(?s)Never directly invoke.*?Maintenance' -and $k -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
+    Check RP15_AEGIS_PENDING ($k -match 'Aegis is\s+still completing' -and $handoff -match 'MH3_KNOWN_NOT_UNCONFIRMED')
+    Check RP16_AEGIS_OUTSIDE_ROUTING ($k -match 'Kael → Aegis remains DENIED' -and $k -match 'cannot be TARGET_ROLE' -and $s -match '(?s)Never directly invoke.*?Aegis' -and $k -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
     Check RP17_THIRD_AUTO_DENIED ($k -match 'No third automatic consultation' -and $k -match 'explicit user authorization' -and $k -match '`/power`, FAST mode, complexity')
     Check RP18_COMPLETION_OWNERSHIP ($k -match 'reasoner final result consumed' -and $k -match 'zero unresolved required work')
-    Check RP19_MODELS ($k -match 'model: "openai/gpt-6-sol#high"' -and $s -match 'model: openai/gpt-6-sol#xhigh' -and $m -match 'model: openai/gpt-6-sol#high' -and @($workers | Where-Object { $_ -notmatch 'model: "openai/gpt-6-luna#max"' }).Count -eq 0)
+    Check RP19_MODEL_MAPPING ($k -match 'model: "openai/gpt-6-sol#high"' -and $s -match 'model: openai/gpt-6-sol#xhigh' -and $m -match 'model: openai/gpt-6-luna#max' -and @($workers | Where-Object { $_ -notmatch 'model: "openai/gpt-6-luna#max"' }).Count -eq 0)
     Check RP20_CONCURRENCY ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
     Check RP21_NO_LUNA_FAST (($allAgents -join "`n") -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
 
@@ -159,10 +159,10 @@ try {
     Check 'CASE_E_SIMPLE_BUG' ((Consult $simple 'thales-original' 'EVIDENCE_REQUEST') -eq 'REJECT' -and (Route $simple 'probe' 'veyra') -eq 'NO_THALES' -and $simple.Calls -eq 0)
     # Issue #2 is an explicit user handoff, not a reasoner evidence worker.
     # Keep execution, visibility, and task outcome independent at each event.
-    $mh=[pscustomobject]@{ Identity='original-maintenance'; Execution='RUNNING'; Visibility='PENDING'; Outcome='MAINTENANCE_RESULT_PENDING'; Consumed=0; Retries=0 }
-    Check 'CASE_G_MAINTENANCE_EARLY_ERROR' ($mh.Identity -and $mh.Execution -eq 'RUNNING' -and $mh.Visibility -eq 'PENDING' -and $mh.Outcome -notin @('FAILED','COMPLETION_UNCONFIRMED') -and $mh.Retries -eq 0 -and (Route $out 'maint' 'maintenance') -eq 'BLOCKED')
+    $mh=[pscustomobject]@{ Identity='original-aegis'; Execution='RUNNING'; Visibility='PENDING'; Outcome='MAINTENANCE_RESULT_PENDING'; Consumed=0; Retries=0 }
+    Check 'CASE_G_AEGIS_EARLY_ERROR' ($mh.Identity -and $mh.Execution -eq 'RUNNING' -and $mh.Visibility -eq 'PENDING' -and $mh.Outcome -notin @('FAILED','COMPLETION_UNCONFIRMED') -and $mh.Retries -eq 0 -and (Route $out 'maint' 'aegis') -eq 'BLOCKED')
     $mh.Execution='TERMINAL'; $mh.Visibility='VISIBLE'; $mh.Outcome='PARTIAL'; $mh.Consumed++
-    Check 'CASE_G_MAINTENANCE_LATE_ORIGINAL' ($mh.Outcome -eq 'PARTIAL' -and $mh.Consumed -eq 1 -and $mh.Retries -eq 0)
+    Check 'CASE_G_AEGIS_LATE_ORIGINAL' ($mh.Outcome -eq 'PARTIAL' -and $mh.Consumed -eq 1 -and $mh.Retries -eq 0)
     Write-Output 'ROLE PURITY: PASS (static + deterministic integration; live test separate)'
     exit 0
 } catch {

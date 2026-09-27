@@ -4,7 +4,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $kael = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/kael.md'))
-$maintenance = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/maintenance.md'))
+$aegis = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/aegis.md'))
 $fixture = Join-Path $PSScriptRoot 'fixtures'
 
 function Check([string]$Id, [bool]$Condition) {
@@ -20,9 +20,9 @@ function Section([string]$Text, [string]$Heading) {
 try {
     $preflight = Section $kael 'Capability Preflight — before research'
     $discovery = Section $kael 'Task-scoped, progressive discovery'
-    $admin = Section $maintenance 'Administrative fast path'
+    $admin = Section $aegis 'Administrative fast path'
     $mission = Section $kael 'Mission and routing'
-    $handoff = Section $kael 'Explicit maintenance result handoff'
+    $handoff = Section $kael 'Explicit Aegis result handoff'
 
     Check ORDER ($mission.IndexOf('Capability Preflight') -ge 0 -and
         $mission.IndexOf('Capability Preflight') -lt $mission.IndexOf('choose DIRECT') -and
@@ -40,9 +40,9 @@ try {
     # A second known normal-plane blocker must precede optional discovery.
     Check CAPABILITY_BLOCKED ($preflight -match 'external action has no\s+available authorized path' -and
         $preflight -match 'explain the blocker before optional research')
-    Check BOUNDARY ($preflight -match 'Kael → Maintenance remains DENIED' -and
-        $preflight -match 'only an explicit user' -and $handoff -match 'cannot invoke or delegate to maintenance' -and
-        $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: maintenance\s*\r?\n\s*effect: allow')
+    Check BOUNDARY ($preflight -match 'Kael → Aegis remains DENIED' -and
+        $preflight -match 'only an explicit user' -and $handoff -match 'cannot invoke or' -and $handoff -match 'delegate to Aegis' -and
+        $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: aegis\s*\r?\n\s*effect: allow')
 
     # Controlled small fixture: localized cart target, related test, unrelated auth module.
     Check FIXTURE ((Test-Path (Join-Path $fixture 'src/cart.ts')) -and
@@ -62,12 +62,12 @@ try {
         $admin -match 'start with administrative context only' -and
         $admin -match 'Do not first inventory source' -and $admin -match 'history\s+rewrite plus push' -and
         $admin -match 'non-mutating' -and $admin -match 'not definitive remote write')
-    Check MAINTENANCE_BOUNDARY ($maintenance -match 'explicit `/maintain` invocation' -and
-        $maintenance -match '(?s)action: subagent\s+resource: "\*"\s+effect: deny')
+    Check MAINTENANCE_BOUNDARY ($aegis -match 'explicit `/maintain` invocation' -and
+        $aegis -match '(?s)action: subagent\s+resource: "\*"\s+effect: deny')
     Check INVARIANTS ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kael -match 'model: "openai/gpt-6-sol#high"' -and
-        $maintenance -match 'model: openai/gpt-6-sol#high' -and
-        $kael -notmatch 'Luna Fast|project-context\.json' -and $maintenance -notmatch 'project-context\.json')
+        $aegis -match 'model: openai/gpt-6-luna#max' -and
+        $kael -notmatch 'Luna Fast|project-context\.json' -and $aegis -notmatch 'project-context\.json')
     Write-Output 'PREFLIGHT / SCOPED DISCOVERY QUALIFICATION: PASS (static policy + fixture only; interactive sequencing and child counts NOT VERIFIED)'
     exit 0
 } catch {

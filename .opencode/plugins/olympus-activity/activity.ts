@@ -4,7 +4,7 @@ type Row = { id: string; agent: string; title: string }
 
 const names: Record<string, string> = {
   kael: "Kael", veyra: "Veyra", orin: "Orin", kovan: "Kovan",
-  nox: "Nox", vera: "Vera", thales: "Thales", maintenance: "Maintenance",
+  nox: "Nox", vera: "Vera", thales: "Thales", aegis: "🛡️ Aegis The Keeper",
 }
 
 function label(agent?: string): string {
@@ -15,7 +15,7 @@ function label(agent?: string): string {
 function title(session: Session): string {
   const value = (session.title || "").replace(/\s+/g, " ").trim()
   if (!value || /^(?:(?:new |child )?session|(?:subagent )?task|untitled)(?: \d+)?$/i.test(value)) {
-    return session.agent?.toLowerCase() === "maintenance" ? "Maintenance task" : "Subagent task"
+    return session.agent?.toLowerCase() === "aegis" ? "Aegis task" : "Subagent task"
   }
   return value.length > 64 ? value.slice(0, 61) + "…" : value
 }

@@ -11,7 +11,7 @@
       "effect": "deny"
     },
     // Shell is globally denied; Kovan and Nox opt into trusted-project shell.
-    // The hidden maintenance agent explicitly allows shell for /maintain only.
+    // The hidden Aegis agent explicitly allows shell for /maintain only.
     {
       "action": "shell",
       "resource": "*",

@@ -24,14 +24,15 @@ $Managed = @(
     ".opencode/agents/argus.md",
     ".opencode/agents/talos.md",
     ".opencode/agents/helios.md",
-    ".opencode/agents/maintenance.md",
+    ".opencode/agents/aegis.md",
     ".opencode/commands/maintain.md",
     ".opencode/plugins/olympus-activity/activity.ts",
     ".opencode/plugins/olympus-activity/tui.tsx"
 )
-$NewManaged = @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md',
+$LegacyMaintenanceFiles = @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md',
     '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
 $OldReasoner = '.opencode/agents/sorin.md'
+$RetiredMaintenanceAgent = '.opencode/agents/maintenance.md'
 
 function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
 function Rel([string]$Path) { ($Path -replace "\\", "/").TrimStart([char[]]@('/')) }
@@ -158,7 +159,7 @@ function Assert-Target([string]$Raw) {
 }
 
 function Assert-Install-Destinations([string]$Repo) {
-    foreach ($p in @($Managed) + @($ManifestRel, $OldReasoner)) {
+    foreach ($p in @($Managed) + @($ManifestRel, $OldReasoner, $RetiredMaintenanceAgent)) {
         $path = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         if (-not (Path-Is-Within $path $Repo)) {
             Fail "UNSAFE_TARGET_PATH" "Install destination escapes the target repository: $p"
@@ -178,35 +179,38 @@ function Assert-Managed([string]$Repo, $Manifest) {
     if ($Manifest.schema_version -ne 1) { Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Unsupported manifest schema." }
     $entries = @($Manifest.managed_files)
     $previous = @('.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
-    $currentBeforeArgus = @($Managed | Where-Object { $_ -notin @('.opencode/agents/argus.md', '.opencode/agents/talos.md', '.opencode/agents/helios.md') })
-    $currentBeforeTalos = @($Managed | Where-Object { $_ -notin @('.opencode/agents/talos.md', '.opencode/agents/helios.md') })
-    $currentBeforeHelios = @($Managed | Where-Object { $_ -ne '.opencode/agents/helios.md' })
+    # Historical sets had maintenance where the new candidate has aegis.
+    $historical = @($Managed | ForEach-Object { if ($_ -eq '.opencode/agents/aegis.md') { $RetiredMaintenanceAgent } else { $_ } })
+    $currentBeforeArgus = @($historical | Where-Object { $_ -notin @('.opencode/agents/argus.md', '.opencode/agents/talos.md', '.opencode/agents/helios.md') })
+    $currentBeforeTalos = @($historical | Where-Object { $_ -notin @('.opencode/agents/talos.md', '.opencode/agents/helios.md') })
+    $currentBeforeHelios = @($historical | Where-Object { $_ -ne '.opencode/agents/helios.md' })
     # Recognize exact historical owned sets, including pre-maintenance and pre-HUD
     # manifests. Counts alone cannot distinguish the old and new reasoner identity.
     $allowed = @()
     foreach ($reasoner in @($OldReasoner, '.opencode/agents/thales.md')) {
         $base = @($currentBeforeArgus | Where-Object { $_ -ne '.opencode/agents/atlas.md' } |
             ForEach-Object { if ($_ -eq '.opencode/agents/thales.md') { $reasoner } else { $_ } })
-        foreach ($missing in @(@(), $previous, $NewManaged)) {
+        foreach ($missing in @(@(), $previous, $LegacyMaintenanceFiles)) {
             $allowed += ,@($base | Where-Object { $_ -notin $missing })
         }
     }
     # Some focused upgrade fixtures simulate pre-HUD/pre-Maintenance ownership
     # from a currently installed candidate, retaining its Atlas-owned path.
-    foreach ($missing in @(@(), $previous, $NewManaged)) {
+    foreach ($missing in @(@(), $previous, $LegacyMaintenanceFiles)) {
         $allowed += ,@($currentBeforeArgus | Where-Object { $_ -notin $missing })
     }
     # Focused legacy fixtures can retain the already-owned current reasoner while
     # reconstructing pre-HUD/pre-Maintenance ownership. Exact sets and hashes
     # still govern every existing path; unowned new destinations still conflict.
-    foreach ($missing in @(@(), $previous, $NewManaged)) {
+    foreach ($missing in @(@(), $previous, $LegacyMaintenanceFiles)) {
         $allowed += ,@($currentBeforeTalos | Where-Object { $_ -notin $missing })
     }
-    foreach ($missing in @(@(), $previous, $NewManaged)) {
+    foreach ($missing in @(@(), $previous, $LegacyMaintenanceFiles)) {
         $allowed += ,@($currentBeforeHelios | Where-Object { $_ -notin $missing })
     }
-    foreach ($missing in @(@(), $previous, $NewManaged)) {
+    foreach ($missing in @(@(), $previous, $LegacyMaintenanceFiles)) {
         $allowed += ,@($Managed | Where-Object { $_ -notin $missing })
+        $allowed += ,@($historical | Where-Object { $_ -notin $missing })
     }
     $actual = @($entries | ForEach-Object { Rel ([string]$_.path) })
     $matchCount = 0
@@ -228,6 +232,11 @@ function Assert-Managed([string]$Repo, $Manifest) {
             Fail "MANAGED_FILE_DRIFT" "Managed file modified: $p"
         }
     }
+    foreach ($old in @($OldReasoner, $RetiredMaintenanceAgent)) {
+        if ($old -notin $actual -and (Test-Path -LiteralPath (Join-Path $Repo ($old -replace '/', [IO.Path]::DirectorySeparatorChar)))) {
+            Fail 'INSTALL_CONFLICT' "Unowned retired agent exists: $old"
+        }
+    }
     if ($legacy.Count -gt 0) {
         foreach ($p in $legacy) {
             if (Test-Path -LiteralPath (Join-Path $Repo ($p -replace '/', [IO.Path]::DirectorySeparatorChar))) {
@@ -235,7 +244,7 @@ function Assert-Managed([string]$Repo, $Manifest) {
             }
         }
     }
-    return @($actual | Where-Object { $_ -eq $OldReasoner })
+    return @($actual | Where-Object { $_ -in @($OldReasoner, $RetiredMaintenanceAgent) })
 }
 
 function Assert-No-Conflicts([string]$Repo, $Manifest) {
@@ -245,7 +254,7 @@ function Assert-No-Conflicts([string]$Repo, $Manifest) {
         }
     }
     if ($null -eq $Manifest) {
-        foreach ($p in @($Managed) + @($OldReasoner)) {
+        foreach ($p in @($Managed) + @($OldReasoner, $RetiredMaintenanceAgent)) {
             if (Test-Path -LiteralPath (Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar))) {
                 Fail "INSTALL_CONFLICT" "Destination exists without ownership metadata: $p"
             }
@@ -463,7 +472,7 @@ function Validate-Install([string]$Repo) {
         "kovan"=@("gpt-6-luna","max","subagent")
         "nox"=@("gpt-6-luna","max","subagent")
         "vera"=@("gpt-6-luna","max","subagent")
-        "maintenance"=@("gpt-6-sol","high","subagent")
+        "aegis"=@("gpt-6-luna","max","subagent")
     }
     $lastMismatch = $null
     Push-Location $Repo
@@ -493,8 +502,8 @@ function Validate-Install([string]$Repo) {
                     break
                 }
             }
-            if ($null -eq $lastMismatch -and @($agents | Where-Object id -eq 'sorin').Count -gt 0) {
-                $lastMismatch = 'Retired sorin agent remains active.'
+            if ($null -eq $lastMismatch -and @($agents | Where-Object { $_.id -in @('sorin','maintenance') }).Count -gt 0) {
+                $lastMismatch = 'Retired sorin or maintenance agent remains active.'
             }
             if ($null -eq $lastMismatch) { return }
             if ($attempt -lt 5) { Start-Sleep -Milliseconds 250 }
@@ -547,10 +556,12 @@ try {
         $full = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         Write-Text $full ([string]$content[$p])
     }
-    $retiredPath = Join-Path $Repo ($OldReasoner -replace '/', [IO.Path]::DirectorySeparatorChar)
-    if ((Test-Path -LiteralPath $retiredPath) -and
-        ($null -eq $Manifest -or $OldReasoner -notin @($Manifest.managed_files | ForEach-Object { Rel ([string]$_.path) }))) {
-        Fail 'INSTALL_CONFLICT' "Unowned retired agent exists: $OldReasoner"
+    foreach ($old in @($OldReasoner, $RetiredMaintenanceAgent)) {
+        $retiredPath = Join-Path $Repo ($old -replace '/', [IO.Path]::DirectorySeparatorChar)
+        if ((Test-Path -LiteralPath $retiredPath) -and
+            ($null -eq $Manifest -or $old -notin @($Manifest.managed_files | ForEach-Object { Rel ([string]$_.path) }))) {
+            Fail 'INSTALL_CONFLICT' "Unowned retired agent exists: $old"
+        }
     }
     foreach ($p in $plan.Removes) {
         $full = Join-Path $Repo ($p -replace '/', [IO.Path]::DirectorySeparatorChar)

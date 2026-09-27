@@ -1,4 +1,4 @@
-# Historical Phase 3 v2 manual plan — NOT executed by Maintenance
+# Historical Phase 3 v2 manual plan — NOT executed by Aegis
 
 For the final candidate on current master use `tests/role-purity/RUNME.md`.
 This historical plan is retained as provenance, not as an executable command

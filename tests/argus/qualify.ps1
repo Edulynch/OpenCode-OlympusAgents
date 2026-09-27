@@ -78,10 +78,10 @@ try {
     Check AR24 ($k -match 'Fourth automatic consultation DENIED' -and $a -match 'Automatic consultation #4 DENIED')
     Check AR25 ($k -match 'NO_PROGRESS:' -and $a -match 'NO_PROGRESS')
     Check AR26 ($k -match 'MISSING OUTPUT != WORKER FAILURE' -and $k -match 'COMPLETION_UNCONFIRMED' -and $k -match 'never launch replacement')
-    Check AR27 ($k -match 'Issue #2 Maintenance handoff remain unchanged' -and $k -match 'MAINTENANCE_RESULT_PENDING')
-    Check AR28 ($a -match 'Kael → Maintenance DENIED' -and $k -match 'Kael → Maintenance remains DENIED' -and $k -match 'user → /maintain explicit only')
+    Check AR27 ($k -match 'Issue #2 Aegis handoff remain unchanged' -and $k -match 'MAINTENANCE_RESULT_PENDING')
+    Check AR28 ($a -match 'Kael → Aegis DENIED' -and $k -match 'Kael → Aegis remains DENIED' -and $k -match 'user → /maintain explicit only')
     Check AR29 ($k -match 'BUG_DIAGNOSIS means diagnosis only' -and $a -match 'Kael owns final completion')
-    $expected = @{ kael='gpt-6-sol#high'; atlas='gpt-6-sol#high'; argus='gpt-6-sol#high'; thales='gpt-6-sol#xhigh'; maintenance='gpt-6-sol#high'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
+    $expected = @{ kael='gpt-6-sol#high'; atlas='gpt-6-sol#high'; argus='gpt-6-sol#high'; thales='gpt-6-sol#xhigh'; helios='gpt-6-sol#high'; aegis='gpt-6-luna#max'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
     Check AR30 (@($expected.Keys | Where-Object { ([IO.File]::ReadAllText((Join-Path $source ".opencode/agents/$_.md"))) -notmatch ('(?m)^model: "?openai/' + [regex]::Escape($expected[$_]) + '"?\r?$') }).Count -eq 0)
     Check AR31 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
     Check AR32 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match '\$OldReasoner = ''.opencode/agents/sorin.md''')

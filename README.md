@@ -62,7 +62,7 @@ OpenCode is the runtime. Olympus is the orchestration and decision layer that he
 
 ## 🔧 Maintenance
 
-For advanced repository administration, use `/maintain <task>` (for example, release preparation, Git maintenance, Olympus configuration maintenance, or repository-level administration). Maintenance is separate from the normal eight-agent team: Kael cannot invoke it automatically. Ordinary feature development does not require `/maintain`.
+For advanced repository administration, use `/maintain <task>` (for example, release preparation, Git maintenance, Olympus configuration maintenance, or repository-level administration). `/maintain` invokes the hidden 🛡️ Aegis The Keeper executor, separate from the normal agent team: Kael cannot invoke Aegis automatically. Ordinary feature development does not require `/maintain`.
 
 ## ⚡ NORMAL vs FAST
 

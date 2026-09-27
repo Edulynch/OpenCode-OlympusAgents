@@ -30,7 +30,7 @@ The table distinguishes existing roles from proposed identities. Model entries a
 | 👑 Kael The Master | GPT-6 Sol High | Master orchestration | SHIPPED; evolving |
 | 🔭 Veyra The Explorer | GPT-6 Luna Max | Research/discovery | SHIPPED; evolving |
 | 📐 Orin The Architect | GPT-6 Luna Max | Architecture/boundaries | SHIPPED; evolving |
-| 🗺️ Atlas The Planner | GPT-6 Sol High | Execution planning | IN VALIDATION; optional candidate |
+| 🗺️ Atlas The Planner | GPT-6 Sol High | Execution planning | SHIPPED; optional, Planning Gate only |
 | 🔨 Kovan The Coder | GPT-6 Luna Max | Implementation | SHIPPED; evolving |
 | 🐞 Argus The Bug Hunter | GPT-6 Sol High | Functional defect reasoning | PLANNED; proposed |
 | 👁️ Nox The Tester | GPT-6 Luna Max | Testing/runtime evidence | SHIPPED; evolving |
@@ -69,7 +69,7 @@ Existing `/maintain` enters the explicit Maintenance plane. Candidate concepts b
 | 2 — Current Sorin baseline qualification | **PLANNED** | Explicit invocation, automatic Diagnostic Gate, and negative control where Sorin must **not** activate. |
 | 3 — Role Purity + Iterative Evidence | **SHIPPED** | Kael-mediated Role Purity, same-session Sorin evidence follow-up, no-progress stop, completion ownership, Issue #1 reconciliation and Issue #2 Maintenance safety. Static/synthetic/full regression passed; user-executed live Cases A and B passed. No third automatic Sorin consultation. |
 | 4 — Thales evolution | **SHIPPED** | Sorin visible identity → Thales The Sage; Sol XHigh deep-escalation role, user-executed live routing and deterministic negative control passed. |
-| 5 — Atlas The Planner | **IN VALIDATION** | Sol High, smallest sufficient execution plan; no implementation/discovery ownership; gated use. Live qualification still required. |
+| 5 — Atlas The Planner | **SHIPPED** | Sol High, smallest sufficient execution plan; no implementation/discovery ownership; gated use. User-executed live planning and negative control passed. |
 | 6 — Argus The Bug Hunter | **PLANNED** | Functional bugs only, evidence-driven diagnosis, budget, third-party containment policy. |
 | 7 — Talos The Sentinel | **PLANNED** | Security defects, exploitability/blast-radius reasoning; not general functional debugging. |
 | 8 — Helios The Optimizer | **PLANNED** | Explicit-only analyze/propose/approval/delegate/measure flow. |
@@ -88,9 +88,11 @@ Existing `/maintain` enters the explicit Maintenance plane. Candidate concepts b
 
 Offline/static, fresh-install, v0.2.0-to-candidate upgrade and full non-live regression passed. User-executed live Case A (Kael `ses_f217c2a55ffeXgwTNO96v5Ybzr`, Thales `ses_f217bf452ffe50smZ2Ad30z8z3`, Veyra `ses_f217b9d60ffeOvaDBJN71MxUCc`) verified runtime agent ID `thales` at `openai/gpt-6-sol#xhigh`, one Thales session, two consultations in that same session (EVIDENCE_REQUEST then calibrated ADVICE), direct Kael-owned worker evidence and no Sorin sessions. User-executed live Case B (Kael `ses_f216b02a1ffe0N79YjA86GUgL6`, Veyra `ses_f216ae227ffewhO6EdE35g0cLr`) verified a bounded `REDA` → `READY` deterministic correction recommendation with Thales, Sorin and Maintenance counts all zero. Both families completed with pending and unknown counts zero. Evidence class: **USER_EXECUTED_LIVE_EVIDENCE**, not task-executed live evidence. Neither case was rerun for integration; no third automatic consultation is authorized.
 
-### Phase 5 Atlas The Planner — IN VALIDATION
+### Phase 5 Atlas The Planner — SHIPPED
 
-Optional Atlas plans the execution of an already-scoped and already-architected change, using the smallest sufficient sequence; Kael applies the Planning Gate and retains evidence routing and completion ownership. Atlas neither discovers, redesigns architecture, diagnoses root cause, implements, tests nor reviews. The candidate includes static/synthetic and fresh/upgrade installation qualification plus a prepared user-executed live fixture; live cases are NOT EXECUTED for this candidate and Phase 5 must not be marked SHIPPED until they pass.
+Optional Atlas plans the execution of an already-scoped and already-architected change, using the smallest sufficient sequence; Kael applies the Planning Gate and retains evidence routing and completion ownership. Atlas neither discovers, redesigns architecture, diagnoses root cause, implements, tests nor reviews. Offline/static, synthetic, fresh-install, managed-upgrade and non-live regression qualification passed.
+
+User-executed live Case A (Kael `ses_f1e1eef3cffeV8KbtBWzwZbDVm`, Atlas `ses_f1e1ebd96ffeBiApFHkJ4paS6p`, Veyra `ses_f1e1e6759ffevt47wXhKeJsAH2`) verified runtime ID `atlas` at `openai/gpt-6-sol#high`: one Atlas session, two consultations, bounded `contracts/compatibility.txt` evidence from a direct Kael-owned Veyra, `EVIDENCE_REQUEST` followed by `PLAN` in the same Atlas session, and a useful smallest-sufficient compatibility rollout and rollback plan. No direct Atlas discovery, implementation or third consultation occurred. Case B (Kael `ses_f1e1af036ffecnp6pzOjibKQT5`, Kovan `ses_f1e1ac7c6ffePDii4zHwm7fI9e`) changed `READY` to `READY!` with Atlas count and consultation count zero. Both families completed with pending and unknown counts zero. Evidence class: **USER_EXECUTED_LIVE_EVIDENCE**, not task-executed live evidence; neither case was rerun during integration. The disposable fixture manifest retained an older source commit, but SHA-256 comparisons matched the final candidate's runtime assets; an initial empty `opencode debug agents` response resolved on subsequent invocation in the intact fixture. Neither observation required fixture recreation.
 
 ## Premortem guardrails
 

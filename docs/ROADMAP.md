@@ -32,7 +32,7 @@ The table distinguishes existing roles from proposed identities. Model entries a
 | 📐 Orin The Architect | GPT-6 Luna Max | Architecture/boundaries | SHIPPED; evolving |
 | 🗺️ Atlas The Planner | GPT-6 Sol High | Execution planning | SHIPPED; optional, Planning Gate only |
 | 🔨 Kovan The Coder | GPT-6 Luna Max | Implementation | SHIPPED; evolving |
-| 🐞 Argus The Bug Hunter | GPT-6 Sol High | Functional defect reasoning | IN VALIDATION; candidate |
+| 🐞 Argus The Bug Hunter | GPT-6 Sol High | Functional defect reasoning | SHIPPED; optional, Functional Bug Routing Gate only |
 | 👁️ Nox The Tester | GPT-6 Luna Max | Testing/runtime evidence | SHIPPED; evolving |
 | ⚖️ Vera The Judge | GPT-6 Luna Max | Independent review | SHIPPED; evolving |
 | 🛡️ Talos The Sentinel | GPT-6 Sol High | Security defect/exploitability reasoning | PLANNED; proposed |
@@ -40,7 +40,7 @@ The table distinguishes existing roles from proposed identities. Model entries a
 | ☀️ Helios The Optimizer | GPT-6 Sol High | Explicit optimization analysis/orchestration | PLANNED; proposed |
 | 🛡️ Aegis The Keeper | GPT-6 Luna Max target | Explicit Maintenance/admin execution | PLANNED visible identity/model adjustment of current Maintenance |
 
-## Defect routing and diagnostic budget — Phase 6 candidate
+## Defect routing and diagnostic budget — Phase 6 shipped
 
 - **FUNCTIONAL_BUG → optional Argus** only if cause/fix direction is not obvious; deterministic trivial bugs bypass him. **SECURITY_BUG** is excluded (Talos remains planned); **OPERATIONAL_ISSUE** (build/deploy/tooling/test infrastructure) → low-cost unblock/containment by default. A **GAP / FEATURE / OPTIMIZATION** is not a bug.
 - Thales is **not** a bug category: escalate to this specialist when ordinary diagnosis reaches high uncertainty or stops making useful progress.
@@ -70,7 +70,7 @@ Existing `/maintain` enters the explicit Maintenance plane. Candidate concepts b
 | 3 — Role Purity + Iterative Evidence | **SHIPPED** | Kael-mediated Role Purity, same-session Sorin evidence follow-up, no-progress stop, completion ownership, Issue #1 reconciliation and Issue #2 Maintenance safety. Static/synthetic/full regression passed; user-executed live Cases A and B passed. No third automatic Sorin consultation. |
 | 4 — Thales evolution | **SHIPPED** | Sorin visible identity → Thales The Sage; Sol XHigh deep-escalation role, user-executed live routing and deterministic negative control passed. |
 | 5 — Atlas The Planner | **SHIPPED** | Sol High, smallest sufficient execution plan; no implementation/discovery ownership; gated use. User-executed live planning and negative control passed. |
-| 6 — Argus The Bug Hunter | **IN VALIDATION** | Optional functional diagnosis; static/synthetic and manual live qualification required before shipping. No implementation or direct discovery. |
+| 6 — Argus The Bug Hunter | **SHIPPED** | Optional functional diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. No implementation or direct discovery. |
 | 7 — Talos The Sentinel | **PLANNED** | Security defects, exploitability/blast-radius reasoning; not general functional debugging. |
 | 8 — Helios The Optimizer | **PLANNED** | Explicit-only analyze/propose/approval/delegate/measure flow. |
 | 9 — Aegis evolution | **PLANNED** | Maintenance visible identity, Luna Max target; executor, not strategist. |
@@ -94,9 +94,11 @@ Optional Atlas plans the execution of an already-scoped and already-architected 
 
 User-executed live Case A (Kael `ses_f1e1eef3cffeV8KbtBWzwZbDVm`, Atlas `ses_f1e1ebd96ffeBiApFHkJ4paS6p`, Veyra `ses_f1e1e6759ffevt47wXhKeJsAH2`) verified runtime ID `atlas` at `openai/gpt-6-sol#high`: one Atlas session, two consultations, bounded `contracts/compatibility.txt` evidence from a direct Kael-owned Veyra, `EVIDENCE_REQUEST` followed by `PLAN` in the same Atlas session, and a useful smallest-sufficient compatibility rollout and rollback plan. No direct Atlas discovery, implementation or third consultation occurred. Case B (Kael `ses_f1e1af036ffecnp6pzOjibKQT5`, Kovan `ses_f1e1ac7c6ffePDii4zHwm7fI9e`) changed `READY` to `READY!` with Atlas count and consultation count zero. Both families completed with pending and unknown counts zero. Evidence class: **USER_EXECUTED_LIVE_EVIDENCE**, not task-executed live evidence; neither case was rerun during integration. The disposable fixture manifest retained an older source commit, but SHA-256 comparisons matched the final candidate's runtime assets; an initial empty `opencode debug agents` response resolved on subsequent invocation in the intact fixture. Neither observation required fixture recreation.
 
-### Phase 6 Argus The Bug Hunter — IN VALIDATION
+### Phase 6 Argus The Bug Hunter — SHIPPED
 
-Candidate adds one optional Sol High functional-bug reasoner with no direct repository discovery, edits or tests. Veyra/Nox collect bounded evidence as direct Kael children; Argus compares hypotheses and returns a calibrated diagnosis or bounded request in the same session. Normal limit two consultations; a third needs a second discriminating evidence round; no automatic fourth. Security, operational failures, unpromised features, optimization and trivial deterministic bugs bypass Argus. Static, synthetic, installer and regression qualification are candidate gates; manual live cases remain **NOT EXECUTED**, so Phase 6 is not shipped. See `tests/argus/RUNME.md`.
+Argus is one optional `argus` subagent at `openai/gpt-6-sol#high`, with no direct repository discovery, edits or tests. Veyra/Nox collect bounded evidence as direct Kael children; Argus compares hypotheses and returns a calibrated diagnosis or bounded request in the same session. Normal limit two consultations; a third needs a second discriminating evidence round; no automatic fourth. Security, operational failures, unpromised features, optimization and trivial deterministic bugs bypass Argus. Static/synthetic, fresh-install, managed-upgrade and all 16 applicable post-merge non-live suites passed.
+
+**USER_EXECUTED_LIVE_EVIDENCE**: Case A (Kael `ses_f1daec63fffe9KIz6iwZVDMlwd`, Argus `ses_f1dae9029ffe99un2V7aOy5kRZ`, Veyra `ses_f1dae4cd7ffemKeV6WP0EGVCTW`) verified runtime Argus ID and Sol High model, one Argus session with two consultations, EVIDENCE_REQUEST followed by an evidence-backed BUG_DIAGNOSIS in that **same** session after bounded `bug/shipping-rule.txt` evidence from direct Kael-owned Veyra. Diagnosis identified strict `>` excluding threshold 50 against the established `>= 50` contract, suggested inclusive threshold semantics, and bounded validation to 49/50/51. No third consultation, Argus direct discovery, implementation, Atlas, Thales or Maintenance; family complete with pending/unknown zero. Case B (Kael `ses_f1da3bab2ffefQIzpvzR03Awsq`, Kovan `ses_f1da36c9dffefQSzUcybi9eg74`) corrected `REEDY` to `READY` with **Argus count zero**; family complete with pending/unknown zero. Neither valid case was rerun for integration. Earlier attempted Case A (`ses_f1dc6f099ffep6VsmAj6yz4vG7`) was **INFRA_OR_TEST_INSTRUCTION_BLOCKED**, not an Argus failure: root assistant was `build` rather than Kael, with zero Argus/Veyra executions. `tests/argus/RUNME.md` now requires a fresh explicit Kael root, native agent verification and stop on wrong-agent roots without blind retry. Disposable live fixtures remain retained.
 
 ## Premortem guardrails
 

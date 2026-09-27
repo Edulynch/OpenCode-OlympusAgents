@@ -86,7 +86,7 @@ try {
     Check AR31 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
     Check AR32 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match '\$OldReasoner = ''.opencode/agents/sorin.md''')
     Check AR33 ((& git -C $source grep -n -i 'gpt-6-luna#fast' -- '.opencode/agents' 'opencode.jsonc' | Out-String).Length -eq 0)
-    Check AR_ROADMAP ($r -match '6 — Argus The Bug Hunter \| \*\*IN VALIDATION\*\*' -and @('3 — Role Purity + Iterative Evidence','4 — Thales evolution','5 — Atlas The Planner' | Where-Object { $r -notmatch ([regex]::Escape($_) + ' \| \*\*SHIPPED\*\*') }).Count -eq 0)
+    Check AR_ROADMAP ($r -match '6 — Argus The Bug Hunter \| \*\*SHIPPED\*\*' -and $r -match 'USER_EXECUTED_LIVE_EVIDENCE' -and $r -match 'INFRA_OR_TEST_INSTRUCTION_BLOCKED' -and @('3 — Role Purity + Iterative Evidence','4 — Thales evolution','5 — Atlas The Planner' | Where-Object { $r -notmatch ([regex]::Escape($_) + ' \| \*\*SHIPPED\*\*') }).Count -eq 0)
 
     $caseA = Simulate one-round; $caseB = Simulate second-round; $caseC = Simulate fourth
     Check CASE_A ($caseA.Status -eq 'BUG_DIAGNOSIS' -and $caseA.Sessions -eq 1 -and $caseA.Consultations -eq 2 -and $caseA.WorkerParent -eq 'kael')

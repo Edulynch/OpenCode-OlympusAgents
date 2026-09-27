@@ -37,7 +37,7 @@ The table distinguishes existing roles from proposed identities. Model entries a
 | ⚖️ Vera The Judge | GPT-6 Luna Max | Independent review | SHIPPED; evolving |
 | 🛡️ Talos The Sentinel | GPT-6 Sol High | Security defect and trust-boundary reasoning | SHIPPED; optional, Security Routing Gate only |
 | 🧠 Thales The Sage | GPT-6 Sol XHigh | High-uncertainty diagnostic escalation | SHIPPED: native evolution of Sorin; live routing qualified |
-| ☀️ Helios The Optimizer | GPT-6 Sol High | Explicit-only optimization feasibility and evidence-bounded proposal | IN VALIDATION; no live evidence yet |
+| ☀️ Helios The Optimizer | GPT-6 Sol High | Explicit-only optimization feasibility and evidence-bounded proposal | SHIPPED; user-executed live qualification passed |
 | 🛡️ Aegis The Keeper | GPT-6 Luna Max target | Explicit Maintenance/admin execution | PLANNED visible identity/model adjustment of current Maintenance |
 
 ## Defect routing and diagnostic budget — Phase 6 shipped
@@ -47,9 +47,9 @@ The table distinguishes existing roles from proposed identities. Model entries a
 - Argus normally uses up to two consultations, with a third only after a second materially discriminating evidence round; a fourth automatic call is denied. Kael alone considers Thales under the independent Diagnostic Gate if diagnosis stays unresolved. Stop on no progress.
 - Third-party resolution ladder: correct usage/configuration → available fixed version → upgrade/downgrade/pin → adapter/wrapper → fallback/feature flag → local reversible workaround → patch/vendor/fork **only with explicit approval**. Give workarounds a removal condition when practical.
 
-## Helios — IN VALIDATION, explicit-only
+## Helios — SHIPPED, explicit-only
 
-Explicit user optimization intent may engage Helios; a performance fact alone never does. Cheap feasibility triage precedes bounded Nox measurements or Veyra source evidence. Helios proposes a small, evidence-backed benefit/effort/risk envelope or **DO_NOT_OPTIMIZE**; two automatic consultations normally suffice, third automatic denied. **STOP for user approval** of the concrete proposal before any implementation; Kael alone coordinates approved work, and success requires measured **BEFORE / AFTER / DELTA / TARGET / CORRECTNESS**. Offline qualification is in progress; agent live cases have not been executed.
+Explicit user optimization intent may engage Helios; a performance fact alone never does. Cheap feasibility triage precedes bounded Nox measurements or Veyra source evidence. Helios proposes a small, evidence-backed benefit/effort/risk envelope or **DO_NOT_OPTIMIZE**; two automatic consultations normally suffice, third automatic denied. **STOP for user approval** of the concrete proposal before any implementation; Kael alone coordinates approved work, and success requires measured **BEFORE / AFTER / DELTA / TARGET / CORRECTNESS**. Static, synthetic, fresh-install, managed-upgrade and full non-live regression qualification passed. User-executed live evidence passed: Case A (Kael `ses_f1d00092cffei3vpkwwod5V6Gw`) used one Sol High Helios (`ses_f1cffb27fffeQK1m5hcXSf3t3u`) for two consultations in the same session, with bounded Kael-owned Veyra evidence (`ses_f1cff4df4ffeTmrPSOqZia0GBp`), a conservative proposal and an explicit approval stop; Case B (Kael `ses_f1cd99003ffeq9C1V0uMOt5G5L`) was observation-only, with zero Helios children. Case A's generic observer flagged `complete=False`, but native reconciliation confirmed the succeeded root, both terminal children consumed, empty inbox and no remaining required work. Neither live case was rerun during release review.
 
 ## Command UX — EXPLORATION
 
@@ -72,7 +72,7 @@ Existing `/maintain` enters the explicit Maintenance plane. Candidate concepts b
 | 5 — Atlas The Planner | **SHIPPED** | Sol High, smallest sufficient execution plan; no implementation/discovery ownership; gated use. User-executed live planning and negative control passed. |
 | 6 — Argus The Bug Hunter | **SHIPPED** | Optional functional diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. No implementation or direct discovery. |
 | 7 — Talos The Sentinel | **SHIPPED** | Bounded security defect and trust-boundary diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. |
-| 8 — Helios The Optimizer | **IN VALIDATION** | Explicit-only feasibility/proposal, mandatory user approval, before/after validation; live qualification pending. |
+| 8 — Helios The Optimizer | **SHIPPED** | Explicit-only feasibility/proposal, mandatory user approval, before/after validation; user-executed live cases A and B passed. |
 | 9 — Aegis evolution | **PLANNED** | Maintenance visible identity, Luna Max target; executor, not strategist. |
 | 10 — Command UX | **EXPLORATION** | Validate a small useful repertoire: candidate `/power`, `/plan`, `/fast`, `/performance`; avoid command sprawl. |
 | 11 — Integrated Routing Qualification | **PLANNED** | Fixtures: simple edit, complex feature, functional bug, security bug, operational/build issue, difficult/flaky diagnosis, third-party bug, optimization request, explicit planning, power mode, maintenance boundary. |

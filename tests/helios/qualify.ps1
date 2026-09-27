@@ -82,7 +82,7 @@ try {
     Check HE34 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
     Check HE35 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match '\$OldReasoner = ''.opencode/agents/sorin.md''')
     Check HE36 ((& git -C $source grep -n -i 'gpt-6-luna#fast' -- '.opencode/agents' 'opencode.jsonc' | Out-String).Length -eq 0)
-    Check HE_ROADMAP ($r -match '8 — Helios The Optimizer \| \*\*IN VALIDATION\*\*' -and @('3 — Role Purity + Iterative Evidence','4 — Thales evolution','5 — Atlas The Planner','6 — Argus The Bug Hunter','7 — Talos The Sentinel' | Where-Object { $r -notmatch ([regex]::Escape($_) + ' \| \*\*SHIPPED\*\*') }).Count -eq 0)
+    Check HE_ROADMAP ($r -match '8 — Helios The Optimizer \| \*\*(IN VALIDATION|SHIPPED)\*\*' -and @('3 — Role Purity + Iterative Evidence','4 — Thales evolution','5 — Atlas The Planner','6 — Argus The Bug Hunter','7 — Talos The Sentinel' | Where-Object { $r -notmatch ([regex]::Escape($_) + ' \| \*\*SHIPPED\*\*') }).Count -eq 0)
     $a=Simulate proposal; Check CASE_A ($a.Status -eq 'OPTIMIZATION_PROPOSAL' -and $a.Sessions -eq 1 -and $a.Calls -eq 2 -and $a.WorkerParent -eq 'kael' -and $a.SameSession -and -not $a.Implemented)
     $c=Simulate already-met; Check CASE_B ($c.Status -eq 'DO_NOT_OPTIMIZE' -and -not $c.Implemented)
     $c=Simulate fact; Check CASE_C ($c.Sessions -eq 0 -and $c.Calls -eq 0)

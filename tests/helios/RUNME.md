@@ -1,4 +1,6 @@
-# Helios The Optimizer — manual live qualification (NOT EXECUTED)
+# Helios The Optimizer — candidate-fixture live cases (NOT EXECUTED)
+
+These two candidate-fixture cases were not run. This does not invalidate the separate user-executed Helios live cases already recorded in `docs/ROADMAP.md`; do not rerun those accepted cases for release preparation.
 
 The retained disposable fixture is `$env:LOCALAPPDATA\Temp\opencode\helios-live-candidate-20260927`. Prepare it **only if absent** from the candidate root:
 

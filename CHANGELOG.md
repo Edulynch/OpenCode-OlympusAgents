@@ -1,8 +1,37 @@
 # Unreleased
 
-## Changed
+_No additional unreleased changes._
 
-- Rename the hidden privileged executor identity to Aegis while preserving `/maintain`; Kael cannot invoke it automatically. Bootstrap migrates hash-verified owned legacy installs and rejects unowned or modified retired-agent files.
+# 0.3.0-beta.1 (pending publication)
+
+**Status: draft; publication is pending. No tag or release is claimed by this entry.**
+
+## Highlights
+
+- Add gated specialists: Argus for functional-defect diagnosis, Atlas for execution planning, Talos for security-defect diagnosis, and Thales (evolved from Sorin) for high-uncertainty technical diagnosis.
+- Add Helios for explicitly requested, evidence-bounded optimization proposals that stop for user approval.
+- Rename the hidden privileged maintenance executor to Aegis while preserving explicit `/maintain` entry; Kael cannot route to Aegis. Bootstrap migrates hash-verified owned legacy installs and rejects unowned or modified retired-agent files.
+- Strengthen completion/result reconciliation and ownership: reconcile original work rather than blindly retrying, and collect and validate required terminal results before claiming completion.
+- Add qualification fixtures and update bootstrap, Activity HUD, and maintainer documentation for the expanded roster and handoffs.
+
+## Why beta
+
+This prerelease is intended for real-project use before stable v0.3.0 so regressions and operational problems can be found and addressed.
+
+## Known limitations
+
+- The intermittent OpenCode result-correlation trigger tracked by Issue #1 remains unidentified and unfixed; Olympus mitigates unsafe retries by reconciling original work, but does not fix the runtime cause.
+- Automated Aegis qualification covers bootstrap, routing boundaries, and synthetic handoff behavior; interactive `/maintain` result delivery is not simulated and remains a real-use validation target.
+- OpenCode's visible maintenance-failure badge is outside Olympus control; whether an early badge persists after later result reconciliation is unproven.
+
+## Requirements and install
+
+- Windows, PowerShell 7, Git, an existing trusted Git project, and OpenCode V2 with GPT-6 Sol and GPT-6 Luna available (including the variants Olympus uses).
+- Run the installer only from the root of a Git project you trust; review the installer first if preferred.
+
+```powershell
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.1/install.ps1 | iex
+```
 
 # 0.2.0
 

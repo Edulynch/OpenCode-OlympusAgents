@@ -53,12 +53,17 @@ Kael coordinates the team as needed: research, implementation, testing, and revi
 | 🔭 **Veyra** | Researches the project and gathers context. |
 | 📐 **Orin** | Decides architecture and interface boundaries. |
 | 🗺️ **Atlas The Planner** | Optionally plans the execution order of already-scoped changes. |
+| 🐞 **Argus The Bug Hunter** | Optionally diagnoses nontrivial functional defects. |
 | 🔨 **Kovan** | Writes code. |
 | 👁️ **Nox** | Runs checks and tests. |
 | ⚖️ **Vera** | Reviews the result. |
+| 🛡️ **Talos The Sentinel** | Optionally reasons about evidenced security defects. |
 | 🧠 **Thales The Sage** | Helps diagnose difficult problems when needed. |
+| ☀️ **Helios The Optimizer** | On explicit optimization requests, proposes a bounded improvement and stops for user approval. |
 
 OpenCode is the runtime. Olympus is the orchestration and decision layer that helps this team work together.
+
+The pinned v0.2.0 installer remains the latest published release. Argus, Atlas, Talos, Thales, and Helios are additions in the v0.3.0-beta.1 source candidate; that prerelease is still pending publication and is not included in the v0.2.0 installer.
 
 ## 🔧 Maintenance
 

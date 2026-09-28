@@ -75,7 +75,7 @@ try {
     Check 'MH10_ROUTING' ($kael -match 'Kael → Aegis remains denied' -and
         $kael -match 'Kael → Aegis remains DENIED' -and $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: aegis' -and
         $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
-    Check 'MH11_EXPLICIT' ($command -match '(?m)^agent: aegis$' -and $command -match '(?m)^subagent: true$' -and
+    Check 'MH11_EXPLICIT' ($command -match '(?m)^agent: aegis\r?$' -and $command -match '(?m)^subagent: true\r?$' -and
         $command -match 'user explicitly invoked `/maintain`' -and $kael -match 'user → `/maintain`\s+remains explicit-only')
     Check 'MH16_TEMPLATE_AUTHORIZATION' ($command -match 'The user explicitly invoked `/maintain` and authorizes this maintenance task:' -and
         $aegis -match 'when the `/maintain` command template starts this agent and states that the user invoked `/maintain` and authorized the described task' -and

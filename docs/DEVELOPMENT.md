@@ -6,7 +6,7 @@ For Olympus maintainers, contributors, installation debugging, qualification, an
 
 OpenCode is the runtime; Olympus is the orchestration and decision layer. Kael coordinates the normal agent plane; hidden Aegis The Keeper is separate and privileged.
 
-Kael checks feasibility and plane routing from the request **before** delegated research or planning. Known Aegis-only administrative operations receive a user-facing `/maintain <task>` handoff, not automatic delegation; that command invokes the hidden Aegis subagent. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
+Kael checks feasibility and plane routing from the request **before** delegated research or planning. `/maintain` is reserved for Olympus development/maintenance/configuration/installation, Olympus framework bug/gap repair, or a user-explicit Olympus escape hatch because such a gap blocks normal completion. Ordinary user-project work, including ordinary Git administration, remains in the normal plane; Git alone is not an Aegis capability boundary. Kael does not automatically delegate to Aegis. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
 
 ### Phase 3 — role purity and iterative evidence (shipped)
 
@@ -57,7 +57,7 @@ unresolved work. Phase 3 evidence class: USER_EXECUTED_LIVE_EVIDENCE; see
 
 ## Local/bootstrap installation
 
-From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The v0.2.0 public installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`:
+From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The pinned v0.2.0 stable installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project' -DryRun
@@ -91,12 +91,17 @@ pwsh -NoProfile -File ./tests/release/qualify.ps1
 pwsh -NoProfile -File ./tests/release/installer-compatibility.ps1
 pwsh -NoProfile -File ./tests/release/dirty-worktree.ps1
 pwsh -NoProfile -File ./tests/preflight/qualify.ps1
+pwsh -NoProfile -File ./tests/routing-constraints/qualify.ps1
+pwsh -NoProfile -File ./tests/question-barrier/qualify.ps1
+pwsh -NoProfile -File ./tests/aegis-recovery/qualify.ps1
 pwsh -NoProfile -File ./tests/completion-gates/qualify.ps1
 pwsh -NoProfile -File ./tests/result-reconciliation/qualify.ps1
 pwsh -NoProfile -File ./tests/maintenance-handoff/qualify.ps1
 ```
 
 Phase 4C covers bootstrap security and static Maintenance Plane checks; the separate Maintenance handoff qualifier covers Issue #2 policy and synthetic event ordering, not interactive delivery. The Preflight harness checks policy ordering, boundaries and a small cart/auth fixture **statically**; it does not execute agents or verify actual child count, discovery tool calls or latency. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Adaptive Concurrency / FAST checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release, dirty-worktree, and installer compatibility harnesses use **local source**, not the remote tag, and do not test the interactive UI. The dirty-worktree harness checks unrelated bytes, Git status, index diffs, managed conflict/drift, reinstall and a local-source managed update. The compatibility harness launches the installer via both Windows PowerShell 5.1 (when present) and PowerShell 7 into separate disposable Git projects, and tests missing `pwsh` with a process-local PATH. Some harnesses retain disposable fixtures; check their output. The adaptive-concurrency harness's `DOC` check verifies that the README describes NORMAL as the default using only useful parallelism, FAST as explicitly requested with up to four agents, and FAST as preserving checks and task dependencies.
+
+The Routing/Constraints, Question Barrier, and Aegis Recovery harnesses verify static contracts plus deterministic synthetic cases; they do not claim interactive runtime execution or real process termination. The Question Barrier live race remains separate and must be reported as `RUNTIME_QUESTION_RACE: NOT AUTOMATED` unless a bounded, reliable OpenCode smoke is actually observed.
 
 ## Result correlation safety (Issue #1)
 
@@ -118,9 +123,11 @@ The passive, read-only plugin uses native OpenCode child-session list and status
 
 ## Aegis Plane (explicit maintenance operations)
 
-Kael → Aegis: **DENIED** (not an automatic escalation path). User → `/maintain <task>` → Aegis: **ALLOWED** for explicit repository administration. Aegis is hidden and outside normal agent routing.
+Kael → Aegis: **DENIED** (not an automatic escalation path). User → `/maintain <task>` → Aegis is admitted only for Olympus development/maintenance/configuration/installation, Olympus framework bug/gap repair, or an explicitly requested Olympus escape hatch because such a gap blocks normal completion. An ordinary project task remains OUT_OF_SCOPE even after `/maintain` was invoked; make no project changes or run project administration, and direct the user conceptually to the normal Kael plane. Do not provide a ready-made `/maintain` reroute. Aegis is hidden and outside normal agent routing.
 
-Aegis separates repository administration from software-development investigation. Git-only operations start with Git-scoped non-mutating feasibility checks (target, scope, state, remote and tools as relevant), not application architecture. Read/authentication evidence alone does not prove remote write permission.
+Ordinary trusted-project Git (status/diff, task-owned staging, explicitly requested commit/push, branch/tag work, or ordinary project release) belongs to the normal Kael/Kovan plane. Kovan may perform it only within the task's explicit repository/Git ownership; stage only task-owned paths. Destructive or high-impact operations such as history rewrite, force-push, reset/clean, destructive ref changes, or publishing require explicit, proportionate authorization, but do not route to Aegis solely because Git is involved. Olympus repository/release operations are Aegis work only when directly serving an admitted Olympus purpose.
+
+Aegis separates admitted Olympus repository administration from software-development investigation. Admitted Olympus Git operations start with Git-scoped non-mutating feasibility checks (target, scope, state, remote and tools as relevant), not application architecture. Read/authentication evidence alone does not prove remote write permission.
 
 Parallel Aegis administration is permitted through shell and OpenCode session APIs, not through Olympus child-agent routing. It must track every launched root and descendant, join, collect and validate required results before declaring success; unknown/uncollected children mean PARTIAL or COMPLETION_UNCONFIRMED. Do not serialize independent jobs as a substitute for joining them.
 
@@ -131,6 +138,16 @@ Before launch, ensure the full lifecycle can be observed and joined; otherwise r
 For local static/semantic policy and disposable external-process qualification, run `pwsh -NoProfile -File ./tests/external-work-ownership/qualify.ps1`. Its live foreground controller and parallel cases measure launch, terminal and simulated Aegis final times, but do not themselves constitute interactive Aegis-agent or visible-window observation; run an interactive `/maintain` smoke separately if required.
 
 OpenCode v2.0.15 completion semantics: `POST /api/session/{sessionID}/command` executes a slash-command callback immediately; `POST /api/session/{sessionID}/prompt` durably admits input and schedules execution. A CLI `opencode run` exit or a root assistant response is not a session-family completion signal. `POST /api/experimental/session/{sessionID}/wait` waits for **one** agent loop to become idle (HTTP 204), not its descendants or a terminal result. `GET /api/session/active` lists only foreground drains owned by that server process: absence is not proof of terminal completion. Use `GET /api/session?parentID=<root>` (paginate), recursively discover descendants, `GET /api/session/{sessionID}` (outcome, time.idle), `GET /api/session/{sessionID}/inbox` and messages/export to verify terminal result and parent consumption. Recheck family membership before concluding. There is no documented family-wide wait in this version. Distinguish MESSAGE_COMPLETE, ROOT_IDLE and FAMILY_COMPLETE (the last is a validated workflow condition, not an OpenCode API status). If a child has no terminal outcome/result, classify it as unconfirmed even if the root has gone idle. Bounded waits must end with an honest PARTIAL/BLOCKED report rather than fabricate success.
+
+### Question Barrier
+
+Kael does not ask a human question while any task child is running, an original result is pending/indeterminate, or a terminal result/completion notification has not been reconciled, collected, validated and consumed. Reconcile the existing family and consume each original result once before presenting a question. Unknown work is not an empty barrier. If a user decision is already known to be a prerequisite, ask before launching dependent children. A question that becomes necessary after fan-out is deferred until the barrier is empty; while it is pending, dependent children remain pending. Deterministic decisions already specified by the request, constraints, capabilities or routing have QUESTION COUNT = 0.
+
+### Restart and process recovery
+
+Recovery preserves chronological evidence. Later messages, tool/process activity, progress, or a collected result outrank an older metadata snapshot. An old `session.outcome=failed` cannot override later activity; classify that identity as `STATE_INCONSISTENT_AFTER_RESTART` and continue reconciliation. Absence from `/api/session/active` means only that the session is absent from that endpoint's current list, not that it completed. Distinguish `LIVE_OWNED_WORK`, `TERMINAL_COLLECTED_WORK`, `STATE_INCONSISTENT_AFTER_RESTART`, `ORPHAN_CANDIDATE`, and `CONFIRMED_OWNED_ORPHAN`.
+
+For any external process that may outlive its launcher/runtime, retain a minimal task-scoped receipt in the approved temporary `opencode` area: unique run ID; per-process PID and start time, executable, exact command line, working directory, parent PID and start time, ownership marker where supported, expected result path, and latest meaningful progress. Classify each process as ACTIVE (evidenced progress), STALLED (no progress for a finite task-bounded window), ORPHANED (verified Olympus/Aegis ownership, recorded owner gone, no recoverable result, and no progress), or UNKNOWN. Parent disappearance, `Responding=True`, or process-name similarity alone is insufficient. Never retry an owned active process or terminate by process name/pattern. Before terminating a verified owned stalled/orphaned process, recheck its exact identity and marker. After cleanup, seek the original output first; only the affected lost/uncollected gate may become eligible for explicit revalidation, and only repeat it when safe and duplication is ruled out. Missing output is neither failure nor retry permission; consume the original result once.
 
 ## Release process
 

@@ -64,6 +64,22 @@ try {
         $aegis -match 'without a\s+visible console or focus stealing' -and
         $aegis -match 'stdout, stderr, exit code and results' -and
         $aegis -match 'Prefer direct shell/tool execution')
+    Check 'RESTART_OWNERSHIP_RECEIPT' ($aegis -match 'minimal task-scoped recovery receipt' -and $aegis -match 'unique task/run ID' -and
+        $aegis -match 'PID and process start time' -and $aegis -match 'executable path' -and
+        $aegis -match 'exact launch\s+arguments/command line' -and
+        $aegis -match 'working directory' -and
+        $aegis -match 'unambiguous task/run ownership marker where supported' -and
+        $aegis -match 'parent PID and parent start time' -and $aegis -match 'expected result path' -and
+        $aegis -match 'latest meaningful progress timestamp/counter' -and
+        $aegis -match 'not a registry' -and $aegis -match 'remove it after validated result collection')
+    Check 'ORPHAN_CLASSIFICATION_AND_SAFE_STOP' ($aegis -match 'ACTIVE only with meaningful progress evidence' -and
+        $aegis -match 'STALLED only after no meaningful progress over a finite' -and
+        $aegis -match 'ORPHANED only when Olympus/Aegis ownership is verified' -and
+        $aegis -match '`Responding=True`' -and
+        $aegis -match 'parent disappearance alone is not ownership or progress evidence' -and
+        $aegis -match 'recheck the exact PID' -and
+        $aegis -match 'never kill by process\s+name' -and
+        $aegis -match 'forbids retry' -and $aegis -match 'Never retry while the original\s+process is alive')
     Check 'PARALLEL_CONTROLLER_AND_GATES' ($aegis -match 'launch independent A/B/C concurrently' -and
         $aegis -match 'controller may be the ownership boundary' -and
         $aegis -match 'Recheck family membership' -and $aegis -match 'session.inbox.list' -and

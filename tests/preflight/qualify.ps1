@@ -5,6 +5,8 @@ $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $kael = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/kael.md'))
 $aegis = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/aegis.md'))
+$kovan = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/kovan.md'))
+$nox = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/nox.md'))
 $fixture = Join-Path $PSScriptRoot 'fixtures'
 
 function Check([string]$Id, [bool]$Condition) {
@@ -20,7 +22,7 @@ function Section([string]$Text, [string]$Heading) {
 try {
     $preflight = Section $kael 'Capability Preflight — before research'
     $discovery = Section $kael 'Task-scoped, progressive discovery'
-    $admin = Section $aegis 'Administrative fast path'
+    $admin = Section $aegis 'Olympus administrative fast path'
     $mission = Section $kael 'Mission and routing'
     $handoff = Section $kael 'Explicit Aegis result handoff'
 
@@ -30,18 +32,22 @@ try {
     Check PREFLIGHT ($preflight -match 'actual outcome' -and $preflight -match 'required capabilities' -and
         $preflight -match 'known Olympus' -and $preflight -match 'is any repository discovery needed' -and
         $preflight -match 'not a research phase')
-    Check NO_DELEGATION ($preflight -match 'Do not invoke Veyra' -and $preflight -match 'Orin to decide the plane' -and
-        $preflight -match 'no Veyra, Orin,' -and $preflight -match 'no repository inspection')
-    # Semantic regression: "Rewrite all Git history using this name/email and push it".
-    # This is a policy assertion, NOT evidence of actual child/session activity.
-    Check GIT_HISTORY_REDIRECT ($preflight -match 'rewrite all\s+Git history using this name/email and push it' -and
-        $preflight -match 'Stop the normal path immediately' -and
-        $preflight -match '/maintain <task>' -and $preflight -match 'include them in the handoff')
+    Check NO_DELEGATION ($preflight -match 'Do not invoke Veyra to decide\s+whether Olympus has permission' -and
+        $preflight -match 'Orin to decide the plane' -and
+        $preflight -match 'inspect the project\s+to confirm an already-known boundary')
+    Check NORMAL_GIT_ROUTING ($preflight -match 'Ordinary Git work in a trusted user project belongs to the normal plane' -and
+        $preflight -match 'Kovan is the normal-plane Git writer' -and
+        $preflight -match 'Nox may perform only read-only Git\s+integrity checks' -and
+        $preflight -match 'do not\s+require Aegis solely because they are Git' -and
+        $kael -match 'TASK_TYPE: GIT_ONLY or\s+MIXED' -and
+        $kovan -match 'For GIT_ONLY, WRITE_SCOPE must be exactly' -and
+        $kovan -match 'exact task-owned paths/refs')
     # A second known normal-plane blocker must precede optional discovery.
     Check CAPABILITY_BLOCKED ($preflight -match 'external action has no\s+available authorized path' -and
         $preflight -match 'explain the blocker before optional research')
     Check BOUNDARY ($preflight -match 'Kael → Aegis remains DENIED' -and
-        $preflight -match 'only an explicit user' -and $handoff -match 'cannot invoke or' -and $handoff -match 'delegate to Aegis' -and
+        $preflight -match 'only the\s+user.s explicit `/maintain` invocation' -and
+        $handoff -match 'cannot invoke or' -and $handoff -match 'delegate to Aegis' -and
         $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: aegis\s*\r?\n\s*effect: allow')
 
     # Controlled small fixture: localized cart target, related test, unrelated auth module.
@@ -57,12 +63,14 @@ try {
         $discovery -match 'observed evidence shows broader impact')
     Check BROAD_ALLOWED ($discovery -match 'Refactor authentication across\s+all services' -and
         $discovery -match 'audit these 40 independent\s+modules' -and $discovery -match 'repository-wide analysis')
-    # Same Git request through /maintain: assert administrative rather than source-first policy.
-    Check MAINTENANCE_ADMIN ($admin -match 'distinguish repository administration' -and
-        $admin -match 'start with administrative context only' -and
-        $admin -match 'Do not first inventory source' -and $admin -match 'history\s+rewrite plus push' -and
+    # Admitted Olympus Git work uses administrative rather than source-first policy.
+    Check MAINTENANCE_ADMIN ($admin -match 'After the Olympus-only scope check' -and
+        $admin -match 'start with administrative\s+context only' -and
+        $admin -match 'Do not first\s+inventory source' -and $admin -match 'history\s+rewrite plus push' -and
         $admin -match 'non-mutating' -and $admin -match 'not definitive remote write')
     Check MAINTENANCE_BOUNDARY ($aegis -match 'explicit `/maintain` invocation' -and
+        $aegis -match 'Olympus-only task boundary' -and $aegis -match 'OUT_OF_SCOPE' -and
+        $aegis -match 'no project administration' -and
         $aegis -match '(?s)action: subagent\s+resource: "\*"\s+effect: deny')
     Check INVARIANTS ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kael -match 'model: "openai/gpt-6-sol#high"' -and

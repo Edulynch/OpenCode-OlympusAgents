@@ -15,7 +15,7 @@ function New-Assignment([string]$id, [bool]$writer) {
     [pscustomobject]@{ id=$id; writer=$writer; consumed=$false; consumedCount=0; retries=0 }
 }
 function Reconcile($assignment, [string]$event, [bool]$childKnown, [bool]$terminal,
-                   [bool]$resultAvailable, [bool]$notStarted, [string]$outcome) {
+                    [bool]$resultAvailable, [bool]$notStarted, [string]$outcome) {
     if ($notStarted) {
         # Only native positive pre-launch evidence may reach this branch.
         return [pscustomobject]@{ state='CONFIRMED_NOT_STARTED'; retryEligible=$true; action='RETRY_ELIGIBLE' }
@@ -32,6 +32,22 @@ function Reconcile($assignment, [string]$event, [bool]$childKnown, [bool]$termin
         return [pscustomobject]@{ state='PENDING_OR_RUNNING'; retryEligible=$false; action='WAIT_ORIGINAL' }
     }
     [pscustomobject]@{ state='COMPLETION_UNCONFIRMED'; retryEligible=$false; action='NO_RETRY' }
+}
+function Reconcile-Restart($assignment, [string]$storedOutcome, [DateTimeOffset]$metadataAt,
+                           [DateTimeOffset]$latestActivityAt, [bool]$absentFromActive,
+                           [bool]$originalResultAvailable) {
+    if ($originalResultAvailable) {
+        if ($assignment.consumed) { $action='IGNORE_DUPLICATE' }
+        else { $assignment.consumed=$true; $assignment.consumedCount++; $action='CONSUME_ORIGINAL' }
+        return [pscustomobject]@{ state='TERMINAL_COLLECTED_WORK'; retryEligible=$false; action=$action }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($storedOutcome) -and $latestActivityAt -gt $metadataAt) {
+        return [pscustomobject]@{ state='STATE_INCONSISTENT_AFTER_RESTART'; retryEligible=$false; action='RECONCILE_ORIGINAL' }
+    }
+    if ($absentFromActive) {
+        return [pscustomobject]@{ state='ORPHAN_CANDIDATE'; retryEligible=$false; action='RECONCILE_ORIGINAL' }
+    }
+    [pscustomobject]@{ state='LIVE_OWNED_WORK'; retryEligible=$false; action='WAIT_ORIGINAL' }
 }
 try {
     $kael = Text '.opencode/agents/kael.md'
@@ -74,6 +90,13 @@ try {
         $kael -match 'FAST is an explicit user-selected latency-priority profile' -and
         $kael -match 'FAST never overrides writer ownership')
     Check 'RR15_NO_LUNA_FAST' ($allAgentText -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
+    Check 'RR16_RESTART_CHRONOLOGY' ($kael -match 'Later message/tool activity or a collected result outranks\s+an older session metadata snapshot' -and
+        $kael -match 'stored `session.outcome` predates later\s+activity' -and
+        $kael -match 'STATE_INCONSISTENT_AFTER_RESTART')
+    Check 'RR17_ACTIVE_ABSENCE_NOT_TERMINAL' ($kael -match 'Absence from `/api/session/active` only means the session is absent' -and
+        $kael -match 'it does not prove terminal completion')
+    Check 'RR18_OUTPUT_NOT_RETRY' ($kael -match 'Missing output is\s+neither failure nor retry authorization' -and
+        $kael -match 'consume it once')
     Check 'NO_THALES_ON_ERROR' ($kael -match 'not by itself a reason to invoke Thales')
     Check 'PHASE3_INHERITS' ($kael -match 'Kael-mediated iterative evidence loops reconcile the original worker')
 
@@ -104,6 +127,22 @@ try {
     $failure = Reconcile $f 'original-terminal-failure' $true $true $true $false 'failed'
     Check 'CASE_F_TERMINAL_FAILURE' ($failure.state -eq 'CONFIRMED_RESULT' -and
         $failure.action -eq 'CONFIRMED_FAILURE' -and $f.consumedCount -eq 1)
+    $restart = New-Assignment 'restart-original' $false
+    $metadataAt = [DateTimeOffset]::Parse('2026-09-28T10:00:00Z')
+    $laterActivityAt = [DateTimeOffset]::Parse('2026-09-28T10:00:05Z')
+    $staleFailure = Reconcile-Restart $restart 'failed' $metadataAt $laterActivityAt $true $false
+    Check 'CASE_G_EARLY_FAILED_LATER_ACTIVITY' ($staleFailure.state -eq 'STATE_INCONSISTENT_AFTER_RESTART' -and
+        $staleFailure.action -eq 'RECONCILE_ORIGINAL' -and -not $staleFailure.retryEligible)
+    $staleSuccess = Reconcile-Restart (New-Assignment 'stale-succeeded' $false) 'succeeded' $metadataAt $laterActivityAt $true $false
+    Check 'CASE_STALE_SUCCESS_LATER_ACTIVITY' ($staleSuccess.state -eq 'STATE_INCONSISTENT_AFTER_RESTART' -and
+        $staleSuccess.action -eq 'RECONCILE_ORIGINAL' -and -not $staleSuccess.retryEligible)
+    $absentActive = Reconcile-Restart (New-Assignment 'absent-active' $false) 'succeeded' $metadataAt $metadataAt $true $false
+    Check 'CASE_H_ABSENT_ACTIVE_NOT_COMPLETION' ($absentActive.state -eq 'ORPHAN_CANDIDATE' -and
+        $absentActive.action -eq 'RECONCILE_ORIGINAL' -and -not $absentActive.retryEligible)
+    $lateOriginal = Reconcile-Restart $restart 'failed' $metadataAt $laterActivityAt $true $true
+    $lateDuplicate = Reconcile-Restart $restart 'failed' $metadataAt $laterActivityAt $true $true
+    Check 'CASE_I_ORIGINAL_RESULT_ONCE' ($lateOriginal.action -eq 'CONSUME_ORIGINAL' -and
+        $lateDuplicate.action -eq 'IGNORE_DUPLICATE' -and $restart.consumedCount -eq 1)
     Write-Output 'RESULT RECONCILIATION QUALIFICATION: PASS (static + synthetic; live control separate)'
     exit 0
 } catch {

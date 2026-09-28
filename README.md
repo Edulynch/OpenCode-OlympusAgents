@@ -63,11 +63,11 @@ Kael coordinates the team as needed: research, implementation, testing, and revi
 
 OpenCode is the runtime. Olympus is the orchestration and decision layer that helps this team work together.
 
-The pinned v0.2.0 installer remains the latest published release. Argus, Atlas, Talos, Thales, and Helios are additions in the v0.3.0-beta.1 source candidate; that prerelease is still pending publication and is not included in the v0.2.0 installer.
+The pinned v0.2.0 installer remains the latest stable installer. The `v0.3.0-beta.1` prerelease was published on 2026-09-28 and adds Argus, Atlas, Talos, Thales, and Helios; those prerelease additions are not included in the v0.2.0 installer.
 
 ## 🔧 Maintenance
 
-For advanced repository administration, use `/maintain <task>` (for example, release preparation, Git maintenance, Olympus configuration maintenance, or repository-level administration). `/maintain` invokes the hidden 🛡️ Aegis The Keeper executor, separate from the normal agent team: Kael cannot invoke Aegis automatically. Ordinary feature development does not require `/maintain`.
+Use `/maintain <task>` only for Olympus itself: Olympus development, maintenance/configuration/installation, framework bug or gap repair, or an explicitly requested Olympus escape hatch when such a gap blocks normal completion. It invokes the hidden 🛡️ Aegis The Keeper executor, separate from the normal agent team; Kael cannot invoke Aegis automatically. Ordinary user-project work—including status/diff, stage, commit, push, branch/tag, or project releases—belongs to the normal Kael plane and does not require Aegis merely because it uses Git. Destructive or high-impact Git operations require explicit, proportionate authorization, but not Aegis solely because they are Git. An ordinary project task remains out of scope even if `/maintain` is invoked.
 
 ## ⚡ NORMAL vs FAST
 

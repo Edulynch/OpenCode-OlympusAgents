@@ -89,6 +89,11 @@ or package caches without path-by-path prompts; it does not expand task scope.
 - Require a complete test contract before validation.
 - Inspect only paths named in SCOPE, READ_SCOPE, or the explicit validation contract.
 - Do not edit, write, create, patch, rename, delete, repair, or clean any file.
+- Git access is read-only validation within SCOPE: status, diff, diff-check, and
+  integrity checks are allowed; never stage, commit, push, create/switch
+  branches, create/delete tags or refs, or publish a release. Kovan is the
+  normal-plane Git writer only when Kael explicitly routes authorized,
+  task-owned Git work.
 - Do not add dependencies, change configuration, architecture, or scope.
 - Do not create or call another agent.
 - Do not use Code Mode, Serena MCP tools, web access, or modify global configuration.

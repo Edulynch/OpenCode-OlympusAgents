@@ -83,7 +83,7 @@ $env:PATH = $EmptyPath
             $output -notmatch 'SOURCE_INVALID|BOOTSTRAP_FAILED|VariableIsUndefined' -and
             -not (Test-Path -LiteralPath $missingTarget))
     }
-    Write-Output 'INSTALLER COMPATIBILITY: PASS (local source; remote v0.2.0 tag not yet published)'
+    Write-Output 'INSTALLER COMPATIBILITY: PASS (local source; remote v0.2.0 publication status not queried)'
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
     Write-Output 'INSTALLER COMPATIBILITY: FAIL'

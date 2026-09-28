@@ -262,7 +262,8 @@ try {
     Assert-Condition ($null -ne (Get-Command git -ErrorAction SilentlyContinue)) 'Git is unavailable.' 'ENVIRONMENT_LIMITATION'
     Assert-Condition ($null -ne (Get-Command opencode -ErrorAction SilentlyContinue)) 'OpenCode is unavailable.' 'ENVIRONMENT_LIMITATION'
     Assert-Condition ($null -ne (Get-Command pwsh -ErrorAction SilentlyContinue)) 'PowerShell 7 is unavailable.' 'ENVIRONMENT_LIMITATION'
-    Assert-Condition ([IO.Directory]::Exists((Join-Path $RepoRoot '.git'))) 'Harness is not running in the orchestrator Git repository.'
+    $gitRoot = Full-Path (Invoke-Git $RepoRoot @('rev-parse', '--show-toplevel'))
+    Assert-Condition ([string]::Equals($gitRoot, (Full-Path $RepoRoot), [StringComparison]::OrdinalIgnoreCase)) 'Harness is not running in the orchestrator Git repository.'
     Assert-Descendant $WorkRoot $RepoRoot
     [IO.Directory]::CreateDirectory($WorkRoot) | Out-Null
     Assert-Descendant $WorkRoot $RepoRoot

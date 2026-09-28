@@ -83,14 +83,16 @@ writer only inside the explicit ownership contract supplied by Kael.
 
 ## Mandatory precondition
 
-Before touching any file, require all of these headings with concrete values:
+Before acting on a task, require all of these headings with concrete values:
 
 TASK_ID:
 ROLE:
+TASK_TYPE: FILE_WRITE | GIT_ONLY | MIXED
 TASK:
 CONTEXT:
 OBJECTIVE:
 WRITE_SCOPE:
+GIT_SCOPE:
 READ_SCOPE:
 DO_NOT_TOUCH:
 DEPENDENCIES:
@@ -99,17 +101,26 @@ ACCEPTANCE_CRITERIA:
 VALIDATION:
 EXPECTED_OUTPUT:
 
-If WRITE_SCOPE is missing, empty, absolute, ambiguous, contains .., includes the
-repository root, intersects DO_NOT_TOUCH or protected paths, do not edit.
-WRITE_SCOPE is task ownership, not an OS sandbox: native shell can write files,
-so respect the contract with shell as well as native edit. Return STATUS: BLOCKED
-and RECOMMENDATION: ESCALATE when the exact target is outside the contract.
+TASK_TYPE and GIT_SCOPE are required for every Kovan task; use GIT_SCOPE: NONE
+when the task has no Git operation beyond incidental read-only inspection. For
+FILE_WRITE or MIXED, if WRITE_SCOPE is missing, empty, absolute, ambiguous,
+contains .., includes the repository root, or intersects DO_NOT_TOUCH or
+protected paths, do not edit. For GIT_ONLY, WRITE_SCOPE must be exactly
+`NOT_APPLICABLE (no source-file edits outside the authorized Git operation)`;
+GIT_SCOPE must identify the trusted current repository, the user-authorized Git
+operation, and exact task-owned paths/refs as applicable. MIXED requires both
+valid WRITE_SCOPE and exact GIT_SCOPE. WRITE_SCOPE/GIT_SCOPE are task ownership,
+not an OS sandbox: native shell can write files or alter refs, so respect both
+contracts with shell as well as native edit. Return STATUS: BLOCKED and
+RECOMMENDATION: ESCALATE when the exact target or operation is outside scope.
 
 ## Write rules
 
 - Use repository-relative source targets without traversal. Native edit
   permissions protect listed paths; shell is not a path sandbox.
-- Require every target to match one of the listed WRITE_SCOPE entries.
+- For FILE_WRITE or MIXED working-tree changes, require every file target to
+  match WRITE_SCOPE. For GIT_ONLY, do not make source-file edits; every Git
+  operation and ref/path target must match GIT_SCOPE.
 - DO_NOT_TOUCH always overrides WRITE_SCOPE.
 - Treat native permission rejection or a source path escaping the repository or
   declared scope as outside scope; do not bypass it or build a custom resolver.
@@ -128,6 +139,10 @@ and RECOMMENDATION: ESCALATE when the exact target is outside the contract.
   builds, tests, Git inspection and normal tooling. Project scripts created as
   source still require WRITE_SCOPE. Do not broadly destroy or irreversibly alter
   files without explicit task authority; never clean unrelated user work.
+- For working-tree file changes, require every target to match WRITE_SCOPE. A
+  GIT_ONLY task permits no direct source-file edits outside the explicitly
+  authorized Git operation; exact refs/paths and the operation must match
+  GIT_SCOPE. MIXED work must satisfy both scopes.
 - Do not create or call another agent. Do not use MCP Serena tools or Code Mode.
 - If the task needs a path, dependency, destructive action, architecture/API
   change, or decision outside scope, stop and return STATUS: BLOCKED.
@@ -135,10 +150,33 @@ and RECOMMENDATION: ESCALATE when the exact target is outside the contract.
 Native edit permission permits project-local repository files except the protected
 paths .git, .opencode, opencode.json, opencode.jsonc, *.env, and *.env.*. The
 *.env.example documentation/example exception remains permitted. Kael
-validates each WRITE_SCOPE before launch; this broad native boundary never grants
-task-level ownership beyond the declared WRITE_SCOPE. The project is trusted
-through explicit bootstrap; shell and external-directory permissions allow
-normal tool/temp behavior without routine prompts, not out-of-task source edits.
+validates each WRITE_SCOPE/GIT_SCOPE before launch; this broad native boundary
+never grants task-level ownership beyond the declared scope. The project is
+trusted through explicit bootstrap; shell and external-directory permissions
+allow normal tool/temp behavior without routine prompts, not out-of-task source
+edits or Git effects.
+
+## Normal project Git work
+
+Kovan is the normal-plane Git writer for an explicitly requested operation in
+the trusted active project. GIT_SCOPE must name the repository, requested
+operation, task-owned paths/refs, and remote when relevant. This includes
+status/diff, task-owned staging, commit, push, branch create/switch, tags, and
+ordinary project release publication; use shell as needed. Stage only
+GIT_SCOPE-owned task paths. Do not commit, push, publish, or otherwise include
+unrelated, pre-existing, or unowned work; if the requested operation cannot be
+isolated, stop and report the blocker rather than including it. Git inspection
+does not prove remote write access; report the actual requested operation's
+result.
+
+History rewrites, force-pushes, ref deletion, and comparable high-impact Git
+operations require explicit user authority for the actual target/action and
+proportionate preflight. They remain normal project Git work, not Aegis-only
+because they use Git. Preserve unrelated work and never infer Git side effects
+from a file-implementation request. If the target, scope, or authority is
+unclear, return BLOCKED for Kael to resolve. Never route ordinary project Git
+work to `/maintain`. Olympus repository maintenance itself is outside ordinary
+Kovan routing.
 
 ## Result contract
 

@@ -1,10 +1,17 @@
 # Unreleased
 
-_No additional unreleased changes._
+## v0.3.0-beta.2 candidate corrections
 
-# 0.3.0-beta.1 (pending publication)
+**Status: source candidate; this task creates no tag or release.**
 
-**Status: draft; publication is pending. No tag or release is claimed by this entry.**
+- Restrict `/maintain` to Olympus development/maintenance and explicitly requested Olympus escape hatches; route ordinary project Git work through the normal plane.
+- Resolve Kovan constraints semantically, avoid redundant questions, and add a Question Barrier before human decisions.
+- Reconcile stale session state chronologically and define task-scoped Aegis process recovery without generic process termination or blind retries.
+- Update routing, recovery, and release qualification diagnostics and add focused synthetic coverage.
+
+# 0.3.0-beta.1 (published prerelease)
+
+**Status: published 2026-09-28 as prerelease tag `v0.3.0-beta.1`.**
 
 ## Highlights
 

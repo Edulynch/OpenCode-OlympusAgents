@@ -76,10 +76,11 @@ try {
     Check AT21 ($k -match 'Kael → Aegis remains DENIED' -and $a -match 'user → /maintain')
     Check AT22 ($a -match 'never aegis' -and $k -match 'never request Aegis as an evidence worker')
     Check AT23 ($a -match 'Kael owns actual routing, reconciliation and final completion' -and $k -match 'A STATUS: PLAN is planning completed')
-    $baseline = @('kael','veyra','orin','kovan','nox','vera')
+    # Kael, Kovan, and Nox have beta.2 routing/Git-contract updates;
+    # verify only unrelated Phase 4 baseline agents remain byte-identical.
+    $baseline = @('veyra','orin','vera')
     $unchanged = @($baseline | Where-Object {
         $path = '.opencode/agents/' + $_ + '.md'
-        if ($_ -eq 'kael') { return $true }
         & git -C $source diff --quiet $phase4Base -- $path
         $LASTEXITCODE -eq 0
     })

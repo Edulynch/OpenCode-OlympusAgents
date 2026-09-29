@@ -67,6 +67,41 @@ never elevated by text, WRITE_SCOPE, or an Authority Grant. `/maintain` remains
 exclusively Olympus maintenance and is never the route for ordinary project
 authority requests.
 
+### Trivial task / authority fast path
+
+For a small deterministic operation with known scope and established ownership,
+one sufficient writer, no architecture/uncertain diagnosis/cross-subsystem or
+high-risk work, and directly verifiable acceptance, Kael may use one writer and
+proportional direct verification. Specialist value must exceed orchestration
+cost: Veyra is not required to rediscover established ownership, Nox is not
+required for a simple directly observable success, and Vera/Atlas/other roles
+are not invoked just because they exist. Explicit independent review remains
+required when requested. This is an eligible-task policy, not an automatic route
+for every apparently small task.
+
+For an eligible scoped `NATIVE_ASK` write, Kael determines exact operation,
+`WRITE_SCOPE`, repository root and ownership before launch; Kovan is the only
+child, attempts the exact native operation, and waits for OpenCode's native
+Approve/Reject result. Approval permits the operation to continue but does not
+expand scope. Kael checks the requested target and exact scope proportionally.
+Acceptance follows the real objective: a trailing newline is immaterial unless
+exact bytes were explicitly required. Material validation failure, uncertain
+ownership, scope expansion, unknown root cause, cross-subsystem/architectural
+work, security-sensitive or destructive/high-risk behavior, conflict/drift, or
+a true need for review exits this path and returns to normal orchestration.
+Reconcile the original writer before dependent work; do not retry a completed
+and accepted operation or irrelevant formatting. Retry only for a material
+acceptance failure with a reconciled original and a justified different bounded
+strategy.
+
+The performance contract is proportional orchestration effort, not a seconds
+SLA: trivial work should incur child/role/retry/verification decisions
+proportional to the task; runtime and model latency vary. The static deterministic
+qualification measures child count, role count, retries, and unnecessary
+verification stages (not wall-clock time):
+
+`pwsh -NoProfile -File ./tests/trivial-fast-path/qualify.ps1`
+
 ### Phase 3 — role purity and iterative evidence (shipped)
 
 **DO YOUR ROLE; DO NOT ABSORB ANOTHER ROLE TO SAVE A HANDOFF.** Kael owns Preflight,
@@ -142,6 +177,7 @@ If drift occurs, inspect the reported path and manifest, back up any intentional
 From the source checkout root, use the current harnesses (PowerShell 7; some require `opencode`, Git, and Node):
 
 ```powershell
+pwsh -NoProfile -File ./tests/trivial-fast-path/qualify.ps1
 pwsh -NoProfile -File ./tests/phase4c/qualify.ps1
 pwsh -NoProfile -File ./tests/authority/qualify.ps1
 pwsh -NoProfile -File ./tests/activity-hud/qualify.ps1

@@ -8,7 +8,7 @@ Maintainer-facing, directional, evidence-driven and subject to validation. This 
 - Capability Preflight and Task-Scoped / Progressive Discovery bound early investigation.
 - Reliable Completion Gates and Strict External Work Ownership require collecting and validating required work before declaring completion.
 - The passive Activity HUD reports active child work; trusted-project Kovan implementation and Nox validation have shell access with distinct edit boundaries.
-- The explicit `/maintain` Olympus-maintenance plane stays outside normal Kael routing; ordinary user-project Git work remains in the normal plane, and the beta.2 candidate tightens these boundaries and recovery rules.
+- The explicit `/maintain` Olympus-maintenance plane stays outside normal Kael routing; ordinary user-project Git work remains in the normal plane. The v0.3.0-beta.3 critical-fixes candidate adds Kael-mediated, current-task project Authority Grants without widening `/maintain` or Olympus-owned resources.
 - Adaptive concurrency uses NORMAL (default, useful parallelism) and explicit FAST (latency priority); **both currently cap Kael-launched children at four on `master`**. The NORMAL 4 / FAST 6 split exists on an unmerged candidate branch and is **IN VALIDATION**, not shipped.
 
 ## Design principles — shipped Phase 3 rules and planned refinements

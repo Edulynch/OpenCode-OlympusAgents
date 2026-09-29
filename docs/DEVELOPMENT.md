@@ -8,6 +8,65 @@ OpenCode is the runtime; Olympus is the orchestration and decision layer. Kael c
 
 Kael checks feasibility and plane routing from the request **before** delegated research or planning. `/maintain` is reserved for Olympus development/maintenance/configuration/installation, Olympus framework bug/gap repair, or a user-explicit Olympus escape hatch because such a gap blocks normal completion. Ordinary user-project work, including ordinary Git administration, remains in the normal plane; Git alone is not an Aegis capability boundary. Kael does not automatically delegate to Aegis. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
 
+### Authority Grants — beta.3 candidate
+
+Permission outcomes are explicit: **ALLOW** means an in-scope tool can run
+directly; **NATIVE_ASK** means an otherwise eligible exact operation may be
+attempted so OpenCode can request one-shot user approval; **DENY** means do not
+invoke the tool. NATIVE_ASK is not prior user approval. A worker returns
+`NEED_AUTHORITY` only when it discovers a legitimate path/operation not yet
+delegated to it, with exact operation, minimum scope, repository root, reason,
+and blocked task. Children cannot ask the user or self-escalate. Kael reconciles
+outstanding results, then verifies role, ownership, and user prohibitions before
+classifying/redelegating. Native ASK consent is obtained in OpenCode's permission
+UI, not duplicated by a Kael QUESTION.
+If no applicable native ASK exists and the request is not already ALLOW,
+compatible needs may be consolidated into one precise Kael QUESTION under the
+Question Barrier.
+
+An Authority Grant is a current-task delegation field, not a persistent ACL:
+
+```text
+agent: kovan
+operation: WRITE_SCOPE (create/update only)
+scope: .opencode/plugins/foo/**
+repository_root: <canonical affected repository root>
+permission_mode: NATIVE_ASK
+lifetime: current_task
+task_id: <current task identity>
+```
+
+The authorized agent, operation/effect, paths/refs, repository root, and task
+must match exactly; the grant expires at task end and never covers siblings,
+other agents or inferred operations. For NATIVE_ASK, Kael delegates the exact
+agent, operation/effect, WRITE_SCOPE, repository root, task identity and
+permission mode; Kovan attempts that tool once without textual pre-authorization
+and waits for the native permission result. Approval allows continuation;
+rejection/cancellation means stop with no fallback or retry. A write grant does
+not authorize deletion, rename, destructive replacement, Git side effects or
+other high-impact work. Role/tool limits continue to apply. User prohibitions
+(including “do not modify .opencode”) deny without a question. The native edit
+policy makes project-owned `.opencode/**` resources ASK, with explicit DENY for `.opencode/agents/**`,
+`.opencode/commands/maintain.md`, `.opencode/plugins/olympus-activity/**`, the
+installer manifest, OpenCode config files, and other known Olympus-managed
+assets. Root `opencode.json[c]` is DENY. A project-owned
+`.opencode/plugins/<name>/**` is eligible only with positive project-ownership
+evidence and no Olympus-owned collision. Its exact native ASK is the user
+authorization point; Kael must not also send a duplicate QUESTION. The child
+must reach the native permission layer by attempting the exact scoped tool;
+reject means no write, approval is one-shot and grants no sibling paths. Do not
+special-case project names. Kovan's broad project edit ALLOW must not be paired with a
+blanket `edit * deny`, which blocks project-owned paths from reaching their
+more-specific native ASK rules; the explicit Olympus-owned DENYs remain in force.
+
+The project-wide `external_directory` default is ASK, not blanket ALLOW or DENY;
+normal agents have no wildcard external allow. This supports repositories outside
+the current root—including monorepo/sibling/multi-repo layouts—only after native
+user approval and exact Kael scope. Layouts are not hardcoded. Native DENY is
+never elevated by text, WRITE_SCOPE, or an Authority Grant. `/maintain` remains
+exclusively Olympus maintenance and is never the route for ordinary project
+authority requests.
+
 ### Phase 3 — role purity and iterative evidence (shipped)
 
 **DO YOUR ROLE; DO NOT ABSORB ANOTHER ROLE TO SAVE A HANDOFF.** Kael owns Preflight,
@@ -57,14 +116,14 @@ unresolved work. Phase 3 evidence class: USER_EXECUTED_LIVE_EVIDENCE; see
 
 ## Local/bootstrap installation
 
-From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The pinned v0.2.0 stable installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`:
+From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The README's explicitly pinned v0.2.0 stable installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`. The v0.3.0-beta.3 candidate installer defaults to `v0.3.0-beta.3`; a published tagged installer is expected to keep its embedded default equal to its own immutable tag. `-Version` accepts only Olympus SemVer `vX.Y.Z`, `vX.Y.Z-alpha.N`, `vX.Y.Z-beta.N`, or `vX.Y.Z-rc.N`; select stable releases explicitly with `-Version v0.2.0`.
 
 ```powershell
 pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project' -DryRun
 pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project'
 ```
 
-`-Target` is required and must be an absolute path to the Git worktree root; `-DryRun` checks and reports the proposed changes without writing them. `scripts/bootstrap.ps1` reads managed assets from its own source checkout and **does not accept `-SourceRoot`**. For local-source installer qualification, `install.ps1` has a qualification-only `-SourceRoot` option; the public installer normally fetches an immutable release tag. Bootstrap rejects unsafe targets independently of trusted-project agent execution.
+`-Target` is required and must be an absolute path to the Git worktree root; `-DryRun` checks and reports the proposed changes without writing them. `scripts/bootstrap.ps1` reads managed assets from its own source checkout and **does not accept `-SourceRoot`**. For local installer qualification, `install.ps1` has `-SourceRoot` and local tag-shaped `-SourceArchive` overrides; both validate the source's declared release version. The public installer fetches the archive for the exact requested immutable tag, validates its archive-root tag and embedded source version before bootstrap, and fails closed on mismatch rather than installing a different release. The installer reports requested/resolved versions; current bootstrap records `installed_version` in the install manifest. Legacy stable bootstrap archives that predate this metadata remain installable. Bootstrap rejects unsafe targets independently of trusted-project agent execution.
 
 ## Managed installation and recovery
 
@@ -84,6 +143,7 @@ From the source checkout root, use the current harnesses (PowerShell 7; some req
 
 ```powershell
 pwsh -NoProfile -File ./tests/phase4c/qualify.ps1
+pwsh -NoProfile -File ./tests/authority/qualify.ps1
 pwsh -NoProfile -File ./tests/activity-hud/qualify.ps1
 pwsh -NoProfile -File ./tests/adaptive-concurrency/qualify.ps1
 pwsh -NoProfile -File ./tests/autonomy/qualify.ps1
@@ -101,7 +161,17 @@ pwsh -NoProfile -File ./tests/maintenance-handoff/qualify.ps1
 
 Phase 4C covers bootstrap security and static Maintenance Plane checks; the separate Maintenance handoff qualifier covers Issue #2 policy and synthetic event ordering, not interactive delivery. The Preflight harness checks policy ordering, boundaries and a small cart/auth fixture **statically**; it does not execute agents or verify actual child count, discovery tool calls or latency. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Adaptive Concurrency / FAST checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release, dirty-worktree, and installer compatibility harnesses use **local source**, not the remote tag, and do not test the interactive UI. The dirty-worktree harness checks unrelated bytes, Git status, index diffs, managed conflict/drift, reinstall and a local-source managed update. The compatibility harness launches the installer via both Windows PowerShell 5.1 (when present) and PowerShell 7 into separate disposable Git projects, and tests missing `pwsh` with a process-local PATH. Some harnesses retain disposable fixtures; check their output. The adaptive-concurrency harness's `DOC` check verifies that the README describes NORMAL as the default using only useful parallelism, FAST as explicitly requested with up to four agents, and FAST as preserving checks and task dependencies.
 
-The Routing/Constraints, Question Barrier, and Aegis Recovery harnesses verify static contracts plus deterministic synthetic cases; they do not claim interactive runtime execution or real process termination. The Question Barrier live race remains separate and must be reported as `RUNTIME_QUESTION_RACE: NOT AUTOMATED` unless a bounded, reliable OpenCode smoke is actually observed.
+The Routing/Constraints, Authority Grants, Question Barrier, and Aegis Recovery harnesses verify static contracts plus deterministic synthetic cases; they do not claim interactive runtime execution or real process termination. `tests/authority/qualify.ps1` also inspects OpenCode's effective agent rules, but approval/rejection delivery and exact runtime tool behavior require an interactive OpenCode session. Report interactive evidence separately from static qualification output. The Question Barrier live race remains separate and must be reported as `RUNTIME_QUESTION_RACE: NOT AUTOMATED` unless observed.
+
+Native ASK is a client-side permission event, not a requirement for literal `ASK`
+transcript text. Classify `NATIVE_AUTHORITY_ASK_RUNTIME: PASS` only when an
+assigned child attempts the exact tool, the native permission event remains
+pending for the client's decision, and the tool executes only after approval;
+rejection/cancellation must leave it unexecuted with no fallback or bypass.
+Static qualification can test the delegation/tool-attempt contract but cannot
+establish that the native UI appeared or that a human approved/rejected it; it
+reports `NOT ASSESSED BY STATIC QUALIFICATION`. Report observed interactive
+evidence separately. The Question Barrier live-race status remains independent.
 
 ## Result correlation safety (Issue #1)
 
@@ -115,7 +185,7 @@ Olympus owns Kael's interpretation and user-facing synthesis; OpenCode owns plat
 
 ## Trusted-project execution
 
-Explicitly bootstrapped projects are treated as trusted. Kovan can edit and use shell within its assigned task ownership; Nox can use shell for validation but does not edit source. `WRITE_SCOPE` is an orchestration ownership contract, **not an OS sandbox**: shell can access paths beyond it, so agent instructions still matter. Bootstrap target safety (Git root, containment, conflict and drift checks) remains separate and stricter; agent trust never relaxes installation checks.
+Explicitly bootstrapped projects are treated as trusted. Kovan can edit and use shell within its assigned task ownership; Nox can use shell for validation but does not edit source. `WRITE_SCOPE` is an orchestration ownership contract, **not an OS sandbox**: shell can access paths beyond it, so agent instructions still matter. Native `external_directory` ASK prevents a blanket path-taking-tool grant outside the runtime root. Bootstrap target safety (Git root, containment, conflict and drift checks) remains separate and stricter; agent trust never relaxes installation checks.
 
 ## Activity HUD
 

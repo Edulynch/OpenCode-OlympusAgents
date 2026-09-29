@@ -31,7 +31,10 @@ try {
     $k = @($agents | Where-Object id -eq kovan)[0]
     $n = @($agents | Where-Object id -eq nox)[0]
     Check AU1 (Has $k shell allow)
-    Check AU2 ((Has $k edit allow) -and @($k.permissions | Where-Object { $_.action -eq 'edit' -and $_.resource -eq '.opencode/*' -and $_.effect -eq 'deny' }).Count -gt 0)
+    Check AU2 ((Has $k edit allow) -and
+        @($k.permissions | Where-Object { $_.action -eq 'edit' -and $_.resource -eq '*' -and $_.effect -eq 'deny' }).Count -eq 0 -and
+        @($k.permissions | Where-Object { $_.action -eq 'edit' -and $_.resource -eq '.opencode/**' -and $_.effect -eq 'ask' }).Count -gt 0 -and
+        @($k.permissions | Where-Object { $_.action -eq 'edit' -and $_.resource -eq '.opencode/agents/**' -and $_.effect -eq 'deny' }).Count -gt 0)
     Check AU3_STATIC ((Has $k shell allow) -and (Has $k edit allow) -and ([IO.File]::ReadAllText((Join-Path $fixture '.opencode/agents/kovan.md')) -match 'Project scripts created as'))
     Check AU4_STATIC ((Has $n shell allow) -and @($n.permissions | Where-Object { $_.action -eq 'shell' -and $_.resource -eq 'pwsh -NoProfile -File ./safe-validation.ps1' -and $_.effect -eq 'allow' }).Count -eq 0)
     Check AU5 (Has $n edit deny)
@@ -39,7 +42,9 @@ try {
         $a = @($agents | Where-Object id -eq $case[1])[0]
         Check $case[0] ((Has $a shell deny) -and (Has $a edit deny) -and -not (Has $a shell allow))
     }
-    Check AU11_STATIC ((Has $k external_directory allow) -and (Has $n external_directory allow) -and @($k.permissions + $n.permissions | Where-Object { $_.action -eq 'shell' -and $_.effect -eq 'ask' }).Count -eq 0)
+    Check AU11_STATIC ((Has $k external_directory ask) -and (Has $n external_directory ask) -and
+        -not (Has $k external_directory allow) -and -not (Has $n external_directory allow) -and
+        @($k.permissions + $n.permissions | Where-Object { $_.action -eq 'shell' -and $_.effect -eq 'ask' }).Count -eq 0)
     $again = (& pwsh -NoProfile -File (Join-Path $root 'scripts/bootstrap.ps1') -Target $fixture 2>&1 | Out-String)
     Check AU12_IDEMPOTENT ($LASTEXITCODE -eq 0 -and $again -match '(?m)^NO_CHANGES\s*$')
     Write-Output 'AU3/AU4/AU11 RUNTIME: PENDING INTERACTIVE VALIDATION (no child-agent execution in this harness)'

@@ -82,7 +82,15 @@ try {
         $kael -match '“Do not invoke Kovan” prohibits Kovan completely')
     Check 'POLICY_NO_REDUNDANT_QUESTIONS' ($kael -match 'Do not ask the user to repeat or waive an outcome already\s+determined' -and
         $kael -match 'Deterministic outcomes have QUESTION COUNT = 0' -and
-        $kael -match 'materially ambiguous decision')
+        $kael -match 'materially ambiguous decision' -and
+        $kael -match 'Native ASK is the human-consent point' -and
+        $kael -match 'do not send a duplicate Kael\s+QUESTION')
+    $nativeConfig = Text 'opencode.jsonc'
+    Check 'POLICY_NATIVE_AUTHORITY_ASK' ($nativeConfig -match '(?s)"action":\s*"edit"\s*,\s*"resource":\s*"\*"\s*,\s*"effect":\s*"ask"' -and
+        $nativeConfig -match '(?s)"action":\s*"external_directory"\s*,\s*"resource":\s*"\*"\s*,\s*"effect":\s*"ask"' -and
+        $kovan -match '\.opencode/plugins/\*\*"\s+effect: ask' -and
+        $kovan -match '\.opencode/agents/\*\*"\s+effect: deny' -and
+        $kovan -match '(?s)action: external_directory\s+resource: "?\*"?\s+effect: ask')
 
     $normalCommit = Route 'user-project' 'commit'
     $normalPush = Route 'user-project' 'push'

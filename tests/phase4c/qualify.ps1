@@ -466,18 +466,26 @@ try {
         Assert-Condition (Has-Rule $thales 'subagent' '*' 'deny') 'Thales subagent DENY missing.' 'BOOTSTRAP_BUG'
         $kovan = Get-Agent $agents 'kovan'
         Assert-Condition (Has-Rule $kovan 'edit' '*' 'allow') 'Kovan repository-local edit allow missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (-not (Has-Rule $kovan 'edit' '*' 'deny')) 'Kovan blanket edit DENY blocks scoped native ASK rules.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $kovan 'shell' '*' 'allow') 'Kovan shell ALLOW missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $kovan 'subagent' '*' 'deny') 'Kovan subagent DENY missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $kovan 'external_directory' '*' 'allow') 'Kovan external-directory ALLOW missing.' 'BOOTSTRAP_BUG'
-        foreach ($resource in @('.git', '.git/*', '.opencode', '.opencode/*', 'opencode.json', 'opencode.jsonc', '*.env', '*.env.*')) {
+        Assert-Condition (Has-Rule $kovan 'external_directory' '*' 'ask' -and -not (Has-Rule $kovan 'external_directory' '*' 'allow')) 'Kovan external-directory must ASK, not blanket ALLOW.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $kovan 'edit' '.opencode/**' 'ask' -and Has-Rule $kovan 'edit' '.opencode/plugins/**' 'ask') 'Project-owned protected-adjacent edit ASK missing.' 'BOOTSTRAP_BUG'
+        foreach ($resource in @('.git', '.git/*', '.opencode', '.opencode/agents/**',
+            '.opencode/commands/maintain.md', '.opencode/plugins/olympus-activity/**',
+            '.opencode/orchestrator-install.json', '.opencode/opencode.json', '.opencode/opencode.jsonc',
+            'opencode.json', 'opencode.jsonc', '*.env', '*.env.*')) {
             Assert-Condition (Has-Rule $kovan 'edit' $resource 'deny') ('Kovan protected edit path missing: ' + $resource) 'BOOTSTRAP_BUG'
         }
         Assert-Condition (Has-Rule $kovan 'edit' '*.env.example' 'allow') 'Documented env-example exception missing.' 'BOOTSTRAP_BUG'
+        $nativeConfig = [IO.File]::ReadAllText((Join-Path $repo 'opencode.jsonc'))
+        Assert-Condition ($nativeConfig -match '(?s)"action":\s*"edit"\s*,\s*"resource":\s*"\*"\s*,\s*"effect":\s*"ask"' -and
+            $nativeConfig -match '(?s)"action":\s*"external_directory"\s*,\s*"resource":\s*"\*"\s*,\s*"effect":\s*"ask"') 'Global native edit/external_directory ASK defaults missing.' 'BOOTSTRAP_BUG'
         $nox = Get-Agent $agents 'nox'
         Assert-Condition (Has-Rule $nox 'edit' '*' 'deny') 'Nox edit DENY missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $nox 'shell' '*' 'allow') 'Nox shell ALLOW missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $nox 'subagent' '*' 'deny') 'Nox subagent DENY missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $nox 'external_directory' '*' 'allow') 'Nox external-directory ALLOW missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition (Has-Rule $nox 'external_directory' '*' 'ask' -and -not (Has-Rule $nox 'external_directory' '*' 'allow')) 'Nox external-directory must ASK, not blanket ALLOW.' 'BOOTSTRAP_BUG'
         $shellRules = @($nox.permissions | Where-Object { $_.action -eq 'shell' })
         Assert-Condition (@($shellRules | Where-Object effect -eq 'ask').Count -eq 0) 'Effective Nox shell ASK exists.' 'BOOTSTRAP_BUG'
         Assert-Condition (@($shellRules | Where-Object { $_.effect -eq 'allow' -and $_.resource -eq '*' }).Count -gt 0) 'Effective Nox broad shell allow missing.' 'BOOTSTRAP_BUG'
@@ -618,6 +626,66 @@ try {
         $agents = Get-OpenCodeDiagnostics $repo
         Assert-Condition (@($agents.Agents | Where-Object id -eq 'maintenance').Count -eq 0) 'Retired maintenance agent ID remains effective after upgrade.' 'BOOTSTRAP_BUG'
         [void](Get-Agent $agents.Agents 'aegis')
+    }
+
+    Run-Scenario 'M-RETIRED-MAINTENANCE-MODIFIED-UNOWNED' {
+        $legacyBaseline = '3ab1495fdfcdb8503e2411effe81e814da3f6eb6'
+        $legacyText = (& git -C $RepoRoot show "${legacyBaseline}:.opencode/agents/maintenance.md" | Out-String)
+        Assert-Condition ($LASTEXITCODE -eq 0 -and $legacyText) 'Cannot load the retired Maintenance agent fixture.' 'HARNESS_BUG'
+
+        $ownedHome = New-ScenarioHome 'retired-owned'
+        $ownedRepo = New-CleanRepo $ownedHome 'target' ([ordered]@{ 'README.md' = 'owned migration' + [Environment]::NewLine })
+        $ownedRun = Invoke-Bootstrap $ownedRepo
+        Assert-Condition ($ownedRun.ExitCode -eq 0 -and $ownedRun.Text -match '(?m)^READY\s*$') 'Cannot create current owned fixture.' 'BOOTSTRAP_BUG'
+        $ownedOld = Join-Path $ownedRepo '.opencode/agents/maintenance.md'
+        $ownedNew = Join-Path $ownedRepo '.opencode/agents/aegis.md'
+        [IO.File]::WriteAllText($ownedOld, $legacyText, $Utf8)
+        $ownedManifestPath = Join-Path $ownedRepo '.opencode/orchestrator-install.json'
+        $ownedManifest = [IO.File]::ReadAllText($ownedManifestPath) | ConvertFrom-Json -Depth 100
+        $ownedManifest.managed_files = @($ownedManifest.managed_files | ForEach-Object {
+            if ($_.path -eq '.opencode/agents/aegis.md') {
+                [pscustomobject]@{ path='.opencode/agents/maintenance.md'; sha256=(Get-Hash $ownedOld) }
+            } else { $_ }
+        })
+        [IO.File]::Delete($ownedNew)
+        [IO.File]::WriteAllText($ownedManifestPath, (($ownedManifest | ConvertTo-Json -Depth 100) + "`n"), $Utf8)
+        $ownedUpgrade = Invoke-Bootstrap $ownedRepo
+        Assert-Condition ($ownedUpgrade.ExitCode -eq 0 -and $ownedUpgrade.Text -match '(?m)^READY\s*$' -and
+            -not (Test-Path -LiteralPath $ownedOld) -and (Test-Path -LiteralPath $ownedNew)) 'Verified owned maintenance.md was not safely migrated.' 'BOOTSTRAP_BUG'
+
+        $modifiedHome = New-ScenarioHome 'retired-modified'
+        $modifiedRepo = New-CleanRepo $modifiedHome 'target' ([ordered]@{ 'README.md' = 'modified migration' + [Environment]::NewLine })
+        $modifiedRun = Invoke-Bootstrap $modifiedRepo
+        Assert-Condition ($modifiedRun.ExitCode -eq 0) 'Cannot create modified-file fixture.' 'BOOTSTRAP_BUG'
+        $modifiedOld = Join-Path $modifiedRepo '.opencode/agents/maintenance.md'
+        $modifiedNew = Join-Path $modifiedRepo '.opencode/agents/aegis.md'
+        [IO.File]::WriteAllText($modifiedOld, $legacyText, $Utf8)
+        $modifiedManifestPath = Join-Path $modifiedRepo '.opencode/orchestrator-install.json'
+        $modifiedManifest = [IO.File]::ReadAllText($modifiedManifestPath) | ConvertFrom-Json -Depth 100
+        $modifiedManifest.managed_files = @($modifiedManifest.managed_files | ForEach-Object {
+            if ($_.path -eq '.opencode/agents/aegis.md') {
+                [pscustomobject]@{ path='.opencode/agents/maintenance.md'; sha256=(Get-Hash $modifiedOld) }
+            } else { $_ }
+        })
+        [IO.File]::Delete($modifiedNew)
+        [IO.File]::WriteAllText($modifiedManifestPath, (($modifiedManifest | ConvertTo-Json -Depth 100) + "`n"), $Utf8)
+        [IO.File]::AppendAllText($modifiedOld, "`nuser modification`n", $Utf8)
+        $modifiedHash = Get-Hash $modifiedOld
+        $modifiedUpgrade = Invoke-Bootstrap $modifiedRepo
+        Assert-BootstrapError $modifiedUpgrade 'MANAGED_FILE_DRIFT'
+        Assert-Condition ((Get-Hash $modifiedOld) -eq $modifiedHash -and -not (Test-Path -LiteralPath $modifiedNew)) 'Modified retired maintenance.md was destructively replaced.' 'BOOTSTRAP_BUG'
+
+        $unownedHome = New-ScenarioHome 'retired-unowned'
+        $unownedRepo = New-CleanRepo $unownedHome 'target' ([ordered]@{ 'README.md' = 'unowned migration' + [Environment]::NewLine })
+        $unownedRun = Invoke-Bootstrap $unownedRepo
+        Assert-Condition ($unownedRun.ExitCode -eq 0) 'Cannot create unowned-file fixture.' 'BOOTSTRAP_BUG'
+        $unownedOld = Join-Path $unownedRepo '.opencode/agents/maintenance.md'
+        $unownedNew = Join-Path $unownedRepo '.opencode/agents/aegis.md'
+        [IO.File]::WriteAllText($unownedOld, "user-owned maintenance.md`n", $Utf8)
+        $unownedHash = Get-Hash $unownedOld; $aegisHash = Get-Hash $unownedNew
+        $unownedUpgrade = Invoke-Bootstrap $unownedRepo
+        Assert-BootstrapError $unownedUpgrade 'INSTALL_CONFLICT'
+        Assert-Condition ((Get-Hash $unownedOld) -eq $unownedHash -and (Get-Hash $unownedNew) -eq $aegisHash) 'Unowned retired-name file or current Aegis file was destructively changed.' 'BOOTSTRAP_BUG'
     }
 
     Write-Output 'M5-RUNTIME_INTERACTION_ASSERTION: NOT AUTOMATED — run the documented two-command smoke from a normal Kael UI session; static/bootstrap assertions are not a runtime PASS.'

@@ -76,15 +76,17 @@ try {
     Check AT21 ($k -match 'Kael → Aegis remains DENIED' -and $a -match 'user → /maintain')
     Check AT22 ($a -match 'never aegis' -and $k -match 'never request Aegis as an evidence worker')
     Check AT23 ($a -match 'Kael owns actual routing, reconciliation and final completion' -and $k -match 'A STATUS: PLAN is planning completed')
-    # Kael, Kovan, and Nox have beta.2 routing/Git-contract updates;
-    # verify only unrelated Phase 4 baseline agents remain byte-identical.
-    $baseline = @('veyra','orin','vera')
-    $unchanged = @($baseline | Where-Object {
-        $path = '.opencode/agents/' + $_ + '.md'
-        & git -C $source diff --quiet $phase4Base -- $path
-        $LASTEXITCODE -eq 0
+    # Beta.3 intentionally adds the shared Authority handoff to the prior
+    # read-only roles; verify policy integration without changing their models.
+    $authorityRoles = @('veyra','orin','vera')
+    $authorityIntegrated = @($authorityRoles | Where-Object {
+        $agentText = [IO.File]::ReadAllText((Join-Path $source ('.opencode/agents/' + $_ + '.md')))
+        $agentText -notmatch '## Scope and Authority handoff' -or
+            $agentText -notmatch 'STATUS: NEED_AUTHORITY' -or
+            $agentText -notmatch 'Kael alone reconciles the result' -or
+            $agentText -notmatch '(?s)action: question\s+resource: "?\*"?\s+effect: deny'
     })
-    Check AT24 ($unchanged.Count -eq $baseline.Count -and $k -match 'model: "openai/gpt-6-sol#high"' -and $t -match 'model: openai/gpt-6-sol#xhigh')
+    Check AT24 ($authorityIntegrated.Count -eq 0 -and $k -match 'model: "openai/gpt-6-sol#high"' -and $t -match 'model: openai/gpt-6-sol#xhigh')
     Check AT25 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children' -and $k -notmatch 'gpt-6-luna#fast')
     Check AT26 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match "'sorin'" -and $a -notmatch 'gpt-6-luna#fast')
     Check 'AT_READ_DENIED' (@(@('read','glob','grep','list','lsp') | Where-Object { $a -notmatch ('(?s)action: ' + $_ + '\s+resource: "\*"\s+effect: deny') }).Count -eq 0)
@@ -101,8 +103,11 @@ try {
     Check 'CASE_G_THIRD_DENIED' ($caseG.Status -eq 'THIRD_DENIED' -and $caseG.Consultations -eq 2)
     Check 'CASE_H_INDETERMINATE_WORKER' ($caseH.Status -eq 'COMPLETION_UNCONFIRMED' -and $caseH.Consultations -eq 1 -and $caseH.WorkerParent -eq 'kael')
 
-    & git -C $source worktree add --detach $old $phase4Base | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Phase 4 baseline fixture worktree failed' }
+    [IO.Directory]::CreateDirectory($old) | Out-Null
+    $baselineArchive = Join-Path $run 'phase4-baseline.zip'
+    & git -C $source archive --format=zip $phase4Base -o $baselineArchive
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $baselineArchive -PathType Leaf)) { throw 'Phase 4 baseline archive failed' }
+    Expand-Archive -LiteralPath $baselineArchive -DestinationPath $old -Force
     [IO.Directory]::CreateDirectory($target) | Out-Null
     & git -C $target init --quiet
     foreach ($path in @('src/local.txt','docs/staged.txt')) {
@@ -161,7 +166,6 @@ try {
     Write-Output 'ATLAS QUALIFICATION: FAIL'
     exit 1
 } finally {
-    if (Test-Path -LiteralPath $old) { & git -C $source worktree remove --force $old 2>$null | Out-Null }
     if (Test-Path -LiteralPath $run) {
         try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop }
         catch { Write-Output "CLEANUP_DEFERRED: $run" }

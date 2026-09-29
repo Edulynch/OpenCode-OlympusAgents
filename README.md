@@ -63,7 +63,11 @@ Kael coordinates the team as needed: research, implementation, testing, and revi
 
 OpenCode is the runtime. Olympus is the orchestration and decision layer that helps this team work together.
 
-The pinned v0.2.0 installer remains the latest stable installer. The `v0.3.0-beta.1` prerelease was published on 2026-09-28 and adds Argus, Atlas, Talos, Thales, and Helios; those prerelease additions are not included in the v0.2.0 installer.
+The pinned v0.2.0 installer remains the latest stable installer. The `v0.3.0-beta.1` prerelease was published on 2026-09-28 and adds Argus, Atlas, Talos, Thales, and Helios; those prerelease additions are not included in the v0.2.0 installer. The checked-in v0.3.0-beta.3 installer is a source candidate, not a published release; when published from its matching tag, its default selects that same prerelease rather than silently falling back to stable.
+
+### Out-of-scope project work
+
+Workers return `NEED_AUTHORITY` only when they discover an otherwise legitimate scope not yet delegated. Kael classifies requests as ALLOW, NATIVE_ASK, or DENY. For an exact eligible project-owned path covered by native ASK, Kael delegates the exact task/scope as `NATIVE_ASK`: the child attempts the tool and OpenCode's native permission UI obtains the user's one-shot decision; this is not pre-approval and does not trigger a duplicate Kael QUESTION. Rejection/cancellation stops without fallback. If native ASK does not apply, Kael uses the Question Barrier when needed. Explicit user prohibitions and Olympus-owned native DENYs cannot be overridden. `/maintain` remains Olympus-only.
 
 ## 🔧 Maintenance
 
@@ -94,7 +98,7 @@ Olympus treats an installed project as trusted. Kovan and Nox can run commands f
 
 ## 🔄 Update
 
-Olympus is installed per project. To install or upgrade to **v0.2.0** in a project (including one with v0.1.2 installed), run the [Install](#-install) command from its Git root. Olympus preserves unrelated project work and refuses to overwrite changed files it manages. This command is pinned to v0.2.0; it will not automatically install future releases.
+Olympus is installed per project. To install or upgrade to **v0.2.0** in a project (including one with v0.1.2 installed), run the [Install](#-install) command from its Git root. Olympus preserves unrelated project work and refuses to overwrite changed files it manages. The README command is explicitly pinned to stable v0.2.0. An installer copied from a prerelease uses that release's embedded tag by default; use `-Version v0.2.0` to select stable explicitly.
 
 ## 🆘 Troubleshooting
 

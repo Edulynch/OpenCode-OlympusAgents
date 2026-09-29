@@ -2,6 +2,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Target,
+    [string]$SourceVersion = 'local',
     [switch]$DryRun
 )
 
@@ -11,6 +12,9 @@ $ErrorActionPreference = "Stop"
 $SourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $Utf8NoBom = [Text.UTF8Encoding]::new($false)
 $ManifestRel = ".opencode/orchestrator-install.json"
+if ($SourceVersion -cne 'local' -and $SourceVersion -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') {
+    throw 'SOURCE_VERSION_INVALID: Expected an Olympus SemVer release or local.'
+}
 $Managed = @(
     "opencode.jsonc",
     ".opencode/agents/kael.md",
@@ -415,12 +419,13 @@ function Managed-Content($Detection) {
     $map
 }
 
-function Manifest-Text($Detection, $Content) {
+function Manifest-Text($Detection, $Content, [string]$Version) {
     $files = foreach ($p in $Managed) { [ordered]@{ path=$p; sha256=Sha-Text ([string]$Content[$p]) } }
     $commit = (& git -C $SourceRoot rev-parse HEAD 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $commit) { $commit = "unknown" }
     ([ordered]@{
         schema_version = 1
+        installed_version = $Version
         installed_from_commit = $commit
         managed_files = @($files)
         detected_stacks = @($Detection.Stacks)
@@ -538,7 +543,7 @@ try {
 
     $detection = Detect-Project $Repo
     $content = Managed-Content $detection
-    $manifestText = Manifest-Text $detection $content
+    $manifestText = Manifest-Text $detection $content $SourceVersion
     $plan = Plan $Repo $content $manifestText $retired
 
     if ($DryRun) {

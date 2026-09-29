@@ -3,12 +3,11 @@
   "default_agent": "kael",
   "model": "openai/gpt-6-sol",
   "permissions": [
-    // Default for read-only agents; trusted-project Kovan/Nox opt into native
-    // external-directory access for normal tool-managed temp and caches.
+    // External paths require native user approval; do not grant every path.
     {
       "action": "external_directory",
       "resource": "*",
-      "effect": "deny"
+      "effect": "ask"
     },
     // Shell is globally denied; Kovan and Nox opt into trusted-project shell.
     // The hidden Aegis agent explicitly allows shell for /maintain only.
@@ -17,19 +16,18 @@
       "resource": "*",
       "effect": "deny"
     },
-    // Agent definitions may add controlled child-role and edit exceptions after
-    // this global deny; task contracts still define dynamic write scope.
+    // Child routing stays agent-specific; Kael's allowlist is authoritative.
     {
       "action": "subagent",
       "resource": "*",
       "effect": "deny"
     },
-    // Kovan-specific rules protect sensitive edit paths; WRITE_SCOPE remains
-    // a task ownership contract, not an OS sandbox.
+    // Agent rules may specialize this ask. Olympus-owned paths stay native DENY;
+    // WRITE_SCOPE remains a task ownership contract, not an OS sandbox.
     {
       "action": "edit",
       "resource": "*",
-      "effect": "deny"
+      "effect": "ask"
     }
   ]
 }

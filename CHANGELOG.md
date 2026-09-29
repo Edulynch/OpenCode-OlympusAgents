@@ -1,13 +1,11 @@
 # Unreleased
 
-## v0.3.0-beta.2 candidate corrections
+## v0.3.0-beta.3 critical fixes candidate
 
 **Status: source candidate; this task creates no tag or release.**
 
-- Restrict `/maintain` to Olympus development/maintenance and explicitly requested Olympus escape hatches; route ordinary project Git work through the normal plane.
-- Resolve Kovan constraints semantically, avoid redundant questions, and add a Question Barrier before human decisions.
-- Reconcile stale session state chronologically and define task-scoped Aegis process recovery without generic process termination or blind retries.
-- Update routing, recovery, and release qualification diagnostics and add focused synthetic coverage.
+- Add exact current-task ALLOW/NATIVE_ASK Authority Grants: native ASK scopes may reach OpenCode's permission layer without duplicate textual pre-authorization, while Olympus-owned protections and `/maintain`'s Olympus-only boundary remain enforced.
+- Make the release installer accept Olympus SemVer prereleases, bind requested versions to resolved source identity, and qualify archive/version/roster/manifest end-to-end.
 
 # 0.3.0-beta.1 (published prerelease)
 

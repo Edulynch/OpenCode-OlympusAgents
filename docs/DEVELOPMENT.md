@@ -200,14 +200,24 @@ Phase 4C covers bootstrap security and static Maintenance Plane checks; the sepa
 The Routing/Constraints, Authority Grants, Question Barrier, and Aegis Recovery harnesses verify static contracts plus deterministic synthetic cases; they do not claim interactive runtime execution or real process termination. `tests/authority/qualify.ps1` also inspects OpenCode's effective agent rules, but approval/rejection delivery and exact runtime tool behavior require an interactive OpenCode session. Report interactive evidence separately from static qualification output. The Question Barrier live race remains separate and must be reported as `RUNTIME_QUESTION_RACE: NOT AUTOMATED` unless observed.
 
 Native ASK is a client-side permission event, not a requirement for literal `ASK`
-transcript text. Classify `NATIVE_AUTHORITY_ASK_RUNTIME: PASS` only when an
-assigned child attempts the exact tool, the native permission event remains
-pending for the client's decision, and the tool executes only after approval;
-rejection/cancellation must leave it unexecuted with no fallback or bypass.
-Static qualification can test the delegation/tool-attempt contract but cannot
-establish that the native UI appeared or that a human approved/rejected it; it
-reports `NOT ASSESSED BY STATIC QUALIFICATION`. Report observed interactive
-evidence separately. The Question Barrier live-race status remains independent.
+transcript text. Keep four facts separate in a child report: `TOOL_ATTEMPT`,
+`TOOL_EXECUTION` and its direct result, `NATIVE_PERMISSION_UI`, and
+`USER_CONFIRMED_EXTERNAL_OBSERVATION`. Use
+`NATIVE_PERMISSION_UI: OBSERVED_ASK | OBSERVED_NO_ASK | NOT_OBSERVABLE` and
+`NATIVE_PERMISSION_DECISION: APPROVED | REJECTED | NOT_OBSERVABLE`; report UI or
+decision only when directly observable in that agent's context/tool result.
+Otherwise use `NOT_OBSERVABLE`. Tool success does not establish that ASK was
+absent, and tool failure/denial alone does not establish a human rejection. A
+later user confirmation may be recorded as attributed external/manual evidence,
+without presenting it as the agent's own observation. Classify
+`NATIVE_AUTHORITY_ASK_RUNTIME: PASS` only when an assigned child attempts the
+exact tool, the native permission event remains pending for the client's
+decision, and the tool executes only after approval; rejection/cancellation
+must leave it unexecuted with no fallback or bypass. Static qualification can
+test the delegation/tool-attempt contract but cannot establish that the native
+UI appeared or that a human approved/rejected; it reports `NOT ASSESSED BY
+STATIC QUALIFICATION`. Report observed interactive evidence separately. The
+Question Barrier live-race status remains independent.
 
 ## Result correlation safety (Issue #1)
 

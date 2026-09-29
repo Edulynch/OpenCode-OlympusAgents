@@ -129,6 +129,21 @@ function Write-Decision([string]$nativeDecision, [string]$approval = 'NONE') {
     return $approval -eq 'APPROVE_ONCE'
 }
 
+function New-PermissionReport([bool]$attempted, [string]$execution, [string]$toolResult,
+                              [string]$uiObservation = 'NOT_OBSERVABLE',
+                              [string]$permissionDecision = 'NOT_OBSERVABLE',
+                              [string]$externalObservation = 'NONE') {
+    # Reporting records only supplied evidence; execution result never infers UI or human action.
+    [pscustomobject]@{
+        TOOL_ATTEMPT = $(if ($attempted) { 'ATTEMPTED' } else { 'NOT_ATTEMPTED' })
+        TOOL_EXECUTION = $execution
+        TOOL_RESULT = $toolResult
+        NATIVE_PERMISSION_UI = $uiObservation
+        NATIVE_PERMISSION_DECISION = $permissionDecision
+        USER_CONFIRMED_EXTERNAL_OBSERVATION = $externalObservation
+    }
+}
+
 try {
     $kael = Text '.opencode/agents/kael.md'
     $kovan = Text '.opencode/agents/kovan.md'
@@ -336,8 +351,36 @@ try {
         @($effectiveKovan.permissions | Where-Object { $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'allow' }).Count -eq 0)
 
     $normalizedDocs = $docs -replace '\s+', ' '
-    $eventBasedRuntimeReporting = $normalizedDocs -match '(?i)Native ASK is a client-side permission event.*?not a requirement for literal.*?transcript text.*?assigned child attempts the exact tool.*?native permission event remains pending.*?tool executes only after approval.*?rejection/cancellation must leave it unexecuted.*?Static qualification.*?cannot establish that the native UI appeared'
-    Check 'AUTH15_NATIVE_ASK_EVENT_BASED_RUNTIME_REPORTING' $eventBasedRuntimeReporting
+    $reportingPolicy = $normalizedDocs -match '(?is)TOOL_ATTEMPT.*?TOOL_EXECUTION.*?NATIVE_PERMISSION_UI.*?USER_CONFIRMED_EXTERNAL_OBSERVATION.*?NOT_OBSERVABLE.*?Tool success does not establish that ASK was\s+absent.*?tool failure/denial alone does not establish a human rejection'
+    Check 'AUTH15_NATIVE_PERMISSION_OBSERVABILITY_POLICY' ($reportingPolicy -and
+        $kael -match '(?is)TOOL_ATTEMPT.*?TOOL_EXECUTION.*?NATIVE_PERMISSION_UI.*?NATIVE_PERMISSION_DECISION.*?NOT_OBSERVABLE.*?Tool success does not prove ASK was absent.*?failed\s+or denied tool result does not by itself prove a human rejected.*?USER_CONFIRMED_EXTERNAL_OBSERVATION.*?external/manual evidence' -and
+        $kovan -match '(?is)TOOL_ATTEMPT.*?TOOL_EXECUTION.*?NATIVE_PERMISSION_UI.*?NATIVE_PERMISSION_DECISION.*?NOT_OBSERVABLE.*?success never implies\s+`OBSERVED_NO_ASK`.*?USER_CONFIRMED_EXTERNAL_OBSERVATION')
+
+    $uiHiddenSuccess = New-PermissionReport $true 'SUCCESS' 'write completed'
+    Check 'AUTH26_PERMISSION_UI_UNOBSERVABLE' ($uiHiddenSuccess.NATIVE_PERMISSION_UI -eq 'NOT_OBSERVABLE' -and
+        $uiHiddenSuccess.NATIVE_PERMISSION_DECISION -eq 'NOT_OBSERVABLE' -and $uiHiddenSuccess.TOOL_ATTEMPT -eq 'ATTEMPTED')
+
+    $successNoAskInference = New-PermissionReport $true 'SUCCESS' 'write completed'
+    Check 'AUTH27_SUCCESS_DOES_NOT_INFER_ASK_ABSENT' ($successNoAskInference.TOOL_EXECUTION -eq 'SUCCESS' -and
+        $successNoAskInference.NATIVE_PERMISSION_UI -eq 'NOT_OBSERVABLE' -and
+        $successNoAskInference.NATIVE_PERMISSION_UI -ne 'OBSERVED_NO_ASK' -and
+        $successNoAskInference.NATIVE_PERMISSION_DECISION -eq 'NOT_OBSERVABLE')
+
+    $failedNoHumanDecision = New-PermissionReport $true 'FAILED' 'tool returned a permission-related error'
+    $deniedNoHumanDecision = New-PermissionReport $true 'NOT_EXECUTED' 'tool denied without an explicit human decision result'
+    Check 'AUTH28_FAILURE_OR_DENIAL_DOES_NOT_INVENT_HUMAN_DECISION' ($failedNoHumanDecision.TOOL_EXECUTION -eq 'FAILED' -and
+        $failedNoHumanDecision.NATIVE_PERMISSION_UI -eq 'NOT_OBSERVABLE' -and
+        $failedNoHumanDecision.NATIVE_PERMISSION_DECISION -eq 'NOT_OBSERVABLE' -and
+        $deniedNoHumanDecision.TOOL_EXECUTION -eq 'NOT_EXECUTED' -and
+        $deniedNoHumanDecision.NATIVE_PERMISSION_UI -eq 'NOT_OBSERVABLE' -and
+        $deniedNoHumanDecision.NATIVE_PERMISSION_DECISION -eq 'NOT_OBSERVABLE')
+
+    $manualConfirmation = New-PermissionReport $true 'SUCCESS' 'write completed' 'NOT_OBSERVABLE' 'NOT_OBSERVABLE' `
+        'USER_REPORTED: user saw the native prompt and approved it'
+    Check 'AUTH29_LATER_USER_CONFIRMATION_IS_EXTERNAL_EVIDENCE' ($manualConfirmation.NATIVE_PERMISSION_UI -eq 'NOT_OBSERVABLE' -and
+        $manualConfirmation.NATIVE_PERMISSION_DECISION -eq 'NOT_OBSERVABLE' -and
+        $manualConfirmation.USER_CONFIRMED_EXTERNAL_OBSERVATION -match '^USER_REPORTED:' -and
+        $manualConfirmation.USER_CONFIRMED_EXTERNAL_OBSERVATION -match 'saw the native prompt and approved')
 
     Write-Output 'NATIVE_AUTHORITY_ASK_RUNTIME: NOT ASSESSED BY STATIC QUALIFICATION (report interactive event evidence separately)'
     Write-Output 'AUTHORITY QUALIFICATION: PASS (static contracts, native/effective rules, and deterministic scope/approval cases; interactive outcome not asserted)'

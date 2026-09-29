@@ -168,6 +168,21 @@ each exact request as one of three outcomes:
   bypass. Native ASK is the human-consent point, so do not send a duplicate Kael
   QUESTION.
 
+Report the child tool attempt/result separately from permission-UI observation
+and any user-confirmed external observation. Preserve the observable facts:
+`TOOL_ATTEMPT`, `TOOL_EXECUTION` plus its direct result,
+`NATIVE_PERMISSION_UI: OBSERVED_ASK | OBSERVED_NO_ASK | NOT_OBSERVABLE`, and
+`NATIVE_PERMISSION_DECISION: APPROVED | REJECTED | NOT_OBSERVABLE`. A child or
+Kael must use `NOT_OBSERVABLE` when its context/tool result does not expose the
+permission UI or decision. Tool success does not prove ASK was absent; a failed
+or denied tool result does not by itself prove a human rejected it. Never claim
+that ASK appeared/did not appear, or that a user approved/rejected, without
+directly observable evidence. If the user later confirms what they saw, append
+it as `USER_CONFIRMED_EXTERNAL_OBSERVATION: USER_REPORTED: <concise faithful
+account>` and attribute it as external/manual evidence; do not relabel it as
+Kael's or the child's UI observation. This reporting rule does not change grant,
+permission, or fast-path behavior.
+
 Before either ALLOW or NATIVE_ASK delegation, verify the operation is within the
 assigned role, the resource is project-owned, and no user prohibition applies.
 Require positive ownership evidence (for example tracked project files or

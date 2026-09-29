@@ -183,6 +183,20 @@ BLOCKED/DENIED, not an authority request.
   never retry, fall back, or bypass it. If a source path escapes the repository
   or declared scope, stop and return NEED_AUTHORITY to Kael; do not build a
   custom resolver.
+- Report permission observability separately from the tool attempt and result.
+  In `ACCEPTANCE`, include distinct fields:
+  `TOOL_ATTEMPT: ATTEMPTED | NOT_ATTEMPTED`, `TOOL_EXECUTION: PENDING | SUCCESS |
+  FAILED | NOT_EXECUTED | UNKNOWN`, `TOOL_RESULT: <direct tool result>`,
+  `NATIVE_PERMISSION_UI: OBSERVED_ASK | OBSERVED_NO_ASK | NOT_OBSERVABLE`, and
+  `NATIVE_PERMISSION_DECISION: APPROVED | REJECTED | NOT_OBSERVABLE`. Mark UI or
+  decision `NOT_OBSERVABLE` unless your context or tool result directly exposes
+  it. Tool success/failure, missing literal ASK text, and absence of a visible
+  event in an unobservable context do not establish whether ASK appeared or
+  whether the user approved/rejected; a denial result also does not by itself
+  prove human rejection. In particular, success never implies
+  `OBSERVED_NO_ASK`. Preserve any later user statement only as
+  `USER_CONFIRMED_EXTERNAL_OBSERVATION: USER_REPORTED: <concise faithful account>`;
+  do not present it as your own UI observation.
 - The repository root and any filesystem root are never valid write or delete
   targets.
 - Do not source-edit another repository or files outside WRITE_SCOPE unless Kael

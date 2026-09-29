@@ -6,6 +6,19 @@
 
 - Add exact current-task ALLOW/NATIVE_ASK Authority Grants: native ASK scopes may reach OpenCode's permission layer without duplicate textual pre-authorization, while Olympus-owned protections and `/maintain`'s Olympus-only boundary remain enforced.
 - Make the release installer accept Olympus SemVer prereleases, bind requested versions to resolved source identity, and qualify archive/version/roster/manifest end-to-end.
+- Add read-only `-VerifyOnly` installation verification against the requested release's managed files, hashes, and roster; do not infer installed version from manifest text alone.
+
+## Installation
+
+```powershell
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.3/install.ps1 | iex
+```
+
+## Verify installation
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.3/install.ps1'))) -Version 'v0.3.0-beta.3' -Target (Get-Location).Path -VerifyOnly
+```
 
 # 0.3.0-beta.1 (published prerelease)
 

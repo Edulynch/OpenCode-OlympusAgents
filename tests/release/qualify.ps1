@@ -1,14 +1,59 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$MockOpenCode,
+    [switch]$ResumeAtR1,
+    [switch]$ResumeAtPermissions,
+    [string]$RecoveryRunId = ''
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $installer = Join-Path $source 'install.ps1'
-$run = Join-Path (Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode') ('olympus-release-qualification-' + [guid]::NewGuid().ToString('N'))
+$tempOpencode = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode'
+if (-not $RecoveryRunId) { $RecoveryRunId = [guid]::NewGuid().ToString('N') }
+if ($RecoveryRunId -notmatch '^[A-Za-z0-9-]{8,80}$') { throw 'RECOVERY_RUN_ID_INVALID' }
+$run = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId)
+$receiptPath = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId + '.json')
+$transcriptPath = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId + '.log')
 $utf8 = [Text.UTF8Encoding]::new($false)
+$script:QualificationReceipt = $null
+function Save-QualificationReceipt {
+    if ($null -ne $script:QualificationReceipt) {
+        $script:QualificationReceipt.latest_progress_timestamp = (Get-Date).ToString('o')
+        [IO.File]::WriteAllText($receiptPath, ($script:QualificationReceipt | ConvertTo-Json -Depth 15), $utf8)
+    }
+}
+
+$self = Get-CimInstance Win32_Process -Filter "ProcessId=$PID" -ErrorAction SilentlyContinue
+if (-not $self) { throw 'PROCESS_OWNERSHIP_UNAVAILABLE: Cannot record qualification process identity.' }
+$parentProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$($self.ParentProcessId)" -ErrorAction SilentlyContinue
+if (-not $parentProcess) { throw 'PROCESS_OWNERSHIP_UNAVAILABLE: Cannot record qualification parent identity.' }
+$script:QualificationReceipt = [ordered]@{
+    task_run_id = $RecoveryRunId
+    task = 'Olympus beta.3 release qualification'
+    state = 'LIVE_OWNED_WORK'
+    ownership_marker = $RecoveryRunId
+    expected_result_path = $transcriptPath
+    progress_counter = 0
+    latest_progress_timestamp = (Get-Date).ToString('o')
+    process = [ordered]@{
+        pid = [int]$self.ProcessId
+        start_time = ([datetime]$self.CreationDate).ToString('o')
+        executable_path = [string]$self.ExecutablePath
+        exact_command_line = [string]$self.CommandLine
+        working_directory = (Get-Location).Path
+        parent_pid = [int]$self.ParentProcessId
+        parent_start_time = ([datetime]$parentProcess.CreationDate).ToString('o')
+        ownership_marker = $RecoveryRunId
+    }
+}
+Save-QualificationReceipt
+
 function Check([string]$id, [bool]$valid) {
     if (-not $valid) { throw "$id FAIL" }
     Write-Output "$id PASS"
+    $script:QualificationReceipt.progress_counter++
+    Save-QualificationReceipt
 }
 
 function New-Target([string]$name) {
@@ -28,8 +73,14 @@ function New-SourceArchive([string]$sourceRoot, [string]$tag, [string]$archivePa
     $pack = Join-Path $run ('package-' + [guid]::NewGuid().ToString('N'))
     $top = Join-Path $pack "OpenCode-OlympusAgents-$tag"
     [IO.Directory]::CreateDirectory($top) | Out-Null
-    foreach ($item in Get-ChildItem -LiteralPath $sourceRoot -Force | Where-Object Name -ne '.git') {
-        Copy-Item -LiteralPath $item.FullName -Destination $top -Recurse -Force
+    $files = @(& git -C $sourceRoot ls-files --cached --others --exclude-standard)
+    if ($LASTEXITCODE -ne 0 -or $files.Count -eq 0) { throw 'GIT_FIXTURE_SOURCE_INVENTORY_FAIL' }
+    foreach ($relative in $files) {
+        $sourceFile = Join-Path $sourceRoot $relative
+        $destination = Join-Path $top $relative
+        $destinationParent = Split-Path -Parent $destination
+        [IO.Directory]::CreateDirectory($destinationParent) | Out-Null
+        Copy-Item -LiteralPath $sourceFile -Destination $destination -Force
     }
     if ($MisreportStable) {
         $path = Join-Path $top 'install.ps1'
@@ -65,8 +116,37 @@ function Install([string]$target, [string]$archive, [string]$version = '') {
     [pscustomobject]@{ Text=$output; Code=$LASTEXITCODE }
 }
 
+function Verify([string]$target, [string]$archive, [string]$version) {
+    $args = @('-NoProfile', '-File', $installer, '-Target', $target, '-SourceArchive', $archive,
+        '-Version', $version, '-VerifyOnly')
+    $output = (& pwsh @args 2>&1 | Out-String)
+    [pscustomobject]@{ Text=$output; Code=$LASTEXITCODE }
+}
+
+function Get-ProjectSnapshot([string]$target) {
+    $root = (Resolve-Path -LiteralPath $target).Path.TrimEnd([char[]]@('\','/'))
+    $prefix = $root + [IO.Path]::DirectorySeparatorChar
+    @(
+        Get-ChildItem -LiteralPath $root -Force -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($prefix.Length)
+            $relative + ':' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+        }
+    ) -join "`n"
+}
+
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
+    Start-Transcript -LiteralPath $transcriptPath -Force | Out-Null
+    if ($MockOpenCode) {
+        $mockBin = Join-Path $run 'mock-bin'
+        [IO.Directory]::CreateDirectory($mockBin) | Out-Null
+        $fixtureMock = Join-Path $PSScriptRoot 'fixtures/opencode.ps1'
+        if (-not (Test-Path -LiteralPath $fixtureMock -PathType Leaf)) { throw 'OPENCODE_STUB_MISSING' }
+        Copy-Item -LiteralPath $fixtureMock -Destination (Join-Path $mockBin 'opencode.ps1') -Force
+        [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), "@echo off`r`npwsh -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n", [Text.Encoding]::ASCII)
+        $env:PATH = $mockBin + [IO.Path]::PathSeparator + $env:PATH
+        Write-Output 'RUNTIME_OPEN_CODE: local stub responses; no live OpenCode session or authority smoke.'
+    }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $candidateArchive = New-SourceArchive $source 'v0.3.0-beta.3' (Join-Path $run 'candidate-beta3.zip')
     $stableArchive = New-GitTagArchive 'v0.2.0' (Join-Path $run 'stable-v020.zip')
@@ -76,52 +156,70 @@ try {
     $mismatchArchive = New-SourceArchive $source 'v0.3.0-beta.3' (Join-Path $run 'mismatch-beta3-to-v020.zip') -MisreportStable
 
     $versionText = [IO.File]::ReadAllText($installer)
-    Check 'R0_RELEASE_IDENTITY' ($versionText -match "(?m)^\s*\[string\]\`$Version\s*=\s*'v0\.3\.0-beta\.3'" -and
+    $releaseIdentityValid = ($versionText -match "(?m)^\s*\[string\]\`$Version\s*=\s*'v0\.3\.0-beta\.3'" -and
         $versionText -match "(?m)^\`$ReleaseVersion\s*=\s*'v0\.3\.0-beta\.3'")
     $patternMatch = [regex]::Match($versionText, "(?s)\[ValidatePattern\('([^']+)'\)\]\s*\[string\]\`$Version")
     $versionPattern = if ($patternMatch.Success) { $patternMatch.Groups[1].Value } else { '' }
     $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1','v0.3.0-beta.3','v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
-    Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
+    if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
+        Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
+        Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
+        Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
+    } elseif ($ResumeAtR1) { Write-Output 'REVALIDATION_START: R1 (previously collected R0/alpha/RC gates not rerun).' }
+    else { Write-Output 'REVALIDATION_START: permission checks (previously collected R0/alpha/RC gates not rerun).' }
 
     # The beta.3 request uses a local ZIP with the same GitHub tag-root layout.
     $target = New-Target 'fresh-beta3-default'
     $first = Install $target $candidateArchive
-    Check 'R1_REQUESTED_BETA3_RESOLVED_BETA3' ($first.Code -eq 0 -and
-        $first.Text -match 'OLYMPUS_SOURCE: requested=v0\.3\.0-beta\.3 resolved=v0\.3\.0-beta\.3 origin=LOCAL_ARCHIVE' -and
-        $first.Text -match 'OLYMPUS_INSTALL: v0\.3\.0-beta\.3 READY_OR_NO_CHANGES')
-    $paths = @('opencode.jsonc', '.opencode/orchestrator-install.json', '.opencode/commands/maintain.md',
-        '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
-    $paths += @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios','aegis' | ForEach-Object { ".opencode/agents/$_.md" })
-    Check 'R2_BETA3_ROSTER_FILES' (@($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path $target $_) -PathType Leaf) }).Count -eq 0 -and
-        -not (Test-Path -LiteralPath (Join-Path $target '.opencode/agents/maintenance.md')))
-    $manifestPath = Join-Path $target '.opencode/orchestrator-install.json'
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    Check 'R2_BETA3_MANIFEST_VERSION_AND_OWNERSHIP' ($manifest.schema_version -eq 1 -and
-        $manifest.installed_version -eq 'v0.3.0-beta.3' -and $manifest.managed_files.Count -eq 16 -and
-        @($manifest.managed_files | Where-Object path -eq '.opencode/agents/aegis.md').Count -eq 1 -and
-        @($manifest.managed_files | Where-Object path -eq '.opencode/agents/maintenance.md').Count -eq 0)
+    if (-not $ResumeAtPermissions) {
+        $r1Pass = ($first.Code -eq 0 -and
+            $first.Text -match 'OLYMPUS_SOURCE: requested=v0\.3\.0-beta\.3 resolved=v0\.3\.0-beta\.3 origin=LOCAL_ARCHIVE' -and
+            $first.Text -match 'OLYMPUS_INSTALL: v0\.3\.0-beta\.3 READY_OR_NO_CHANGES')
+        if (-not $r1Pass) { Write-Output "R1_INSTALL_OUTPUT: $($first.Text)" }
+        Check 'R1_REQUESTED_BETA3_RESOLVED_BETA3' $r1Pass
+        $paths = @('opencode.jsonc', '.opencode/orchestrator-install.json', '.opencode/commands/maintain.md',
+            '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
+        $paths += @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios','aegis' | ForEach-Object { ".opencode/agents/$_.md" })
+        Check 'R2_BETA3_ROSTER_FILES' (@($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path $target $_) -PathType Leaf) }).Count -eq 0 -and
+            -not (Test-Path -LiteralPath (Join-Path $target '.opencode/agents/maintenance.md')))
+        $manifestPath = Join-Path $target '.opencode/orchestrator-install.json'
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        Check 'R2_BETA3_MANIFEST_VERSION_AND_OWNERSHIP' ($manifest.schema_version -eq 1 -and
+            $manifest.installed_version -eq 'v0.3.0-beta.3' -and $manifest.managed_files.Count -eq 16 -and
+            @($manifest.managed_files | Where-Object path -eq '.opencode/agents/aegis.md').Count -eq 1 -and
+            @($manifest.managed_files | Where-Object path -eq '.opencode/agents/maintenance.md').Count -eq 0)
 
-    Push-Location $target
-    try {
-        $agents = (& opencode debug agents 2>&1 | Out-String) | ConvertFrom-Json -Depth 100
-        Check 'R3_EFFECTIVE_AGENTS' ($LASTEXITCODE -eq 0 -and @($agents | Where-Object { $_.id -in @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios','aegis') }).Count -eq 12 -and @($agents | Where-Object { $_.id -in @('maintenance','sorin') }).Count -eq 0)
-        $plugins = (& opencode plugin list 2>&1 | Out-String)
-        Check 'R9_HUD_DISCOVERY' ($LASTEXITCODE -eq 0 -and $plugins -match 'olympus-activity')
-    } finally { Pop-Location }
-    $expected = @{
-        kael=@('gpt-6-sol','high','primary'); thales=@('gpt-6-sol','xhigh','subagent'); atlas=@('gpt-6-sol','high','subagent'); argus=@('gpt-6-sol','high','subagent'); talos=@('gpt-6-sol','high','subagent'); helios=@('gpt-6-sol','high','subagent')
-        veyra=@('gpt-6-luna','max','subagent'); orin=@('gpt-6-luna','max','subagent'); kovan=@('gpt-6-luna','max','subagent')
-        nox=@('gpt-6-luna','max','subagent'); vera=@('gpt-6-luna','max','subagent'); aegis=@('gpt-6-luna','max','subagent')
+        $betaVerify = Verify $target $candidateArchive 'v0.3.0-beta.3'
+        Check 'R24_BETA_INSTALL_VERIFY_PASS' ($betaVerify.Code -eq 0 -and $betaVerify.Text -match '(?m)^OLYMPUS_VERIFY: v0\.3\.0-beta\.3 PASS\s*$')
+
+        Push-Location $target
+        try {
+            $agents = (& opencode debug agents 2>&1 | Out-String) | ConvertFrom-Json -Depth 100
+            Check 'R3_EFFECTIVE_AGENTS' ($LASTEXITCODE -eq 0 -and @($agents | Where-Object { $_.id -in @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios','aegis') }).Count -eq 12 -and @($agents | Where-Object { $_.id -in @('maintenance','sorin') }).Count -eq 0)
+            $plugins = (& opencode plugin list 2>&1 | Out-String)
+            Check 'R9_HUD_DISCOVERY' ($LASTEXITCODE -eq 0 -and $plugins -match 'olympus-activity')
+        } finally { Pop-Location }
+        $expected = @{
+            kael=@('gpt-6-sol','high','primary'); thales=@('gpt-6-sol','xhigh','subagent'); atlas=@('gpt-6-sol','high','subagent'); argus=@('gpt-6-sol','high','subagent'); talos=@('gpt-6-sol','high','subagent'); helios=@('gpt-6-sol','high','subagent')
+            veyra=@('gpt-6-luna','max','subagent'); orin=@('gpt-6-luna','max','subagent'); kovan=@('gpt-6-luna','max','subagent')
+            nox=@('gpt-6-luna','max','subagent'); vera=@('gpt-6-luna','max','subagent'); aegis=@('gpt-6-luna','max','subagent')
+        }
+        foreach ($id in $expected.Keys) {
+            $agent = @($agents | Where-Object id -eq $id)
+            Check "R5_MODEL_$id" ($agent.Count -eq 1 -and $agent[0].model.id -eq $expected[$id][0] -and
+                $agent[0].model.variant -eq $expected[$id][1] -and $agent[0].mode -eq $expected[$id][2])
+        }
+        $m = @($agents | Where-Object id -eq aegis)[0]
+        Check 'R4_AEGIS_HIDDEN' ($m.mode -eq 'subagent' -and $m.hidden -eq $true)
+        $maintainCommand = [IO.File]::ReadAllText((Join-Path $target '.opencode/commands/maintain.md'))
+        Check 'R4_MAINTAIN_ROUTES_AEGIS' ($maintainCommand -match '(?m)^agent: aegis\s*$' -and $maintainCommand -match '(?m)^subagent: true\s*$')
+    } else {
+        Write-Output 'REVALIDATION_START: R4_PERMISSION_CHECKS (R1-R4 discovery gates already collected; no gate assertions rerun).'
+        if ($first.Code -ne 0) { throw 'Fixture setup failed while restoring permission check context.' }
+        Push-Location $target
+        try { $agents = (& opencode debug agents 2>&1 | Out-String) | ConvertFrom-Json -Depth 100; if ($LASTEXITCODE -ne 0) { throw 'OpenCode stub fixture setup failed.' } }
+        finally { Pop-Location }
     }
-    foreach ($id in $expected.Keys) {
-        $agent = @($agents | Where-Object id -eq $id)
-        Check "R5_MODEL_$id" ($agent.Count -eq 1 -and $agent[0].model.id -eq $expected[$id][0] -and
-            $agent[0].model.variant -eq $expected[$id][1] -and $agent[0].mode -eq $expected[$id][2])
-    }
-    $m = @($agents | Where-Object id -eq aegis)[0]
-    Check 'R4_AEGIS_HIDDEN' ($m.mode -eq 'subagent' -and $m.hidden -eq $true)
-    $maintainCommand = [IO.File]::ReadAllText((Join-Path $target '.opencode/commands/maintain.md'))
-    Check 'R4_MAINTAIN_ROUTES_AEGIS' ($maintainCommand -match '(?m)^agent: aegis\s*$' -and $maintainCommand -match '(?m)^subagent: true\s*$')
     $k = @($agents | Where-Object id -eq kovan)[0]
     $n = @($agents | Where-Object id -eq nox)[0]
     $kael = @($agents | Where-Object id -eq kael)[0]
@@ -142,6 +240,8 @@ try {
         $stable.Text -match 'OLYMPUS_SOURCE: requested=v0\.2\.0 resolved=v0\.2\.0 origin=LOCAL_ARCHIVE' -and
         $stable.Text -match 'OLYMPUS_INSTALL: v0\.2\.0 READY_OR_NO_CHANGES' -and
         (Get-Content -LiteralPath (Join-Path $stableTarget '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json).managed_files.Count -gt 0)
+    $stableVerify = Verify $stableTarget $stableArchive 'v0.2.0'
+    Check 'R24_STABLE_INSTALL_VERIFY_PASS' ($stableVerify.Code -eq 0 -and $stableVerify.Text -match '(?m)^OLYMPUS_VERIFY: v0\.2\.0 PASS\s*$')
     foreach ($entry in @(@('alpha','v0.3.0-alpha.1',$alphaArchive), @('beta','v0.3.0-beta.2',$betaArchive), @('rc','v0.3.0-rc.1',$rcArchive))) {
         $semverTarget = New-Target ('semver-' + $entry[0])
         $result = Install $semverTarget $entry[2] $entry[1]
@@ -151,6 +251,81 @@ try {
             $result.Text -match ('OLYMPUS_SOURCE: requested=' + [regex]::Escape($entry[1]) + ' resolved=' + [regex]::Escape($entry[1])) -and
             $null -ne $semverManifest -and $semverManifest.installed_version -eq $entry[1])
     }
+
+    $legacyTarget = New-Target 'verify-legacy-unknown-commit'
+    $legacyInstall = Install $legacyTarget $candidateArchive 'v0.3.0-beta.3'
+    if ($legacyInstall.Code -ne 0) { throw 'Beta.3 fixture install failed before unknown-commit verification.' }
+    $legacyManifestPath = Join-Path $legacyTarget '.opencode/orchestrator-install.json'
+    $legacyManifest = Get-Content -LiteralPath $legacyManifestPath -Raw | ConvertFrom-Json
+    $legacyManifest.installed_from_commit = 'unknown'
+    [void]$legacyManifest.PSObject.Properties.Remove('installed_version')
+    [IO.File]::WriteAllText($legacyManifestPath, (($legacyManifest | ConvertTo-Json -Depth 30) + "`n"), $utf8)
+    $legacySnapshot = Get-ProjectSnapshot $legacyTarget
+    $legacyVerify = Verify $legacyTarget $candidateArchive 'v0.3.0-beta.3'
+    Check 'R24_UNKNOWN_COMMIT_VERIFIED_BY_CONTENT' ($legacyVerify.Code -eq 0 -and
+        $legacyVerify.Text -match '(?m)^OLYMPUS_VERIFY: v0\.3\.0-beta\.3 PASS\s*$')
+    Check 'R24_VERIFY_ONLY_READ_ONLY' ((Get-ProjectSnapshot $legacyTarget) -ceq $legacySnapshot)
+
+    $oldStableMismatch = Verify $stableTarget $candidateArchive 'v0.3.0-beta.3'
+    Check 'R24_BETA3_VS_INSTALLED_STABLE_FAIL' ($oldStableMismatch.Code -ne 0 -and
+        $oldStableMismatch.Text -match '(?m)^OLYMPUS_VERIFY: v0\.3\.0-beta\.3 FAIL\s*$' -and
+        $oldStableMismatch.Text -match 'OLYMPUS_VERIFY_REASON: MANAGED_FILE_MISMATCH')
+    $otherBetaTarget = New-Target 'verify-other-beta'
+    $otherBetaInstall = Install $otherBetaTarget $betaArchive 'v0.3.0-beta.2'
+    if ($otherBetaInstall.Code -ne 0) { throw 'Other-beta fixture install failed before version verification.' }
+    $otherBetaVerify = Verify $otherBetaTarget $candidateArchive 'v0.3.0-beta.3'
+    Check 'R24_BETA3_VS_OTHER_BETA_FAIL' ($otherBetaVerify.Code -ne 0 -and
+        $otherBetaVerify.Text -match 'OLYMPUS_VERIFY_REASON: INSTALLED_VERSION_MISMATCH')
+
+    $driftTarget = New-Target 'verify-managed-hash-drift'
+    $driftInstall = Install $driftTarget $candidateArchive 'v0.3.0-beta.3'
+    if ($driftInstall.Code -ne 0) { throw 'Beta.3 fixture install failed before managed drift verification.' }
+    $driftFile = Join-Path $driftTarget '.opencode/agents/kael.md'
+    [IO.File]::AppendAllText($driftFile, "`n# verification drift`n", $utf8)
+    $driftSnapshot = Get-ProjectSnapshot $driftTarget
+    $hashDrift = Verify $driftTarget $candidateArchive 'v0.3.0-beta.3'
+    Check 'R24_MANAGED_HASH_DRIFT_FAIL' ($hashDrift.Code -ne 0 -and
+        $hashDrift.Text -match 'OLYMPUS_VERIFY_REASON: MANAGED_FILE_MISMATCH' -and
+        (Get-ProjectSnapshot $driftTarget) -ceq $driftSnapshot)
+
+    $retiredAgentTarget = New-Target 'verify-retired-agent-active'
+    $retiredInstall = Install $retiredAgentTarget $candidateArchive 'v0.3.0-beta.3'
+    if ($retiredInstall.Code -ne 0) { throw 'Beta.3 fixture install failed before retired-agent verification.' }
+    [IO.File]::WriteAllText((Join-Path $retiredAgentTarget '.opencode/agents/maintenance.md'), "id: maintenance`n", $utf8)
+    $retiredVerify = Verify $retiredAgentTarget $candidateArchive 'v0.3.0-beta.3'
+    Check 'R24_BETA3_ROSTER_REJECTS_MAINTENANCE' ($retiredVerify.Code -ne 0 -and
+        $retiredVerify.Text -match 'OLYMPUS_VERIFY_REASON: ROSTER_MISMATCH')
+
+    $sourceMismatchVerify = Verify $legacyTarget $mismatchArchive 'v0.3.0-beta.3'
+    Check 'R24_REQUESTED_SOURCE_VERSION_MISMATCH_FAIL' ($sourceMismatchVerify.Code -ne 0 -and
+        $sourceMismatchVerify.Text -match 'OLYMPUS_VERIFY_REASON: SOURCE_VERSION_MISMATCH')
+
+    $changelog = [IO.File]::ReadAllText((Join-Path $source 'CHANGELOG.md'))
+    $notesStart = $changelog.IndexOf('## v0.3.0-beta.3', [StringComparison]::Ordinal)
+    $notesEnd = $changelog.IndexOf('# 0.3.0-beta.1', $notesStart, [StringComparison]::Ordinal)
+    if ($notesStart -lt 0 -or $notesEnd -le $notesStart) { throw 'Beta.3 release-notes section is missing or unbounded.' }
+    $releaseNotes = $changelog.Substring($notesStart, $notesEnd - $notesStart)
+    $rawUrl = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.3/install.ps1'
+    $installCommand = "irm $rawUrl | iex"
+    $verifyCommand = "& ([scriptblock]::Create((irm '$rawUrl'))) -Version 'v0.3.0-beta.3' -Target (Get-Location).Path -VerifyOnly"
+    Check 'R25_RELEASE_NOTES_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Installation\s*$' -and $releaseNotes.Contains($installCommand))
+    Check 'R25_RELEASE_NOTES_VERIFY_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Verify installation\s*$' -and $releaseNotes.Contains($verifyCommand))
+    Check 'R25_RELEASE_NOTES_COMMANDS_PIN_SAME_TAG' ($installCommand.Contains('/v0.3.0-beta.3/') -and
+        $verifyCommand.Contains('/v0.3.0-beta.3/') -and $verifyCommand.Contains("-Version 'v0.3.0-beta.3'"))
+    Check 'R25_BETA_RELEASE_NO_MASTER_SOURCE' ($releaseNotes -notmatch '(?i)raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/master/install\.ps1' -and
+        $versionText -match 'archive/refs/tags/\$Version\.zip')
+
+    $releaseGate = Join-Path $PSScriptRoot 'github-release-notes.ps1'
+    $gateGood = (& pwsh -NoProfile -File $releaseGate -Version 'v0.3.0-beta.3' -ReleaseBody $releaseNotes 2>&1 | Out-String)
+    Check 'R26_RELEASE_GATE_ACCEPTS_BOTH_PINNED_COMMANDS' ($LASTEXITCODE -eq 0 -and $gateGood -match 'RELEASE_NOTES_CONTRACT: v0\.3\.0-beta\.3 PASS')
+    $gateBad = (& pwsh -NoProfile -File $releaseGate -Version 'v0.3.0-beta.3' -ReleaseBody ($releaseNotes -replace '(?s)## Verify installation.*', '') 2>&1 | Out-String)
+    Check 'R26_RELEASE_GATE_REJECTS_MISSING_VERIFY' ($LASTEXITCODE -ne 0 -and $gateBad -match 'RELEASE_NOTES_VERIFY_MISSING')
+    $gateWrongTag = (& pwsh -NoProfile -File $releaseGate -Version 'v0.3.0-beta.3' -ReleaseBody ($releaseNotes.Replace("-Version 'v0.3.0-beta.3'", "-Version 'v0.3.0-beta.2'")) 2>&1 | Out-String)
+    Check 'R26_RELEASE_GATE_REJECTS_TAG_MISMATCH' ($LASTEXITCODE -ne 0 -and $gateWrongTag -match 'RELEASE_NOTES_VERIFY_PIN_MISMATCH')
+    $gateText = [IO.File]::ReadAllText($releaseGate)
+    Check 'R26_GATE_READS_PUBLISHED_GITHUB_RELEASE_BODY' ($gateText -match 'gh\.Source release view' -and
+        $gateText -match 'release\.body' -and $gateText -match 'RELEASE_NOTES_INSTALL_PIN_MISMATCH' -and
+        $gateText -match 'RELEASE_NOTES_VERIFY_PIN_MISMATCH')
 
     $badVersionTarget = New-Target 'bad-version'
     $badVersion = (& pwsh -NoProfile -File $installer -Version 'v1.2.3-preview.1' -Target $badVersionTarget -SourceArchive $candidateArchive 2>&1 | Out-String)
@@ -214,18 +389,32 @@ try {
     Check 'R8_FILESYSTEM_ROOT_REJECTED' ($unsafe.Code -ne 0 -and $unsafe.Text -match 'UNSAFE_TARGET|TARGET_NOT_GIT')
     Write-Output 'R8_REDIRECTS_CLOUD_CONTAINMENT: covered by Phase 4C target-security cases (run separately)'
     Write-Output 'RUNTIME_ARCHIVE_SOURCE: local archive fixtures were used; remote tag bytes/authentication were not queried.'
-    Write-Output 'RELEASE QUALIFICATION: PASS (local tag-shaped source archives; no tag, push, or release created)'
+    $script:QualificationReceipt.state = 'TERMINAL_RESULT_WRITTEN'
+    Save-QualificationReceipt
+    if ($MockOpenCode) { Write-Output 'RELEASE QUALIFICATION: PASS (local source; OpenCode CLI stubbed; no tag, push, or release created)' }
+    else { Write-Output 'RELEASE QUALIFICATION: PASS (local tag-shaped source archives; no tag, push, or release created)' }
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
+    if ($null -ne $script:QualificationReceipt) {
+        $script:QualificationReceipt.state = 'FAILED_RESULT_WRITTEN'
+        Save-QualificationReceipt
+    }
     Write-Output 'RELEASE QUALIFICATION: FAIL'
     exit 1
 } finally {
+    try { Stop-Transcript | Out-Null } catch { }
+    if ($MockOpenCode -and $run -and (Test-Path -LiteralPath $run)) {
+        $mockBin = Join-Path $run 'mock-bin'
+        if (Test-Path -LiteralPath $mockBin) {
+            $env:PATH = ($env:PATH -replace ('^' + [regex]::Escape($mockBin + [IO.Path]::PathSeparator)), '')
+        }
+    }
     if ($run -and (Test-Path -LiteralPath $run)) {
         for ($attempt = 1; $attempt -le 10; $attempt++) {
             try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop; break }
             catch {
                 if ($attempt -eq 10) {
-                    Write-Output 'CLEANUP_DEFERRED: OpenCode/Windows still holds the disposable fixture; remove after handles close.'
+                    Write-Output "CLEANUP_DEFERRED: OpenCode/Windows still holds disposable fixture $run; remove after handles close."
                     break
                 }
                 Start-Sleep -Milliseconds 500

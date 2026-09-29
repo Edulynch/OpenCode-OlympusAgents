@@ -79,7 +79,7 @@ $env:PATH = $EmptyPath
         $output = (& $hostEntry.Path -NoProfile -File $missingFixture -Installer $installer -SourceRoot $missingSource -Target $missingTarget -EmptyPath $run 2>&1 | Out-String)
         $code = $LASTEXITCODE
         Check ('P4_PWSH_MISSING_' + $hostEntry.Id) ($code -ne 0 -and
-            $output -match 'OLYMPUS_REQUIRES_POWERSHELL_7: PowerShell 7 \(pwsh\) is required' -and
+            $output -match 'OLYMPUS_REQUIRES_POWERSHELL_7:\s*PowerShell 7 \(pwsh\) is required' -and
             $output -notmatch 'SOURCE_INVALID|BOOTSTRAP_FAILED|VariableIsUndefined' -and
             -not (Test-Path -LiteralPath $missingTarget))
     }

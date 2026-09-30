@@ -4,6 +4,8 @@ param(
     [ValidatePattern('^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$')]
     [string]$Version = 'v0.3.0-beta.4',
     [string]$Target = (Get-Location).Path,
+    [ValidateSet('opencode', 'codex', 'all')]
+    [string]$Harness = 'opencode',
     [switch]$DryRun,
     [switch]$VerifyOnly,
     # Qualification-only source overrides. Source identity is always checked.
@@ -15,151 +17,6 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ReleaseVersion = 'v0.3.0-beta.4' # Must equal this installer's default and published tag.
 $owned = $null
-
-function Get-ContentHash([string]$Path) {
-    $utf8 = [Text.UTF8Encoding]::new($false)
-    $sha = [Security.Cryptography.SHA256]::Create()
-    try {
-        $bytes = $utf8.GetBytes([IO.File]::ReadAllText($Path))
-        ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '')
-    } finally { $sha.Dispose() }
-}
-
-function Get-ManagedSourcePaths([string]$BootstrapPath) {
-    $text = [IO.File]::ReadAllText($BootstrapPath)
-    $block = [regex]::Match($text, '(?ms)^\s*\$Managed\s*=\s*@\(\s*(?<body>.*?)^\s*\)')
-    if (-not $block.Success) { throw 'SOURCE_INVALID: Cannot read the release managed-file inventory.' }
-    $paths = [System.Collections.Generic.List[string]]::new()
-    foreach ($line in ($block.Groups['body'].Value -split '\r?\n')) {
-        $item = $line.Trim()
-        if (-not $item -or $item.StartsWith('#')) { continue }
-        $match = [regex]::Match($item, '^(?:"(?<double>[^"]+)"|''(?<single>[^'']+)'')\s*,?$')
-        if (-not $match.Success) { throw 'SOURCE_INVALID: Release managed-file inventory is not a literal path list.' }
-        $path = if ($match.Groups['double'].Success) { $match.Groups['double'].Value } else { $match.Groups['single'].Value }
-        if ([IO.Path]::IsPathRooted($path) -or $path -match '(^|[/\\])\.\.([/\\]|$)' -or $paths.Contains($path)) {
-            throw "SOURCE_INVALID: Invalid or duplicate managed path '$path'."
-        }
-        $paths.Add($path.Replace('\', '/'))
-    }
-    if ($paths.Count -eq 0) { throw 'SOURCE_INVALID: Release managed-file inventory is empty.' }
-    return @($paths)
-}
-
-function Assert-InstalledRelease([string]$Source, [string]$RequestedVersion, [string]$ProjectPath) {
-    $pathRoot = [IO.Path]::GetPathRoot($ProjectPath)
-    $driveAbsolute = $ProjectPath -match '^[A-Za-z]:[\\/]'
-    $uncAbsolute = $ProjectPath -match '^\\\\[^\\]+\\[^\\]+'
-    if (-not $pathRoot -or (-not $driveAbsolute -and -not $uncAbsolute)) { throw 'MANAGED_FILE_MISMATCH: Target must be an absolute project-root path.' }
-    $targetItem = Get-Item -LiteralPath $ProjectPath -ErrorAction Stop
-    if (-not $targetItem.PSIsContainer) { throw 'MANAGED_FILE_MISMATCH: Target is not a directory.' }
-    $target = (Resolve-Path -LiteralPath $ProjectPath -ErrorAction Stop).Path
-    $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue
-    if (-not $git) { throw 'MANAGED_FILE_MISMATCH: Git is required to identify the target project root.' }
-    $gitRoot = (& $git.Source -C $target rev-parse --show-toplevel 2>$null | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $gitRoot) { throw 'MANAGED_FILE_MISMATCH: Target is not a Git project.' }
-    $gitRoot = (Resolve-Path -LiteralPath $gitRoot -ErrorAction Stop).Path
-    if (-not [string]::Equals($target.TrimEnd('\','/'), $gitRoot.TrimEnd('\','/'), [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'MANAGED_FILE_MISMATCH: Target must be the Git worktree root.'
-    }
-
-    $bootstrap = Join-Path $Source 'scripts/bootstrap.ps1'
-    if (-not (Test-Path -LiteralPath $bootstrap -PathType Leaf)) { throw 'SOURCE_INVALID: Release source has no bootstrap script.' }
-    $managed = @(Get-ManagedSourcePaths $bootstrap)
-    $sourceAgents = @($managed | Where-Object { $_ -match '^\.opencode/agents/[^/]+\.md$' } | Sort-Object)
-    if ($sourceAgents.Count -eq 0) { throw 'SOURCE_INVALID: Release source declares no agent roster.' }
-
-    $manifestPath = Join-Path $target '.opencode/orchestrator-install.json'
-    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
-        throw 'MANAGED_FILE_MISMATCH: Olympus install manifest is missing.'
-    }
-    try { $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json }
-    catch { throw 'MANAGED_FILE_MISMATCH: Olympus install manifest is invalid.' }
-    if ($manifest.schema_version -ne 1 -or $null -eq $manifest.managed_files) {
-        throw 'MANAGED_FILE_MISMATCH: Olympus install manifest schema or managed file set is unsupported.'
-    }
-
-    # A recorded version is useful evidence, never the sole integrity check. Old
-    # manifests may omit it (or record local); release bytes below remain decisive.
-    $manifestProperties = @($manifest.PSObject.Properties | ForEach-Object Name)
-    if ('installed_version' -in $manifestProperties) {
-        $recordedVersion = [string]$manifest.installed_version
-        if ($recordedVersion -and $recordedVersion -notin @('unknown', 'local') -and $recordedVersion -cne $RequestedVersion) {
-            throw "INSTALLED_VERSION_MISMATCH: manifest records '$recordedVersion'; requested '$RequestedVersion'."
-        }
-    }
-
-    $entries = @($manifest.managed_files)
-    $entryPaths = [System.Collections.Generic.List[string]]::new()
-    $entryByPath = @{}
-    foreach ($entry in $entries) {
-        $path = ([string]$entry.path).Replace('\', '/')
-        if (-not $path -or $entryByPath.ContainsKey($path)) {
-            throw 'MANAGED_FILE_MISMATCH: Manifest contains an empty or duplicate managed path.'
-        }
-        $entryPaths.Add($path)
-        $entryByPath[$path] = $entry
-    }
-    if ($entryPaths.Count -ne $managed.Count -or @($managed | Where-Object { $_ -notin $entryPaths }).Count -gt 0 -or
-        @($entryPaths | Where-Object { $_ -notin $managed }).Count -gt 0) {
-        throw 'MANAGED_FILE_MISMATCH: Installed managed file set differs from the requested release.'
-    }
-
-    foreach ($path in $managed) {
-        $sourceFile = Join-Path $Source ($path -replace '/', [IO.Path]::DirectorySeparatorChar)
-        $targetFile = Join-Path $target ($path -replace '/', [IO.Path]::DirectorySeparatorChar)
-        if (-not (Test-Path -LiteralPath $sourceFile -PathType Leaf)) {
-            throw "SOURCE_INVALID: Release managed file is missing: $path"
-        }
-        if (-not (Test-Path -LiteralPath $targetFile -PathType Leaf)) {
-            throw "MANAGED_FILE_MISSING: Installed managed file is missing: $path"
-        }
-        $sourceHash = Get-ContentHash $sourceFile
-        $targetHash = Get-ContentHash $targetFile
-        if ($targetHash -cne $sourceHash -or [string]$entryByPath[$path].sha256 -notmatch ('(?i)^' + [regex]::Escape($targetHash) + '$')) {
-            throw "MANAGED_FILE_MISMATCH: Installed managed content differs from release source: $path"
-        }
-    }
-
-    $installedAgents = @($entryPaths | Where-Object { $_ -match '^\.opencode/agents/[^/]+\.md$' } | Sort-Object)
-    if ($installedAgents.Count -ne $sourceAgents.Count -or @($sourceAgents | Where-Object { $_ -notin $installedAgents }).Count -gt 0) {
-        throw 'ROSTER_MISMATCH: Installed agent roster differs from the requested release.'
-    }
-    $sourceAgentIds = @($sourceAgents | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_) })
-    $knownOlympusAgents = @('kael','veyra','orin','kovan','nox','vera','thales','sorin','atlas','argus','talos','helios','aegis','maintenance')
-    $activeAgentDirectory = Join-Path $target '.opencode/agents'
-    foreach ($retired in @($knownOlympusAgents | Where-Object { $_ -notin $sourceAgentIds })) {
-        if (Test-Path -LiteralPath (Join-Path $activeAgentDirectory ($retired + '.md'))) {
-            throw "ROSTER_MISMATCH: Agent '$retired' is not part of the requested release roster."
-        }
-    }
-    if ($RequestedVersion -ceq $ReleaseVersion -and '.opencode/agents/aegis.md' -notin $sourceAgents) {
-        throw 'ROSTER_MISMATCH: Current prerelease source does not include the managed Aegis agent.'
-    }
-
-    $opencode = Get-Command opencode -ErrorAction SilentlyContinue
-    if (-not $opencode) { throw 'ROSTER_MISMATCH: OpenCode CLI is required to validate the active agent roster.' }
-    Push-Location $target
-    try {
-        $agentJson = (& opencode debug agents 2>&1 | Out-String)
-        $agentExitCode = $LASTEXITCODE
-    } finally { Pop-Location }
-    if ($agentExitCode -ne 0) { throw 'ROSTER_MISMATCH: OpenCode could not resolve the active agent roster.' }
-    try { $activeAgents = $agentJson | ConvertFrom-Json }
-    catch { throw 'ROSTER_MISMATCH: OpenCode returned an invalid active agent roster.' }
-    foreach ($agentId in $sourceAgentIds) {
-        if (@($activeAgents | Where-Object { $_.id -ceq $agentId }).Count -ne 1) {
-            throw "ROSTER_MISMATCH: Expected exactly one active '$agentId' agent from the requested release."
-        }
-    }
-    foreach ($retired in @($knownOlympusAgents | Where-Object { $_ -notin $sourceAgentIds })) {
-        if (@($activeAgents | Where-Object { $_.id -ceq $retired }).Count -gt 0) {
-            throw "ROSTER_MISMATCH: Retired or unexpected '$retired' agent is active."
-        }
-    }
-    if ($RequestedVersion -ceq $ReleaseVersion -and @($activeAgents | Where-Object { $_.id -ceq 'maintenance' }).Count -gt 0) {
-        throw 'ROSTER_MISMATCH: Retired maintenance agent is active in the current prerelease roster.'
-    }
-}
 
 function Get-DeclaredReleaseVersion([string]$Source) {
     $scriptPath = Join-Path $Source 'install.ps1'
@@ -178,6 +35,115 @@ function Get-DeclaredReleaseVersion([string]$Source) {
         throw "SOURCE_INVALID: Source release version is malformed: $defaultVersion"
     }
     return $defaultVersion
+}
+
+function Get-ContentHash([string]$Path) {
+    $utf8 = [Text.UTF8Encoding]::new($false)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        ([BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes([IO.File]::ReadAllText($Path)))).Replace('-', ''))
+    } finally { $sha.Dispose() }
+}
+
+function Get-LegacyManagedSourcePaths([string]$BootstrapPath) {
+    # Older tagged bootstraps predate Harness Core; their literal managed list is
+    # the migration source of truth only for those immutable legacy releases.
+    $text = [IO.File]::ReadAllText($BootstrapPath)
+    $block = [regex]::Match($text, '(?ms)^\s*\$Managed\s*=\s*@\(\s*(?<body>.*?)^\s*\)')
+    if (-not $block.Success) { throw 'SOURCE_INVALID: Legacy release has no readable managed-file inventory.' }
+    $paths = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in ($block.Groups['body'].Value -split '\r?\n')) {
+        $item = $line.Trim()
+        if (-not $item -or $item.StartsWith('#')) { continue }
+        $match = [regex]::Match($item, '^(?:"(?<double>[^"]+)"|''(?<single>[^'']+)'')\s*,?$')
+        if (-not $match.Success) { throw 'SOURCE_INVALID: Legacy managed-file inventory is not a literal path list.' }
+        $path = if ($match.Groups['double'].Success) { $match.Groups['double'].Value } else { $match.Groups['single'].Value }
+        if ([IO.Path]::IsPathRooted($path) -or $path -match '(^|[/\\])\.\.([/\\]|$)' -or $paths.Contains($path)) {
+            throw "SOURCE_INVALID: Invalid or duplicate legacy managed path '$path'."
+        }
+        $paths.Add($path.Replace('\', '/'))
+    }
+    if ($paths.Count -eq 0) { throw 'SOURCE_INVALID: Legacy managed-file inventory is empty.' }
+    return @($paths)
+}
+
+function Assert-LegacyOpenCodeInstall([string]$Source, [string]$RequestedVersion, [string]$ProjectPath, [string]$BootstrapPath) {
+    $rooted = [IO.Path]::IsPathFullyQualified($ProjectPath)
+    if (-not $rooted) { throw 'MANAGED_FILE_MISMATCH: Target must be an absolute project-root path.' }
+    $target = (Resolve-Path -LiteralPath $ProjectPath -ErrorAction Stop).Path
+    $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue
+    if (-not $git) { throw 'MANAGED_FILE_MISMATCH: Git is required to identify the target project root.' }
+    $gitRoot = (& $git.Source -C $target rev-parse --show-toplevel 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $gitRoot) { throw 'MANAGED_FILE_MISMATCH: Target is not a Git project.' }
+    $gitRoot = (Resolve-Path -LiteralPath $gitRoot -ErrorAction Stop).Path
+    if (-not [string]::Equals($target.TrimEnd('\','/'), $gitRoot.TrimEnd('\','/'), [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'MANAGED_FILE_MISMATCH: Target must be the Git worktree root.'
+    }
+
+    $manifestPath = Join-Path $target '.opencode/orchestrator-install.json'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw 'MANAGED_FILE_MISMATCH: Legacy OpenCode install manifest is missing.' }
+    try { $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json }
+    catch { throw 'MANAGED_FILE_MISMATCH: Legacy OpenCode install manifest is invalid.' }
+    if ($manifest.schema_version -ne 1 -or $null -eq $manifest.managed_files) {
+        throw 'MANAGED_FILE_MISMATCH: Legacy install manifest schema or managed file set is unsupported.'
+    }
+    $properties = @($manifest.PSObject.Properties | ForEach-Object Name)
+    if ('installed_version' -in $properties) {
+        $recorded = [string]$manifest.installed_version
+        if ($recorded -and $recorded -notin @('unknown','local') -and $recorded -cne $RequestedVersion) {
+            throw "INSTALLED_VERSION_MISMATCH: manifest records '$recorded'; requested '$RequestedVersion'."
+        }
+    }
+
+    $managed = @(Get-LegacyManagedSourcePaths $BootstrapPath)
+    $entries = @($manifest.managed_files)
+    $entryByPath = @{}
+    foreach ($entry in $entries) {
+        $path = ([string]$entry.path).Replace('\','/')
+        if (-not $path -or $entryByPath.ContainsKey($path)) { throw 'MANAGED_FILE_MISMATCH: Manifest has empty or duplicate managed paths.' }
+        $entryByPath[$path] = $entry
+    }
+    if ($entryByPath.Count -ne $managed.Count -or @($managed | Where-Object { -not $entryByPath.ContainsKey($_) }).Count -gt 0) {
+        throw 'MANAGED_FILE_MISMATCH: Installed managed file set differs from the legacy release.'
+    }
+    foreach ($path in $managed) {
+        $sourceFile = Join-Path $Source ($path -replace '/', [IO.Path]::DirectorySeparatorChar)
+        $targetFile = Join-Path $target ($path -replace '/', [IO.Path]::DirectorySeparatorChar)
+        if (-not (Test-Path -LiteralPath $sourceFile -PathType Leaf)) { throw "SOURCE_INVALID: Legacy managed file is missing: $path" }
+        if (-not (Test-Path -LiteralPath $targetFile -PathType Leaf)) { throw "MANAGED_FILE_MISSING: Installed managed file is missing: $path" }
+        $sourceHash = Get-ContentHash $sourceFile
+        $targetHash = Get-ContentHash $targetFile
+        if ($sourceHash -cne $targetHash -or ([string]$entryByPath[$path].sha256) -notmatch ('(?i)^' + [regex]::Escape($targetHash) + '$')) {
+            throw "MANAGED_FILE_MISMATCH: Installed managed content differs from legacy release: $path"
+        }
+    }
+    $sourceAgentIds = @($managed | Where-Object { $_ -match '^\.opencode/agents/[^/]+\.md$' } | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_) })
+    $knownOlympusAgents = @('kael','veyra','orin','kovan','nox','vera','thales','sorin','atlas','argus','talos','helios','aegis','maintenance')
+    $retiredAgentIds = @($knownOlympusAgents | Where-Object { $_ -notin $sourceAgentIds })
+    foreach ($id in $retiredAgentIds) {
+        $retiredPath = Join-Path $target ('.opencode/agents/' + $id + '.md')
+        if (Test-Path -LiteralPath $retiredPath) {
+            throw "ROSTER_MISMATCH: Retired or unexpected '$id' agent is installed."
+        }
+    }
+    $opencode = Get-Command opencode -ErrorAction SilentlyContinue
+    if (-not $opencode) { throw 'ROSTER_MISMATCH: OpenCode CLI is required to validate the active agent roster.' }
+    Push-Location $target
+    try { $agentJson = (& $opencode.Source debug agents 2>&1 | Out-String); $agentExitCode = $LASTEXITCODE }
+    finally { Pop-Location }
+    if ($agentExitCode -ne 0) { throw 'ROSTER_MISMATCH: OpenCode could not resolve the active agent roster.' }
+    try { $activeAgents = $agentJson | ConvertFrom-Json }
+    catch { throw 'ROSTER_MISMATCH: OpenCode returned an invalid active agent roster.' }
+    foreach ($id in $sourceAgentIds) {
+        if (@($activeAgents | Where-Object { $_.id -ceq $id }).Count -ne 1) {
+            throw "ROSTER_MISMATCH: Expected exactly one active '$id' agent from the legacy release."
+        }
+    }
+    foreach ($id in $retiredAgentIds) {
+        if (@($activeAgents | Where-Object { $_.id -ceq $id }).Count -gt 0) {
+            throw "ROSTER_MISMATCH: Retired or unexpected '$id' agent is active."
+        }
+    }
 }
 
 function Assert-ArchiveTag([string]$RootName, [string]$RequestedVersion) {
@@ -238,17 +204,34 @@ try {
     }
     $bootstrap = Join-Path $source 'scripts/bootstrap.ps1'
     if (-not (Test-Path -LiteralPath $bootstrap -PathType Leaf)) { throw 'SOURCE_INVALID: Release source has no bootstrap script.' }
+    $bootstrapText = [IO.File]::ReadAllText($bootstrap)
+    $bootstrapSupportsHarness = $bootstrapText -match '(?m)^\s*\[string\]\$Harness\s*='
+    $bootstrapSupportsVerify = $bootstrapText -match '(?m)^\s*\[switch\]\$VerifyOnly\s*(?:,|$)'
+    if ($Harness.ToLowerInvariant() -ne 'opencode' -and -not $bootstrapSupportsHarness) {
+        throw "HARNESS_UNSUPPORTED_RELEASE: Requested '$Harness', but release '$resolvedVersion' predates dual-harness installation."
+    }
     Write-Output "OLYMPUS_SOURCE: requested=$Version resolved=$resolvedVersion origin=$origin"
 
     if ($VerifyOnly) {
-        Assert-InstalledRelease $source $Version $Target
-        Write-Output "OLYMPUS_VERIFY: $Version PASS"
+        if ($bootstrapSupportsHarness -and $bootstrapSupportsVerify) {
+            $verifyArgs = @('-NoProfile', '-File', $bootstrap, '-Target', $Target, '-Harness', $Harness, '-VerifyOnly')
+            if ($bootstrapText -match '(?m)^\s*\[string\]\$SourceVersion\s*=') { $verifyArgs += @('-SourceVersion', $resolvedVersion) }
+            $verifyOutput = & $pwsh.Source @verifyArgs 2>&1
+            $verifyExitCode = $LASTEXITCODE
+            foreach ($line in $verifyOutput) { Write-Output $line }
+            if ($verifyExitCode -ne 0) { exit $verifyExitCode }
+        } elseif ($Harness.ToLowerInvariant() -eq 'opencode') {
+            Assert-LegacyOpenCodeInstall $source $resolvedVersion $Target $bootstrap
+            Write-Output "OLYMPUS_VERIFY: $resolvedVersion PASS"
+        } else {
+            throw "HARNESS_UNSUPPORTED_RELEASE: Release '$resolvedVersion' cannot verify harness '$Harness'."
+        }
         exit 0
     }
 
     # Keep bootstrap's own process semantics, drift checks, containment and effective-agent validation.
     $args = @('-NoProfile', '-File', $bootstrap, '-Target', $Target)
-    $bootstrapText = [IO.File]::ReadAllText($bootstrap)
+    if ($bootstrapSupportsHarness) { $args += @('-Harness', $Harness) }
     if ($bootstrapText -match '(?m)^\s*\[string\]\$SourceVersion\s*=') {
         $args += @('-SourceVersion', $resolvedVersion)
     }

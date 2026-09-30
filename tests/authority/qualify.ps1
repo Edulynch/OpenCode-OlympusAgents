@@ -244,9 +244,13 @@ try {
         }).Count -gt 0
     }).Count -eq 0
     Check 'AUTH9_CORE_AND_GENERATOR_PROTECTED_FOR_NORMAL_AGENTS' $coreProtectionValid
-    $bootstrap = Text 'scripts/bootstrap.ps1'
-    $managedBlock = [regex]::Match($bootstrap, '(?s)\$Managed\s*=\s*@\((.*?)\)').Groups[1].Value
-    $managedPaths = @([regex]::Matches($managedBlock, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value }) + '.opencode/orchestrator-install.json'
+    $managedPaths = @('opencode.jsonc', 'CODEX.md', '.opencode/orchestrator-install.json',
+        '.codex/orchestrator-install.json')
+    foreach ($surface in @('.opencode', '.codex')) {
+        $managedPaths += @(Get-ChildItem -LiteralPath (Join-Path $root $surface) -File -Recurse | ForEach-Object {
+            $_.FullName.Substring(([IO.Path]::GetFullPath($root).TrimEnd([char[]]@('\','/')).Length + 1)).Replace('\','/')
+        })
+    }
     Check 'AUTH9B_EVERY_INSTALLER_MANAGED_PATH_HAS_NATIVE_DENY' (@($managedPaths | Where-Object {
         (Native-Decision $nativeRules 'edit' $_) -ne 'DENY'
     }).Count -eq 0)

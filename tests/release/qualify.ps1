@@ -254,6 +254,14 @@ try {
         (Get-Content -LiteralPath (Join-Path $stableTarget '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json).managed_files.Count -gt 0)
     $stableVerify = Verify $stableTarget $stableArchive 'v0.2.0'
     Check 'R24_STABLE_INSTALL_VERIFY_PASS' ($stableVerify.Code -eq 0 -and $stableVerify.Text -match '(?m)^OLYMPUS_VERIFY: v0\.2\.0 PASS\s*$')
+    $unexpectedLegacyAgent = Join-Path $stableTarget '.opencode/agents/aegis.md'
+    [IO.File]::WriteAllText($unexpectedLegacyAgent, "id: aegis`n", $utf8)
+    $unexpectedAgentSnapshot = Get-ProjectSnapshot $stableTarget
+    $unexpectedAgentVerify = Verify $stableTarget $stableArchive 'v0.2.0'
+    Check 'R24_LEGACY_VERIFY_REJECTS_UNEXPECTED_OLYMPUS_AGENT' ($unexpectedAgentVerify.Code -ne 0 -and
+        $unexpectedAgentVerify.Text -match 'OLYMPUS_VERIFY_REASON: ROSTER_MISMATCH')
+    Check 'R24_LEGACY_VERIFY_UNEXPECTED_AGENT_READ_ONLY' ((Get-ProjectSnapshot $stableTarget) -ceq $unexpectedAgentSnapshot)
+    Remove-Item -LiteralPath $unexpectedLegacyAgent -Force
     foreach ($entry in @(@('alpha','v0.3.0-alpha.1',$alphaArchive), @('beta','v0.3.0-beta.2',$betaArchive), @('rc','v0.3.0-rc.1',$rcArchive))) {
         $semverTarget = New-Target ('semver-' + $entry[0])
         $result = Install $semverTarget $entry[2] $entry[1]

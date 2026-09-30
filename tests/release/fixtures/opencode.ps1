@@ -16,7 +16,9 @@ if ($Command.Count -eq 1 -and $Command[0] -eq 'models') {
     exit 0
 }
 if ($Command.Count -ge 2 -and $Command[0] -eq 'debug' -and $Command[1] -eq 'config') {
-    Write-Output '{}'
+    $configPath = Join-Path (Get-Location).Path 'opencode.jsonc'
+    $configEntries = @([pscustomobject]@{ path=$configPath })
+    Write-Output (ConvertTo-Json -InputObject $configEntries -Depth 5 -Compress)
     exit 0
 }
 if ($Command.Count -ge 2 -and $Command[0] -eq 'debug' -and $Command[1] -eq 'agents') {
@@ -29,6 +31,7 @@ if ($Command.Count -ge 2 -and $Command[0] -eq 'debug' -and $Command[1] -eq 'agen
         $mode = ($modeLine[0] -replace '^mode:\s*', '').Trim()
         $parts = $model -split '#', 2
         $modelId = ($parts[0] -split '/')[-1]
+        $providerId = ($parts[0] -split '/')[0]
         $permissions = foreach ($match in [regex]::Matches($text, '(?m)^[ \t]*-[ \t]+action:[ \t]*(?<action>[^\r\n]+)\r?\n[ \t]+resource:[ \t]*(?<resource>[^\r\n]+)\r?\n[ \t]+effect:[ \t]*(?<effect>[^\r\n]+)')) {
             [pscustomobject]@{
                 action = $match.Groups['action'].Value.Trim().Trim('"').Trim("'")
@@ -38,7 +41,7 @@ if ($Command.Count -ge 2 -and $Command[0] -eq 'debug' -and $Command[1] -eq 'agen
         }
         [pscustomobject]@{
             id = $file.BaseName
-            model = [pscustomobject]@{ id=$modelId; variant=$(if ($parts.Count -gt 1) { $parts[1] } else { '' }) }
+            model = [pscustomobject]@{ providerID=$providerId; id=$modelId; variant=$(if ($parts.Count -gt 1) { $parts[1] } else { '' }) }
             mode = $mode
             hidden = ($text -match '(?m)^hidden:\s*true\s*$')
             permissions = @($permissions)

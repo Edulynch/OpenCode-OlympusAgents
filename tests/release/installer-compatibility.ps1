@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $installer = Join-Path $source 'install.ps1'
 $run = Join-Path (Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode') ('olympus-installer-compat-' + [guid]::NewGuid().ToString('N'))
+$originalPath = $env:PATH
 function Check([string]$id, [bool]$valid) {
     if (-not $valid) { throw "$id FAIL" }
     Write-Output "$id PASS"
@@ -31,6 +32,11 @@ try {
     $hosts += [pscustomobject]@{ Id='P2_POWERSHELL_7'; Path=$pwsh }
 
     [IO.Directory]::CreateDirectory($run) | Out-Null
+    $mockBin = Join-Path $run 'mock-bin'
+    [IO.Directory]::CreateDirectory($mockBin) | Out-Null
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/opencode.ps1') -Destination (Join-Path $mockBin 'opencode.ps1')
+    [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), "@echo off`r`npwsh -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n", [Text.Encoding]::ASCII)
+    $env:PATH = $mockBin + [IO.Path]::PathSeparator + $env:PATH
     $results = @()
     foreach ($hostEntry in $hosts) {
         $target = Join-Path $run $hostEntry.Id
@@ -61,6 +67,22 @@ try {
             (@($toolFiles | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $target $_) -Algorithm SHA256).Hash }) -join ',') -eq ($toolHashes -join ',') -and
             $toolStatus -match '(?m)^\?\? \.serena/\.gitignore\s*$' -and
             $toolStatus -match '(?m)^\?\? \.serena/project\.yml\s*$')
+
+        $codexTarget = Join-Path $run ($hostEntry.Id + '-codex')
+        [IO.Directory]::CreateDirectory($codexTarget) | Out-Null
+        & git -C $codexTarget init --quiet
+        Check ($hostEntry.Id + '_CODEX_GIT_FIXTURE') ($LASTEXITCODE -eq 0)
+        $codexInstall = (& $hostEntry.Path -NoProfile -File $installer -SourceRoot $source -Target $codexTarget -Harness CODEX 2>&1 | Out-String)
+        $codexExit = $LASTEXITCODE
+        $codexManifestPath = Join-Path $codexTarget '.codex/orchestrator-install.json'
+        $codexManifest = if (Test-Path -LiteralPath $codexManifestPath) { Get-Content -LiteralPath $codexManifestPath -Raw | ConvertFrom-Json } else { $null }
+        Check ($hostEntry.Id + '_CASE_INSENSITIVE_CODEX_INSTALL') ($codexExit -eq 0 -and $null -ne $codexManifest -and
+            @($codexManifest.installed_harnesses).Count -eq 1 -and $codexManifest.installed_harnesses[0] -eq 'codex' -and
+            (Test-Path -LiteralPath (Join-Path $codexTarget 'CODEX.md') -PathType Leaf) -and
+            -not (Test-Path -LiteralPath (Join-Path $codexTarget '.opencode')) -and
+            -not (Test-Path -LiteralPath (Join-Path $codexTarget 'opencode.jsonc')))
+        $codexVerify = (& $hostEntry.Path -NoProfile -File $installer -SourceRoot $source -Target $codexTarget -Harness codex -VerifyOnly 2>&1 | Out-String)
+        Check ($hostEntry.Id + '_CODEX_VERIFYONLY') ($LASTEXITCODE -eq 0 -and $codexVerify -match '(?m)^OLYMPUS_VERIFY: .* PASS\s*$')
         $results += $target
     }
     if ($results.Count -eq 2) {
@@ -89,12 +111,13 @@ $env:PATH = $EmptyPath
             $output -notmatch 'SOURCE_INVALID|BOOTSTRAP_FAILED|VariableIsUndefined' -and
             -not (Test-Path -LiteralPath $missingTarget))
     }
-    Write-Output 'INSTALLER COMPATIBILITY: PASS (local source; remote publication status not queried)'
+    Write-Output 'INSTALLER COMPATIBILITY: PASS (local source; deterministic OpenCode CLI fixture; remote publication status not queried)'
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
     Write-Output 'INSTALLER COMPATIBILITY: FAIL'
     exit 1
 } finally {
+    $env:PATH = $originalPath
     if ($run -and (Test-Path -LiteralPath $run)) {
         for ($attempt = 1; $attempt -le 10; $attempt++) {
             try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop; break }

@@ -1,10 +1,12 @@
 # Olympus Codex experiment — comparison matrix
 
 Esta matriz conserva el trabajo parcial y no convierte evidencia ausente en
-PASS. Las cifras Codex son las que ya constaban en el experimento auditado; no
-se repitieron esos smokes. Esta continuación añadió qualification estática y
-research oficial, no nuevas tareas de calidad/modelo. Las filas OpenCode no son
-una comparación de rendimiento: sus smokes equivalentes siguen pendientes.
+PASS. Las cifras históricas Codex se conservaron sin repetir sus smokes. Esta
+continuación añadió qualification estática, research oficial y un diagnóstico
+root-only de `codex exec`; este último no cumplió la edición y no califica la
+calidad del modelo ni los permission profiles interactivos. Las filas OpenCode
+no son una comparación de rendimiento: sus smokes equivalentes siguen
+pendientes.
 
 ## Cómo iniciar cada runtime
 
@@ -61,8 +63,9 @@ ejecución no interactiva.
 |---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|
 | Trivial one-file edit | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | Smoke equivalente no ejecutado. |
 | Trivial one-file edit | Codex | PASS, root-only | 109.9 s | 0 | 1 revalidación segura | 0 observado | 0 observado, sin children | 0 observado | `gpt-6.1-sol` | `high` configurado; no emitido por evento | 170,393 input (148,224 cached), 717 output, 73 reasoning; costo no disponible | Editó y verificó `target.md`. Primer intento terminó sin cumplir aceptación porque el sandbox read-only dejó `Status: pending`; se verificó que el fixture no había cambiado y se repitió la misma edición con workspace-write limitado al Git root temporal. No probó Kovan ni los permission profiles normales. |
+| Trivial edit con config de proyecto, vía `codex exec` | Codex | BLOCKED: sandbox read-only | 16 s | 0 | 0 | 0 observado; sin TTY | 0: `turn.completed`, salida final consumida | 0 observado | `gpt-6.1-sol` | `high` configurado; no emitido por evento | 26,859 input (20,480 cached), 178 output; costo no disponible | `--strict-config`, sin `--sandbox`; `agents.enabled=false` por seguridad. El patch fue rechazado (`writing is blocked by read-only sandbox`), el fixture quedó `Status: pending`. Exit code 0 no significó aceptación. No prueba `default_permissions`. |
 | Repository exploration | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | Delegación no comparada. |
-| Repository exploration | Codex | NOT_RUN | — | — | — | — | — | — | — | — | — | Kael→Veyra no ejecutado; ningún resultado de child observado. |
+| Repository exploration / Kael → one specialist | Codex | NOT_RUN | — | — | — | — | — | — | — | — | — | Kael→Veyra no ejecutado; Aegis no puede lanzar/delegar un child. Discovery y routing permanecen estáticos. |
 | Functional implementation | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | Smoke separado no ejecutado. |
 | Functional implementation | Codex | NOT_RUN | — | — | — | — | — | — | — | — | — | No existe resultado separado del caso implementation+tests. |
 | Bug diagnosis | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | Pendiente. |
@@ -74,9 +77,9 @@ ejecución no interactiva.
 | Execution planning | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | Pendiente. |
 | Execution planning | Codex | NOT_RUN | — | — | — | — | — | — | — | — | — | Atlas no invocado. |
 | Parallel research (2–4 independent items) | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | Cap y entrega no comparados. |
-| Parallel research (2–4 independent items) | Codex | NOT_RUN | — | — | — | — | — | — | — | — | — | No se inició child; cap efectivo, serial/paralelo, duplicación y entrega no medidos. |
+| Parallel research (2–4 independent items) | Codex | NOT_RUN | — | — | — | — | — | — | — | — | — | Aegis no puede lanzar/delegar subagents; cap efectivo, serial/paralelo, duplicación y entrega no medidos. |
 | Authority / permission | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | Fixture de approvals no ejecutado. |
-| Authority / permission | Codex | NOT_RUN | — | — | — | — | — | — | — | — | — | No se observó perfil Windows interactivo, ASK real ni DENY sintético. `--sandbox workspace-write` omite los `default_permissions`; no se usó sobre Olympus ni se atribuyó ausencia de UI a cero prompts. |
+| Authority / permission | Codex | PARTIAL | 16 s | 0 | 0 | 0 observado; sin TTY | 0 lifecycle errors observados | 0 | `gpt-6.1-sol` | `high` configurado | 26,859 input (20,480 cached), 178 output; costo no disponible | El `exec` no interactivo denegó una escritura de workspace por su sandbox read-only; no validó ALLOW/DENY del permission profile, ASK real, UI ni enforcement Windows. Solo fixture sintético. |
 | Long-running child / result handling | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | No se indujo el fallo upstream. |
 | Long-running child / result handling | Codex | NOT_RUN | — | — | — | — | — | — | — | — | — | Sin child, no hay medida runtime de continuation, cancellation, missing result ni entrega. No se observó `No tool output found` ni se declara ausente un equivalente. |
 
@@ -94,6 +97,18 @@ ejecución no interactiva.
 - Los tokens provienen del evento `turn.completed`; no hubo costo monetario
   reportado. No inventar ni extrapolar cifras.
 - En esta continuación se auditó el perfil, se amplió la qualification estática
-  y se consultaron docs oficiales actuales. No se iniciaron nuevos smokes con
-  children. Por eso routing real, question/result barriers y lifecycle siguen
-  pendientes, no PASS.
+  y se consultaron docs oficiales actuales. Una invocation adicional de
+  `codex exec` llegó a `turn.completed`, pero su edición no cumplió aceptación y
+  el fixture quedó intacto; no se iniciaron smokes con children. El límite
+  read-only del CLI no interactivo impide usar esa invocation para demostrar
+  ALLOW/DENY del perfil. Routing real, question/result barriers y lifecycle de
+  children siguen pendientes, no PASS.
+- El `codex exec` nuevo usó un Git root desechable bajo el área temporal
+  `opencode`, copias de `.codex/` y `CODEX.md`, `--strict-config`, y overrides
+  limitados a desactivar agents/MCP no usados. No pasó `--sandbox`. La CLI
+  devolvió exit 0, cinco eventos JSONL incluido `turn.completed`, pero la
+  respuesta terminal informó el rechazo de escritura y el host verificó que no
+  cambió ningún archivo. Se recolectó el resultado original antes de limpiar.
+- OpenCode regression estática reejecutada y recolectada: `opencode debug config`
+  exit 0, `opencode debug agents` exit 0 e incluye Kael; 12 fuentes bajo
+  `.opencode/agents/`. No se abrió TUI ni se ejecutó prompt conversacional.

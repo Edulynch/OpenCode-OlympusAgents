@@ -4,6 +4,11 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $installer = Join-Path $source 'install.ps1'
+$installerText = [IO.File]::ReadAllText($installer)
+$versionMatch = [regex]::Match($installerText, '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''')
+if (-not $versionMatch.Success) { throw 'Cannot identify candidate installer version.' }
+$script:CandidateVersion = $versionMatch.Groups[1].Value
+$script:CandidateInstallPattern = [regex]::Escape("OLYMPUS_INSTALL: $($script:CandidateVersion) READY_OR_NO_CHANGES")
 $run = Join-Path (Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode') ('olympus-dirty-worktree-' + [guid]::NewGuid().ToString('N'))
 $utf8 = [Text.UTF8Encoding]::new($false)
 function Check([string]$id, [bool]$ok) {
@@ -35,7 +40,7 @@ function Install([string]$repo, [string]$root = $source) {
     $out = (& pwsh -NoProfile -File (Join-Path $root 'install.ps1') -SourceRoot $root -Target $repo 2>&1 | Out-String)
     [pscustomobject]@{ Code=$LASTEXITCODE; Text=$out }
 }
-function Ready($result) { $result.Code -eq 0 -and $result.Text -match '(?m)^READY\s*$' -and $result.Text -match 'OLYMPUS_INSTALL: v0.3.0-beta.3 READY_OR_NO_CHANGES' }
+function Ready($result) { $result.Code -eq 0 -and $result.Text -match '(?m)^READY\s*$' -and $result.Text -match "(?m)^$($script:CandidateInstallPattern)\r?$" }
 function Untracked([string]$repo, [string]$path) { (Fixture-Git $repo @('status','--porcelain=v1','-uall','--',$path)).Trim() -eq "?? $path" }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null

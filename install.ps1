@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$')]
-    [string]$Version = 'v0.3.0-beta.3',
+    [string]$Version = 'v0.3.0-beta.4',
     [string]$Target = (Get-Location).Path,
     [switch]$DryRun,
     [switch]$VerifyOnly,
@@ -13,7 +13,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$ReleaseVersion = 'v0.3.0-beta.3' # Must equal this installer's default and published tag.
+$ReleaseVersion = 'v0.3.0-beta.4' # Must equal this installer's default and published tag.
 $owned = $null
 
 function Get-ContentHash([string]$Path) {
@@ -132,8 +132,8 @@ function Assert-InstalledRelease([string]$Source, [string]$RequestedVersion, [st
             throw "ROSTER_MISMATCH: Agent '$retired' is not part of the requested release roster."
         }
     }
-    if ($RequestedVersion -ceq 'v0.3.0-beta.3' -and '.opencode/agents/aegis.md' -notin $sourceAgents) {
-        throw 'ROSTER_MISMATCH: beta.3 release source does not include the managed Aegis agent.'
+    if ($RequestedVersion -ceq $ReleaseVersion -and '.opencode/agents/aegis.md' -notin $sourceAgents) {
+        throw 'ROSTER_MISMATCH: Current prerelease source does not include the managed Aegis agent.'
     }
 
     $opencode = Get-Command opencode -ErrorAction SilentlyContinue
@@ -156,8 +156,8 @@ function Assert-InstalledRelease([string]$Source, [string]$RequestedVersion, [st
             throw "ROSTER_MISMATCH: Retired or unexpected '$retired' agent is active."
         }
     }
-    if ($RequestedVersion -ceq 'v0.3.0-beta.3' -and @($activeAgents | Where-Object { $_.id -ceq 'maintenance' }).Count -gt 0) {
-        throw 'ROSTER_MISMATCH: maintenance is active in the beta.3 roster.'
+    if ($RequestedVersion -ceq $ReleaseVersion -and @($activeAgents | Where-Object { $_.id -ceq 'maintenance' }).Count -gt 0) {
+        throw 'ROSTER_MISMATCH: Retired maintenance agent is active in the current prerelease roster.'
     }
 }
 

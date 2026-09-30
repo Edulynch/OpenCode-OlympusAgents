@@ -63,7 +63,7 @@ Kael coordinates the team as needed: research, implementation, testing, and revi
 
 Olympus Core defines what the team and its orchestration mean. Harness adapters define how each runtime expresses the same Core. **OpenCode and Codex are the two officially supported harnesses**; Codex uses its native root, agents, approvals, and activity view, while capability gaps remain explicit.
 
-The pinned v0.2.0 installer remains the latest stable installer. The `v0.3.0-beta.1` prerelease was published on 2026-09-28 and adds Argus, Atlas, Talos, Thales, and Helios; those prerelease additions are not included in the v0.2.0 installer. The checked-in v0.3.0-beta.3 installer is a source candidate, not a published release; when published from its matching tag, its default selects that same prerelease rather than silently falling back to stable.
+The pinned v0.2.0 installer remains the latest stable installer. The `v0.3.0-beta.1` prerelease was published on 2026-09-28 and adds Argus, Atlas, Talos, Thales, and Helios; those prerelease additions are not included in the v0.2.0 installer. The `v0.3.0-beta.4` installer is a source candidate, not a published release; when published from its matching tag, its default selects that same prerelease rather than silently falling back to stable.
 
 ### Out-of-scope project work
 

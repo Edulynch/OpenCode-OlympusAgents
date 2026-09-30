@@ -9,6 +9,16 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $installer = Join-Path $source 'install.ps1'
+$installerText = [IO.File]::ReadAllText($installer)
+$defaultVersionMatch = [regex]::Match($installerText, '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''\s*,?\s*$')
+$releaseVersionMatch = [regex]::Match($installerText, '(?m)^\s*\$ReleaseVersion\s*=\s*''([^'']+)''')
+if (-not $defaultVersionMatch.Success -or -not $releaseVersionMatch.Success -or
+    $defaultVersionMatch.Groups[1].Value -cne $releaseVersionMatch.Groups[1].Value) {
+    throw 'RELEASE_IDENTITY_INVALID: Installer default and release version marker must agree.'
+}
+$script:CandidateVersion = $defaultVersionMatch.Groups[1].Value
+$script:CandidateRegex = [regex]::Escape($script:CandidateVersion)
+$script:CandidateHeading = "## $($script:CandidateVersion)"
 $tempOpencode = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode'
 if (-not $RecoveryRunId) { $RecoveryRunId = [guid]::NewGuid().ToString('N') }
 if ($RecoveryRunId -notmatch '^[A-Za-z0-9-]{8,80}$') { throw 'RECOVERY_RUN_ID_INVALID' }
@@ -30,7 +40,7 @@ $parentProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$($self.Parent
 if (-not $parentProcess) { throw 'PROCESS_OWNERSHIP_UNAVAILABLE: Cannot record qualification parent identity.' }
 $script:QualificationReceipt = [ordered]@{
     task_run_id = $RecoveryRunId
-    task = 'Olympus beta.3 release qualification'
+    task = "Olympus $($script:CandidateVersion) release qualification"
     state = 'LIVE_OWNED_WORK'
     ownership_marker = $RecoveryRunId
     expected_result_path = $transcriptPath
@@ -85,14 +95,14 @@ function New-SourceArchive([string]$sourceRoot, [string]$tag, [string]$archivePa
     if ($MisreportStable) {
         $path = Join-Path $top 'install.ps1'
         $text = [IO.File]::ReadAllText($path)
-        $text = $text.Replace("[string]`$Version = 'v0.3.0-beta.3'", "[string]`$Version = 'v0.2.0'")
-        $text = $text.Replace("`$ReleaseVersion = 'v0.3.0-beta.3'", "`$ReleaseVersion = 'v0.2.0'")
+        $text = $text.Replace("[string]`$Version = '$($script:CandidateVersion)'", "[string]`$Version = 'v0.2.0'")
+        $text = $text.Replace("`$ReleaseVersion = '$($script:CandidateVersion)'", "`$ReleaseVersion = 'v0.2.0'")
         [IO.File]::WriteAllText($path, $text, $utf8)
     } elseif ($tag -in @('v0.3.0-alpha.1','v0.3.0-beta.2','v0.3.0-rc.1')) {
         $path = Join-Path $top 'install.ps1'
         $text = [IO.File]::ReadAllText($path)
-        $text = $text.Replace("[string]`$Version = 'v0.3.0-beta.3'", "[string]`$Version = '$tag'")
-        $text = $text.Replace("`$ReleaseVersion = 'v0.3.0-beta.3'", "`$ReleaseVersion = '$tag'")
+        $text = $text.Replace("[string]`$Version = '$($script:CandidateVersion)'", "[string]`$Version = '$tag'")
+        $text = $text.Replace("`$ReleaseVersion = '$($script:CandidateVersion)'", "`$ReleaseVersion = '$tag'")
         [IO.File]::WriteAllText($path, $text, $utf8)
     }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -148,49 +158,51 @@ try {
         Write-Output 'RUNTIME_OPEN_CODE: local stub responses; no live OpenCode session or authority smoke.'
     }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $candidateArchive = New-SourceArchive $source 'v0.3.0-beta.3' (Join-Path $run 'candidate-beta3.zip')
+    $candidateArchive = New-SourceArchive $source $script:CandidateVersion (Join-Path $run "candidate-$($script:CandidateVersion).zip")
     $stableArchive = New-GitTagArchive 'v0.2.0' (Join-Path $run 'stable-v020.zip')
+    $previousBetaArchive = New-GitTagArchive 'v0.3.0-beta.3' (Join-Path $run 'previous-beta3.zip')
     $alphaArchive = New-SourceArchive $source 'v0.3.0-alpha.1' (Join-Path $run 'alpha.zip')
     $betaArchive = New-SourceArchive $source 'v0.3.0-beta.2' (Join-Path $run 'beta.zip')
     $rcArchive = New-SourceArchive $source 'v0.3.0-rc.1' (Join-Path $run 'rc.zip')
-    $mismatchArchive = New-SourceArchive $source 'v0.3.0-beta.3' (Join-Path $run 'mismatch-beta3-to-v020.zip') -MisreportStable
+    $mismatchArchive = New-SourceArchive $source $script:CandidateVersion (Join-Path $run "mismatch-$($script:CandidateVersion)-to-v020.zip") -MisreportStable
 
-    $versionText = [IO.File]::ReadAllText($installer)
-    $releaseIdentityValid = ($versionText -match "(?m)^\s*\[string\]\`$Version\s*=\s*'v0\.3\.0-beta\.3'" -and
-        $versionText -match "(?m)^\`$ReleaseVersion\s*=\s*'v0\.3\.0-beta\.3'")
+    $versionText = $installerText
+    $releaseIdentityValid = ($versionText -match "(?m)^\s*\[string\]\`$Version\s*=\s*'$($script:CandidateRegex)'" -and
+        $versionText -match "(?m)^\`$ReleaseVersion\s*=\s*'$($script:CandidateRegex)'")
     $patternMatch = [regex]::Match($versionText, "(?s)\[ValidatePattern\('([^']+)'\)\]\s*\[string\]\`$Version")
     $versionPattern = if ($patternMatch.Success) { $patternMatch.Groups[1].Value } else { '' }
-    $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1','v0.3.0-beta.3','v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
+    $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1',$script:CandidateVersion,'v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
     if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
         Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
+        Check 'R0_EXPECTED_VERSION_BETA4' ($script:CandidateVersion -ceq 'v0.3.0-beta.4')
         Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
         Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
     } elseif ($ResumeAtR1) { Write-Output 'REVALIDATION_START: R1 (previously collected R0/alpha/RC gates not rerun).' }
     else { Write-Output 'REVALIDATION_START: permission checks (previously collected R0/alpha/RC gates not rerun).' }
 
-    # The beta.3 request uses a local ZIP with the same GitHub tag-root layout.
-    $target = New-Target 'fresh-beta3-default'
+    # The current prerelease request uses a local ZIP with the same GitHub tag-root layout.
+    $target = New-Target 'fresh-candidate-default'
     $first = Install $target $candidateArchive
     if (-not $ResumeAtPermissions) {
         $r1Pass = ($first.Code -eq 0 -and
-            $first.Text -match 'OLYMPUS_SOURCE: requested=v0\.3\.0-beta\.3 resolved=v0\.3\.0-beta\.3 origin=LOCAL_ARCHIVE' -and
-            $first.Text -match 'OLYMPUS_INSTALL: v0\.3\.0-beta\.3 READY_OR_NO_CHANGES')
+            $first.Text -match "OLYMPUS_SOURCE: requested=$($script:CandidateRegex) resolved=$($script:CandidateRegex) origin=LOCAL_ARCHIVE" -and
+            $first.Text -match "OLYMPUS_INSTALL: $($script:CandidateRegex) READY_OR_NO_CHANGES")
         if (-not $r1Pass) { Write-Output "R1_INSTALL_OUTPUT: $($first.Text)" }
-        Check 'R1_REQUESTED_BETA3_RESOLVED_BETA3' $r1Pass
+        Check 'R1_CANDIDATE_RESOLVED_CANDIDATE' $r1Pass
         $paths = @('opencode.jsonc', '.opencode/orchestrator-install.json', '.opencode/commands/maintain.md',
             '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
         $paths += @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios','aegis' | ForEach-Object { ".opencode/agents/$_.md" })
-        Check 'R2_BETA3_ROSTER_FILES' (@($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path $target $_) -PathType Leaf) }).Count -eq 0 -and
+        Check 'R2_CANDIDATE_ROSTER_FILES' (@($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path $target $_) -PathType Leaf) }).Count -eq 0 -and
             -not (Test-Path -LiteralPath (Join-Path $target '.opencode/agents/maintenance.md')))
         $manifestPath = Join-Path $target '.opencode/orchestrator-install.json'
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-        Check 'R2_BETA3_MANIFEST_VERSION_AND_OWNERSHIP' ($manifest.schema_version -eq 1 -and
-            $manifest.installed_version -eq 'v0.3.0-beta.3' -and $manifest.managed_files.Count -eq 16 -and
+        Check 'R2_CANDIDATE_MANIFEST_VERSION_AND_OWNERSHIP' ($manifest.schema_version -eq 1 -and
+            $manifest.installed_version -eq $script:CandidateVersion -and $manifest.managed_files.Count -eq 16 -and
             @($manifest.managed_files | Where-Object path -eq '.opencode/agents/aegis.md').Count -eq 1 -and
             @($manifest.managed_files | Where-Object path -eq '.opencode/agents/maintenance.md').Count -eq 0)
 
-        $betaVerify = Verify $target $candidateArchive 'v0.3.0-beta.3'
-        Check 'R24_BETA_INSTALL_VERIFY_PASS' ($betaVerify.Code -eq 0 -and $betaVerify.Text -match '(?m)^OLYMPUS_VERIFY: v0\.3\.0-beta\.3 PASS\s*$')
+        $betaVerify = Verify $target $candidateArchive $script:CandidateVersion
+        Check 'R24_CANDIDATE_INSTALL_VERIFY_PASS' ($betaVerify.Code -eq 0 -and $betaVerify.Text -match "(?m)^OLYMPUS_VERIFY: $($script:CandidateRegex) PASS\s*$")
 
         Push-Location $target
         try {
@@ -253,86 +265,108 @@ try {
     }
 
     $legacyTarget = New-Target 'verify-legacy-unknown-commit'
-    $legacyInstall = Install $legacyTarget $candidateArchive 'v0.3.0-beta.3'
-    if ($legacyInstall.Code -ne 0) { throw 'Beta.3 fixture install failed before unknown-commit verification.' }
+    $legacyInstall = Install $legacyTarget $candidateArchive $script:CandidateVersion
+    if ($legacyInstall.Code -ne 0) { throw 'Candidate fixture install failed before unknown-commit verification.' }
     $legacyManifestPath = Join-Path $legacyTarget '.opencode/orchestrator-install.json'
     $legacyManifest = Get-Content -LiteralPath $legacyManifestPath -Raw | ConvertFrom-Json
     $legacyManifest.installed_from_commit = 'unknown'
     [void]$legacyManifest.PSObject.Properties.Remove('installed_version')
     [IO.File]::WriteAllText($legacyManifestPath, (($legacyManifest | ConvertTo-Json -Depth 30) + "`n"), $utf8)
     $legacySnapshot = Get-ProjectSnapshot $legacyTarget
-    $legacyVerify = Verify $legacyTarget $candidateArchive 'v0.3.0-beta.3'
+    $legacyVerify = Verify $legacyTarget $candidateArchive $script:CandidateVersion
     Check 'R24_UNKNOWN_COMMIT_VERIFIED_BY_CONTENT' ($legacyVerify.Code -eq 0 -and
-        $legacyVerify.Text -match '(?m)^OLYMPUS_VERIFY: v0\.3\.0-beta\.3 PASS\s*$')
+        $legacyVerify.Text -match "(?m)^OLYMPUS_VERIFY: $($script:CandidateRegex) PASS\s*$")
     Check 'R24_VERIFY_ONLY_READ_ONLY' ((Get-ProjectSnapshot $legacyTarget) -ceq $legacySnapshot)
 
-    $oldStableMismatch = Verify $stableTarget $candidateArchive 'v0.3.0-beta.3'
-    Check 'R24_BETA3_VS_INSTALLED_STABLE_FAIL' ($oldStableMismatch.Code -ne 0 -and
-        $oldStableMismatch.Text -match '(?m)^OLYMPUS_VERIFY: v0\.3\.0-beta\.3 FAIL\s*$' -and
+    $oldStableMismatch = Verify $stableTarget $candidateArchive $script:CandidateVersion
+    Check 'R24_CANDIDATE_VS_INSTALLED_STABLE_FAIL' ($oldStableMismatch.Code -ne 0 -and
+        $oldStableMismatch.Text -match "(?m)^OLYMPUS_VERIFY: $($script:CandidateRegex) FAIL\s*$" -and
         $oldStableMismatch.Text -match 'OLYMPUS_VERIFY_REASON: MANAGED_FILE_MISMATCH')
+    $previousBetaTarget = New-Target 'previous-beta3-cannot-resolve-candidate'
+    $previousBetaInstall = Install $previousBetaTarget $previousBetaArchive $script:CandidateVersion
+    $previousBetaErrorPattern = [regex]::Escape("Archive root 'OpenCode-OlympusAgents-v0.3.0-beta.3' does not identify requested tag") +
+        "[\s|]*'" + [regex]::Escape($script:CandidateVersion) + "'\."
+    Check 'R27_PREVIOUS_BETA3_CANNOT_SATISFY_CANDIDATE' ($previousBetaInstall.Code -ne 0 -and
+        $previousBetaInstall.Text -match $previousBetaErrorPattern -and
+        -not (Test-Path -LiteralPath (Join-Path $previousBetaTarget '.opencode/orchestrator-install.json')) -and
+        (Get-Content -LiteralPath (Join-Path $previousBetaTarget 'user-notes.txt') -Raw) -eq "preserve me`n")
     $otherBetaTarget = New-Target 'verify-other-beta'
     $otherBetaInstall = Install $otherBetaTarget $betaArchive 'v0.3.0-beta.2'
     if ($otherBetaInstall.Code -ne 0) { throw 'Other-beta fixture install failed before version verification.' }
-    $otherBetaVerify = Verify $otherBetaTarget $candidateArchive 'v0.3.0-beta.3'
-    Check 'R24_BETA3_VS_OTHER_BETA_FAIL' ($otherBetaVerify.Code -ne 0 -and
+    $otherBetaVerify = Verify $otherBetaTarget $candidateArchive $script:CandidateVersion
+    Check 'R24_CANDIDATE_VS_OTHER_BETA_FAIL' ($otherBetaVerify.Code -ne 0 -and
         $otherBetaVerify.Text -match 'OLYMPUS_VERIFY_REASON: INSTALLED_VERSION_MISMATCH')
 
     $driftTarget = New-Target 'verify-managed-hash-drift'
-    $driftInstall = Install $driftTarget $candidateArchive 'v0.3.0-beta.3'
-    if ($driftInstall.Code -ne 0) { throw 'Beta.3 fixture install failed before managed drift verification.' }
+    $driftInstall = Install $driftTarget $candidateArchive $script:CandidateVersion
+    if ($driftInstall.Code -ne 0) { throw 'Candidate fixture install failed before managed drift verification.' }
     $driftFile = Join-Path $driftTarget '.opencode/agents/kael.md'
     [IO.File]::AppendAllText($driftFile, "`n# verification drift`n", $utf8)
     $driftSnapshot = Get-ProjectSnapshot $driftTarget
-    $hashDrift = Verify $driftTarget $candidateArchive 'v0.3.0-beta.3'
+    $hashDrift = Verify $driftTarget $candidateArchive $script:CandidateVersion
     Check 'R24_MANAGED_HASH_DRIFT_FAIL' ($hashDrift.Code -ne 0 -and
         $hashDrift.Text -match 'OLYMPUS_VERIFY_REASON: MANAGED_FILE_MISMATCH' -and
         (Get-ProjectSnapshot $driftTarget) -ceq $driftSnapshot)
 
     $missingTarget = New-Target 'verify-managed-file-missing'
-    $missingInstall = Install $missingTarget $candidateArchive 'v0.3.0-beta.3'
-    if ($missingInstall.Code -ne 0) { throw 'Beta.3 fixture install failed before missing-file verification.' }
+    $missingInstall = Install $missingTarget $candidateArchive $script:CandidateVersion
+    if ($missingInstall.Code -ne 0) { throw 'Candidate fixture install failed before missing-file verification.' }
     $missingFile = Join-Path $missingTarget '.opencode/agents/aegis.md'
     Remove-Item -LiteralPath $missingFile -Force
     $missingSnapshot = Get-ProjectSnapshot $missingTarget
-    $missingVerify = Verify $missingTarget $candidateArchive 'v0.3.0-beta.3'
+    $missingVerify = Verify $missingTarget $candidateArchive $script:CandidateVersion
     Check 'R24_MANAGED_FILE_MISSING_FAIL' ($missingVerify.Code -ne 0 -and
-        $missingVerify.Text -match '(?m)^OLYMPUS_VERIFY: v0\.3\.0-beta\.3 FAIL\s*$' -and
+        $missingVerify.Text -match "(?m)^OLYMPUS_VERIFY: $($script:CandidateRegex) FAIL\s*$" -and
         $missingVerify.Text -match 'OLYMPUS_VERIFY_REASON: MANAGED_FILE_MISSING' -and
         (Get-ProjectSnapshot $missingTarget) -ceq $missingSnapshot)
 
     $retiredAgentTarget = New-Target 'verify-retired-agent-active'
-    $retiredInstall = Install $retiredAgentTarget $candidateArchive 'v0.3.0-beta.3'
-    if ($retiredInstall.Code -ne 0) { throw 'Beta.3 fixture install failed before retired-agent verification.' }
+    $retiredInstall = Install $retiredAgentTarget $candidateArchive $script:CandidateVersion
+    if ($retiredInstall.Code -ne 0) { throw 'Candidate fixture install failed before retired-agent verification.' }
     [IO.File]::WriteAllText((Join-Path $retiredAgentTarget '.opencode/agents/maintenance.md'), "id: maintenance`n", $utf8)
-    $retiredVerify = Verify $retiredAgentTarget $candidateArchive 'v0.3.0-beta.3'
-    Check 'R24_BETA3_ROSTER_REJECTS_MAINTENANCE' ($retiredVerify.Code -ne 0 -and
+    $retiredVerify = Verify $retiredAgentTarget $candidateArchive $script:CandidateVersion
+    Check 'R24_CANDIDATE_ROSTER_REJECTS_MAINTENANCE' ($retiredVerify.Code -ne 0 -and
         $retiredVerify.Text -match 'OLYMPUS_VERIFY_REASON: ROSTER_MISMATCH')
 
-    $sourceMismatchVerify = Verify $legacyTarget $mismatchArchive 'v0.3.0-beta.3'
+    $sourceMismatchVerify = Verify $legacyTarget $mismatchArchive $script:CandidateVersion
     Check 'R24_REQUESTED_SOURCE_VERSION_MISMATCH_FAIL' ($sourceMismatchVerify.Code -ne 0 -and
         $sourceMismatchVerify.Text -match 'OLYMPUS_VERIFY_REASON: SOURCE_VERSION_MISMATCH')
 
     $changelog = [IO.File]::ReadAllText((Join-Path $source 'CHANGELOG.md'))
-    $notesStart = $changelog.IndexOf('## v0.3.0-beta.3', [StringComparison]::Ordinal)
-    $notesEnd = $changelog.IndexOf('# 0.3.0-beta.1', $notesStart, [StringComparison]::Ordinal)
-    if ($notesStart -lt 0 -or $notesEnd -le $notesStart) { throw 'Beta.3 release-notes section is missing or unbounded.' }
+    $notesStart = $changelog.IndexOf($script:CandidateHeading, [StringComparison]::Ordinal)
+    if ($notesStart -lt 0) { throw "Release-notes section for $($script:CandidateVersion) is missing." }
+    $afterCandidate = $changelog.Substring($notesStart + $script:CandidateHeading.Length)
+    $nextRelease = [regex]::Match($afterCandidate, '(?m)^##[ \t]+v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?(?:[ \t]+.*)?$')
+    $notesEnd = if ($nextRelease.Success) { $notesStart + $script:CandidateHeading.Length + $nextRelease.Index } else { $changelog.Length }
+    if ($notesEnd -le $notesStart) { throw "Release-notes section for $($script:CandidateVersion) is unbounded." }
     $releaseNotes = $changelog.Substring($notesStart, $notesEnd - $notesStart)
-    $rawUrl = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.3/install.ps1'
+    $rawUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/install.ps1"
     $installCommand = "irm $rawUrl | iex"
-    $verifyCommand = "& ([scriptblock]::Create((irm '$rawUrl'))) -Version 'v0.3.0-beta.3' -Target (Get-Location).Path -VerifyOnly"
+    $verifyCommand = "& ([scriptblock]::Create((irm '$rawUrl'))) -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -VerifyOnly"
     Check 'R25_RELEASE_NOTES_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Installation\s*$' -and $releaseNotes.Contains($installCommand))
     Check 'R25_RELEASE_NOTES_VERIFY_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Verify installation\s*$' -and $releaseNotes.Contains($verifyCommand))
-    Check 'R25_RELEASE_NOTES_COMMANDS_PIN_SAME_TAG' ($installCommand.Contains('/v0.3.0-beta.3/') -and
-        $verifyCommand.Contains('/v0.3.0-beta.3/') -and $verifyCommand.Contains("-Version 'v0.3.0-beta.3'"))
+    Check 'R25_RELEASE_NOTES_COMMANDS_PIN_SAME_TAG' ($installCommand.Contains("/$($script:CandidateVersion)/") -and
+        $verifyCommand.Contains("/$($script:CandidateVersion)/") -and $verifyCommand.Contains("-Version '$($script:CandidateVersion)'"))
+    Check 'R25_CANDIDATE_RELEASE_HIGHLIGHTS' (@('Olympus Harness Core','single canonical role, policy, model-intent','deterministic OpenCode and Codex adapters',
+        'experimental Codex runtime support','GPT-6.1 Sol','bounded multi-agent orchestration','capability contract',
+        'OpenCode hard DENY remains supported','Codex DENY and Codex Aegis remain documented gaps','Aegis Early Scope Gate',
+        'target ownership','Fix `/maintain` generated frontmatter','`-VerifyOnly`' | Where-Object { -not $releaseNotes.Contains($_) }).Count -eq 0)
+    Check 'R25_ISSUE1_AND_CAPABILITY_GAPS_NOT_OVERCLAIMED' ($releaseNotes -match 'Issue #1.*remains open and upstream' -and
+        $releaseNotes -match 'does not claim to fix it' -and $releaseNotes -match 'not full Codex parity' -and
+        $releaseNotes -match 'Codex DENY and Codex Aegis remain documented gaps' -and
+        $releaseNotes -notmatch '(?i)Codex (?:has|provides|supports) (?:full parity|hard DENY|Aegis)')
     Check 'R25_BETA_RELEASE_NO_MASTER_SOURCE' ($releaseNotes -notmatch '(?i)raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/master/install\.ps1' -and
         $versionText -match 'archive/refs/tags/\$Version\.zip')
 
     $releaseGate = Join-Path $PSScriptRoot 'github-release-notes.ps1'
-    $gateGood = (& pwsh -NoProfile -File $releaseGate -Version 'v0.3.0-beta.3' -ReleaseBody $releaseNotes 2>&1 | Out-String)
-    Check 'R26_RELEASE_GATE_ACCEPTS_BOTH_PINNED_COMMANDS' ($LASTEXITCODE -eq 0 -and $gateGood -match 'RELEASE_NOTES_CONTRACT: v0\.3\.0-beta\.3 PASS')
-    $gateBad = (& pwsh -NoProfile -File $releaseGate -Version 'v0.3.0-beta.3' -ReleaseBody ($releaseNotes -replace '(?s)## Verify installation.*', '') 2>&1 | Out-String)
+    $gateGood = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody $releaseNotes 2>&1 | Out-String)
+    Check 'R26_RELEASE_GATE_ACCEPTS_BOTH_PINNED_COMMANDS' ($LASTEXITCODE -eq 0 -and $gateGood -match "RELEASE_NOTES_CONTRACT: $($script:CandidateRegex) PASS")
+    $gateDerived = (& pwsh -NoProfile -File $releaseGate -ReleaseBody $releaseNotes 2>&1 | Out-String)
+    Check 'R26_RELEASE_GATE_DERIVES_CANDIDATE_VERSION' ($LASTEXITCODE -eq 0 -and
+        $gateDerived -match "RELEASE_NOTES_CONTRACT: $($script:CandidateRegex) PASS")
+    $gateBad = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody ($releaseNotes -replace '(?s)## Verify installation.*', '') 2>&1 | Out-String)
     Check 'R26_RELEASE_GATE_REJECTS_MISSING_VERIFY' ($LASTEXITCODE -ne 0 -and $gateBad -match 'RELEASE_NOTES_VERIFY_MISSING')
-    $gateWrongTag = (& pwsh -NoProfile -File $releaseGate -Version 'v0.3.0-beta.3' -ReleaseBody ($releaseNotes.Replace("-Version 'v0.3.0-beta.3'", "-Version 'v0.3.0-beta.2'")) 2>&1 | Out-String)
+    $gateWrongTag = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody ($releaseNotes.Replace("-Version '$($script:CandidateVersion)'", "-Version 'v0.3.0-beta.2'")) 2>&1 | Out-String)
     Check 'R26_RELEASE_GATE_REJECTS_TAG_MISMATCH' ($LASTEXITCODE -ne 0 -and $gateWrongTag -match 'RELEASE_NOTES_VERIFY_PIN_MISMATCH')
     $gateText = [IO.File]::ReadAllText($releaseGate)
     Check 'R26_GATE_READS_PUBLISHED_GITHUB_RELEASE_BODY' ($gateText -match 'gh\.Source release view' -and
@@ -345,21 +379,21 @@ try {
         $badVersion -match 'no coincide|does not match|validation pattern' -and
         -not (Test-Path -LiteralPath (Join-Path $badVersionTarget '.opencode/orchestrator-install.json')))
 
-    $mismatchTarget = New-Target 'beta3-resolves-v020-negative'
-    $mismatch = Install $mismatchTarget $mismatchArchive 'v0.3.0-beta.3'
-    Check 'R20_REQUESTED_BETA3_RESOLVED_V020_FAILS' ($mismatch.Code -ne 0 -and
-        $mismatch.Text -match "SOURCE_VERSION_MISMATCH: requested 'v0\.3\.0-beta\.3' but resolved source reports 'v0\.2\.0'" -and
+    $mismatchTarget = New-Target 'candidate-resolves-v020-negative'
+    $mismatch = Install $mismatchTarget $mismatchArchive $script:CandidateVersion
+    Check 'R20_REQUESTED_CANDIDATE_RESOLVED_V020_FAILS' ($mismatch.Code -ne 0 -and
+        $mismatch.Text.Contains("SOURCE_VERSION_MISMATCH: requested '$($script:CandidateVersion)' but resolved source reports 'v0.2.0'") -and
         -not (Test-Path -LiteralPath (Join-Path $mismatchTarget '.opencode/orchestrator-install.json')) -and
         (Get-Content -LiteralPath (Join-Path $mismatchTarget 'user-notes.txt') -Raw) -eq "preserve me`n")
 
     # Verified owned legacy maintenance.md is migrated; modified or unowned copies are never replaced.
     Check 'R22_STABLE_SOURCE_HAS_RETIRED_AGENT' (Test-Path -LiteralPath (Join-Path $stableTarget '.opencode/agents/maintenance.md'))
-    $upgrade = Install $stableTarget $candidateArchive 'v0.3.0-beta.3'
+    $upgrade = Install $stableTarget $candidateArchive $script:CandidateVersion
     $upManifest = Get-Content -LiteralPath (Join-Path $stableTarget '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json
     Check 'R22_OWNED_RETIRED_AGENT_MIGRATED' ($upgrade.Code -eq 0 -and
         -not (Test-Path -LiteralPath (Join-Path $stableTarget '.opencode/agents/maintenance.md')) -and
         (Test-Path -LiteralPath (Join-Path $stableTarget '.opencode/agents/aegis.md')) -and
-        $upManifest.installed_version -eq 'v0.3.0-beta.3' -and
+        $upManifest.installed_version -eq $script:CandidateVersion -and
         @($upManifest.managed_files | Where-Object path -eq '.opencode/agents/maintenance.md').Count -eq 0)
 
     $modifiedLegacyTarget = New-Target 'modified-retired-agent'
@@ -368,7 +402,7 @@ try {
     $retiredPath = Join-Path $modifiedLegacyTarget '.opencode/agents/maintenance.md'
     [IO.File]::AppendAllText($retiredPath, "`n# local modification`n", $utf8)
     $retiredHash = (Get-FileHash -LiteralPath $retiredPath -Algorithm SHA256).Hash
-    $modifiedUpgrade = Install $modifiedLegacyTarget $candidateArchive 'v0.3.0-beta.3'
+    $modifiedUpgrade = Install $modifiedLegacyTarget $candidateArchive $script:CandidateVersion
     Check 'R23_MODIFIED_RETIRED_FILE_CONFLICT_NONDESTRUCTIVE' ($modifiedUpgrade.Code -ne 0 -and
         $modifiedUpgrade.Text -match 'MANAGED_FILE_DRIFT' -and
         (Get-FileHash -LiteralPath $retiredPath -Algorithm SHA256).Hash -eq $retiredHash -and
@@ -403,8 +437,8 @@ try {
     Write-Output 'RUNTIME_ARCHIVE_SOURCE: local archive fixtures were used; remote tag bytes/authentication were not queried.'
     $script:QualificationReceipt.state = 'TERMINAL_RESULT_WRITTEN'
     Save-QualificationReceipt
-    if ($MockOpenCode) { Write-Output 'RELEASE QUALIFICATION: PASS (local source; OpenCode CLI stubbed; no tag, push, or release created)' }
-    else { Write-Output 'RELEASE QUALIFICATION: PASS (local tag-shaped source archives; no tag, push, or release created)' }
+    if ($MockOpenCode) { Write-Output "RELEASE QUALIFICATION: $($script:CandidateVersion) PASS (local source; OpenCode CLI stubbed; no tag, push, or release created)" }
+    else { Write-Output "RELEASE QUALIFICATION: $($script:CandidateVersion) PASS (local tag-shaped source archives; no tag, push, or release created)" }
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
     if ($null -ne $script:QualificationReceipt) {

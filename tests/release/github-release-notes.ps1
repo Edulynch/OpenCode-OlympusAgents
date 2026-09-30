@@ -1,7 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidatePattern('^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$')]
-    [string]$Version = 'v0.3.0-beta.3',
+    [string]$Version = '',
     # Contract fixture input is used by release qualification; normal gate use
     # omits it and inspects the published GitHub Release body with gh.
     [string]$ReleaseBody
@@ -46,6 +45,23 @@ function Assert-ReleaseNotes([string]$Body, [string]$Tag) {
 }
 
 try {
+    if (-not $Version) {
+        $installerPath = Join-Path $PSScriptRoot '../../install.ps1'
+        if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
+            throw 'RELEASE_VERSION_UNAVAILABLE: The candidate installer could not be found.'
+        }
+        $installerText = [IO.File]::ReadAllText($installerPath)
+        $defaultVersion = [regex]::Match($installerText, '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''')
+        $releaseVersion = [regex]::Match($installerText, '(?m)^\s*\$ReleaseVersion\s*=\s*''([^'']+)''')
+        if (-not $defaultVersion.Success -or -not $releaseVersion.Success -or
+            $defaultVersion.Groups[1].Value -cne $releaseVersion.Groups[1].Value) {
+            throw 'RELEASE_VERSION_UNAVAILABLE: Installer default and release marker do not agree.'
+        }
+        $Version = $defaultVersion.Groups[1].Value
+    }
+    if ($Version -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') {
+        throw 'RELEASE_VERSION_INVALID: Requested release version is malformed.'
+    }
     if ($PSBoundParameters.ContainsKey('ReleaseBody')) {
         Assert-ReleaseNotes $ReleaseBody $Version
         Write-Output "RELEASE_NOTES_CONTRACT: $Version PASS (fixture body)"

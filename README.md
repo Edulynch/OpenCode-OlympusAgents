@@ -19,17 +19,47 @@
 
 ### Requirements
 
-- Windows with PowerShell 7 installed
+- Windows with PowerShell 7 installed (Windows PowerShell 5.1 may launch the installer, which delegates bootstrap to PowerShell 7)
 - Git and an existing Git project
-- OpenCode V2 with GPT-6 Sol and GPT-6 Luna available (including the variants Olympus uses)
+- OpenCode V2 and the configured models when installing OpenCode; Codex CLI when using Codex
 
-Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Run:
+Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Replace `<TAG>` with a published release tag that includes the dual-harness installer. Installation is project-local, never global.
+
+#### OpenCode (default)
+
+The default preserves the one-line OpenCode install:
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.2.0/install.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1 | iex
 ```
 
-This installs Olympus into that project, not globally. Only run downloaded scripts in projects you trust; [review the installer](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.2.0/install.ps1) first if you prefer.
+This is equivalent to `-Harness opencode`; no harness selection prompt appears.
+
+#### Codex
+
+Run the downloaded script as a script block to pass installer parameters:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness codex
+```
+
+#### OpenCode + Codex
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness all
+```
+
+Add `-Target (Get-Location).Path` when invoking from outside the project root. Each selection is additive: installing one harness does not remove the other. A published tag must contain this feature; the existing release tag is not changed by this source-branch work.
+
+Verify just the requested project-local harness surface without writing files:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness opencode -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness codex -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness all -Target (Get-Location).Path -VerifyOnly
+```
+
+Only run downloaded scripts in projects you trust; review the installer at the same immutable tag first if you prefer.
 
 ## 💬 Start Building
 
@@ -63,7 +93,7 @@ Kael coordinates the team as needed: research, implementation, testing, and revi
 
 Olympus Core defines what the team and its orchestration mean. Harness adapters define how each runtime expresses the same Core. **OpenCode and Codex are the two officially supported harnesses**; Codex uses its native root, agents, approvals, and activity view, while capability gaps remain explicit.
 
-The pinned v0.2.0 installer remains the latest stable installer. The `v0.3.0-beta.1` prerelease was published on 2026-09-28 and adds Argus, Atlas, Talos, Thales, and Helios; those prerelease additions are not included in the v0.2.0 installer. The `v0.3.0-beta.4` installer is a source candidate, not a published release; when published from its matching tag, its default selects that same prerelease rather than silently falling back to stable.
+The OpenCode and Codex adapters use the same Olympus Core, but their capabilities are not identical. OpenCode provides hard DENY, the explicit `/maintain` → Aegis entry, and the Activity HUD. Codex supports multi-agent work, result delivery, ALLOW, and adaptable ASK; DENY and Aegis remain gaps, and activity visibility is basic/partial. See the [capability contract](docs/HARNESS-CAPABILITIES.md).
 
 ### Out-of-scope project work
 
@@ -98,7 +128,7 @@ Olympus treats an installed project as trusted. Kovan and Nox can run commands f
 
 ## 🔄 Update
 
-Olympus is installed per project. To install or upgrade to **v0.2.0** in a project (including one with v0.1.2 installed), run the [Install](#-install) command from its Git root. Olympus preserves unrelated project work and refuses to overwrite changed files it manages. The README command is explicitly pinned to stable v0.2.0. An installer copied from a prerelease uses that release's embedded tag by default; use `-Version v0.2.0` to select stable explicitly.
+Olympus is installed per project. Use the commands above with the exact published tag that contains the desired installer feature. `-Harness` accepts `opencode` (the default), `codex`, or `all`. Installing an additional harness is additive. The installer preserves unrelated project work and refuses to overwrite a differing user-owned destination or a drifted managed file. `-VerifyOnly` checks only the requested harness subset and is read-only.
 
 ## 🆘 Troubleshooting
 

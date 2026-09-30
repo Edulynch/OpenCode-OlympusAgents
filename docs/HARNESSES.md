@@ -51,11 +51,30 @@ outputs**.
 | Codex | `CODEX.md`, `.codex/config.toml`, `.codex/agents/*.toml` |
 | Shared contract presentation | `docs/HARNESS-CAPABILITIES.md` |
 
-OpenCode preserves the current `/maintain` command, hidden Aegis, native ASK,
-hard DENY, Activity HUD, roles, models, permissions, and installer-managed
-surface. The current OpenCode installer continues to consume the checked-in
-generated OpenCode files and its existing VerifyOnly path is qualified. It is
-not redesigned here.
+The project-local installer accepts `-Harness opencode`, `-Harness codex`, or
+`-Harness all`; the default remains `opencode` for the existing one-line install
+experience. It discovers generated adapter outputs under `.opencode/**` and
+`.codex/**` and the generated root file for each harness, so role rosters and
+policies are not copied into a second installer inventory. Additions are
+non-destructive: choosing one harness never removes the other.
+
+Managed ownership remains hash-based. A manifest records `installed_harnesses`
+and the union of managed output hashes. Existing beta.4 OpenCode manifests with
+no harness field are interpreted as OpenCode-only and upgraded in place. For an
+OpenCode installation the manifest remains `.opencode/orchestrator-install.json`;
+a Codex-only installation uses `.codex/orchestrator-install.json`, so it does not
+create `.opencode/**` or `opencode.jsonc`. Adding OpenCode to Codex safely moves
+the manifest to the OpenCode location while retaining Codex outputs. Differing
+unowned destinations are conflicts; exact generated Codex files may be adopted.
+VerifyOnly checks only the requested harness subset, so drift in the other
+installed harness does not invalidate a subset verification. It is read-only.
+
+OpenCode still provides the `/maintain` command, hidden Aegis, native ASK, hard
+DENY, Activity HUD, roles, models, permissions, and installer-managed surface.
+Codex installation does not imply capability parity: Codex multi-agent and
+result delivery are supported, ALLOW is supported, ASK is adaptable, DENY and
+Aegis remain gaps, and activity visibility is partial/basic. See the generated
+[capability contract](HARNESS-CAPABILITIES.md).
 
 Codex uses its root thread as Kael, custom specialists, per-role model/effort,
 native multi-agent tools, bounded fan-out/fan-in, child result delivery, and
@@ -81,6 +100,26 @@ as passing/confirmed; these smokes were **not rerun** during modularization.
 - `ACTIVITY_VISIBILITY = PARTIAL`: use native Codex visibility; no equivalent
   Activity HUD is recreated.
 
-The Codex installer / VerifyOnly path is a documented next task. A future
-harness can be added through another adapter only if it can satisfy and honestly
-declare the Olympus capability contract.
+Canonical project-local command examples (replace `<TAG>` with a published tag
+that contains this installer):
+
+```powershell
+# OpenCode only (also the default)
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1 | iex
+
+# Codex only
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness codex
+
+# Both harnesses
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness all
+
+# Verify only the selected managed surface (read-only)
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness opencode -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness codex -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness all -Target (Get-Location).Path -VerifyOnly
+```
+
+No global Olympus installer, plugin framework, automatic harness detection, or
+additional harness is introduced. A future harness may be added only through a
+separate adapter that satisfies and honestly declares the Olympus capability
+contract.

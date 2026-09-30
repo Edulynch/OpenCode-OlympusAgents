@@ -39,6 +39,23 @@ function Assert-ReleaseNotes([string]$Body, [string]$Tag) {
     if (-not $verificationBody.Contains($verify)) {
         throw 'RELEASE_NOTES_VERIFY_PIN_MISMATCH: Verify command must use the same exact release tag and -VerifyOnly.'
     }
+    if ($Tag -cne 'v0.3.0-beta.4') {
+        $codexInstall = "& ([scriptblock]::Create((irm '$base'))) -Harness codex"
+        $allInstall = "& ([scriptblock]::Create((irm '$base'))) -Harness all"
+        $opencodeVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness opencode -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
+        $codexVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness codex -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
+        $allVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness all -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
+        foreach ($command in @($codexInstall, $allInstall)) {
+            if (-not $installationBody.Contains($command)) {
+                throw 'RELEASE_NOTES_HARNESS_INSTALL_MISSING: Installation section must publish Codex and all-harness commands.'
+            }
+        }
+        foreach ($command in @($opencodeVerify, $codexVerify, $allVerify)) {
+            if (-not $verificationBody.Contains($command)) {
+                throw 'RELEASE_NOTES_HARNESS_VERIFY_MISSING: Verify section must publish OpenCode, Codex, and all subset checks.'
+            }
+        }
+    }
     if ($Body -match '(?i)raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/master/install\.ps1') {
         throw 'RELEASE_NOTES_MASTER_SOURCE: A mutable master installer is not a canonical release source.'
     }

@@ -1,5 +1,36 @@
 # Unreleased
 
+## v0.3.0-beta.4
+
+**Status: local release candidate; no tag or GitHub Release created.**
+
+### Highlights
+
+- Add Olympus Harness Core as the single canonical role, policy, model-intent, orchestration, and capability source; render deterministic OpenCode and Codex adapters from it.
+- Retain experimental Codex runtime support and bounded multi-agent orchestration (up to four children); this is not full Codex parity.
+- Map Sol roles to GPT-6.1 Sol while Luna roles remain GPT-6 Luna, with canonical reasoning efforts preserved.
+- Publish the adapter capability contract: OpenCode hard DENY remains supported; Codex DENY and Codex Aegis remain documented gaps.
+- Add the Aegis Early Scope Gate and classify maintenance by target ownership, not by the requested operation.
+- Fix `/maintain` generated frontmatter and the runtime handoff so the explicit command routes to hidden Aegis.
+- Retain the tagged-source installer contract, managed-file hashes, and read-only `-VerifyOnly` checks.
+
+### Known limitations
+
+- OpenCode V2 Issue #1 (`No tool output found`) remains open and upstream; Olympus does not claim to fix it.
+- Codex does not provide Olympus hard DENY or Aegis support; its capability contract continues to report both as `GAP`.
+
+## Installation
+
+```powershell
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.4/install.ps1 | iex
+```
+
+## Verify installation
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.4/install.ps1'))) -Version 'v0.3.0-beta.4' -Target (Get-Location).Path -VerifyOnly
+```
+
 ## v0.3.0-beta.3 critical fixes candidate
 
 **Status: source candidate; this task creates no tag or release.**

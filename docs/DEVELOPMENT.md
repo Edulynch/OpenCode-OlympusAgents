@@ -8,7 +8,7 @@ Olympus Core defines role responsibilities, model intent, routing, authority, re
 
 Kael checks feasibility and plane routing from the request **before** delegated research or planning. `/maintain` is reserved for Olympus development/maintenance/configuration/installation, Olympus framework bug/gap repair, or a user-explicit Olympus escape hatch because such a gap blocks normal completion. Ordinary user-project work, including ordinary Git administration, remains in the normal plane; Git alone is not an Aegis capability boundary. Kael does not automatically delegate to Aegis. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
 
-### Authority Grants — beta.3 candidate
+### Authority Grants — beta.3
 
 Permission outcomes are explicit: **ALLOW** means an in-scope tool can run
 directly; **NATIVE_ASK** means an otherwise eligible exact operation may be
@@ -151,7 +151,7 @@ unresolved work. Phase 3 evidence class: USER_EXECUTED_LIVE_EVIDENCE; see
 
 ## Local/bootstrap installation
 
-From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The README's explicitly pinned v0.2.0 stable installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`. The v0.3.0-beta.3 candidate installer defaults to `v0.3.0-beta.3`; a published tagged installer is expected to keep its embedded default equal to its own immutable tag. `-Version` accepts only Olympus SemVer `vX.Y.Z`, `vX.Y.Z-alpha.N`, `vX.Y.Z-beta.N`, or `vX.Y.Z-rc.N`; select stable releases explicitly with `-Version v0.2.0`.
+From an Olympus source checkout, bootstrap into the **root of a separate, trusted Git project** on Windows with PowerShell 7, Git, and OpenCode V2 available. The README's explicitly pinned v0.2.0 stable installer can be launched from Windows PowerShell 5.1 or PowerShell 7, but delegates bootstrap to installed `pwsh`. The v0.3.0-beta.4 candidate installer defaults to `v0.3.0-beta.4`; a published tagged installer is expected to keep its embedded default equal to its own immutable tag. `-Version` accepts only Olympus SemVer `vX.Y.Z`, `vX.Y.Z-alpha.N`, `vX.Y.Z-beta.N`, or `vX.Y.Z-rc.N`; select stable releases explicitly with `-Version v0.2.0`.
 
 ```powershell
 pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project' -DryRun
@@ -160,11 +160,11 @@ pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project'
 
 `-Target` is required and must be an absolute path to the Git worktree root; `-DryRun` checks and reports the proposed changes without writing them. `-VerifyOnly` resolves the requested release exactly like install mode, then compares the target's managed-file set and SHA-256 contents to that release and checks the release's managed agent roster. It is read-only with respect to the project: it does not invoke bootstrap, create/update the manifest, repair drift, or alter any target file. An old `installed_from_commit: unknown` value is not trusted as evidence either way; exact managed content is checked against the resolved tag. A recorded, non-legacy `installed_version` that conflicts with the requested version fails explicitly. `scripts/bootstrap.ps1` reads managed assets from its own source checkout and **does not accept `-SourceRoot`**. For local installer qualification, `install.ps1` has `-SourceRoot` and local tag-shaped `-SourceArchive` overrides; both validate the source's declared release version. The public installer fetches the archive for the exact requested immutable tag, validates its archive-root tag and embedded source version before bootstrap/verification, and fails closed on mismatch rather than using a different release. The installer reports requested/resolved versions; current bootstrap records `installed_version` in the install manifest. Legacy stable bootstrap archives that predate this metadata remain installable. Bootstrap rejects unsafe targets independently of trusted-project agent execution.
 
-Canonical beta.3 commands (both pinned to the same immutable tag):
+Canonical beta.4 commands (both pinned to the same immutable tag):
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.3/install.ps1 | iex
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.3/install.ps1'))) -Version 'v0.3.0-beta.3' -Target (Get-Location).Path -VerifyOnly
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.4/install.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.4/install.ps1'))) -Version 'v0.3.0-beta.4' -Target (Get-Location).Path -VerifyOnly
 ```
 
 ## Managed installation and recovery

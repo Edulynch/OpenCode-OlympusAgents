@@ -127,6 +127,16 @@ def add_yaml_comment(header: str, message: str) -> str:
     return header.replace("---\n", f"---\n# {message}\n", 1)
 
 
+def add_markdown_comment(text: str, message: str) -> str:
+    text = text.removeprefix("\ufeff")
+    if text.startswith("---"):
+        frontmatter = re.match(r"\A---\n.*?^---[ \t]*(?:\n|$)", text, re.MULTILINE | re.DOTALL)
+        if frontmatter is None:
+            raise RenderError("Markdown YAML frontmatter must start with --- and close with ---")
+        return text[: frontmatter.end()] + f"<!-- {message} -->\n" + text[frontmatter.end() :]
+    return f"<!-- {message} -->\n" + text
+
+
 def opencode_outputs(root: Path, models: dict, policies: dict, roles: set[str]) -> dict[Path, str]:
     adapter = root / "olympus" / "harnesses" / "opencode"
     maintenance_policy_path = root / "olympus" / "policies" / "maintenance-plane.md"
@@ -190,7 +200,7 @@ def opencode_outputs(root: Path, models: dict, policies: dict, roles: set[str]) 
         body = read_text(source_path)
         if source_name == "maintain.md":
             body = replace_tokens(body, {"maintenance_plane_policy": maintenance_policy}, source_path)
-        output[output_path] = comment + body
+        output[output_path] = add_markdown_comment(body, GENERATED) if source_name.endswith(".md") else comment + body
     return output
 
 

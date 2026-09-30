@@ -55,6 +55,11 @@ try {
     $aegisSource = Text 'olympus/harnesses/opencode/agent-prompts/aegis.md'
     $commandSource = Text 'olympus/harnesses/opencode/maintain.md'
     $kaelSource = Text 'olympus/harnesses/opencode/agent-prompts/kael.md'
+    # Renderer output is canonical UTF-8/LF; normalize Git's Windows checkout
+    # line endings before comparing embedded policy text.
+    $canonicalPolicy = ($core -replace '\r\n?', "`n").Trim()
+    $canonicalAegis = $aegis -replace '\r\n?', "`n"
+    $canonicalCommand = $command -replace '\r\n?', "`n"
 
     Check 'CORE_POLICY_HAS_EARLY_GATE_AND_OWNER_CLASSIFICATION' (
         $core -match 'Cheap scope gate — before any other work' -and
@@ -78,7 +83,7 @@ try {
     Check 'OPENCODE_AEGIS_AND_MAINTAIN_DERIVE_CANONICAL_POLICY' (
         $aegisSource.Contains('{{maintenance_plane_policy}}') -and
         $commandSource.Contains('{{maintenance_plane_policy}}') -and
-        $aegis.Contains($core.Trim()) -and $command.Contains($core.Trim()))
+        $canonicalAegis.Contains($canonicalPolicy) -and $canonicalCommand.Contains($canonicalPolicy))
     Check 'OPENCODE_KAEL_DERIVES_TARGET_BOUNDARY_FROM_CORE' (
         $kaelSource.Contains('{{maintenance_target_boundary}}') -and
         $kael -match 'Classify the plane primarily by \*\*what target is being changed and who owns it\*\*' -and

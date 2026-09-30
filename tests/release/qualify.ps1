@@ -200,7 +200,7 @@ try {
             Check 'R9_HUD_DISCOVERY' ($LASTEXITCODE -eq 0 -and $plugins -match 'olympus-activity')
         } finally { Pop-Location }
         $expected = @{
-            kael=@('gpt-6-sol','high','primary'); thales=@('gpt-6-sol','xhigh','subagent'); atlas=@('gpt-6-sol','high','subagent'); argus=@('gpt-6-sol','high','subagent'); talos=@('gpt-6-sol','high','subagent'); helios=@('gpt-6-sol','high','subagent')
+            kael=@('gpt-6.1-sol','high','primary'); thales=@('gpt-6.1-sol','xhigh','subagent'); atlas=@('gpt-6.1-sol','high','subagent'); argus=@('gpt-6.1-sol','high','subagent'); talos=@('gpt-6.1-sol','high','subagent'); helios=@('gpt-6.1-sol','high','subagent')
             veyra=@('gpt-6-luna','max','subagent'); orin=@('gpt-6-luna','max','subagent'); kovan=@('gpt-6-luna','max','subagent')
             nox=@('gpt-6-luna','max','subagent'); vera=@('gpt-6-luna','max','subagent'); aegis=@('gpt-6-luna','max','subagent')
         }

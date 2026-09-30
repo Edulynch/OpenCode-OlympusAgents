@@ -1,7 +1,7 @@
 ---
 description: Optional functional bug diagnosis specialist; reasons from Kael-supplied evidence without implementation or discovery.
 mode: subagent
-model: openai/gpt-6-sol#high
+model: openai/gpt-6.1-sol#high
 permissions:
   - action: "*"
     resource: "*"

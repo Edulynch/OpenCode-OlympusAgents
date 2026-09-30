@@ -8,6 +8,9 @@ if ($Command.Count -eq 1 -and $Command[0] -eq '--version') {
     exit 0
 }
 if ($Command.Count -eq 1 -and $Command[0] -eq 'models') {
+    # The stable v0.2.0 installer still validates its historical Sol ID.
+    # Current Olympus roles use GPT-6.1 Sol; keep both for cross-version tests.
+    Write-Output 'openai/gpt-6.1-sol'
     Write-Output 'openai/gpt-6-sol'
     Write-Output 'openai/gpt-6-luna'
     exit 0

@@ -93,9 +93,9 @@ try {
         -not (Test-Path -LiteralPath (Join-Path $repo '.olympus/jobs.json')))
     $agents = Get-ChildItem (Join-Path $repo '.opencode/agents') -Filter '*.md'
     $agentText = ($agents | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
-    Check 'MODELS_AND_NO_LUNA_FAST' ($kael -match 'model: "openai/gpt-6-sol#high"' -and
+    Check 'MODELS_AND_NO_LUNA_FAST' ($kael -match 'model: "openai/gpt-6.1-sol#high"' -and
         $aegis -match 'model: openai/gpt-6-luna#max' -and
-        (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6-sol#xhigh' -and
+        (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.1-sol#xhigh' -and
         @(@('veyra','orin','kovan','nox','vera') | ForEach-Object {
             (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max'
         }) -notcontains $false -and $agentText -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')

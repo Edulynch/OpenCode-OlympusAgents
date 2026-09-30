@@ -1,7 +1,7 @@
 ---
 description: Deep diagnostic and execution-advisory specialist for high-uncertainty technical failures and execution decisions.
 mode: subagent
-model: openai/gpt-6-sol#xhigh
+model: openai/gpt-6.1-sol#xhigh
 permissions:
   - action: "*"
     resource: "*"

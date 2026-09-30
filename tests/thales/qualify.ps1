@@ -32,7 +32,7 @@ try {
         -not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')))
     Check 'TH3_TH4_ROUTING' ($kael -match 'resource: thales' -and $kael -notmatch '(?i)\bsorin\b' -and
         $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
-    Check 'TH5_TH8_MODEL_PERMISSIONS' ($thales -match 'model: openai/gpt-6-sol#xhigh' -and
+    Check 'TH5_TH8_MODEL_PERMISSIONS' ($thales -match 'model: openai/gpt-6.1-sol#xhigh' -and
         @(@('shell','edit','subagent') | ForEach-Object { $thales -match ('(?s)action: ' + $_ + '\s+resource: "?\*"?\s+effect: deny') }) -notcontains $false)
     Check 'TH9_GATE' ($kael -match '## Diagnostic Gate' -and $kael -match 'evidence-backed condition' -and
         $kael -match 'Do not invoke Thales merely because a task is large, complex, or important')
@@ -99,7 +99,7 @@ try {
         (Test-Path (Join-Path $fresh '.opencode/agents/thales.md')) -and
         -not (Test-Path (Join-Path $fresh '.opencode/agents/sorin.md')) -and
         @($agents | Where-Object id -eq 'sorin').Count -eq 0 -and
-        @($agents | Where-Object { $_.id -eq 'thales' -and $_.model.id -eq 'gpt-6-sol' -and $_.model.variant -eq 'xhigh' }).Count -eq 1)
+        @($agents | Where-Object { $_.id -eq 'thales' -and $_.model.id -eq 'gpt-6.1-sol' -and $_.model.variant -eq 'xhigh' }).Count -eq 1)
 
     $drift = Join-Path $run 'drift'
     [IO.Directory]::CreateDirectory($drift) | Out-Null

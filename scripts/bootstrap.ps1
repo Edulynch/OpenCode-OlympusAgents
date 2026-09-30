@@ -466,12 +466,12 @@ function Report([string]$Repo, $Detection, $Plan, [string]$Status, [string]$Vers
 
 function Validate-Install([string]$Repo) {
     $expected = @{
-        "kael"=@("gpt-6-sol","high","primary")
-        "thales"=@("gpt-6-sol","xhigh","subagent")
-        "atlas"=@("gpt-6-sol","high","subagent")
-        "argus"=@("gpt-6-sol","high","subagent")
-        "talos"=@("gpt-6-sol","high","subagent")
-        "helios"=@("gpt-6-sol","high","subagent")
+        "kael"=@("gpt-6.1-sol","high","primary")
+        "thales"=@("gpt-6.1-sol","xhigh","subagent")
+        "atlas"=@("gpt-6.1-sol","high","subagent")
+        "argus"=@("gpt-6.1-sol","high","subagent")
+        "talos"=@("gpt-6.1-sol","high","subagent")
+        "helios"=@("gpt-6.1-sol","high","subagent")
         "veyra"=@("gpt-6-luna","max","subagent")
         "orin"=@("gpt-6-luna","max","subagent")
         "kovan"=@("gpt-6-luna","max","subagent")
@@ -528,11 +528,11 @@ try {
     $ModelCheck = "DISCOVERY_UNAVAILABLE"
     $models = (& opencode models 2>$null | Out-String)
     if ($LASTEXITCODE -eq 0 -and $models) {
-        if ($models -notmatch [regex]::Escape("openai/gpt-6-sol") -or
+        if ($models -notmatch [regex]::Escape("openai/gpt-6.1-sol") -or
             $models -notmatch [regex]::Escape("openai/gpt-6-luna")) {
-            Fail "MODEL_UNAVAILABLE" "Required GPT-6 Sol/Luna IDs are absent."
+            Fail "MODEL_UNAVAILABLE" "Required GPT-6.1 Sol/GPT-6 Luna IDs are absent."
         }
-        $ModelCheck = "GPT6_SOL_LUNA_IDS_AVAILABLE"
+        $ModelCheck = "GPT61_SOL_GPT6_LUNA_IDS_AVAILABLE"
     }
 
     $manifest = Read-Manifest $Repo

@@ -48,7 +48,7 @@ try {
     $b = [IO.File]::ReadAllText((Join-Path $source 'scripts/bootstrap.ps1'))
     $r = [IO.File]::ReadAllText((Join-Path $source 'docs/ROADMAP.md'))
     Check HE1 ($h -match '(?m)^# ☀️ Helios The Optimizer\r?$' -and $h -match 'mode: subagent' -and $b -match '".opencode/agents/helios.md"')
-    Check HE2 ($h -match 'model: openai/gpt-6-sol#high')
+    Check HE2 ($h -match 'model: openai/gpt-6.1-sol#high')
     Check HE3 ($k -match '(?s)action: subagent\s+resource: helios\s+effect: allow' -and $k -match 'and helios are valid child role IDs')
     foreach ($pair in @(@('HE4','shell'),@('HE5','edit'),@('HE6','subagent'))) { Check $pair[0] ($h -match ('(?s)action: ' + $pair[1] + '\s+resource: "\*"\s+effect: deny')) }
     Check HE7 (@('read','glob','grep','list','lsp' | Where-Object { $h -notmatch ('(?s)action: ' + $_ + '\s+resource: "\*"\s+effect: deny') }).Count -eq 0)
@@ -77,7 +77,7 @@ try {
     Check HE30 ($k -match 'Issue #2 Aegis handoff stays intact' -and $k -match 'MAINTENANCE_RESULT_PENDING')
     Check HE31 ($k -match 'Kael → Aegis DENIED' -and $h -match 'user → /maintain explicit only')
     Check HE32 ($k -match 'Kael retains all routing, reconciliation and root completion' -and $h -match 'Kael retains routing, reconciliation and root completion')
-    $expected = @{ kael='gpt-6-sol#high'; atlas='gpt-6-sol#high'; argus='gpt-6-sol#high'; talos='gpt-6-sol#high'; helios='gpt-6-sol#high'; thales='gpt-6-sol#xhigh'; aegis='gpt-6-luna#max'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
+    $expected = @{ kael='gpt-6.1-sol#high'; atlas='gpt-6.1-sol#high'; argus='gpt-6.1-sol#high'; talos='gpt-6.1-sol#high'; helios='gpt-6.1-sol#high'; thales='gpt-6.1-sol#xhigh'; aegis='gpt-6-luna#max'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
     Check HE33 (@($expected.Keys | Where-Object { ([IO.File]::ReadAllText((Join-Path $source ".opencode/agents/$_.md"))) -notmatch ('(?m)^model: "?openai/' + [regex]::Escape($expected[$_]) + '"?\r?$') }).Count -eq 0)
     Check HE34 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
     Check HE35 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match '\$OldReasoner = ''.opencode/agents/sorin.md''')
@@ -127,7 +127,7 @@ try {
     try { $agents=((& opencode debug agents 2>$null | Out-String) | ConvertFrom-Json -Depth 100) }
     finally { Pop-Location }
     $effective=@($agents | Where-Object id -eq 'helios')
-    Check F_FRESH ($freshResult.Code -eq 0 -and @($effective | Where-Object { $_.model.id -eq 'gpt-6-sol' -and $_.model.variant -eq 'high' -and $_.mode -eq 'subagent' }).Count -eq 1 -and @($agents | Where-Object id -eq 'sorin').Count -eq 0)
+    Check F_FRESH ($freshResult.Code -eq 0 -and @($effective | Where-Object { $_.model.id -eq 'gpt-6.1-sol' -and $_.model.variant -eq 'high' -and $_.mode -eq 'subagent' }).Count -eq 1 -and @($agents | Where-Object id -eq 'sorin').Count -eq 0)
     Check F_EFFECTIVE_DENY ($effective.Count -eq 1 -and @('shell','edit','subagent','read','glob','grep','list','lsp' | Where-Object { $action=$_; @($effective[0].permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq 'deny' }).Count -lt 1 -or @($effective[0].permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq 'allow' }).Count -gt 0 }).Count -eq 0)
     Check F_ROSTER (@($expected.Keys | Where-Object { $id=$_; $want=$expected[$id].Split('#'); @($agents | Where-Object { $_.id -eq $id -and $_.model.id -eq $want[0] -and $_.model.variant -eq $want[1] }).Count -ne 1 }).Count -eq 0)
     $drift=Join-Path $run 'drift'; [IO.Directory]::CreateDirectory($drift) | Out-Null; & git -C $drift init --quiet

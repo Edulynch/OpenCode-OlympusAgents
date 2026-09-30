@@ -1,7 +1,7 @@
 ---
 description: Optional explicit-only optimization feasibility and proposal reasoner; uses Kael-supplied evidence, never profiles or implements.
 mode: subagent
-model: openai/gpt-6-sol#high
+model: openai/gpt-6.1-sol#high
 permissions:
   - action: "*"
     resource: "*"

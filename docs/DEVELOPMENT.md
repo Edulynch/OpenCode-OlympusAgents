@@ -181,9 +181,25 @@ If drift occurs, inspect the reported path and manifest, back up any intentional
 
 ## Qualification
 
+### Current model mapping
+
+Olympus Sol slots now use **GPT-6.1 Sol** without changing their reasoning
+effort: Kael, Atlas, Argus, Talos and Helios use `high`; Thales uses `xhigh`.
+Veyra, Orin, Kovan, Nox, Vera and hidden Aegis remain on **GPT-6 Luna Max**.
+The root OpenCode default follows Kael on GPT-6.1 Sol. Qualify the complete
+mapping and installer model checks with:
+
+```powershell
+pwsh -NoProfile -File ./tests/model-migration/qualify.ps1
+```
+
+Earlier runtime evidence in the roadmap remains a historical record of the
+model actually used at that time; it is not a current model assignment.
+
 From the source checkout root, use the current harnesses (PowerShell 7; some require `opencode`, Git, and Node):
 
 ```powershell
+pwsh -NoProfile -File ./tests/model-migration/qualify.ps1
 pwsh -NoProfile -File ./tests/trivial-fast-path/qualify.ps1
 pwsh -NoProfile -File ./tests/phase4c/qualify.ps1
 pwsh -NoProfile -File ./tests/authority/qualify.ps1

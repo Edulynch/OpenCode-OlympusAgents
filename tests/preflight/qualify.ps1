@@ -73,7 +73,7 @@ try {
         $aegis -match 'no project administration' -and
         $aegis -match '(?s)action: subagent\s+resource: "\*"\s+effect: deny')
     Check INVARIANTS ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
-        $kael -match 'model: "openai/gpt-6-sol#high"' -and
+        $kael -match 'model: "openai/gpt-6.1-sol#high"' -and
         $aegis -match 'model: openai/gpt-6-luna#max' -and
         $kael -notmatch 'Luna Fast|project-context\.json' -and $aegis -notmatch 'project-context\.json')
     Write-Output 'PREFLIGHT / SCOPED DISCOVERY QUALIFICATION: PASS (static policy + fixture only; interactive sequencing and child counts NOT VERIFIED)'

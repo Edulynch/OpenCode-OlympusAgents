@@ -1,7 +1,7 @@
 ---
 description: Bounded execution planner for already-scoped, already-architected changes.
 mode: subagent
-model: openai/gpt-6-sol#high
+model: openai/gpt-6.1-sol#high
 permissions:
   - action: "*"
     resource: "*"

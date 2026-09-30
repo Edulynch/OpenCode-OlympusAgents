@@ -218,8 +218,8 @@ function Get-OpenCodeDiagnostics([string]$Repo) {
 
 function Assert-ModelMapping($Agents) {
     $expected = [ordered]@{
-        'kael' = @('gpt-6-sol', 'high', 'primary')
-        'thales' = @('gpt-6-sol', 'xhigh', 'subagent')
+        'kael' = @('gpt-6.1-sol', 'high', 'primary')
+        'thales' = @('gpt-6.1-sol', 'xhigh', 'subagent')
         'veyra' = @('gpt-6-luna', 'max', 'subagent')
         'orin' = @('gpt-6-luna', 'max', 'subagent')
         'kovan' = @('gpt-6-luna', 'max', 'subagent')

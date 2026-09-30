@@ -50,26 +50,30 @@ try {
     $rr = Text 'tests/result-reconciliation/qualify.ps1'
     $agents = @(Get-ChildItem (Join-Path $root '.opencode/agents') -Filter '*.md')
     $models = @($agents | ForEach-Object { ([regex]::Match([IO.File]::ReadAllText($_.FullName), '(?m)^model:.*$')).Value })
-    # Compare against the shipped Phase 3 foundation, not a moving master ref:
-    # this qualifier must continue to work after Phase 4 is fast-forwarded.
+    $expectedModels = @{
+        kael=@('openai/gpt-6.1-sol#high','primary'); thales=@('openai/gpt-6.1-sol#xhigh','subagent')
+        atlas=@('openai/gpt-6.1-sol#high','subagent'); argus=@('openai/gpt-6.1-sol#high','subagent')
+        talos=@('openai/gpt-6.1-sol#high','subagent'); helios=@('openai/gpt-6.1-sol#high','subagent')
+        veyra=@('openai/gpt-6-luna#max','subagent'); orin=@('openai/gpt-6-luna#max','subagent')
+        kovan=@('openai/gpt-6-luna#max','subagent'); nox=@('openai/gpt-6-luna#max','subagent')
+        vera=@('openai/gpt-6-luna#max','subagent'); aegis=@('openai/gpt-6-luna#max','subagent')
+    }
+    $modelMapValid = ($agents.Count -eq 12)
+    foreach ($id in $expectedModels.Keys) {
+        $agent = @($agents | Where-Object BaseName -eq $id)
+        if ($agent.Count -ne 1) { $modelMapValid=$false; continue }
+        $agentText = [IO.File]::ReadAllText($agent[0].FullName)
+        $model = (([regex]::Match($agentText, '(?m)^model:\s*([^\r\n]+)')).Groups[1].Value).Trim().Trim('"').Trim("'")
+        $mode = (([regex]::Match($agentText, '(?m)^mode:\s*([^\r\n]+)')).Groups[1].Value).Trim()
+        if ($model -cne $expectedModels[$id][0] -or $mode -cne $expectedModels[$id][1]) { $modelMapValid=$false }
+    }
+    # Compare concurrency only against the shipped Phase 3 foundation, not a
+    # moving branch; the intentional GPT-6.1 migration is asserted above.
     $phase3 = '70f22ad366caee13bb479cac17ab2776205a8820'
-    $baseModels = @($agents | Where-Object Name -notin @('atlas.md','argus.md','talos.md','helios.md','aegis.md') | ForEach-Object {
-        # Phase 4 changes only the reasoner file-derived ID, not its model.
-        $relative = '.opencode/agents/' + $(if ($_.Name -eq 'thales.md') { 'sorin.md' } else { $_.Name })
-        $baseline = (& git -C $root show "${phase3}:$relative" | Out-String)
-        if ($LASTEXITCODE -ne 0) { throw "Cannot read baseline model: $relative" }
-        ([regex]::Match($baseline, '(?m)^model:.*$')).Value
-    })
     $baseKael = (& git -C $root show "${phase3}:.opencode/agents/kael.md" | Out-String)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read baseline concurrency policy' }
     $concurrencyPattern = '(?s)NORMAL is cost/context-aware:.*?(?=\r?\nReliable delayed background notifications)'
-    $historicalModels = @($agents | Where-Object Name -notin @('atlas.md','argus.md','talos.md','helios.md','aegis.md') | ForEach-Object { ([regex]::Match([IO.File]::ReadAllText($_.FullName), '(?m)^model:.*$')).Value })
-    Check 'MH14_MODELS' ($models.Count -eq 12 -and (($historicalModels -join '|') -ceq ($baseModels -join '|')) -and
-        (Text '.opencode/agents/atlas.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$' -and
-        (Text '.opencode/agents/argus.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$' -and
-        (Text '.opencode/agents/talos.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$' -and
-        (Text '.opencode/agents/helios.md') -match '(?m)^model: openai/gpt-6-sol#high\r?$' -and
-        (Text '.opencode/agents/aegis.md') -match '(?m)^model: openai/gpt-6-luna#max\r?$')
+    Check 'MH14_MODELS' ($models.Count -eq 12 -and $modelMapValid)
     $baselineConcurrency = ([regex]::Match($baseKael, $concurrencyPattern).Value).Replace('Sorin','Thales')
     Check 'MH15_CONCURRENCY' (([regex]::Match($kael, $concurrencyPattern).Value) -ceq $baselineConcurrency -and $kael -match 'MAX_ACTIVE_CHILDREN = 4')
     Check 'MH10_ROUTING' ($kael -match 'Kael → Aegis remains denied' -and

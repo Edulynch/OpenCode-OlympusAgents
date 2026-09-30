@@ -70,9 +70,9 @@ try {
     $allAgentText = ($agents | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
     Check 'NO_LUNA_FAST' ($allAgentText -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
     $workersMatch = @(@('veyra','orin','kovan','nox','vera') | ForEach-Object { (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max' }) -notcontains $false
-    Check 'MODELS' ($kael -match 'model: "?openai/gpt-6-sol#high' -and
+    Check 'MODELS' ($kael -match 'model: "?openai/gpt-6.1-sol#high' -and
         $aegis -match 'model: openai/gpt-6-luna#max' -and
-        (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6-sol#xhigh' -and
+        (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.1-sol#xhigh' -and
         $workersMatch)
     Write-Output 'COMPLETION GATE QUALIFICATION: PASS (static + synthetic; live qualification separate)'
     exit 0

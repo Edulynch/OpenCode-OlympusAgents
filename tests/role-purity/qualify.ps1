@@ -83,7 +83,7 @@ try {
     Check RP13_RECOVER_ORIGINAL ($k -match 'wait for\s+the original native result and consume it once' -and $k -match 'After a successfully reconciled')
     Check RP14_UNKNOWN_STOPS ($k -match 'unknown/unrecoverable\s+execution stop as COMPLETION_UNCONFIRMED' -and $d -match 'Unknown execution\s+stops as COMPLETION_UNCONFIRMED')
     Check RP15_ISSUE1_INTACT ($k -match 'MISSING PARENT TOOL OUTPUT != CHILD FAILURE' -and $k -match 'only positive native evidence that no child was\s+created' -and $k -match 'No second worker is launched')
-    Check RP16_MODEL_MAPPING ($k -match 'model: "openai/gpt-6-sol#high"' -and $s -match 'model: openai/gpt-6-sol#xhigh' -and
+    Check RP16_MODEL_MAPPING ($k -match 'model: "openai/gpt-6.1-sol#high"' -and $s -match 'model: openai/gpt-6.1-sol#xhigh' -and
         (Text '.opencode/agents/aegis.md') -match 'model: openai/gpt-6-luna#max' -and
         @($workers | Where-Object { $_ -notmatch 'model: "openai/gpt-6-luna#max"' }).Count -eq 0)
     Check RP17_CONCURRENCY_UNCHANGED ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and
@@ -112,7 +112,7 @@ try {
     Check RP16_AEGIS_OUTSIDE_ROUTING ($k -match 'Kael → Aegis remains DENIED' -and $k -match 'cannot be TARGET_ROLE' -and $s -match '(?s)Never directly invoke.*?Aegis' -and $k -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
     Check RP17_THIRD_AUTO_DENIED ($k -match 'No third automatic consultation' -and $k -match 'explicit user authorization' -and $k -match '`/power`, FAST mode, complexity')
     Check RP18_COMPLETION_OWNERSHIP ($k -match 'reasoner final result consumed' -and $k -match 'zero unresolved required work')
-    Check RP19_MODEL_MAPPING ($k -match 'model: "openai/gpt-6-sol#high"' -and $s -match 'model: openai/gpt-6-sol#xhigh' -and $m -match 'model: openai/gpt-6-luna#max' -and @($workers | Where-Object { $_ -notmatch 'model: "openai/gpt-6-luna#max"' }).Count -eq 0)
+    Check RP19_MODEL_MAPPING ($k -match 'model: "openai/gpt-6.1-sol#high"' -and $s -match 'model: openai/gpt-6.1-sol#xhigh' -and $m -match 'model: openai/gpt-6-luna#max' -and @($workers | Where-Object { $_ -notmatch 'model: "openai/gpt-6-luna#max"' }).Count -eq 0)
     Check RP20_CONCURRENCY ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
     Check RP21_NO_LUNA_FAST (($allAgents -join "`n") -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
 

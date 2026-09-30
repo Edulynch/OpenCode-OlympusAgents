@@ -54,7 +54,7 @@ try {
     $b = [IO.File]::ReadAllText((Join-Path $source 'scripts/bootstrap.ps1'))
     $r = [IO.File]::ReadAllText((Join-Path $source 'docs/ROADMAP.md'))
     Check AT1 ((Test-Path (Join-Path $source '.opencode/agents/atlas.md')) -and $a -match 'mode: subagent' -and $a -match '(?m)^# 🗺️ Atlas The Planner\r?$')
-    Check AT2 ($a -match 'model: openai/gpt-6-sol#high')
+    Check AT2 ($a -match 'model: openai/gpt-6.1-sol#high')
     Check AT3 ($k -match '(?s)action: subagent\s+resource: atlas\s+effect: allow' -and $k -match 'atlas, argus, talos, and helios are valid child role IDs')
     foreach ($pair in @(@('AT4','shell'),@('AT5','edit'),@('AT6','subagent'))) {
         Check $pair[0] ($a -match ('(?s)action: ' + $pair[1] + '\s+resource: "\*"\s+effect: deny'))
@@ -86,7 +86,7 @@ try {
             $agentText -notmatch 'Kael alone reconciles the result' -or
             $agentText -notmatch '(?s)action: question\s+resource: "?\*"?\s+effect: deny'
     })
-    Check AT24 ($authorityIntegrated.Count -eq 0 -and $k -match 'model: "openai/gpt-6-sol#high"' -and $t -match 'model: openai/gpt-6-sol#xhigh')
+    Check AT24 ($authorityIntegrated.Count -eq 0 -and $k -match 'model: "openai/gpt-6.1-sol#high"' -and $t -match 'model: openai/gpt-6.1-sol#xhigh')
     Check AT25 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children' -and $k -notmatch 'gpt-6-luna#fast')
     Check AT26 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match "'sorin'" -and $a -notmatch 'gpt-6-luna#fast')
     Check 'AT_READ_DENIED' (@(@('read','glob','grep','list','lsp') | Where-Object { $a -notmatch ('(?s)action: ' + $_ + '\s+resource: "\*"\s+effect: deny') }).Count -eq 0)
@@ -145,7 +145,7 @@ try {
     try { $agents = ((& opencode debug agents 2>$null | Out-String) | ConvertFrom-Json -Depth 100) }
     finally { Pop-Location }
     Check 'AT_FRESH_EFFECTIVE' ($freshResult.Code -eq 0 -and
-        @($agents | Where-Object { $_.id -eq 'atlas' -and $_.model.id -eq 'gpt-6-sol' -and $_.model.variant -eq 'high' -and $_.mode -eq 'subagent' }).Count -eq 1 -and
+        @($agents | Where-Object { $_.id -eq 'atlas' -and $_.model.id -eq 'gpt-6.1-sol' -and $_.model.variant -eq 'high' -and $_.mode -eq 'subagent' }).Count -eq 1 -and
         @($agents | Where-Object id -eq 'sorin').Count -eq 0)
     $drift = Join-Path $run 'drift'
     [IO.Directory]::CreateDirectory($drift) | Out-Null

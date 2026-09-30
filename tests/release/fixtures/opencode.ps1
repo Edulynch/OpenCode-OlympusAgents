@@ -3,6 +3,19 @@ param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Command)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Issue #6 regression probe: runtime discovery may initialize external tooling.
+# If VerifyOnly launches it from the target, leave an observable artifact.
+if ($env:OLYMPUS_VERIFYONLY_PROBE -eq '1' -and $Command.Count -ge 2 -and
+    $Command[0] -eq 'debug' -and $Command[1] -in @('config','agents')) {
+    $target = (Get-Location).Path
+    $serena = Join-Path $target '.serena'
+    [IO.Directory]::CreateDirectory($serena) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $serena 'verify-probe.txt'), 'external runtime artifact')
+    if ($env:OLYMPUS_VERIFYONLY_CALL_LOG) {
+        [IO.File]::AppendAllText($env:OLYMPUS_VERIFYONLY_CALL_LOG, ($Command -join ' ') + "`n")
+    }
+}
+
 if ($Command.Count -eq 1 -and $Command[0] -eq '--version') {
     Write-Output 'OpenCode qualification stub 2.0'
     exit 0

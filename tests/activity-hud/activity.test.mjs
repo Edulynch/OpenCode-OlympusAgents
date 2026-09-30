@@ -17,21 +17,21 @@ test("H4 root-only and direct children only", () => {
 
 test("H5 running direct children appear and disappear on native status transitions", () => {
   const sessions = [root, child("a", "orin"), child("b", "kovan")]
-  assert.deepEqual(activeChildren("root", sessions, status(["a"])).map((row) => row.agent), ["Orin"])
-  assert.deepEqual(activeChildren("root", sessions, status(["b"])).map((row) => row.agent), ["Kovan"])
+  assert.deepEqual(activeChildren("root", sessions, status(["a"])).map((row) => row.agent), ["Orin — The Architect"])
+  assert.deepEqual(activeChildren("root", sessions, status(["b"])).map((row) => row.agent), ["Kovan — The Coder"])
   assert.deepEqual(activeChildren("root", sessions, status([])), [])
 })
 
 test("H6 duplicate sessions remain distinct rows", () => {
   const rows = activeChildren("root", [root, child("a", "aegis"), child("b", "aegis")], status(["a", "b"]))
   assert.deepEqual(rows.map((row) => row.id), ["a", "b"])
-  assert.deepEqual(rows.map((row) => row.agent), ["🛡️ Aegis The Keeper", "🛡️ Aegis The Keeper"])
+  assert.deepEqual(rows.map((row) => row.agent), ["Aegis — The Keeper", "Aegis — The Keeper"])
 })
 
 test("H7 Aegis, fallback, truncation and Olympus display names", () => {
   const rows = activeChildren("root", [root, child("a", "aegis", "New session"), child("b", "veyra", "x".repeat(90))], status(["a", "b"]))
   assert.equal(rows[0].title, "Aegis task")
-  assert.equal(rows[1].agent, "Veyra")
+  assert.equal(rows[1].agent, "Veyra — The Explorer")
   assert.ok(rows[1].title.length <= 64)
 })
 

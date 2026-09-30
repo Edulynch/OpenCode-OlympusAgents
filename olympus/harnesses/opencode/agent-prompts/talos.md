@@ -1,5 +1,5 @@
 
-# 🛡️ Talos The Sentinel
+# {{display_identity}}
 
 ## Scope and Authority handoff
 

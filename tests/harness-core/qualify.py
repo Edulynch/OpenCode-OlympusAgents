@@ -72,6 +72,9 @@ def main() -> int:
     check("PYTHON_311_PLUS", sys.version_info >= (3, 11))
     with (ROOT / "olympus" / "core" / "models.toml").open("rb") as stream:
         models = tomllib.load(stream)
+    with (ROOT / "olympus" / "core" / "identities.toml").open("rb") as stream:
+        identity_source = tomllib.load(stream)
+    identities = {role: entry["display"] for role, entry in identity_source["roles"].items()}
     with (ROOT / "olympus" / "policies" / "orchestration.toml").open("rb") as stream:
         orchestration = tomllib.load(stream)
     with (ROOT / "olympus" / "harnesses" / "capabilities.toml").open("rb") as stream:
@@ -87,6 +90,8 @@ def main() -> int:
 
     canonical_roles = {path.stem for path in (ROOT / "olympus" / "roles").glob("*.md")}
     check("CANONICAL_12_UNIQUE_ROLE_FILES", len(canonical_roles) == 12 and canonical_roles == set(models["roles"]))
+    check("CANONICAL_12_UNIQUE_DISPLAY_IDENTITIES", set(identities) == canonical_roles and len(set(identities.values())) == 12 and
+        all(display.split(" — ", 1)[0].casefold() == role for role, display in identities.items()))
     check("ONE_ROOT_ORCHESTRATOR", "ROOT ORCHESTRATOR" in (ROOT / "olympus/roles/kael.md").read_text(encoding="utf-8"))
 
     installer_text = (ROOT / "install.ps1").read_text(encoding="utf-8")
@@ -94,6 +99,7 @@ def main() -> int:
     check(
         "INSTALLER_DEFAULTS_TO_OPENCODE_AND_EXPOSES_TWO_ADAPTERS",
         "[string]$Harness = 'opencode'" in installer_text
+        and "[string]$Scope = 'project'" in installer_text
         and "[ValidateSet('opencode', 'codex', 'all')]" in installer_text,
     )
     check(
@@ -105,6 +111,7 @@ def main() -> int:
     check(
         "INSTALLER_MANIFEST_TRACKS_INSTALLED_HARNESSES",
         "installed_harnesses = @($InstalledHarnesses)" in bootstrap_text
+        and "scope = 'project'" in bootstrap_text
         and "-VerifyOnly" in installer_text
         and "Assert-InstalledHarness" in bootstrap_text,
     )
@@ -113,6 +120,17 @@ def main() -> int:
     codex_files = {path.stem: path for path in (ROOT / ".codex/agents").glob("*.toml")}
     check("OPENCODE_EXPECTED_ROSTER", set(opencode_files) == canonical_roles)
     check("CODEX_EXPECTED_SUPPORTED_ROSTER", set(codex_files) == canonical_roles - {"kael", "aegis"})
+    check("OPENCODE_FULL_DISPLAY_IDENTITY_DERIVED_FROM_CORE", all(
+        identities[role] in opencode_files[role].read_text(encoding="utf-8")
+        and identities[role] + ". " in opencode_files[role].read_text(encoding="utf-8")
+        for role in canonical_roles))
+    check("CODEX_FULL_DISPLAY_IDENTITY_DERIVED_FROM_CORE", all(
+        identities[role] + ". " in codex_files[role].read_text(encoding="utf-8")
+        for role in codex_files))
+    check("CODEX_ROOT_DISPLAY_IDENTITY_DERIVED_FROM_CORE", (ROOT / "CODEX.md").read_text(encoding="utf-8").startswith(f"# {identities['kael']}\n"))
+    check("OPENCODE_ACTIVITY_HUD_DERIVES_ALL_DISPLAY_IDENTITIES", all(
+        f'{role}: "{identity}"' in (ROOT / ".opencode/plugins/olympus-activity/activity.ts").read_text(encoding="utf-8")
+        for role, identity in identities.items()))
     aegis_prompt = opencode_files["aegis"].read_text(encoding="utf-8")
     kael_prompt = opencode_files["kael"].read_text(encoding="utf-8")
     maintain_command = (ROOT / ".opencode/commands/maintain.md").read_text(encoding="utf-8")

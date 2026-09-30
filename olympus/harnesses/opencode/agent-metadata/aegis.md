@@ -1,5 +1,5 @@
 ---
-description: 🛡️ Aegis The Keeper — explicitly invoked privileged Olympus maintenance executor.
+description: Explicitly invoked privileged Olympus maintenance executor.
 mode: subagent
 hidden: true
 model: {{opencode_model}}#{{effort}}

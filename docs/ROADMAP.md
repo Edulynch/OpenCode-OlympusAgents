@@ -2,14 +2,20 @@
 
 Maintainer-facing, directional, evidence-driven and subject to validation. This is not a release promise, an implementation specification, a commitment to every proposed command, or permission to implement later phases automatically. **SHIPPED** describes the current `master` foundation; **IN VALIDATION** identifies an unmerged candidate; **PLANNED** is future work; **EXPLORATION** is an uncommitted UX idea. Qualification and review precede any promotion of status.
 
-## Current foundation — SHIPPED on master
+## Current foundation — DONE on master (`v0.3.0-beta.5`)
 
-- OpenCode V2 supplies the runtime; Olympus is a thin orchestration/decision layer.
-- Capability Preflight and Task-Scoped / Progressive Discovery bound early investigation.
-- Reliable Completion Gates and Strict External Work Ownership require collecting and validating required work before declaring completion.
-- The passive Activity HUD reports active child work; trusted-project Kovan implementation and Nox validation have shell access with distinct edit boundaries.
-- The explicit `/maintain` Olympus-maintenance plane stays outside normal Kael routing; ordinary user-project Git work remains in the normal plane. The v0.3.0-beta.3 critical-fixes candidate adds Kael-mediated, current-task project Authority Grants without widening `/maintain` or Olympus-owned resources.
-- Adaptive concurrency uses NORMAL (default, useful parallelism) and explicit FAST (latency priority); **both currently cap Kael-launched children at four on `master`**. The NORMAL 4 / FAST 6 split exists on an unmerged candidate branch and is **IN VALIDATION**, not shipped.
+- Harness Core, OpenCode adapter, and experimental Codex adapter are present; their declared capability differences remain explicit.
+- The dual-harness project-local installer is published. `-Scope project` remains the default; Codex/OpenCode/All selection is supported.
+- Completion/reconciliation, external-work ownership, authority, and the explicit Olympus-only `/maintain` maintenance plane are part of Core. OpenCode has Aegis, hard DENY, native ASK, and the passive Activity HUD. Codex DENY/Aegis remain gaps and activity visibility is basic/partial.
+- Upstream OpenCode result-correlation issue #1 remains OPEN; Olympus keeps no-blind-retry/result reconciliation. Issue #2–#5 are CLOSED. Issue #6 is tracked independently and closes only after its read-only acceptance qualification passes.
+- This branch additionally qualifies VerifyOnly isolation and full identities, and implements a **branch-only** global-install foundation. No v0.4.0 release, tag, or master merge is made here.
+
+## IN PROGRESS / NEXT
+
+- `feature/v0.4.0-foundation`: one canonical Full Agent Display Identity source and adapters that derive it; global OpenCode/Codex/All installer foundation, manifests, verification, update, safe uninstall, and non-destructive project→global migration. Project-local beta.5 behavior stays default/backwards-compatible.
+- Global OpenCode runtime discovery remains unqualified: current isolated `opencode debug agents` returned an empty roster even with documented global resources. Do not describe global runtime availability as complete until that evidence is resolved.
+- Codex DENY and Codex Aegis remain explicit GAPs. Research found no demonstrated hard-deny equivalent or safely enforced privileged maintenance entry; do not use prompt-only theater or weaken Core.
+- Real-project OpenCode-vs-Codex comparison remains NEXT. Existing Codex fixture measurements do not establish a winner or comparative quality/cost/speed.
 
 ## Design principles — shipped Phase 3 rules and planned refinements
 
@@ -27,18 +33,18 @@ The table captures shipped roles and current in-validation identities. Model ent
 
 | Agent | Target model | Responsibility | Status |
 |---|---|---|---|
-| 👑 Kael The Master | GPT-6 Sol High | Master orchestration | SHIPPED; evolving |
-| 🔭 Veyra The Explorer | GPT-6 Luna Max | Research/discovery | SHIPPED; evolving |
-| 📐 Orin The Architect | GPT-6 Luna Max | Architecture/boundaries | SHIPPED; evolving |
-| 🗺️ Atlas The Planner | GPT-6 Sol High | Execution planning | SHIPPED; optional, Planning Gate only |
-| 🔨 Kovan The Coder | GPT-6 Luna Max | Implementation | SHIPPED; evolving |
-| 🐞 Argus The Bug Hunter | GPT-6 Sol High | Functional defect reasoning | SHIPPED; optional, Functional Bug Routing Gate only |
-| 👁️ Nox The Tester | GPT-6 Luna Max | Testing/runtime evidence | SHIPPED; evolving |
-| ⚖️ Vera The Judge | GPT-6 Luna Max | Independent review | SHIPPED; evolving |
-| 🛡️ Talos The Sentinel | GPT-6 Sol High | Security defect and trust-boundary reasoning | SHIPPED; optional, Security Routing Gate only |
-| 🧠 Thales The Sage | GPT-6 Sol XHigh | High-uncertainty diagnostic escalation | SHIPPED: native evolution of Sorin; live routing qualified |
-| ☀️ Helios The Optimizer | GPT-6 Sol High | Explicit-only optimization feasibility and evidence-bounded proposal | SHIPPED; user-executed live qualification passed |
-| 🛡️ Aegis The Keeper | GPT-6 Luna Max | Hidden privileged Olympus framework maintenance via explicit `/maintain`; never a Kael child | IN VALIDATION; replaces legacy agent ID `maintenance` |
+| `kael` — Kael — The Master | GPT-6 Sol High | Master orchestration | SHIPPED; evolving |
+| `veyra` — Veyra — The Explorer | GPT-6 Luna Max | Research/discovery | SHIPPED; evolving |
+| `orin` — Orin — The Architect | GPT-6 Luna Max | Architecture/boundaries | SHIPPED; evolving |
+| `atlas` — Atlas — The Planner | GPT-6 Sol High | Execution planning | SHIPPED; optional, Planning Gate only |
+| `kovan` — Kovan — The Coder | GPT-6 Luna Max | Implementation | SHIPPED; evolving |
+| `argus` — Argus — The Bug Hunter | GPT-6 Sol High | Functional defect reasoning | SHIPPED; optional, Functional Bug Routing Gate only |
+| `nox` — Nox — The Tester | GPT-6 Luna Max | Testing/runtime evidence | SHIPPED; evolving |
+| `vera` — Vera — The Judge | GPT-6 Luna Max | Independent review | SHIPPED; evolving |
+| `talos` — Talos — The Sentinel | GPT-6 Sol High | Security defect and trust-boundary reasoning | SHIPPED; optional, Security Routing Gate only |
+| `thales` — Thales — The Sage | GPT-6 Sol XHigh | High-uncertainty diagnostic escalation | SHIPPED: native evolution of Sorin; live routing qualified |
+| `helios` — Helios — The Optimizer | GPT-6 Sol High | Explicit-only optimization feasibility and evidence-bounded proposal | SHIPPED; user-executed live qualification passed |
+| `aegis` — Aegis — The Keeper | GPT-6 Luna Max | Hidden privileged Olympus framework maintenance via explicit `/maintain`; never a Kael child | SHIPPED on OpenCode; `CODEX_AEGIS = GAP` |
 
 ## Defect routing and diagnostic budget — Phase 6 shipped
 
@@ -73,7 +79,7 @@ Existing `/maintain` enters the explicit Olympus Maintenance plane only; it does
 | 6 — Argus The Bug Hunter | **SHIPPED** | Optional functional diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. No implementation or direct discovery. |
 | 7 — Talos The Sentinel | **SHIPPED** | Bounded security defect and trust-boundary diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. |
 | 8 — Helios The Optimizer | **SHIPPED** | Explicit-only feasibility/proposal, mandatory user approval, before/after validation; user-executed live cases A and B passed. |
-| 9 — Aegis evolution | **IN VALIDATION** | Replace the hidden Maintenance agent identity with Aegis on Luna Max while preserving Olympus-only `/maintain`, explicit-user-only entry, Kael's denial boundary, and result reconciliation; executor, not strategist. |
+| 9 — Aegis evolution | **SHIPPED on OpenCode; Codex GAP** | Hidden Aegis on Luna Max preserves Olympus-only `/maintain`, explicit-user-only entry, Kael's denial boundary, and result reconciliation; executor, not strategist. |
 | 10 — Command UX | **EXPLORATION** | Validate a small useful repertoire: candidate `/power`, `/plan`, `/fast`, `/performance`; avoid command sprawl. |
 | 11 — Integrated Routing Qualification | **PLANNED** | Fixtures: simple edit, complex feature, functional bug, security bug, operational/build issue, difficult/flaky diagnosis, third-party bug, optimization request, explicit planning, power mode, maintenance boundary. |
 | 12 — Release | **PLANNED** | Only after integrated qualification. |

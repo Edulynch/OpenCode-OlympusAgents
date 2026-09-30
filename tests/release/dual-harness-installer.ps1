@@ -7,6 +7,8 @@ $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $installer = Join-Path $source 'install.ps1'
 $run = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) ('opencode\olympus-dual-installer-' + [guid]::NewGuid().ToString('N'))
 $originalPath = $env:PATH
+$originalVerifyProbe = $env:OLYMPUS_VERIFYONLY_PROBE
+$originalVerifyCallLog = $env:OLYMPUS_VERIFYONLY_CALL_LOG
 $utf8 = [Text.UTF8Encoding]::new($false)
 
 function Check([string]$id, [bool]$condition) {
@@ -24,8 +26,15 @@ function New-Target([string]$name) {
 
 function Run-Installer([string]$target, [string[]]$arguments) {
     $args = @('-NoProfile', '-File', $installer, '-SourceRoot', $source, '-Target', $target) + $arguments
-    $output = (& pwsh @args 2>&1 | Out-String)
-    return [pscustomobject]@{ Text=$output; Code=$LASTEXITCODE }
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell 5.1 turns native stderr into a terminating error
+        # under Stop; preserve expected installer failures as captured evidence.
+        $ErrorActionPreference = 'Continue'
+        $output = (& pwsh @args 2>&1 | Out-String)
+        $code = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $previousErrorActionPreference }
+    return [pscustomobject]@{ Text=$output; Code=$code }
 }
 
 function Install([string]$target, [string]$harness = '') {
@@ -41,8 +50,10 @@ function Snapshot([string]$target) {
     $root = (Resolve-Path -LiteralPath $target).Path.TrimEnd([char[]]@('\','/'))
     $prefix = $root + [IO.Path]::DirectorySeparatorChar
     @(
-        Get-ChildItem -LiteralPath $root -Force -Recurse -File | Sort-Object FullName | ForEach-Object {
-            $_.FullName.Substring($prefix.Length) + ':' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+        Get-ChildItem -LiteralPath $root -Force -Recurse | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($prefix.Length)
+            if ($_.PSIsContainer) { $relative + ':DIRECTORY' }
+            else { $relative + ':SHA256:' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
         }
     ) -join "`n"
 }
@@ -78,7 +89,8 @@ try {
     $defaultManifest = Get-Content -LiteralPath (Join-Path $defaultTarget '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json
     Check 'A_DEFAULT_OPENCODE_ONLY' ($default.Code -eq 0 -and (Has-GeneratedSurface $defaultTarget 'opencode') -and
         -not (Test-Path -LiteralPath (Join-Path $defaultTarget '.codex')) -and
-        @($defaultManifest.installed_harnesses).Count -eq 1 -and $defaultManifest.installed_harnesses[0] -eq 'opencode')
+        $defaultManifest.scope -eq 'project' -and @($defaultManifest.installed_harnesses).Count -eq 1 -and
+        $defaultManifest.installed_harnesses[0] -eq 'opencode')
     Check 'A_DEFAULT_VERIFY_PASS' ((Verify $defaultTarget 'opencode').Code -eq 0)
 
     # B: explicit OpenCode is equivalent to the default.
@@ -196,15 +208,26 @@ try {
         $legacyAdd.Code -eq 0 -and (Has-GeneratedSurface $legacy 'opencode') -and (Has-GeneratedSurface $legacy 'codex') -and
         @($legacyUpgradedManifest.installed_harnesses).Count -eq 2 -and (Verify $legacy 'all').Code -eq 0)
 
-    # L: every VerifyOnly mode leaves the complete target snapshot unchanged.
+    # L: every VerifyOnly mode is strict managed-file verification. A runtime
+    # discovery call would create .serena in this probe, so none may be launched.
+    $probeLog = Join-Path $run 'verify-only-external-runtime-calls.log'
+    $env:OLYMPUS_VERIFYONLY_PROBE = '1'
+    $env:OLYMPUS_VERIFYONLY_CALL_LOG = $probeLog
     foreach ($entry in @(@($defaultTarget, 'opencode'), @($codexTarget, 'codex'), @($allTarget, 'all'))) {
         $before = Snapshot $entry[0]
         $result = Verify $entry[0] $entry[1]
-        Check ('L_VERIFYONLY_READ_ONLY_' + $entry[1].ToUpperInvariant()) ($result.Code -eq 0 -and (Snapshot $entry[0]) -ceq $before)
+        $after = Snapshot $entry[0]
+        Check ('L_VERIFYONLY_READ_ONLY_' + $entry[1].ToUpperInvariant()) ($result.Code -eq 0 -and $after -ceq $before -and
+            -not (Test-Path -LiteralPath (Join-Path $entry[0] '.serena')))
     }
+    Check 'L_VERIFYONLY_NEVER_LAUNCHES_MUTABLE_RUNTIME_DISCOVERY' (-not (Test-Path -LiteralPath $probeLog))
+    Remove-Item Env:OLYMPUS_VERIFYONLY_PROBE -ErrorAction SilentlyContinue
+    Remove-Item Env:OLYMPUS_VERIFYONLY_CALL_LOG -ErrorAction SilentlyContinue
 
     $installerText = [IO.File]::ReadAllText($installer)
     Check 'M_HARNESS_API_AND_DEFAULT' ($installerText -match "\[string\]\`$Harness\s*=\s*'opencode'" -and
+        $installerText -match "\[string\]\`$Scope\s*=\s*'project'" -and
+        $installerText -match "\[ValidateSet\('project', 'global'\)\]" -and
         $installerText -match "\[ValidateSet\('opencode', 'codex', 'all'\)\]")
     $tag = 'v9.9.9'
     $base = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/install.ps1"
@@ -228,6 +251,10 @@ try {
     exit 1
 } finally {
     $env:PATH = $originalPath
+    if ($null -eq $originalVerifyProbe) { Remove-Item Env:OLYMPUS_VERIFYONLY_PROBE -ErrorAction SilentlyContinue }
+    else { $env:OLYMPUS_VERIFYONLY_PROBE = $originalVerifyProbe }
+    if ($null -eq $originalVerifyCallLog) { Remove-Item Env:OLYMPUS_VERIFYONLY_CALL_LOG -ErrorAction SilentlyContinue }
+    else { $env:OLYMPUS_VERIFYONLY_CALL_LOG = $originalVerifyCallLog }
     if ($run -and (Test-Path -LiteralPath $run)) {
         for ($attempt = 1; $attempt -le 10; $attempt++) {
             try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop; break }

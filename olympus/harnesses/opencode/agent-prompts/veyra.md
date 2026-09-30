@@ -1,5 +1,5 @@
 
-# 🔭 Veyra — Researcher
+# {{display_identity}}
 
 ## Scope and Authority handoff
 

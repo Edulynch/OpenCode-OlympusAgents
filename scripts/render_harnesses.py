@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import tomllib
@@ -58,8 +59,9 @@ def role_ids(root: Path) -> set[str]:
     return ids
 
 
-def checked_sources(root: Path) -> tuple[dict, dict, dict, set[str]]:
+def checked_sources(root: Path) -> tuple[dict, dict, dict, dict[str, str], set[str]]:
     models = read_toml(root / "olympus" / "core" / "models.toml")
+    identity_source = read_toml(root / "olympus" / "core" / "identities.toml")
     policies = read_toml(root / "olympus" / "policies" / "orchestration.toml")
     capabilities = read_toml(root / "olympus" / "harnesses" / "capabilities.toml")
     roles = role_ids(root)
@@ -69,6 +71,17 @@ def checked_sources(root: Path) -> tuple[dict, dict, dict, set[str]]:
             "canonical role roster differs between olympus/roles and olympus/core/models.toml: "
             f"roles-only={sorted(roles - model_roles)}, models-only={sorted(model_roles - roles)}"
         )
+    identities = {role: value.get("display", "").strip() for role, value in identity_source.get("roles", {}).items()}
+    if set(identities) != roles or any(not display for display in identities.values()):
+        raise RenderError(
+            "canonical identity roster differs from canonical roles: "
+            f"missing={sorted(roles - set(identities))}, unexpected={sorted(set(identities) - roles)}"
+        )
+    if len({display.casefold() for display in identities.values()}) != len(identities):
+        raise RenderError("canonical display identities must be unique")
+    for role, display in identities.items():
+        if display.split(" — ", 1)[0].casefold() != role.casefold() or " — " not in display:
+            raise RenderError(f"canonical display identity for {role!r} must preserve its technical ID")
     for family, info in models.get("families", {}).items():
         if not info.get("opencode") or not info.get("codex"):
             raise RenderError(f"model family {family!r} needs both OpenCode and Codex identifiers")
@@ -88,7 +101,7 @@ def checked_sources(root: Path) -> tuple[dict, dict, dict, set[str]]:
         invalid = {name: state for name, state in values.items() if state not in VALID_STATES}
         if invalid:
             raise RenderError(f"invalid {harness} capability state(s): {invalid}")
-    return models, policies, capabilities, roles
+    return models, policies, capabilities, identities, roles
 
 
 def role_model(models: dict, role: str, harness: str) -> tuple[str, str]:
@@ -137,7 +150,31 @@ def add_markdown_comment(text: str, message: str) -> str:
     return f"<!-- {message} -->\n" + text
 
 
-def opencode_outputs(root: Path, models: dict, policies: dict, roles: set[str]) -> dict[Path, str]:
+def prefix_yaml_description(text: str, identity: str, source: Path) -> str:
+    match = re.search(r"(?m)^description:[ \t]*(.*?)[ \t]*$", text)
+    if match is None:
+        raise RenderError(f"OpenCode metadata has no description field: {source}")
+    try:
+        description = json.loads(match.group(1)) if match.group(1).startswith('"') else match.group(1)
+    except json.JSONDecodeError as error:
+        raise RenderError(f"invalid OpenCode description in {source}: {error}") from error
+    rendered = "description: " + json.dumps(f"{identity}. {description}", ensure_ascii=False)
+    return text[: match.start()] + rendered + text[match.end() :]
+
+
+def prefix_toml_description(text: str, identity: str, source: Path) -> str:
+    match = re.search(r'(?m)^description[ \t]*=[ \t]*("(?:[^"\\]|\\.)*")[ \t]*$', text)
+    if match is None:
+        raise RenderError(f"Codex agent source has no supported description field: {source}")
+    try:
+        description = json.loads(match.group(1))
+    except json.JSONDecodeError as error:
+        raise RenderError(f"invalid Codex description in {source}: {error}") from error
+    rendered = json.dumps(f"{identity}. {description}", ensure_ascii=False)
+    return text[: match.start(1)] + rendered + text[match.end(1) :]
+
+
+def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[str, str], roles: set[str]) -> dict[Path, str]:
     adapter = root / "olympus" / "harnesses" / "opencode"
     maintenance_policy_path = root / "olympus" / "policies" / "maintenance-plane.md"
     maintenance_policy = read_text(maintenance_policy_path).strip()
@@ -167,19 +204,20 @@ def opencode_outputs(root: Path, models: dict, policies: dict, roles: set[str]) 
         prompt_path = prompts_dir / f"{role}.md"
         model, effort = role_model(models, role, "opencode")
         values = {"opencode_model": model, "effort": effort}
-        metadata = replace_tokens(read_text(metadata_path), values, metadata_path)
+        metadata = prefix_yaml_description(replace_tokens(read_text(metadata_path), values, metadata_path), identities[role], metadata_path)
         prompt = replace_tokens(
             read_text(prompt_path),
             {
                 "max_children": children,
                 "max_children_word": word,
                 "max_children_title": word.title(),
+                "display_identity": identities[role],
                 "maintenance_plane_policy": maintenance_policy,
                 "maintenance_target_boundary": maintenance_target_boundary,
             },
             prompt_path,
         )
-        display = read_text(root / "olympus" / "roles" / f"{role}.md").splitlines()[0].lstrip("# ")
+        display = identities[role]
         header = add_yaml_comment(metadata, f"{GENERATED} Canonical Olympus role: olympus/roles/{role}.md ({display}).")
         output[root / ".opencode" / "agents" / f"{role}.md"] = header + prompt
 
@@ -191,6 +229,7 @@ def opencode_outputs(root: Path, models: dict, policies: dict, roles: set[str]) 
     )
     output[root / "opencode.jsonc"] = config.replace("{\n", f"{{\n  // {GENERATED}\n", 1)
 
+    display_names = "\n".join(f'  {role}: {json.dumps(identities[role], ensure_ascii=False)},' for role in sorted(roles))
     for source_name, output_path, comment in (
         ("maintain.md", root / ".opencode" / "commands" / "maintain.md", f"<!-- {GENERATED} -->\n"),
         ("activity.ts", root / ".opencode" / "plugins" / "olympus-activity" / "activity.ts", f"// {GENERATED}\n"),
@@ -199,12 +238,14 @@ def opencode_outputs(root: Path, models: dict, policies: dict, roles: set[str]) 
         source_path = adapter / source_name
         body = read_text(source_path)
         if source_name == "maintain.md":
-            body = replace_tokens(body, {"maintenance_plane_policy": maintenance_policy}, source_path)
+            body = replace_tokens(body, {"maintenance_plane_policy": maintenance_policy, "display_identity": identities["aegis"]}, source_path)
+        elif source_name == "activity.ts":
+            body = replace_tokens(body, {"display_names": display_names}, source_path)
         output[output_path] = add_markdown_comment(body, GENERATED) if source_name.endswith(".md") else comment + body
     return output
 
 
-def codex_outputs(root: Path, models: dict, policies: dict, roles: set[str]) -> dict[Path, str]:
+def codex_outputs(root: Path, models: dict, policies: dict, identities: dict[str, str], roles: set[str]) -> dict[Path, str]:
     adapter = root / "olympus" / "harnesses" / "codex"
     agents_dir = adapter / "agents"
     expected = roles - {"kael", "aegis"}
@@ -223,11 +264,13 @@ def codex_outputs(root: Path, models: dict, policies: dict, roles: set[str]) -> 
         source_path = agents_dir / f"{role}.toml"
         model, effort = role_model(models, role, "codex")
         body = replace_tokens(read_text(source_path), {"codex_model": model, "effort": effort}, source_path)
+        body = prefix_toml_description(body, identities[role], source_path)
         output[root / ".codex" / "agents" / f"{role}.toml"] = f"# {GENERATED} Canonical Olympus role: olympus/roles/{role}.md.\n" + body
 
     root_source = adapter / "root.md"
     root_prompt = replace_tokens(read_text(root_source), {"max_children": children, "max_children_word": word}, root_source)
-    root_title, remainder = root_prompt.split("\n", 1)
+    _, remainder = root_prompt.split("\n", 1)
+    root_title = f"# {identities['kael']}"
     output[root / "CODEX.md"] = f"{root_title}\n\n<!-- {GENERATED} Canonical Olympus role: olympus/roles/kael.md. -->\n{remainder}"
 
     config_path = adapter / "config.toml"
@@ -268,12 +311,12 @@ def capability_doc(capabilities: dict) -> str:
 
 
 def outputs_for(root: Path, selected: str) -> dict[Path, str]:
-    models, policies, capabilities, roles = checked_sources(root)
+    models, policies, capabilities, identities, roles = checked_sources(root)
     output: dict[Path, str] = {}
     if selected in ("opencode", "all"):
-        output.update(opencode_outputs(root, models, policies, roles))
+        output.update(opencode_outputs(root, models, policies, identities, roles))
     if selected in ("codex", "all"):
-        output.update(codex_outputs(root, models, policies, roles))
+        output.update(codex_outputs(root, models, policies, identities, roles))
     if selected == "all":
         output[root / "docs" / "HARNESS-CAPABILITIES.md"] = capability_doc(capabilities)
     return output

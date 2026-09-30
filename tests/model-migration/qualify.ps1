@@ -38,7 +38,7 @@ foreach ($match in [regex]::Matches($modelsText, '(?ms)^\[roles\.(?<role>[a-z]+)
     $models[$name] = @($modelId, $match.Groups['effort'].Value, $mode)
 }
 $expectedIds = @($models.Keys)
-Check 'MODEL_SOURCE_CANONICAL_ROSTER' ($expectedIds.Count -eq 12 -and $modelsText -match '(?m)^\[families\.sol\]$' -and $modelsText -match '(?m)^\[families\.luna\]$')
+Check 'MODEL_SOURCE_CANONICAL_ROSTER' ($expectedIds.Count -eq 12 -and $modelsText -match '(?m)^\[families\.sol\]\r?$' -and $modelsText -match '(?m)^\[families\.luna\]\r?$')
 
 $agentsRoot = Join-Path $root '.opencode/agents'
 $agentFiles = @(Get-ChildItem -LiteralPath $agentsRoot -Filter '*.md' -File)

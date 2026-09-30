@@ -296,6 +296,10 @@ function Assert-Managed([string]$Repo, $Manifest) {
     if ($Manifest.schema_version -ne 1 -or $null -eq $Manifest.managed_files) {
         Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Unsupported manifest schema or missing managed_files.'
     }
+    $scopeProperties = @($Manifest.PSObject.Properties | ForEach-Object Name)
+    if ('scope' -in $scopeProperties -and [string]$Manifest.scope -cne 'project') {
+        Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Project bootstrap cannot adopt a non-project Olympus manifest.'
+    }
     $script:ExistingHarnesses = @(Get-ManifestHarnesses $Manifest)
     $entries = @($Manifest.managed_files)
     $actual = @($entries | ForEach-Object { Rel ([string]$_.path) })
@@ -515,6 +519,7 @@ function Manifest-Text($Detection, $Content, [string]$Version) {
     if ($LASTEXITCODE -ne 0 -or -not $commit) { $commit = "unknown" }
     ([ordered]@{
         schema_version = 1
+        scope = 'project'
         installed_version = $Version
         installed_from_commit = $commit
         installed_harnesses = @($InstalledHarnesses)
@@ -625,6 +630,9 @@ function Assert-InstalledHarness([string]$Repo, $Manifest) {
         Fail 'MANAGED_FILE_MISMATCH' 'Olympus install manifest schema or managed file set is unsupported.'
     }
     $manifestProperties = @($Manifest.PSObject.Properties | ForEach-Object Name)
+    if ('scope' -in $manifestProperties -and [string]$Manifest.scope -cne 'project') {
+        Fail 'MANAGED_FILE_MISMATCH' 'VerifyOnly project target does not contain a project-scope Olympus manifest.'
+    }
     if ('installed_version' -in $manifestProperties) {
         $recordedVersion = [string]$Manifest.installed_version
         if ($recordedVersion -and $recordedVersion -notin @('unknown', 'local') -and $recordedVersion -cne $SourceVersion) {
@@ -665,8 +673,14 @@ function Assert-InstalledHarness([string]$Repo, $Manifest) {
                 Fail 'ROSTER_MISMATCH' "Retired or unowned OpenCode agent remains present: $retiredPath"
             }
         }
-        if (-not (Has-Cmd 'opencode')) { Fail 'ROSTER_MISMATCH' 'OpenCode CLI is required to validate the active agent roster.' }
-        Validate-Install $Repo
+        # VerifyOnly is deliberately limited to manifest, version, generated
+        # source, and managed-file/hash checks. Runtime discovery can initialize
+        # optional integrations (and mutate the target), so it belongs only to
+        # install-time validation, never the read-only verification boundary.
+        if (-not $VerifyOnly) {
+            if (-not (Has-Cmd 'opencode')) { Fail 'ROSTER_MISMATCH' 'OpenCode CLI is required to validate the active agent roster.' }
+            Validate-Install $Repo
+        }
     }
 }
 
@@ -698,7 +712,7 @@ try {
     Assert-Install-Destinations $Repo
     $Version = 'NOT_REQUIRED'
     $ModelCheck = 'NOT_REQUIRED'
-    if ('opencode' -in $SelectedHarnesses) {
+    if (-not $VerifyOnly -and 'opencode' -in $SelectedHarnesses) {
         if (-not (Has-Cmd 'opencode')) { Fail 'OPENCODE_UNAVAILABLE' 'OpenCode is required for the OpenCode harness.' }
         $Version = (& opencode --version 2>$null | Out-String).Trim()
         if ($LASTEXITCODE -ne 0) { Fail 'OPENCODE_UNAVAILABLE' 'opencode --version failed.' }

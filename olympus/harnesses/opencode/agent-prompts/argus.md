@@ -1,5 +1,5 @@
 
-# 🐞 Argus The Bug Hunter
+# {{display_identity}}
 
 ## Scope and Authority handoff
 

@@ -4,10 +4,13 @@ param(
     [ValidatePattern('^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$')]
     [string]$Version = 'v0.3.0-beta.5',
     [string]$Target = (Get-Location).Path,
+    [ValidateSet('project', 'global')]
+    [string]$Scope = 'project',
     [ValidateSet('opencode', 'codex', 'all')]
     [string]$Harness = 'opencode',
     [switch]$DryRun,
     [switch]$VerifyOnly,
+    [switch]$Uninstall,
     # Qualification-only source overrides. Source identity is always checked.
     [string]$SourceRoot,
     [string]$SourceArchive
@@ -126,24 +129,9 @@ function Assert-LegacyOpenCodeInstall([string]$Source, [string]$RequestedVersion
             throw "ROSTER_MISMATCH: Retired or unexpected '$id' agent is installed."
         }
     }
-    $opencode = Get-Command opencode -ErrorAction SilentlyContinue
-    if (-not $opencode) { throw 'ROSTER_MISMATCH: OpenCode CLI is required to validate the active agent roster.' }
-    Push-Location $target
-    try { $agentJson = (& $opencode.Source debug agents 2>&1 | Out-String); $agentExitCode = $LASTEXITCODE }
-    finally { Pop-Location }
-    if ($agentExitCode -ne 0) { throw 'ROSTER_MISMATCH: OpenCode could not resolve the active agent roster.' }
-    try { $activeAgents = $agentJson | ConvertFrom-Json }
-    catch { throw 'ROSTER_MISMATCH: OpenCode returned an invalid active agent roster.' }
-    foreach ($id in $sourceAgentIds) {
-        if (@($activeAgents | Where-Object { $_.id -ceq $id }).Count -ne 1) {
-            throw "ROSTER_MISMATCH: Expected exactly one active '$id' agent from the legacy release."
-        }
-    }
-    foreach ($id in $retiredAgentIds) {
-        if (@($activeAgents | Where-Object { $_.id -ceq $id }).Count -gt 0) {
-            throw "ROSTER_MISMATCH: Retired or unexpected '$id' agent is active."
-        }
-    }
+    # Legacy VerifyOnly must remain deterministic and target-read-only too.
+    # Active runtime discovery can initialize optional integrations such as
+    # Serena; managed file/hash and roster-source checks are authoritative here.
 }
 
 function Assert-ArchiveTag([string]$RootName, [string]$RequestedVersion) {
@@ -162,6 +150,7 @@ try {
     }
     if ($Version -cne $Version.Trim()) { throw 'VERSION_INVALID: Whitespace is not allowed.' }
     if ($VerifyOnly -and $DryRun) { throw 'VERIFY_MODE_INVALID: -VerifyOnly and -DryRun cannot be combined.' }
+    if ($VerifyOnly -and $Uninstall) { throw 'VERIFY_MODE_INVALID: -VerifyOnly and -Uninstall cannot be combined.' }
     if ($SourceRoot -and $SourceArchive) { throw 'SOURCE_INVALID: Select only one qualification source override.' }
 
     $pwsh = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue
@@ -212,7 +201,7 @@ try {
     }
     Write-Output "OLYMPUS_SOURCE: requested=$Version resolved=$resolvedVersion origin=$origin"
 
-    if ($VerifyOnly) {
+    if ($VerifyOnly -and $Scope -eq 'project') {
         if ($bootstrapSupportsHarness -and $bootstrapSupportsVerify) {
             $verifyArgs = @('-NoProfile', '-File', $bootstrap, '-Target', $Target, '-Harness', $Harness, '-VerifyOnly')
             if ($bootstrapText -match '(?m)^\s*\[string\]\$SourceVersion\s*=') { $verifyArgs += @('-SourceVersion', $resolvedVersion) }
@@ -226,6 +215,23 @@ try {
         } else {
             throw "HARNESS_UNSUPPORTED_RELEASE: Release '$resolvedVersion' cannot verify harness '$Harness'."
         }
+        exit 0
+    }
+
+    if ($Uninstall -and $Scope -ne 'global') {
+        throw 'UNINSTALL_SCOPE_INVALID: -Uninstall is currently supported only with -Scope global.'
+    }
+    if ($Uninstall -and $DryRun) { throw 'UNINSTALL_MODE_INVALID: -Uninstall and -DryRun cannot be combined.' }
+    if ($Scope -eq 'global') {
+        $globalScript = Join-Path $source 'scripts/global-install.ps1'
+        if (-not (Test-Path -LiteralPath $globalScript -PathType Leaf)) { throw 'SOURCE_INVALID: Global installer is missing.' }
+        $globalArgs = @('-NoProfile', '-File', $globalScript, '-Harness', $Harness, '-SourceVersion', $resolvedVersion)
+        if ($Target) { $globalArgs += @('-ProjectTarget', $Target) }
+        if ($VerifyOnly) { $globalArgs += '-VerifyOnly' }
+        if ($DryRun) { $globalArgs += '-DryRun' }
+        if ($Uninstall) { $globalArgs += '-Uninstall' }
+        & $pwsh.Source @globalArgs
+        if ($LASTEXITCODE -ne 0) { throw "GLOBAL_BOOTSTRAP_FAILED: global installer exited $LASTEXITCODE." }
         exit 0
     }
 

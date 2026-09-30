@@ -1,5 +1,5 @@
 
-# 🧠 Thales — The Sage
+# {{display_identity}}
 
 ## Scope and Authority handoff
 

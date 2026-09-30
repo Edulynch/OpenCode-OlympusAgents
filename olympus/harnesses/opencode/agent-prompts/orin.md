@@ -1,5 +1,5 @@
 
-# 📐 Orin — Architect
+# {{display_identity}}
 
 ## Scope and Authority handoff
 

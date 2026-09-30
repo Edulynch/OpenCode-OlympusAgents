@@ -52,7 +52,7 @@ gaps/parcialidades explícitos, no motivos para debilitar Olympus Core.
 - `DENY` sigue siendo GAP: profiles read-only y policy no son una garantía hard equivalente a OpenCode. No está demostrado que cada approval/override respete siempre un boundary Olympus DENY.
 - Enforcement Windows del perfil `elevated`, protección de recursos Olympus y restricciones cross-repository necesitan un smoke interactivo aislado. `unelevated` no es fallback aceptable para desbloquearlo.
 - `thread/read`, eventos `turn/completed` y filtros de descendants son evidencia de API documentada, no prueba de recovery de un result perdido. La reconciliación de missing result permanece PARTIAL.
-- El installer/VerifyOnly existente sigue gestionando OpenCode; no se añadió install/upgrade/rollback para Codex. Installer Codex es el siguiente trabajo, no un requisito de esta modularización.
+- El baseline beta.5 era project-local. `feature/v0.4.0-foundation` añade un global Codex foundation separado y Windows-qualified: instala agentes, profile `olympus.config.toml` y `AGENTS.md`, protege la base `config.toml`, y no declara Aegis/DENY soportados. Su qualification es estática/aislada; no hubo smoke interactivo ni release.
 - No se obtuvo costo monetario ni se compara quality/speed/cost con OpenCode.
 
 ## OPENCODE ADVANTAGES OBSERVED

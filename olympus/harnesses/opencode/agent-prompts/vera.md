@@ -1,5 +1,5 @@
 
-# ⚖️ Vera — Reviewer
+# {{display_identity}}
 
 ## Scope and Authority handoff
 

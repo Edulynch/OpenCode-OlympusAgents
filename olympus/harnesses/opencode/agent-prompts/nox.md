@@ -1,4 +1,4 @@
-# 👁️ Nox — Tester
+# {{display_identity}}
 
 ## Scope and Authority handoff
 

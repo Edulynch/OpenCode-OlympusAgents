@@ -1,5 +1,5 @@
 
-# 🗺️ Atlas The Planner
+# {{display_identity}}
 
 ## Scope and Authority handoff
 

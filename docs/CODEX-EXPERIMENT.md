@@ -63,7 +63,7 @@ ejecución no interactiva.
 |---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|
 | Trivial one-file edit | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | Smoke equivalente no ejecutado. |
 | Trivial one-file edit | Codex | PASS, root-only | 109.9 s | 0 | 1 revalidación segura | 0 observado | 0 observado, sin children | 0 observado | `gpt-6.1-sol` | `high` configurado; no emitido por evento | 170,393 input (148,224 cached), 717 output, 73 reasoning; costo no disponible | Editó y verificó `target.md`. Primer intento terminó sin cumplir aceptación porque el sandbox read-only dejó `Status: pending`; se verificó que el fixture no había cambiado y se repitió la misma edición con workspace-write limitado al Git root temporal. No probó Kovan ni los permission profiles normales. |
-| Trivial edit con config de proyecto, vía `codex exec` | Codex | BLOCKED: sandbox read-only | 16 s | 0 | 0 | 0 observado; sin TTY | 0: `turn.completed`, salida final consumida | 0 observado | `gpt-6.1-sol` | `high` configurado; no emitido por evento | 26,859 input (20,480 cached), 178 output; costo no disponible | `--strict-config`, sin `--sandbox`; `agents.enabled=false` por seguridad. El patch fue rechazado (`writing is blocked by read-only sandbox`), el fixture quedó `Status: pending`. Exit code 0 no significó aceptación. No prueba `default_permissions`. |
+| Trivial edit con config de proyecto, vía `codex exec` | Codex | BLOCKED: sandbox read-only | 16 s | 0 | 0 | 0 observado; sin TTY | 0: `turn.completed`, salida final consumida | 0 observado | `gpt-6.1-sol` | `high` configurado; no emitido por evento | 26,859 input (20,480 cached), 178 output; costo no disponible | `--strict-config`, sin `--sandbox`; `agents.enabled=false` por seguridad. El patch fue rechazado (`writing is blocked by read-only sandbox`), el fixture quedó `Status: pending`. Exit code 0 no significó aceptación. El `.codex/` copiado coincide con el perfil final; el `CODEX.md` fixture precede las últimas aclaraciones de authority/barrier. No prueba `default_permissions`. |
 | Repository exploration | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | Delegación no comparada. |
 | Repository exploration / Kael → one specialist | Codex | NOT_RUN | — | — | — | — | — | — | — | — | — | Kael→Veyra no ejecutado; Aegis no puede lanzar/delegar un child. Discovery y routing permanecen estáticos. |
 | Functional implementation | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | Smoke separado no ejecutado. |
@@ -109,6 +109,9 @@ ejecución no interactiva.
   devolvió exit 0, cinco eventos JSONL incluido `turn.completed`, pero la
   respuesta terminal informó el rechazo de escritura y el host verificó que no
   cambió ningún archivo. Se recolectó el resultado original antes de limpiar.
-- OpenCode regression estática reejecutada y recolectada: `opencode debug config`
-  exit 0, `opencode debug agents` exit 0 e incluye Kael; 12 fuentes bajo
-  `.opencode/agents/`. No se abrió TUI ni se ejecutó prompt conversacional.
+- La salida de shell recolectada tras el restart reporta `opencode debug config`
+  exit 0 y `opencode debug agents` exit 0 con Kael; el stdout crudo no se guardó
+  como archivo de repo. Un resultado OpenCode anterior devolvió `[]` para
+  `debug agents`. Se conservan ambas observaciones y discovery dinámico queda
+  sin resolver. Qualification estática confirma 12 fuentes/roles y modelos sin
+  cambios contra baseline; no hubo TUI ni prompt conversacional.

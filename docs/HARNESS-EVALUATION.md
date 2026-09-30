@@ -91,17 +91,38 @@ release or harness victory.
   plus `OPENCODE_CONFIG_DIR`. Global Olympus writes those managed resources and
   leaves `opencode.json` untouched; Kael is available by explicit selection,
   not forced as the user's global default.
-- A disposable real-CLI probe against a temporary `OPENCODE_CONFIG_DIR` returned
-  `[]` from `opencode debug agents` even with official-path global agent files.
-  Consequently global OpenCode file placement is statically qualified, but
-  effective runtime discovery is **not claimed PASS** and remains a v0.4.0
-  blocker.
+- The earlier disposable probe returned `[]` from `opencode debug agents` after
+  installing the official-path global agent files. Installed CLI `2.0.20`
+  source shows that `cli.debug.agents` calls `agent.list` through the default
+  server connection (`Ir()` with no standalone option); its help does not offer
+  `--standalone`. That command can report the managed service's roster rather
+  than the temporary config's runtime. The current standalone equivalent is
+  `opencode api --standalone --param directory=<fixture> agent.list`, backed by
+  the installed OpenAPI operation `agent.list` (`GET /api/agent`).
+- The repeatable `tests/global-runtime/qualify.ps1` run installed all 15 global
+  resources into its isolated config root and queried standalone
+  `agent.list` from a clean Git fixture without project-local Olympus files.
+  The CLI exited 0 but returned `data: []`. Its logs confirmed the temporary
+  `OPENCODE_CONFIG_DIR`, yet the private server still subscribed to the real
+  Windows profile's `.opencode`, `.claude/skills`, and `.agents/skills` despite
+  isolated `HOME`, `USERPROFILE`, `HOMEDRIVE`/`HOMEPATH`, `APPDATA`, XDG, and temp
+  values. The user config and project fixture remained unchanged. This is not
+  isolated evidence: it neither proves an Olympus install defect nor supports a
+  runtime PASS. The qualifier rejects the profile leakage and preserves the
+  response/logs/evidence under its printed temporary run directory. OpenCode
+  global remains **PARTIAL**; the exact blocker is that a clean isolated
+  standalone runtime both observes real profile paths and returns an empty agent
+  roster.
 - Codex global path evidence: current CLI help declares `~/.codex/config.toml`,
-  `$CODEX_HOME`, and `$CODEX_HOME/<profile>.config.toml`; current official docs
-  identify `~/.codex/agents/` and global `AGENTS.md`. The foundation installs
-  global agents, `AGENTS.md`, and an `olympus.config.toml` profile, leaves base
-  `config.toml` untouched, and uses `codex --profile olympus`. Its isolated
-  qualifications are static; no interactive runtime smoke is claimed.
+  `$CODEX_HOME`, and profiles at `$CODEX_HOME/<profile>.config.toml`; current
+  official docs confirm `$CODEX_HOME/agents/` and global `AGENTS.md` (with
+  `AGENTS.override.md` precedence). The foundation installs those global
+  agents, root instructions, and an `olympus.config.toml` profile, leaves base
+  `config.toml` untouched, and selects the profile with `codex --profile
+  olympus`. `codex doctor --json` under the isolated `CODEX_HOME` confirmed the
+  config/state root but reported no credentials. `codex agents --help` describes
+  browsing agent sessions, not custom-agent discovery. No model-backed
+  headless execution was performed; Codex global is **PARTIAL**, not SUPPORTED.
 - `-Harness all` uses separate OpenCode and Codex global roots/manifests.
   `VerifyOnly` checks the selected global manifest/files without mixing scopes.
   User-owned global config, drifted resources, or conflicting user `AGENTS.md`
@@ -128,6 +149,11 @@ was collected.
 | Trivial edit via `codex exec` | Codex | BLOCKED: read-only sandbox | 16 s | 0 | 0 | 0 observed; no TTY | 0 observed; terminal result consumed | 0 observed | `gpt-6.1-sol` | `high` configured; not emitted by event | 26,859 input (20,480 cached), 178 output; cost unavailable | Exit 0 did not mean acceptance: fixture remained pending after write rejection. No interactive approval. |
 | Implementation + tests | Codex | PARTIAL | 69.7 s | 0 | 0 | 0 observed | 0 observed; no children | 0 observed | `gpt-6.1-sol` | `high` configured; not emitted by event | 84,593 input (77,824 cached), 501 output, 45 reasoning; cost unavailable | `python -m unittest` failed inside sandbox because `python` was unavailable; Aegis ran the same two fixture tests host-side and both passed. Not Kovan → Nox. |
 | Equivalent task set | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | No apples-to-apples result exists. |
+
+Global runtime classification: **OpenCode PARTIAL** (the isolated API probe
+returned an empty roster while observing the user's profile), **Codex PARTIAL**
+(isolated `CODEX_HOME` confirmed, but runtime agent discovery needs credentials).
+See `docs/HARNESSES.md` for exact commands and the required Codex human smoke.
 
 ## Future real-task collection template
 

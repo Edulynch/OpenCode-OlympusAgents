@@ -173,24 +173,34 @@ function Get-ProjectOverride([string]$Harness, [string]$GlobalVersion) {
     if (-not $git -or -not (Test-Path -LiteralPath $ProjectTarget -PathType Container)) { return }
     $projectRoot = (& $git.Source -C $ProjectTarget rev-parse --show-toplevel 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $projectRoot) { return }
-    $localManifestRel = if ($Harness -eq 'opencode') { '.opencode/orchestrator-install.json' } else { '.codex/orchestrator-install.json' }
-    $manifestPath = Join-Path $projectRoot ($localManifestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
-    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return }
-    try {
-        $local = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -Depth 100
-        $harnesses = if ($local.installed_harnesses) { @($local.installed_harnesses) } else { @('opencode') }
-        if ($Harness -notin $harnesses) { return }
-        $script:ProjectOverrideDetected = $true
-        $localVersion = [string]$local.installed_version
-        $isDrifted = $false
-        foreach ($entry in @($local.managed_files)) {
-            $relative = Normalize-Relative ([string]$entry.path)
-            $full = Join-Path $projectRoot ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
-            if (-not (Test-Path -LiteralPath $full -PathType Leaf) -or (Get-FileHashText $full) -cne ([string]$entry.sha256).ToLowerInvariant()) { $isDrifted = $true; break }
-        }
-        $status = if ($isDrifted) { 'modified local resources; preserved' } elseif ($localVersion -cne $GlobalVersion) { "version $localVersion differs from global $GlobalVersion; preserved" } else { "version $localVersion remains a project-local override" }
-        Write-Output "PROJECT_LOCAL_OVERRIDE: $Harness $status ($projectRoot)"
-    } catch { Write-Output "PROJECT_LOCAL_OVERRIDE: $Harness manifest/path is invalid; preserved at $manifestPath" }
+    # A dual-harness project stores the union manifest at .opencode; a
+    # Codex-only project stores it at .codex. Search both ownership locations
+    # for Codex so a project-local Codex override is not silently missed.
+    $localManifestRels = if ($Harness -eq 'opencode') {
+        @('.opencode/orchestrator-install.json')
+    } else {
+        @('.opencode/orchestrator-install.json', '.codex/orchestrator-install.json')
+    }
+    foreach ($localManifestRel in $localManifestRels) {
+        $manifestPath = Join-Path $projectRoot ($localManifestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { continue }
+        try {
+            $local = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -Depth 100
+            $harnesses = if ($local.installed_harnesses) { @($local.installed_harnesses) } else { @('opencode') }
+            if ($Harness -notin $harnesses) { continue }
+            $script:ProjectOverrideDetected = $true
+            $localVersion = [string]$local.installed_version
+            $isDrifted = $false
+            foreach ($entry in @($local.managed_files)) {
+                $relative = Normalize-Relative ([string]$entry.path)
+                $full = Join-Path $projectRoot ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+                if (-not (Test-Path -LiteralPath $full -PathType Leaf) -or (Get-FileHashText $full) -cne ([string]$entry.sha256).ToLowerInvariant()) { $isDrifted = $true; break }
+            }
+            $status = if ($isDrifted) { 'modified local resources; preserved' } elseif ($localVersion -cne $GlobalVersion) { "version $localVersion differs from global $GlobalVersion; preserved" } else { "version $localVersion remains a project-local override" }
+            Write-Output "PROJECT_LOCAL_OVERRIDE: $Harness $status ($projectRoot)"
+            return
+        } catch { Write-Output "PROJECT_LOCAL_OVERRIDE: $Harness manifest/path is invalid; preserved at $manifestPath" }
+    }
 }
 
 function Invoke-OneHarness([string]$SelectedHarness) {

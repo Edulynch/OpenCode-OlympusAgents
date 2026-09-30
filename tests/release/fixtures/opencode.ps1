@@ -28,6 +28,14 @@ if ($Command.Count -eq 1 -and $Command[0] -eq 'models') {
     Write-Output 'openai/gpt-6-luna'
     exit 0
 }
+if ($Command.Count -ge 2 -and $Command[0] -eq 'debug' -and $Command[1] -eq 'paths') {
+    if (-not $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT) {
+        [Console]::Error.WriteLine('Missing isolated fixture config root.')
+        exit 2
+    }
+    Write-Output ("config   " + $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT)
+    exit 0
+}
 if ($Command.Count -ge 2 -and $Command[0] -eq 'debug' -and $Command[1] -eq 'config') {
     $configPath = Join-Path (Get-Location).Path 'opencode.jsonc'
     $configEntries = @([pscustomobject]@{ path=$configPath })

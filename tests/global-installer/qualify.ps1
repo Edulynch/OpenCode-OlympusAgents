@@ -9,6 +9,7 @@ $run = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) ('opencode\o
 $originalPath = $env:PATH
 $originalOpenCodeRoot = $env:OPENCODE_CONFIG_DIR
 $originalCodexHome = $env:CODEX_HOME
+$originalFixtureOpenCodeRoot = $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT
 $utf8 = [Text.UTF8Encoding]::new($false)
 
 function Check([string]$Id, [bool]$Condition, [string]$Evidence = '') {
@@ -71,9 +72,11 @@ try {
     $project = New-Target 'migration-project'
     $mockBin = Join-Path $run 'mock-bin'
     [IO.Directory]::CreateDirectory($mockBin) | Out-Null
-    $mockPathOutput = "@echo off`r`necho config   $openCodeRoot`r`nexit /b 0`r`n"
-    [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), $mockPathOutput, [Text.Encoding]::ASCII)
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../release/fixtures/opencode.ps1') -Destination (Join-Path $mockBin 'opencode.ps1')
+    $mockCommand = "@echo off`r`npwsh -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
+    [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), $mockCommand, [Text.Encoding]::ASCII)
     $env:PATH = $mockBin + [IO.Path]::PathSeparator + $env:PATH
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeRoot
     Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue
     $env:CODEX_HOME = $codexHome
 
@@ -85,22 +88,24 @@ try {
     $codexUserHash = (Get-FileHash -LiteralPath $codexUserConfig -Algorithm SHA256).Hash
 
     # The existing project-local default stays project-scoped and records scope.
-    $localInstall = Run-Installer $project @('-Harness','codex')
-    $localManifestPath = Join-Path $project '.codex/orchestrator-install.json'
+    $localInstall = Run-Installer $project @('-Harness','all')
+    $localManifestPath = Join-Path $project '.opencode/orchestrator-install.json'
     $localManifest = Get-Content -LiteralPath $localManifestPath -Raw | ConvertFrom-Json
-    Check 'PROJECT_DEFAULT_UNCHANGED' ($localInstall.Code -eq 0 -and $localManifest.scope -eq 'project' -and
-        $localManifest.installed_version -eq 'v0.3.0-beta.5' -and $localManifest.installed_harnesses[0] -eq 'codex')
+    Check 'PROJECT_SCOPE_ALL_INSTALL' ($localInstall.Code -eq 0 -and $localManifest.scope -eq 'project' -and
+        $localManifest.installed_version -eq 'v0.3.0-beta.5' -and $localManifest.installed_harnesses.Count -eq 2 -and
+        $localManifest.installed_harnesses[0] -eq 'opencode' -and $localManifest.installed_harnesses[1] -eq 'codex')
     $projectBeforeVerify = Snapshot $project
-    $projectVerify = Run-Installer $project @('-Harness','codex','-VerifyOnly')
-    Check 'PROJECT_VERIFYONLY_UNAFFECTED' ($projectVerify.Code -eq 0 -and (Snapshot $project) -ceq $projectBeforeVerify)
+    $projectVerify = Run-Installer $project @('-Harness','all','-VerifyOnly')
+    Check 'PROJECT_VERIFYONLY_ALL_UNAFFECTED' ($projectVerify.Code -eq 0 -and (Snapshot $project) -ceq $projectBeforeVerify)
 
     $projectBeforeMigration = Snapshot $project
     $globalInstall = Global-Install $project 'all'
     Check 'GLOBAL_OPENCODE_AND_CODEX_INSTALL' ($globalInstall.Code -eq 0 -and
         $globalInstall.Text -match 'OLYMPUS_GLOBAL_INSTALL: OPENCODE .* READY' -and
         $globalInstall.Text -match 'OLYMPUS_GLOBAL_INSTALL: CODEX .* READY') ("exit=$($globalInstall.Code)`n$($globalInstall.Text)")
-    Check 'GLOBAL_CODEX_PROJECT_OVERRIDE_RETAINED' ($globalInstall.Text -match 'GLOBAL_INSTALLED PROJECT_LOCAL_REMAINS_AS_OVERRIDE' -and
-        $globalInstall.Text -match 'PROJECT_LOCAL_OVERRIDE: codex' -and (Snapshot $project) -ceq $projectBeforeMigration)
+    Check 'GLOBAL_BOTH_PROJECT_OVERRIDES_RETAINED' ($globalInstall.Text -match 'GLOBAL_INSTALLED PROJECT_LOCAL_REMAINS_AS_OVERRIDE' -and
+        $globalInstall.Text -match 'PROJECT_LOCAL_OVERRIDE: opencode' -and $globalInstall.Text -match 'PROJECT_LOCAL_OVERRIDE: codex' -and
+        (Snapshot $project) -ceq $projectBeforeMigration) ("exit=$($globalInstall.Code)`n$($globalInstall.Text)`nPROJECT_SNAPSHOT_UNCHANGED=$((Snapshot $project) -ceq $projectBeforeMigration)")
     Check 'GLOBAL_OPENCODE_RESOLVES_CURRENT_CLI_CONFIG_PATH' ((Test-Path (Join-Path $openCodeRoot 'agents/kael.md')) -and
         (Test-Path (Join-Path $openCodeRoot 'commands/maintain.md')) -and
         (Test-Path (Join-Path $openCodeRoot 'plugins/olympus-activity/activity.ts')))
@@ -132,6 +137,26 @@ try {
         -not (Test-Path (Join-Path $overrideCodexHome 'AGENTS.md')) -and
         -not (Test-Path (Join-Path $overrideCodexHome 'agents/veyra.toml')))
     $env:CODEX_HOME = $codexHome
+
+    # Qualify the successful per-harness global selectors independently of -all.
+    $openCodeOnlyRoot = Join-Path $run 'OpenCode Only Global Config'
+    [IO.Directory]::CreateDirectory($openCodeOnlyRoot) | Out-Null
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeOnlyRoot
+    $openCodeOnly = Run-Installer $project @('-Scope','global','-Harness','opencode')
+    $openCodeOnlyManifest = Get-Content (Join-Path $openCodeOnlyRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
+    Check 'GLOBAL_OPENCODE_ONLY_SELECTOR' ($openCodeOnly.Code -eq 0 -and $openCodeOnlyManifest.scope -eq 'global' -and
+        $openCodeOnlyManifest.installed_harnesses.Count -eq 1 -and $openCodeOnlyManifest.installed_harnesses[0] -eq 'opencode' -and
+        $openCodeOnlyManifest.managed_files.Count -eq 15)
+    $codexOnlyHome = Join-Path $run 'Codex Only Global Home'
+    [IO.Directory]::CreateDirectory($codexOnlyHome) | Out-Null
+    $env:CODEX_HOME = $codexOnlyHome
+    $codexOnly = Run-Installer $project @('-Scope','global','-Harness','codex')
+    $codexOnlyManifest = Get-Content (Join-Path $codexOnlyHome 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
+    Check 'GLOBAL_CODEX_ONLY_SELECTOR' ($codexOnly.Code -eq 0 -and $codexOnlyManifest.scope -eq 'global' -and
+        $codexOnlyManifest.installed_harnesses.Count -eq 1 -and $codexOnlyManifest.installed_harnesses[0] -eq 'codex' -and
+        $codexOnlyManifest.managed_files.Count -eq 12)
+    $env:CODEX_HOME = $codexHome
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeRoot
 
     $openManifestPath = Join-Path $openCodeRoot 'olympus/orchestrator-install.json'
     $codexManifestPath = Join-Path $codexHome 'olympus/orchestrator-install.json'
@@ -199,6 +224,8 @@ try {
     else { $env:OPENCODE_CONFIG_DIR = $originalOpenCodeRoot }
     if ($null -eq $originalCodexHome) { Remove-Item Env:CODEX_HOME -ErrorAction SilentlyContinue }
     else { $env:CODEX_HOME = $originalCodexHome }
+    if ($null -eq $originalFixtureOpenCodeRoot) { Remove-Item Env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT -ErrorAction SilentlyContinue }
+    else { $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $originalFixtureOpenCodeRoot }
     if ($run -and (Test-Path -LiteralPath $run)) {
         for ($attempt = 1; $attempt -le 10; $attempt++) {
             try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop; break }

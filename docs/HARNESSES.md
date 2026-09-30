@@ -98,15 +98,56 @@ The installer remains Windows-qualified. `-Scope global` defaults to no user-dat
 overwrite, records `scope = global`, `installed_harnesses`, `installed_version`,
 and hash-owned `managed_files`, and `-VerifyOnly` verifies one scope at a time.
 OpenCode global `opencode.json` and Codex base `config.toml` remain untouched.
-Global Codex continues to declare `DENY = GAP` and `AEGIS = GAP`. Updates refuse
-drift, preserve unrelated user config, and do not remove project-local installs;
-the explicit migration result is `GLOBAL_INSTALLED
+Updates refuse drift, preserve unrelated user config, and do not remove
+project-local installs; the explicit migration result is `GLOBAL_INSTALLED
 PROJECT_LOCAL_REMAINS_AS_OVERRIDE`. A project-local Olympus manifest in the
 current Git root is reported, including version/hash drift. Other repositories
-are not scanned or modified. Global OpenCode file/path installation qualifies
-statically in isolated fixtures; current CLI `debug agents` returned an empty
-roster in the isolated global probe, so end-to-end global runtime discovery is
-not claimed. Unix runtime installation is not qualified.
+are not scanned or modified. Static global installer qualification passes, but
+runtime discovery is a separate contract:
+
+| Harness | Global support | Runtime evidence and blocker |
+|---|---|---|
+| OpenCode | **PARTIAL** | Current CLI `2.0.20` exposes `opencode api --standalone` and the installed API source identifies `agent.list` (`GET /api/agent`) as the roster endpoint. The runtime qualifier installed all 15 managed resources in an isolated config root, used a clean fixture with no project-local Olympus files, and queried standalone `agent.list`; it returned exit 0 with `data: []`. Despite isolated `HOME`, `USERPROFILE`, `HOMEDRIVE`/`HOMEPATH`, `APPDATA`, XDG, and temp values, server logs subscribed to the real profile's `.opencode`, `.claude/skills`, and `.agents/skills`. The qualifier rejects that leakage and retains the failed logs; this is not isolated evidence and cannot establish an Olympus install defect or a PASS. The prior `opencode debug agents` check is not standalone: its command has no `--standalone` flag and installed source resolves the default managed service. |
+| Codex | **PARTIAL** | Global `AGENTS.md`, profile, and 10 custom-agent TOMLs install under an isolated `CODEX_HOME`. Current CLI `0.159.1` `codex doctor --json` confirmed that `CODEX_HOME` and its state/config paths were the fixture, but reported no credentials. `codex agents` lists sessions, not the custom-agent roster; a headless model execution was not run. Global runtime discovery is therefore unproven. `DENY = GAP` and `AEGIS = GAP` remain unchanged. |
+
+OpenCode's official current config docs confirm global agents under
+`~/.config/opencode/agents/`, `OPENCODE_CONFIG_DIR` as a custom config directory,
+and later project-local config/`.opencode` sources taking precedence. Codex's
+current docs confirm global instructions under `$CODEX_HOME/AGENTS.md` (unless
+`AGENTS.override.md` exists), project instructions layered after the global
+instructions, custom agents under `$CODEX_HOME/agents/`, and profile files at
+`$CODEX_HOME/<profile>.config.toml`. These contracts establish intended paths
+and precedence, not runtime discovery. A global install plus unrelated project
+files and the installer-owned project override/migration paths are covered by
+isolated installer tests; no runtime semantic merge is claimed.
+
+The generated capability row `GLOBAL_RUNTIME_DISCOVERY` remains `PARTIAL` for
+both harnesses until clean runtime evidence is collected. The OpenCode
+qualification `tests/global-runtime/qualify.ps1` rejects profile/config/skill
+path leakage, verifies the user config and fixture remain unchanged, and keeps
+stdout, stderr, and `evidence.json` under the printed
+`%TEMP%\opencode\olympus-global-runtime-<run-id>` path on failure. The latest
+run's exact blocker is profile-path leakage plus an empty standalone roster.
+No Unix global install/runtime is qualified.
+
+### Human action required: Codex global runtime smoke
+
+The isolated Codex fixture has no credentials, and Aegis did not use the user's
+real Codex credentials or delegate to a Codex agent. To complete the smoke, sign
+in with the isolated `CODEX_HOME` below, then run the headless command from the
+fixture repository (which contains no project-local Olympus files):
+
+```powershell
+$env:CODEX_HOME = '<isolated-run>\codex-home'
+codex login
+codex exec --profile olympus --sandbox read-only --ask-for-approval never --cd '<isolated-run>\trusted-fixture' --json 'Use the globally configured Olympus custom agent named veyra to inspect README.md and return exactly GLOBAL_CODEX_VEYRA_DISCOVERED.'
+```
+
+Expected PASS evidence: the global root instructions are active, Codex invokes
+the custom `veyra` agent from `$CODEX_HOME/agents/veyra.toml`, and the terminal
+result contains `GLOBAL_CODEX_VEYRA_DISCOVERED`; the fixture remains free of
+`.codex`, `CODEX.md`, and other project-local Olympus resources. Do not count
+the static presence of the files alone as PASS.
 
 Global uninstall is available only for manifest/hash-verified resources. It
 leaves parent directories, base harness configuration, and project-local state
@@ -123,6 +164,9 @@ pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Scope global -Harness all -Dr
 
 # Automated global path/ownership/verify/update/uninstall fixtures.
 pwsh -NoProfile -File ./tests/global-installer/qualify.ps1
+
+# Standalone OpenCode runtime roster discovery (expected PARTIAL until isolated).
+pwsh -NoProfile -File ./tests/global-runtime/qualify.ps1
 ```
 
 OpenCode still provides the `/maintain` command, hidden Aegis, native ASK, hard

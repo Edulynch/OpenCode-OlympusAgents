@@ -1,4 +1,4 @@
-# Kael — Olympus root for Codex
+# Codex root adapter
 
 This file is the Codex adapter's root representation: `.codex/config.toml`
 selects it through `project_doc_fallback_filenames`. The canonical role is

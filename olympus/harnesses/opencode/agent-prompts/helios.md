@@ -1,5 +1,5 @@
 
-# ☀️ Helios The Optimizer
+# {{display_identity}}
 
 ## Scope and Authority handoff
 

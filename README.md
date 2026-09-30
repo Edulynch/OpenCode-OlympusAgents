@@ -23,7 +23,7 @@
 - Git and an existing Git project
 - OpenCode V2 and the configured models when installing OpenCode; Codex CLI when using Codex
 
-Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Replace `<TAG>` with a published release tag that includes the dual-harness installer. Installation is project-local, never global.
+Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Replace `<TAG>` with a published release tag that includes the dual-harness installer. The default remains project-local for beta.5 compatibility. The v0.4.0 global-install foundation is branch-only, Windows-qualified, and has not been published.
 
 #### OpenCode (default)
 
@@ -79,17 +79,17 @@ Kael coordinates the team as needed: research, implementation, testing, and revi
 
 | Agent | What they do |
 |---|---|
-| 👑 **Kael** | Understands your request and coordinates the work. |
-| 🔭 **Veyra** | Researches the project and gathers context. |
-| 📐 **Orin** | Decides architecture and interface boundaries. |
-| 🗺️ **Atlas The Planner** | Optionally plans the execution order of already-scoped changes. |
-| 🐞 **Argus The Bug Hunter** | Optionally diagnoses nontrivial functional defects. |
-| 🔨 **Kovan** | Writes code. |
-| 👁️ **Nox** | Runs checks and tests. |
-| ⚖️ **Vera** | Reviews the result. |
-| 🛡️ **Talos The Sentinel** | Optionally reasons about evidenced security defects. |
-| 🧠 **Thales The Sage** | Helps diagnose difficult problems when needed. |
-| ☀️ **Helios The Optimizer** | On explicit optimization requests, proposes a bounded improvement and stops for user approval. |
+| **Kael — The Master** (`kael`) | Understands your request and coordinates the work. |
+| **Veyra — The Explorer** (`veyra`) | Researches the project and gathers context. |
+| **Orin — The Architect** (`orin`) | Decides architecture and interface boundaries. |
+| **Atlas — The Planner** (`atlas`) | Optionally plans the execution order of already-scoped changes. |
+| **Kovan — The Coder** (`kovan`) | Writes code. |
+| **Argus — The Bug Hunter** (`argus`) | Optionally diagnoses nontrivial functional defects. |
+| **Nox — The Tester** (`nox`) | Runs checks and tests. |
+| **Vera — The Judge** (`vera`) | Reviews the result. |
+| **Talos — The Sentinel** (`talos`) | Optionally reasons about evidenced security defects. |
+| **Thales — The Sage** (`thales`) | Helps diagnose difficult problems when needed. |
+| **Helios — The Optimizer** (`helios`) | On explicit optimization requests, proposes a bounded improvement and stops for user approval. |
 
 Olympus Core defines what the team and its orchestration mean. Harness adapters define how each runtime expresses the same Core. **OpenCode and Codex are the two officially supported harnesses**; Codex uses its native root, agents, approvals, and activity view, while capability gaps remain explicit.
 
@@ -102,6 +102,8 @@ Workers return `NEED_AUTHORITY` only when they discover an otherwise legitimate 
 ## 🔧 Maintenance
 
 Use `/maintain <task>` only for Olympus itself: Olympus development, maintenance/configuration/installation, framework bug or gap repair, or an explicitly requested Olympus escape hatch when such a gap blocks normal completion. It invokes the hidden 🛡️ Aegis The Keeper executor, separate from the normal agent team; Kael cannot invoke Aegis automatically. Ordinary user-project work—including status/diff, stage, commit, push, branch/tag, or project releases—belongs to the normal Kael plane and does not require Aegis merely because it uses Git. Destructive or high-impact Git operations require explicit, proportionate authorization, but not Aegis solely because they are Git. An ordinary project task remains out of scope even if `/maintain` is invoked.
+
+Canonical display identities live in `olympus/core/identities.toml`; OpenCode and Codex derive display descriptions from this source. Aegis — The Keeper (`aegis`) is the hidden Olympus-only maintenance identity and is not a normal team worker.
 
 ## ⚡ NORMAL vs FAST
 
@@ -128,7 +130,7 @@ Olympus treats an installed project as trusted. Kovan and Nox can run commands f
 
 ## 🔄 Update
 
-Olympus is installed per project. Use the commands above with the exact published tag that contains the desired installer feature. `-Harness` accepts `opencode` (the default), `codex`, or `all`. Installing an additional harness is additive. The installer preserves unrelated project work and refuses to overwrite a differing user-owned destination or a drifted managed file. `-VerifyOnly` checks only the requested harness subset and is read-only.
+The published beta.5 installer is project-local; use the exact published tag with the desired feature. `-Scope project` and `-Harness opencode` remain defaults; `-Harness` accepts `opencode`, `codex`, or `all`. The v0.4.0 global foundation in this branch is not in a release yet. Project verification checks only the requested managed harness subset, is read-only, and does not launch mutable runtime discovery in the target. See [Harness installation](docs/HARNESSES.md) for the unreleased global design and limitations.
 
 ## 🆘 Troubleshooting
 

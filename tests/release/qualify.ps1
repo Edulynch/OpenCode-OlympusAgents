@@ -59,8 +59,11 @@ $script:QualificationReceipt = [ordered]@{
 }
 Save-QualificationReceipt
 
-function Check([string]$id, [bool]$valid) {
-    if (-not $valid) { throw "$id FAIL" }
+function Check([string]$id, [bool]$valid, [string]$evidence = '') {
+    if (-not $valid) {
+        if ($evidence) { throw "$id FAIL`n$evidence" }
+        throw "$id FAIL"
+    }
     Write-Output "$id PASS"
     $script:QualificationReceipt.progress_counter++
     Save-QualificationReceipt
@@ -344,7 +347,7 @@ try {
     $notesStart = $changelog.IndexOf($script:CandidateHeading, [StringComparison]::Ordinal)
     if ($notesStart -lt 0) { throw "Release-notes section for $($script:CandidateVersion) is missing." }
     $afterCandidate = $changelog.Substring($notesStart + $script:CandidateHeading.Length)
-    $nextRelease = [regex]::Match($afterCandidate, '(?m)^##[ \t]+v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?(?:[ \t]+.*)?$')
+    $nextRelease = [regex]::Match($afterCandidate, '(?m)^##[ \t]+v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?(?:[ \t]+[^\r\n]*)?\r?$')
     $notesEnd = if ($nextRelease.Success) { $notesStart + $script:CandidateHeading.Length + $nextRelease.Index } else { $changelog.Length }
     if ($notesEnd -le $notesStart) { throw "Release-notes section for $($script:CandidateVersion) is unbounded." }
     $releaseNotes = $changelog.Substring($notesStart, $notesEnd - $notesStart)
@@ -376,7 +379,7 @@ try {
 
     $releaseGate = Join-Path $PSScriptRoot 'github-release-notes.ps1'
     $gateGood = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody $releaseNotes 2>&1 | Out-String)
-    Check 'R26_RELEASE_GATE_ACCEPTS_PINNED_HARNESS_COMMANDS' ($LASTEXITCODE -eq 0 -and $gateGood -match "RELEASE_NOTES_CONTRACT: $($script:CandidateRegex) PASS")
+    Check 'R26_RELEASE_GATE_ACCEPTS_PINNED_HARNESS_COMMANDS' ($LASTEXITCODE -eq 0 -and $gateGood -match "RELEASE_NOTES_CONTRACT: $($script:CandidateRegex) PASS") ("exit=$LASTEXITCODE`n$gateGood")
     $gateDerived = (& pwsh -NoProfile -File $releaseGate -ReleaseBody $releaseNotes 2>&1 | Out-String)
     Check 'R26_RELEASE_GATE_DERIVES_CANDIDATE_VERSION' ($LASTEXITCODE -eq 0 -and
         $gateDerived -match "RELEASE_NOTES_CONTRACT: $($script:CandidateRegex) PASS")

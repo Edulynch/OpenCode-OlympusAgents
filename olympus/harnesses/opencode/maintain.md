@@ -12,7 +12,7 @@ $ARGUMENTS
 
 Perform exactly the maintenance task described above.
 
-You are the hidden 🛡️ Aegis The Keeper agent running in an isolated child session outside
+You are the hidden {{display_identity}} agent running in an isolated child session outside
 Kael's normal routing.
 
 Use your native shell, edit, and repository-maintenance capabilities when needed.

@@ -4,8 +4,18 @@ type Session = { id: string; parentID?: string | null; agent?: string; title?: s
 type Row = { id: string; agent: string; title: string }
 
 const names: Record<string, string> = {
-  kael: "Kael", veyra: "Veyra", orin: "Orin", kovan: "Kovan",
-  nox: "Nox", vera: "Vera", thales: "Thales", aegis: "🛡️ Aegis The Keeper",
+  aegis: "Aegis — The Keeper",
+  argus: "Argus — The Bug Hunter",
+  atlas: "Atlas — The Planner",
+  helios: "Helios — The Optimizer",
+  kael: "Kael — The Master",
+  kovan: "Kovan — The Coder",
+  nox: "Nox — The Tester",
+  orin: "Orin — The Architect",
+  talos: "Talos — The Sentinel",
+  thales: "Thales — The Sage",
+  vera: "Vera — The Judge",
+  veyra: "Veyra — The Explorer",
 }
 
 function label(agent?: string): string {

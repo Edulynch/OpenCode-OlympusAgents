@@ -36,15 +36,16 @@ function Assert-ReleaseNotes([string]$Body, [string]$Tag) {
     if (-not $installationBody.Contains($install)) {
         throw 'RELEASE_NOTES_INSTALL_PIN_MISMATCH: Installation command must use the exact release tag.'
     }
-    if (-not $verificationBody.Contains($verify)) {
-        throw 'RELEASE_NOTES_VERIFY_PIN_MISMATCH: Verify command must use the same exact release tag and -VerifyOnly.'
-    }
-    if ($Tag -cne 'v0.3.0-beta.4') {
-        $codexInstall = "& ([scriptblock]::Create((irm '$base'))) -Harness codex"
-        $allInstall = "& ([scriptblock]::Create((irm '$base'))) -Harness all"
-        $opencodeVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness opencode -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
-        $codexVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness codex -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
-        $allVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness all -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
+    $codexInstall = "& ([scriptblock]::Create((irm '$base'))) -Harness codex"
+    $allInstall = "& ([scriptblock]::Create((irm '$base'))) -Harness all"
+    $opencodeVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness opencode -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
+    $codexVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness codex -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
+    $allVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness all -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
+    if ($Tag -ceq 'v0.3.0-beta.4') {
+        if (-not $verificationBody.Contains($verify)) {
+            throw 'RELEASE_NOTES_VERIFY_PIN_MISMATCH: Verify command must use the same exact release tag and -VerifyOnly.'
+        }
+    } else {
         foreach ($command in @($codexInstall, $allInstall)) {
             if (-not $installationBody.Contains($command)) {
                 throw 'RELEASE_NOTES_HARNESS_INSTALL_MISSING: Installation section must publish Codex and all-harness commands.'

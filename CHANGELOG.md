@@ -1,5 +1,52 @@
 # Unreleased
 
+## v0.3.0-beta.5
+
+### Highlights
+
+- Add the project-local Dual Harness Installer for OpenCode and Codex, both rendered from Olympus Harness Core.
+- OpenCode remains the backwards-compatible default when `-Harness` is omitted; select `-Harness opencode`, `-Harness codex`, or `-Harness all` explicitly as needed.
+- Harness installation is additive. The `installed_harnesses` ownership-manifest field records selected harnesses, and `-VerifyOnly` checks the selected harness or subset without modifying files.
+- Preserve differing user-owned files and refuse conflicting destinations or drifted managed files instead of silently overwriting them.
+- Support Codex-only installation without creating `.opencode/**`; safely upgrade legacy OpenCode installations and add either harness to the other.
+- Keep Windows PowerShell 5.1 launcher and PowerShell 7 compatibility within the existing qualification coverage.
+
+### Harness capabilities
+
+OpenCode and Codex both use Olympus Harness Core, but their capabilities are not identical. Codex `DENY = GAP`, `AEGIS = GAP`, and `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; this release does not claim full parity.
+
+## Installation
+
+### OpenCode (default and backwards-compatible)
+
+```powershell
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.5/install.ps1 | iex
+```
+
+This is the normal installer command and defaults to `-Harness opencode`.
+
+### Codex
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.5/install.ps1'))) -Harness codex
+```
+
+### OpenCode + Codex
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.5/install.ps1'))) -Harness all
+```
+
+## Verify installation
+
+Each command verifies the exact same immutable beta.5 source and only the selected harness subset:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.5/install.ps1'))) -Harness opencode -Version 'v0.3.0-beta.5' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.5/install.ps1'))) -Harness codex -Version 'v0.3.0-beta.5' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.3.0-beta.5/install.ps1'))) -Harness all -Version 'v0.3.0-beta.5' -Target (Get-Location).Path -VerifyOnly
+```
+
 ## v0.3.0-beta.4
 
 **Status: local release candidate; no tag or GitHub Release created.**

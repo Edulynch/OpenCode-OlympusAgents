@@ -65,6 +65,14 @@ def main() -> int:
         orchestration = tomllib.load(stream)
     with (ROOT / "olympus" / "harnesses" / "capabilities.toml").open("rb") as stream:
         capabilities = tomllib.load(stream)
+    maintenance_policy = (ROOT / "olympus" / "policies" / "maintenance-plane.md").read_text(encoding="utf-8").strip()
+    check(
+        "MAINTENANCE_SCOPE_CORE_CONTRACT",
+        "Cheap scope gate — before any other work" in maintenance_policy
+        and "what target is being changed and who owns it" in maintenance_policy
+        and "genuinely new, material evidence" in maintenance_policy
+        and "global Nox policy" in maintenance_policy,
+    )
 
     canonical_roles = {path.stem for path in (ROOT / "olympus" / "roles").glob("*.md")}
     check("CANONICAL_12_UNIQUE_ROLE_FILES", len(canonical_roles) == 12 and canonical_roles == set(models["roles"]))
@@ -74,6 +82,15 @@ def main() -> int:
     codex_files = {path.stem: path for path in (ROOT / ".codex/agents").glob("*.toml")}
     check("OPENCODE_EXPECTED_ROSTER", set(opencode_files) == canonical_roles)
     check("CODEX_EXPECTED_SUPPORTED_ROSTER", set(codex_files) == canonical_roles - {"kael", "aegis"})
+    aegis_prompt = opencode_files["aegis"].read_text(encoding="utf-8")
+    kael_prompt = opencode_files["kael"].read_text(encoding="utf-8")
+    maintain_command = (ROOT / ".opencode/commands/maintain.md").read_text(encoding="utf-8")
+    check("OPENCODE_AEGIS_AND_COMMAND_DERIVE_CORE_POLICY", maintenance_policy in aegis_prompt and maintenance_policy in maintain_command)
+    check(
+        "OPENCODE_KAEL_DERIVES_CORE_TARGET_BOUNDARY",
+        "Classify the plane primarily by **what target is being changed and who owns it**" in kael_prompt
+        and "do not edit it from the project task" in kael_prompt,
+    )
 
     for role, intent in models["roles"].items():
         family = models["families"][intent["family"]]

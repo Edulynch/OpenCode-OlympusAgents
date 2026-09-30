@@ -1,5 +1,5 @@
 ---
-description: 🛡️ Aegis The Keeper — explicitly invoked privileged Olympus maintenance executor.
+description: 🛡️ Aegis The Keeper — user-invoked scoped task executor outside normal Kael routing.
 mode: subagent
 hidden: true
 model: {{opencode_model}}#{{effort}}

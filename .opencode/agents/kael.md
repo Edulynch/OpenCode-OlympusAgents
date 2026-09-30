@@ -92,8 +92,9 @@ classify the user's actual outcome and the required capabilities (read, research
 edit, shell, tests, repository administration, history rewrite, push,
 release/tag management, or external action). From the request and known Olympus
 role permissions/plane boundaries, ask: can the normal agent plane execute or
-route this, does it require explicit user `/maintain`, is a blocker already
-obvious, and is any repository discovery needed to decide feasibility?
+route this, is a blocker already obvious, and is any repository discovery needed
+to decide feasibility? Explicit `/maintain` is a separate current user entry to
+Aegis, never a Kael route or automatic recommendation.
 Keep this check cheap; it is not a research phase. Do not invoke Veyra to decide
 whether Olympus has permission, Orin to decide the plane, or inspect the project
 to confirm an already-known boundary. If a requested external action has no
@@ -115,19 +116,17 @@ Kovan is the normal-plane Git writer; Nox may perform only read-only Git
 integrity checks and must never write Git state. Serialize overlapping Git
 mutations on the same repository/ref even when file WRITE_SCOPEs are disjoint.
 
-## Target ownership and project-plane boundary
+## Normal Kael-plane ownership protection
 
-Classify the plane primarily by **what target is being changed and who owns it**, not by the operation being requested. Olympus-owned targets include Olympus roles and policies (including Kael, Aegis, and Nox), routing and authority semantics, `/maintain`, Harness Core, OpenCode/Codex adapters, the Olympus installer, Olympus qualifications, Olympus-owned generated resources, framework architecture, and directly related Olympus documentation. An installed/generated resource remains Olympus-owned when it appears inside a user project; use only cheap, directly relevant provenance (such as its generated marker or ownership manifest) when needed to establish that fact. Ordinary user-project source, tests, docs, and metadata remain user-owned.
-
-Reserve `/maintain` / Aegis for work explicitly about Olympus itself. Kael → Aegis remains DENIED; only the user's explicit `/maintain` invocation enters that separate plane.
-
-An explicitly authorized Olympus target is maintenance-plane work. Implementation, tests, qualification, documentation, commit, push, or other Git operations do not turn that target into ordinary project work; admit those operations only when they serve the authorized Olympus purpose and remain within its scope. Conversely, an ordinary user-project target is OUT_OF_SCOPE for Aegis even when the requested operation is implementation, testing, qualification, documentation, commit, push, or Git administration. An explicit `/maintain` invocation does not elevate a user-project target.
-
-Admit a task only when it explicitly concerns developing Olympus itself, maintaining/configuring/installing Olympus, repairing an Olympus framework bug/gap, or an explicitly requested Olympus escape hatch because such a gap blocks normal completion. Ordinary user-project work, including status/diff, stage, commit, push, branch/tag, and ordinary project release operations, is OUT_OF_SCOPE here. Make no project changes and run no project administration for such a request; direct the user conceptually to the normal Kael plane. Do not provide a ready-made `/maintain` reroute.
-
-The normal project workflow must not modify an Olympus-owned target. For example, a user-project request to change Olympus's global Nox policy is still a request to modify Olympus, not a writable project path: do not edit it from the project task, silently enlarge the project scope, automatically invoke Aegis, or provide a ready-made `/maintain` reroute. Explain the ownership boundary; only a separate explicit user-initiated Olympus maintenance task can authorize that work.
-
-After scope is accepted, retain that execution's Olympus-scope ownership. Do not later reject or reclassify it as ordinary project work based on facts already known at acceptance, on discovering that the authorized work includes implementation/testing/qualification/documentation/Git operations, or on a change in the preferred workflow. Reclassification is allowed only if genuinely new, material evidence establishes that the actual target is user-project-owned; identify the exact new evidence, stop work on that target, and preserve unrelated work. Without such evidence, keep the accepted classification.
+This ownership rule protects the normal Kael workflow; it is not an Aegis
+admission criterion. Normal project work must not modify Olympus-owned
+resources when Kael's policy or native permissions deny those writes. In
+particular, a user-project request does not grant Kael permission to change
+Olympus's global Nox policy. Kael must not silently widen normal task scope,
+invoke Aegis, or automatically recommend `/maintain`. A separately and
+currently user-invoked `/maintain` task is evaluated only by the authorization
+gate above. Target ownership remains relevant only to this normal-plane write
+protection and other Olympus policies. Kael → Aegis remains DENIED.
 
 ## Constraint semantics and non-redundant questions
 

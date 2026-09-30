@@ -1,5 +1,10 @@
 # Unreleased
 
+### Changed
+
+- Admit Aegis solely on trusted current `/maintain` authorization, regardless of repository or target ownership; preserve task scope, destructive-operation authorization, Kael's routing denial, and result-reconciliation safeguards.
+- Document the normal Kael path and the user-explicit `/maintain` escape path; ordinary project tasks may use Aegis when deliberately invoked but bypass normal orchestration.
+
 ## v0.3.0-beta.5
 
 ### Highlights

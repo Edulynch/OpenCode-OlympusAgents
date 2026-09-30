@@ -22,10 +22,10 @@ function Section([string]$Text, [string]$Heading) {
 try {
     $preflight = Section $kael 'Capability Preflight — before research'
     $discovery = Section $kael 'Task-scoped, progressive discovery'
-    $admin = Section $aegis 'Olympus administrative fast path'
+    $admin = Section $aegis 'Git-administration fast path'
     $mission = Section $kael 'Mission and routing'
     $handoff = Section $kael 'Explicit Aegis result handoff'
-    $maintenanceBoundary = Section $kael 'Target ownership and project-plane boundary'
+    $maintenanceBoundary = Section $kael 'Normal Kael-plane ownership protection'
 
     Check ORDER ($mission.IndexOf('Capability Preflight') -ge 0 -and
         $mission.IndexOf('Capability Preflight') -lt $mission.IndexOf('choose DIRECT') -and
@@ -47,7 +47,8 @@ try {
     Check CAPABILITY_BLOCKED ($preflight -match 'external action has no\s+available authorized path' -and
         $preflight -match 'explain the blocker before optional research')
     Check BOUNDARY ($maintenanceBoundary -match 'Kael → Aegis remains DENIED' -and
-        $maintenanceBoundary -match 'only the\s+user.s explicit `/maintain` invocation' -and
+        $maintenanceBoundary -match 'not an Aegis\s+admission criterion' -and
+        $maintenanceBoundary -match 'automatically recommend `/maintain`' -and
         $handoff -match 'cannot invoke or' -and $handoff -match 'delegate to Aegis' -and
         $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: aegis\s*\r?\n\s*effect: allow')
 
@@ -65,14 +66,16 @@ try {
     Check BROAD_ALLOWED ($discovery -match 'Refactor authentication across\s+all services' -and
         $discovery -match 'audit these 40 independent\s+modules' -and $discovery -match 'repository-wide analysis')
     # Admitted Olympus Git work uses administrative rather than source-first policy.
-    Check MAINTENANCE_ADMIN ($admin -match 'After the Olympus-only scope check' -and
+    Check MAINTENANCE_ADMIN ($admin -match 'After the authorization gate' -and
         $admin -match 'start with administrative\s+context only' -and
         $admin -match 'Do not first\s+inventory source' -and $admin -match 'history\s+rewrite plus push' -and
-        $admin -match 'non-mutating' -and $admin -match 'not definitive remote write')
-    Check MAINTENANCE_BOUNDARY ($aegis -match 'explicit `/maintain` invocation' -and
-        $aegis -match 'Target ownership and project-plane boundary' -and
-        $aegis -match 'Cheap scope gate — before any other work' -and $aegis -match 'OUT_OF_SCOPE' -and
-        $aegis -match 'no project administration' -and
+        $admin -match 'user-project Git tasks' -and $admin -match 'non-mutating' -and $admin -match 'not definitive remote write')
+    Check MAINTENANCE_BOUNDARY ($aegis -match 'trusted authorization for the current `/maintain` run' -and
+        $aegis -match 'There is no repository-ownership admission gate' -and
+        $aegis -match 'AUTH_CHECK → SCOPE_DECISION → WORK' -and $aegis -match 'AEGIS_SCOPE: REJECTED' -and
+        $maintenanceBoundary -match 'This ownership rule protects the normal Kael workflow' -and
+        $maintenanceBoundary -match 'not an Aegis\s+admission criterion' -and
+        $maintenanceBoundary -match 'Kael must not silently widen normal task scope' -and
         $aegis -match '(?s)action: subagent\s+resource: "\*"\s+effect: deny')
     Check INVARIANTS ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kael -match 'model: "openai/gpt-6.1-sol#high"' -and

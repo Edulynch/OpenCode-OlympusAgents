@@ -38,7 +38,7 @@ The table captures shipped roles and current in-validation identities. Model ent
 | 🛡️ Talos The Sentinel | GPT-6 Sol High | Security defect and trust-boundary reasoning | SHIPPED; optional, Security Routing Gate only |
 | 🧠 Thales The Sage | GPT-6 Sol XHigh | High-uncertainty diagnostic escalation | SHIPPED: native evolution of Sorin; live routing qualified |
 | ☀️ Helios The Optimizer | GPT-6 Sol High | Explicit-only optimization feasibility and evidence-bounded proposal | SHIPPED; user-executed live qualification passed |
-| 🛡️ Aegis The Keeper | GPT-6 Luna Max | Hidden privileged Olympus framework maintenance via explicit `/maintain`; never a Kael child | IN VALIDATION; replaces legacy agent ID `maintenance` |
+| 🛡️ Aegis The Keeper | GPT-6 Luna Max | Hidden user-explicit scoped task executor via `/maintain`; any repository; never a Kael child | IN VALIDATION; replaces legacy agent ID `maintenance` |
 
 ## Defect routing and diagnostic budget — Phase 6 shipped
 
@@ -73,7 +73,7 @@ Existing `/maintain` enters the explicit Olympus Maintenance plane only; it does
 | 6 — Argus The Bug Hunter | **SHIPPED** | Optional functional diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. No implementation or direct discovery. |
 | 7 — Talos The Sentinel | **SHIPPED** | Bounded security defect and trust-boundary diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. |
 | 8 — Helios The Optimizer | **SHIPPED** | Explicit-only feasibility/proposal, mandatory user approval, before/after validation; user-executed live cases A and B passed. |
-| 9 — Aegis evolution | **IN VALIDATION** | Replace the hidden Maintenance agent identity with Aegis on Luna Max while preserving Olympus-only `/maintain`, explicit-user-only entry, Kael's denial boundary, and result reconciliation; executor, not strategist. |
+| 9 — Aegis evolution | **IN VALIDATION** | Replace the hidden Maintenance agent identity with Aegis on Luna Max; qualify current explicit `/maintain` authorization, task-scoped access in any repository, Kael's denial boundary, and result reconciliation; executor, not strategist. |
 | 10 — Command UX | **EXPLORATION** | Validate a small useful repertoire: candidate `/power`, `/plan`, `/fast`, `/performance`; avoid command sprawl. |
 | 11 — Integrated Routing Qualification | **PLANNED** | Fixtures: simple edit, complex feature, functional bug, security bug, operational/build issue, difficult/flaky diagnosis, third-party bug, optimization request, explicit planning, power mode, maintenance boundary. |
 | 12 — Release | **PLANNED** | Only after integrated qualification. |

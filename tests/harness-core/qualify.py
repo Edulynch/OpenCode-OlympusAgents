@@ -79,9 +79,9 @@ def main() -> int:
     maintenance_policy = (ROOT / "olympus" / "policies" / "maintenance-plane.md").read_text(encoding="utf-8").strip()
     check(
         "MAINTENANCE_SCOPE_CORE_CONTRACT",
-        "Cheap scope gate — before any other work" in maintenance_policy
-        and "what target is being changed and who owns it" in maintenance_policy
-        and "genuinely new, material evidence" in maintenance_policy
+        "The only admission rule is trusted authorization for this current Aegis run" in maintenance_policy
+        and "AUTH_CHECK → SCOPE_DECISION → WORK" in maintenance_policy
+        and "Target ownership remains relevant only to this normal-plane write" in maintenance_policy
         and "global Nox policy" in maintenance_policy,
     )
 
@@ -152,9 +152,10 @@ def main() -> int:
     )
     check("OPENCODE_AEGIS_AND_COMMAND_DERIVE_CORE_POLICY", maintenance_policy in aegis_prompt and maintenance_policy in maintain_command)
     check(
-        "OPENCODE_KAEL_DERIVES_CORE_TARGET_BOUNDARY",
-        "Classify the plane primarily by **what target is being changed and who owns it**" in kael_prompt
-        and "do not edit it from the project task" in kael_prompt,
+        "OPENCODE_KAEL_DERIVES_NORMAL_PLANE_OWNERSHIP_PROTECTION",
+        re.search(r"This ownership rule protects the\s+normal Kael workflow", kael_prompt) is not None
+        and re.search(r"not an Aegis\s+admission criterion", kael_prompt) is not None
+        and "global Nox policy" in kael_prompt,
     )
 
     for role, intent in models["roles"].items():

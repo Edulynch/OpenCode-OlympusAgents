@@ -9,16 +9,13 @@ function Check([string]$id, [bool]$ok) {
     Write-Output "$id PASS"
 }
 
-# Policy model: distinguishes normal project Git from Olympus administration.
+# Policy model: explicit current /maintain admission is repository-independent;
+# ordinary requests remain in Kael's normal plane.
 function Route([string]$purpose, [string]$operation, [bool]$explicitMaintain = $false,
                [bool]$explicitOlympusEscape = $false, [bool]$highImpact = $false,
                [bool]$authorized = $false) {
-    $olympus = $purpose -eq 'olympus' -or $explicitOlympusEscape
-    if ($olympus -and $explicitMaintain) {
+    if ($explicitMaintain) {
         return [pscustomobject]@{ plane='AEGIS'; action='ADMIT'; confirmation=$false }
-    }
-    if ($purpose -eq 'user-project' -and $explicitMaintain) {
-        return [pscustomobject]@{ plane='OUT_OF_SCOPE'; action='NO_CHANGE'; confirmation=$false }
     }
     if ($purpose -eq 'user-project') {
         $confirmation = $highImpact -and -not $authorized
@@ -62,12 +59,13 @@ try {
 
     Check 'POLICY_ORDINARY_GIT_NORMAL' ($kael -match 'Ordinary Git work in a trusted user project belongs to the normal plane' -and
         $kovan -match 'Kovan is the normal-plane Git writer for an explicitly requested operation' -and
-        $aegis -match 'Ordinary user-project work, including status/diff, stage, commit, push' -and
-        $readme -match 'project releases.*belongs to the normal Kael plane')
-    Check 'POLICY_AEGIS_OLYMPUS_ONLY' ($kael -match 'Reserve `/maintain` / Aegis for work explicitly about Olympus itself' -and
-        $aegis -match 'Admit a task only when it explicitly concerns developing Olympus itself' -and
-        $command -match '(?s)Ordinary user-project work.*OUT_OF_SCOPE' -and
-        $docs -match 'Aegis is admitted only for Olympus development')
+        $readme -match 'Normal path.*Kael' -and
+        $docs -match 'Ordinary Git requests normally use Kael/Kovan')
+    Check 'POLICY_AEGIS_EXPLICIT_AUTH_REPOSITORY_INDEPENDENT' ($aegis -match 'There is no repository-ownership admission gate' -and
+        $aegis -match 'The only entry path is the user.s current explicit `/maintain` invocation' -and
+        $aegis -match 'Only the user can enter through an actual current `/maintain` invocation' -and
+        $command -match 'Trusted command context: the user explicitly invoked `/maintain`' -and
+        $docs -match 'repository, target ownership, file type, and operation do not affect admission')
     Check 'POLICY_GIT_IMPACT_NOT_PLANE' ($kael -match '(?s)Destructive or high-impact Git\s+operations require explicit, proportionate user authorization, but still do not\s+require Aegis solely because they are Git' -and
         $kovan -match '(?s)History rewrites, force-pushes.*operations require explicit user authority.*proportionate preflight')
     Check 'POLICY_GIT_ONLY_OWNERSHIP' ($kael -match 'TASK_TYPE: GIT_ONLY or\s+MIXED' -and
@@ -99,6 +97,8 @@ try {
     $normalRefs = Route 'user-project' 'branch-tag-release'
     $olympus = Route 'olympus' 'framework-maintenance' $true
     $escape = Route 'framework-gap' 'escape-hatch' $true $true
+    $projectMaintainEdit = Route 'user-project' 'edit-src-foo' $true
+    $projectMaintainGit = Route 'user-project' 'commit-push' $true
     $highImpact = Route 'user-project' 'force-push' $false $false $true $false
     $highImpactAuthorized = Route 'user-project' 'force-push' $false $false $true $true
     $ordinaryMaintain = Route 'user-project' 'commit' $true
@@ -110,10 +110,12 @@ try {
     Check 'ROUTE_NORMAL_BRANCH_TAG_RELEASE' ($normalRefs.plane -eq 'NORMAL' -and $normalRefs.action -eq 'ALLOW')
     Check 'ROUTE_OLYMPUS_MAINTENANCE_AEGIS' ($olympus.plane -eq 'AEGIS' -and $olympus.action -eq 'ADMIT')
     Check 'ROUTE_EXPLICIT_OLYMPUS_ESCAPE_AEGIS' ($escape.plane -eq 'AEGIS' -and $escape.action -eq 'ADMIT')
+    Check 'ROUTE_EXPLICIT_USER_PROJECT_EDIT_AEGIS' ($projectMaintainEdit.plane -eq 'AEGIS' -and $projectMaintainEdit.action -eq 'ADMIT')
+    Check 'ROUTE_EXPLICIT_USER_PROJECT_GIT_AEGIS' ($projectMaintainGit.plane -eq 'AEGIS' -and $projectMaintainGit.action -eq 'ADMIT')
     Check 'ROUTE_HIGH_IMPACT_AUTH_NOT_AEGIS' ($highImpact.plane -eq 'NORMAL' -and
         $highImpact.action -eq 'NEEDS_EXPLICIT_AUTHORIZATION' -and $highImpact.confirmation)
     Check 'ROUTE_HIGH_IMPACT_EXPLICIT_STAYS_NORMAL' ($highImpactAuthorized.plane -eq 'NORMAL' -and $highImpactAuthorized.action -eq 'ALLOW')
-    Check 'ROUTE_ORDINARY_PROJECT_MAINTAIN_OUT_OF_SCOPE' ($ordinaryMaintain.plane -eq 'OUT_OF_SCOPE' -and $ordinaryMaintain.action -eq 'NO_CHANGE')
+    Check 'ROUTE_NORMAL_PROJECT_WITHOUT_MAINTAIN_STAYS_NORMAL' ($normalRead.plane -eq 'NORMAL' -and $normalRead.action -eq 'ALLOW')
 
     Check 'SCOPE_GIT_ONLY_AND_MIXED_TASK_CONTRACTS' ( (Git-Contract 'GIT_ONLY' 'NOT_APPLICABLE' 'repo:trusted; operation:commit; paths:owned') -and
         (Git-Contract 'MIXED' 'src/task-owned' 'repo:trusted; operation:stage-commit; paths:src/task-owned') -and

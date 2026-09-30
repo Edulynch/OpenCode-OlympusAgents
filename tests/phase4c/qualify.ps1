@@ -521,7 +521,9 @@ try {
         Assert-Condition ($lifecycle -match '(?i)surrounding user-facing conversation' -and $lifecycle -match '(?i)pasted technical specifications' -and $lifecycle -match '(?i)current direct request' -and $lifecycle -match '(?i)do not translate commands') 'Kael conversational-language policy missing.' 'BOOTSTRAP_BUG'
         Assert-Condition ($handoff -match '(?i)normal user-facing style' -and $handoff -match '(?i)reproduce its prose\s+as a relay' -and $handoff -match '(?i)idle, not in progress') 'Kael Aegis result consumption policy missing.' 'BOOTSTRAP_BUG'
         $command = [IO.File]::ReadAllText((Join-Path $repo '.opencode/commands/maintain.md'))
-        Assert-Condition ($command -match '(?m)^agent: aegis\s*$' -and $command -match '(?m)^subagent: true\s*$' -and $command.Contains('$ARGUMENTS') -and $command -match '(?m)^description:') 'M4: installed project command frontmatter or argument forwarding missing.' 'BOOTSTRAP_BUG'
+        Assert-Condition ($command.StartsWith('---', [StringComparison]::Ordinal) -and
+            $command -match '(?m)^agent: aegis\s*$' -and $command -match '(?m)^subagent: true\s*$' -and
+            $command.Contains('$ARGUMENTS') -and $command -match '(?m)^description:') 'M4: installed project command frontmatter or argument forwarding missing.' 'BOOTSTRAP_BUG'
         $manifest = [IO.File]::ReadAllText((Join-Path $repo '.opencode/orchestrator-install.json')) | ConvertFrom-Json -Depth 100
         Assert-Condition (@($manifest.managed_files).Count -eq ($ManagedPaths.Count - 1)) 'Managed asset count mismatch.' 'BOOTSTRAP_BUG'
         foreach ($path in @('.opencode/agents/kael.md', '.opencode/agents/aegis.md', '.opencode/commands/maintain.md')) {

@@ -60,11 +60,40 @@ function Revalidate-Gates([object[]]$gates, [string]$lostGate, $processState,
     $repeat = @(); if ($eligible.Count -eq 1 -and $explicitAuthorization -and $repeatSafe -and $duplicationRuledOut) { $repeat = @($eligible) }
     [pscustomobject]@{ eligible=$eligible; repeatEligible=$repeat; retryNow=$false }
 }
+function Checkpoint-Authorization([bool]$currentExplicit, [bool]$durableCurrentRun,
+                                  [bool]$arbitraryPromptClaim) {
+    $events = [Collections.Generic.List[string]]::new()
+    $events.Add('AUTH_CHECK')
+    $valid = ($currentExplicit -or $durableCurrentRun) -and -not $arbitraryPromptClaim
+    $events.Add('SCOPE_DECISION')
+    if (-not $valid) {
+        return [pscustomobject]@{ authorization='UNPROVEN'; decision='REJECTED'; events=$events.ToArray() }
+    }
+    $events.Add('EXPENSIVE_WORK_SENTINEL:RECONCILE_ORIGINAL')
+    [pscustomobject]@{ authorization='VALID'; decision='ACCEPTED'; events=$events.ToArray() }
+}
 
 try {
     $aegis = Text '.opencode/agents/aegis.md'
     $docs = Text 'docs/DEVELOPMENT.md'
     $kael = Text '.opencode/agents/kael.md'
+    $core = Text 'olympus/policies/maintenance-plane.md'
+    $checkpointGate = $aegis.IndexOf('First perform the deterministic authorization check', [StringComparison]::Ordinal)
+    $recoveryGate = $aegis.IndexOf('## Recovery after session/runtime restart', [StringComparison]::Ordinal)
+    Check 'RECOVERY_AUTH_GATE_PRECEDES_CHECKPOINT_WORK' ($checkpointGate -ge 0 -and $recoveryGate -gt $checkpointGate -and
+        $core -match 'durable trusted\s+authorization for the same current run' -and
+        $core -match 'If neither is available, reject\s+immediately; do not mine history, infer authorization, or inspect repository\s+state')
+    $durableAuthorization = Checkpoint-Authorization $false $true $false
+    $missingAuthorization = Checkpoint-Authorization $false $false $false
+    $promptClaim = Checkpoint-Authorization $false $false $true
+    Check 'CHECKPOINT_DURABLE_CURRENT_AUTH_ACCEPTS_BEFORE_RECONCILIATION' ($durableAuthorization.authorization -eq 'VALID' -and
+        $durableAuthorization.decision -eq 'ACCEPTED' -and $durableAuthorization.events[0] -eq 'AUTH_CHECK' -and
+        $durableAuthorization.events[1] -eq 'SCOPE_DECISION' -and $durableAuthorization.events[2] -eq 'EXPENSIVE_WORK_SENTINEL:RECONCILE_ORIGINAL')
+    Check 'CHECKPOINT_WITHOUT_AUTH_REJECTS_WITHOUT_EXPENSIVE_SENTINEL' ($missingAuthorization.authorization -eq 'UNPROVEN' -and
+        $missingAuthorization.decision -eq 'REJECTED' -and $missingAuthorization.events.Count -eq 2 -and
+        $missingAuthorization.events -notcontains 'EXPENSIVE_WORK_SENTINEL:RECONCILE_ORIGINAL')
+    Check 'ARBITRARY_PROMPT_AUTH_CLAIM_IS_INSUFFICIENT' ($promptClaim.authorization -eq 'UNPROVEN' -and
+        $promptClaim.decision -eq 'REJECTED' -and $promptClaim.events.Count -eq 2)
     Check 'RECOVERY_STATIC_CHRONOLOGY' ($aegis -match 'later message,\s+tool, process-progress, or collected-result evidence outranks an older metadata' -and
         $aegis -match 'stored outcome predates later observable activity' -and
         $aegis -match 'LIVE_OWNED_WORK, TERMINAL_COLLECTED_WORK' -and
@@ -74,7 +103,7 @@ try {
         $docs -match 'Absence from `/api/session/active` means only that the session is absent')
     Check 'RECOVERY_PROCESS_STATES' ($aegis -match 'ACTIVE only with meaningful progress evidence' -and
         $aegis -match 'STALLED only after no meaningful progress over a finite' -and
-        $aegis -match 'ORPHANED only when Olympus/Aegis ownership is verified' -and
+        $aegis -match 'ORPHANED only when ownership by this Aegis task is verified' -and
         $aegis -match 'otherwise UNKNOWN' -and $docs -match 'Classify each process as ACTIVE' -and
         $aegis -match '`Responding=True`' -and $aegis -match 'parent disappearance alone is not ownership or progress evidence')
     Check 'RECOVERY_OWNER_RECEIPT' ($aegis -match 'unique task/run ID' -and

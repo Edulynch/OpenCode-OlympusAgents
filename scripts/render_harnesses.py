@@ -141,9 +141,9 @@ def opencode_outputs(root: Path, models: dict, policies: dict, roles: set[str]) 
     adapter = root / "olympus" / "harnesses" / "opencode"
     maintenance_policy_path = root / "olympus" / "policies" / "maintenance-plane.md"
     maintenance_policy = read_text(maintenance_policy_path).strip()
-    maintenance_target_boundary = markdown_section(
+    normal_plane_ownership_protection = markdown_section(
         maintenance_policy,
-        "## Target ownership and project-plane boundary",
+        "## Normal Kael-plane ownership protection",
         maintenance_policy_path,
     )
     metadata_dir = adapter / "agent-metadata"
@@ -175,7 +175,7 @@ def opencode_outputs(root: Path, models: dict, policies: dict, roles: set[str]) 
                 "max_children_word": word,
                 "max_children_title": word.title(),
                 "maintenance_plane_policy": maintenance_policy,
-                "maintenance_target_boundary": maintenance_target_boundary,
+                "normal_plane_ownership_protection": normal_plane_ownership_protection,
             },
             prompt_path,
         )

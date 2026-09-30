@@ -9,42 +9,28 @@ function Check([string]$id, [bool]$ok) {
     Write-Output "$id PASS"
 }
 
-# Synthetic ordering contract: these events are explicit sentinels, not timers
-# and not real Aegis tool invocations.
-function Run-Maintenance([string]$targetOwner, [bool]$explicitMaintain, [string[]]$operations) {
+# Synthetic event model: no elapsed-time assumptions and no real agent/runtime call.
+function Invoke-Maintain([string]$authorization, [string]$caller,
+                        [string[]]$operations = @()) {
     $events = [Collections.Generic.List[string]]::new()
-    $events.Add('CHEAP_SCOPE_GATE')
-    $decision = if ($explicitMaintain -and $targetOwner -eq 'OLYMPUS') { 'ACCEPTED' } else { 'REJECTED' }
-    $counts = [ordered]@{ implementation=0; qualification=0; subagents=0; git=0 }
-    if ($decision -eq 'REJECTED') {
-        return [pscustomobject]@{ decision=$decision; events=$events.ToArray(); counts=$counts }
+    $events.Add('AUTH_CHECK')
+    $valid = ($caller -eq 'USER' -and $authorization -in @('CURRENT_EXPLICIT_MAINTAIN','DURABLE_CURRENT_RUN_AUTH'))
+    $events.Add('SCOPE_DECISION')
+    $decision = if ($valid) { 'ACCEPTED' } else { 'REJECTED' }
+    if (-not $valid) {
+        return [pscustomobject]@{ authorization='UNPROVEN'; decision=$decision; events=$events.ToArray() }
     }
-    foreach ($operation in $operations) {
-        $events.Add("EXPENSIVE_WORK_MARKER:$operation")
-        switch ($operation) {
-            'IMPLEMENTATION' { $counts.implementation++ }
-            'QUALIFICATION' { $counts.qualification++ }
-            'SUBAGENT' { $counts.subagents++ }
-            { $_ -in @('COMMIT','PUSH') } { $counts.git++ }
-        }
-    }
-    [pscustomobject]@{ decision=$decision; events=$events.ToArray(); counts=$counts }
+    $events.Add('TRUSTED_CURRENT_AUTH')
+    foreach ($operation in $operations) { $events.Add("EXPENSIVE_WORK_SENTINEL:$operation") }
+    [pscustomobject]@{ authorization='VALID'; decision=$decision; events=$events.ToArray() }
 }
 
-function Try-LateReclassification($scope, [bool]$newMaterialEvidence, [string]$evidence,
-                                 [string]$newTargetOwner = '') {
-    if ($scope.decision -ne 'ACCEPTED') { return $scope }
-    if (-not $newMaterialEvidence -or [string]::IsNullOrWhiteSpace($evidence) -or $newTargetOwner -ne 'USER_PROJECT') {
-        return [pscustomobject]@{ decision='ACCEPTED'; reclassified=$false; evidence='' }
-    }
-    [pscustomobject]@{ decision='REJECTED'; reclassified=$true; evidence=$evidence }
-}
-
-function Normal-ProjectWrite([string]$target) {
-    if ($target -eq 'olympus/roles/nox.md') {
-        return [pscustomobject]@{ allowed=$false; aegisStarted=$false; state='OLYMPUS_OWNED_TARGET_BLOCKED' }
-    }
-    [pscustomobject]@{ allowed=$true; aegisStarted=$false; state='NORMAL_PROJECT_SCOPE' }
+function Permit-Operation([string[]]$authorizedScope, [string]$operation,
+                          [bool]$specificHighImpactAuthorization) {
+    if ($operation -notin $authorizedScope) { return 'DENIED_SCOPE_BROADENING' }
+    if ($operation -in @('COMMIT','PUSH','FORCE_PUSH','RESET','DELETE_REF','PUBLISH') -and
+        -not $specificHighImpactAuthorization) { return 'BLOCKED_HIGH_IMPACT' }
+    'ALLOWED'
 }
 
 try {
@@ -55,95 +41,114 @@ try {
     $aegisSource = Text 'olympus/harnesses/opencode/agent-prompts/aegis.md'
     $commandSource = Text 'olympus/harnesses/opencode/maintain.md'
     $kaelSource = Text 'olympus/harnesses/opencode/agent-prompts/kael.md'
-    # Renderer output is canonical UTF-8/LF; normalize Git's Windows checkout
-    # line endings before comparing embedded policy text.
     $canonicalPolicy = ($core -replace '\r\n?', "`n").Trim()
     $canonicalAegis = $aegis -replace '\r\n?', "`n"
     $canonicalCommand = $command -replace '\r\n?', "`n"
+    $canonicalCommandSource = $commandSource -replace '\r\n?', "`n"
 
-    Check 'CORE_POLICY_HAS_EARLY_GATE_AND_OWNER_CLASSIFICATION' (
-        $core -match 'Cheap scope gate — before any other work' -and
-        $core -match 'primarily by \*\*what target is being changed and who owns it\*\*' -and
-        $core -match 'AEGIS_SCOPE: ACCEPTED.*?AEGIS_SCOPE: REJECTED' -and
-        $core -match 'Do not perform broad repository exploration or expensive searches')
-    Check 'CORE_POLICY_ACCEPTED_SCOPE_STICKY_WITH_NEW_EVIDENCE_EXCEPTION' (
-        $core -match 'After scope is accepted, retain that execution.s Olympus-scope ownership' -and
-        $core -match 'genuinely new, material evidence' -and
-        $core -match 'identify the exact new evidence')
-    Check 'CORE_POLICY_OPERATION_DOES_NOT_SET_PLANE' (
-        $core -match 'Implementation, tests, qualification, documentation, commit, push' -and
-        $core -match 'Ordinary user-project work, including status/diff, stage, commit, push' -and
-        $core -match 'does not elevate a user-project target')
-    Check 'CORE_POLICY_NORMAL_PROJECT_CANNOT_EDIT_GLOBAL_NOX' (
-        $core -match 'normal project workflow must not modify an Olympus-owned target' -and
-        $core -match 'change Olympus.s global Nox policy' -and
-        $core -match 'do not edit it from the project task' -and
-        $core -match 'automatically invoke Aegis' -and
-        $core -match 'Do not provide a ready-made `/maintain` reroute')
-    Check 'OPENCODE_AEGIS_AND_MAINTAIN_DERIVE_CANONICAL_POLICY' (
+    Check 'CORE_AUTHORIZATION_IS_ONLY_ADMISSION_GATE' (
+        $core -match 'The only admission rule is trusted authorization for this current Aegis run' -and
+        $core -match 'Neither repository, target owner, path, branch, task wording, nor operation can\s+establish or defeat admission' -and
+        $core -notmatch 'Aegis rejects.*user project|user-project.*OUT_OF_SCOPE.*Aegis')
+    Check 'CORE_AUTH_CHECK_ORDER_AND_FAST_REJECTION' (
+        $core.IndexOf('AUTH_CHECK → SCOPE_DECISION → WORK', [StringComparison]::Ordinal) -ge 0 -and
+        $core -match 'Unproven authorization means REJECTED immediately' -and
+        $aegis -match 'If neither current nor durable authorization is provable' -and
+        $aegis -match 'report `MAINTENANCE_AUTH: UNPROVEN` and `AEGIS_SCOPE: REJECTED`' -and
+        $aegis -match 'report `MAINTENANCE_AUTH: VALID` and `AEGIS_SCOPE: ACCEPTED`' -and
+        $core -match 'Do not read the repository, search, inspect\s+paths, qualify, implement, run Git, or reconstruct historical checkpoints')
+    Check 'CORE_TASK_SCOPE_AND_HIGH_IMPACT_RETAINED' (
+        $core -match 'A task X never\s+authorizes unrelated Y' -and
+        $core -match 'Commit, push, release, destructive changes, and other\s+high-impact effects require authorization specific and proportionate' -and
+        $core -match 'Missing output is not failure or retry\s+permission')
+    Check 'CORE_NORMAL_KAEL_OWNERSHIP_IS_SEPARATE' (
+        $core -match 'This ownership rule protects the\s+normal Kael workflow; it is not an Aegis\s+admission criterion' -and
+        $core -match 'Kael must not silently widen normal task scope,\s+invoke Aegis, or automatically recommend `/maintain`')
+    Check 'OPENCODE_AEGIS_AND_COMMAND_DERIVE_CORE_POLICY' (
         $aegisSource.Contains('{{maintenance_plane_policy}}') -and
         $commandSource.Contains('{{maintenance_plane_policy}}') -and
         $canonicalAegis.Contains($canonicalPolicy) -and $canonicalCommand.Contains($canonicalPolicy))
-    Check 'OPENCODE_KAEL_DERIVES_TARGET_BOUNDARY_FROM_CORE' (
-        $kaelSource.Contains('{{maintenance_target_boundary}}') -and
-        $kael -match 'Classify the plane primarily by \*\*what target is being changed and who owns it\*\*' -and
-        $kael -match 'do not edit it from the project task' -and $kael -match 'automatically invoke Aegis')
+    Check 'COMMAND_HAS_TRUSTED_CONTEXT_OUTSIDE_TASK_ARGUMENTS' (
+        $canonicalCommandSource.StartsWith("---`n", [StringComparison]::Ordinal) -and
+        $canonicalCommandSource.IndexOf('Trusted command context: the user explicitly invoked `/maintain` for this current run.', [StringComparison]::Ordinal) -lt
+            $canonicalCommandSource.IndexOf('$ARGUMENTS', [StringComparison]::Ordinal) -and
+        $canonicalCommandSource -match '(?m)^agent: aegis\s*$' -and $canonicalCommandSource -match '(?m)^subagent: true\s*$' -and
+        $canonicalCommand.StartsWith("---`n", [StringComparison]::Ordinal) -and
+        $command -match '(?m)^agent: aegis\s*$' -and $command -match '(?m)^subagent: true\s*$')
 
-    $gateIndex = $aegis.IndexOf('## Cheap scope gate — before any other work', [StringComparison]::Ordinal)
-    $fastPathIndex = $aegis.IndexOf('## Olympus administrative fast path', [StringComparison]::Ordinal)
-    $adminCheckIndex = $aegis.IndexOf('After the Olympus-only scope check', [StringComparison]::Ordinal)
-    Check 'EXPENSIVE_WORK_SENTINEL_POLICY_ORDER' ($gateIndex -ge 0 -and $fastPathIndex -gt $gateIndex -and $adminCheckIndex -gt $gateIndex)
-    Check 'MAINTAIN_COMMAND_SCOPE_GATE_BEFORE_CONTINUATION' (
-        $command.IndexOf('## Cheap scope gate — before any other work', [StringComparison]::Ordinal) -ge 0 -and
-        $command.IndexOf('AEGIS_SCOPE: ACCEPTED', [StringComparison]::Ordinal) -lt $command.IndexOf('Perform exactly the maintenance task described above.', [StringComparison]::Ordinal))
+    $authIndex = $aegis.IndexOf('First perform the deterministic authorization check', [StringComparison]::Ordinal)
+    $scopeIndex = $aegis.IndexOf('AEGIS_SCOPE: ACCEPTED', [StringComparison]::Ordinal)
+    $workIndex = $aegis.IndexOf('## Git-administration fast path', [StringComparison]::Ordinal)
+    Check 'OPENCODE_AUTH_SCOPE_WORK_ORDER' ($authIndex -ge 0 -and $scopeIndex -gt $authIndex -and $workIndex -gt $scopeIndex)
+    Check 'KAEL_NORMAL_PROTECTION_DERIVES_FROM_CORE' (
+        $kaelSource.Contains('{{normal_plane_ownership_protection}}') -and
+        $kael -match 'This ownership rule protects the\s+normal Kael workflow' -and
+        $kael -match 'not an Aegis\s+admission criterion' -and
+        $kael -match 'Kael must not silently widen normal task scope')
 
-    # CASE A — clear ordinary project implementation: gate first, then stop.
-    $a = Run-Maintenance 'USER_PROJECT' $true @('IMPLEMENTATION','QUALIFICATION','SUBAGENT')
-    Check 'CASE_A_REJECTS_BEFORE_EXPENSIVE_WORK' ($a.decision -eq 'REJECTED' -and
-        $a.events.Count -eq 1 -and $a.events[0] -eq 'CHEAP_SCOPE_GATE' -and
-        $a.counts.implementation -eq 0 -and $a.counts.qualification -eq 0 -and $a.counts.subagents -eq 0)
+    # A/B — current explicit invocation accepts in Olympus and user repositories.
+    $olympus = Invoke-Maintain 'CURRENT_EXPLICIT_MAINTAIN' 'USER' @('EDIT_OLYMPUS_POLICY')
+    $userProject = Invoke-Maintain 'CURRENT_EXPLICIT_MAINTAIN' 'USER' @('EDIT_USER_FILE')
+    Check 'CASE_A_EXPLICIT_MAINTAIN_OLYMPUS_ACCEPTS' ($olympus.authorization -eq 'VALID' -and
+        $olympus.decision -eq 'ACCEPTED' -and $olympus.events[0] -eq 'AUTH_CHECK' -and
+        $olympus.events[1] -eq 'SCOPE_DECISION')
+    Check 'CASE_B_EXPLICIT_MAINTAIN_USER_PROJECT_ACCEPTS' ($userProject.authorization -eq 'VALID' -and
+        $userProject.decision -eq 'ACCEPTED' -and $userProject.events[-1] -eq 'EXPENSIVE_WORK_SENTINEL:EDIT_USER_FILE')
 
-    # CASE B — an Olympus-owned policy target is accepted and work may proceed.
-    $b = Run-Maintenance 'OLYMPUS' $true @('TARGETED_FRAMEWORK_INSPECTION')
-    Check 'CASE_B_ACCEPTS_OLYMPUS_TARGET_AND_CONTINUES' ($b.decision -eq 'ACCEPTED' -and
-        $b.events.Count -eq 2 -and $b.events[0] -eq 'CHEAP_SCOPE_GATE' -and
-        $b.events[1] -eq 'EXPENSIVE_WORK_MARKER:TARGETED_FRAMEWORK_INSPECTION')
+    # C/D — ordinary project edits and explicitly scoped Git operations are admitted.
+    $ordinaryEdit = Invoke-Maintain 'CURRENT_EXPLICIT_MAINTAIN' 'USER' @('EDIT_SRC_FOO_TS')
+    $gitTask = Invoke-Maintain 'CURRENT_EXPLICIT_MAINTAIN' 'USER' @('COMMIT','PUSH')
+    Check 'CASE_C_EXPLICIT_ORDINARY_PROJECT_EDIT_ACCEPTS' ($ordinaryEdit.decision -eq 'ACCEPTED' -and
+        $ordinaryEdit.events[-1] -eq 'EXPENSIVE_WORK_SENTINEL:EDIT_SRC_FOO_TS')
+    Check 'CASE_D_EXPLICIT_GIT_SCOPE_ACCEPTS' ($gitTask.decision -eq 'ACCEPTED' -and
+        $gitTask.events[-1] -eq 'EXPENSIVE_WORK_SENTINEL:PUSH')
 
-    # CASE C — operation mix cannot reclassify an authorized Olympus target.
-    $c = Run-Maintenance 'OLYMPUS' $true @('IMPLEMENTATION','TESTS','QUALIFICATION','COMMIT','PUSH')
-    Check 'CASE_C_OLYMPUS_OPERATIONS_STAY_ACCEPTED' ($c.decision -eq 'ACCEPTED' -and
-        $c.events[0] -eq 'CHEAP_SCOPE_GATE' -and $c.events.Count -eq 6 -and
-        $c.counts.implementation -eq 1 -and $c.counts.qualification -eq 1 -and $c.counts.git -eq 2)
-
-    # CASE D — no new facts means no late rejection.
-    $d = Try-LateReclassification $c $false ''
-    Check 'CASE_D_NO_LATE_REJECTION_WITHOUT_NEW_EVIDENCE' ($d.decision -eq 'ACCEPTED' -and -not $d.reclassified)
-
-    # CASE E — only specific, newly learned ownership evidence permits reclassification.
-    $evidence = 'New target resolution: workspace/coffee-shop/src/foo.ts is the actual user-owned edit target; it is not an Olympus source or Olympus-owned generated resource.'
-    $e = Try-LateReclassification $c $true $evidence 'USER_PROJECT'
-    Check 'CASE_E_MATERIAL_NEW_EVIDENCE_ALLOWS_RECLASSIFICATION' ($e.decision -eq 'REJECTED' -and
-        $e.reclassified -and $e.evidence -ceq $evidence)
-    $eUnproven = Try-LateReclassification $c $true 'New qualification request discovered; target unchanged.' 'OLYMPUS'
-    Check 'CASE_E_REQUIRES_EVIDENCE_OF_USER_PROJECT_OWNERSHIP' ($eUnproven.decision -eq 'ACCEPTED' -and -not $eUnproven.reclassified)
-
-    # CASE F — a normal project cannot turn a request for global Nox into a project write.
-    $f = Normal-ProjectWrite 'olympus/roles/nox.md'
-    Check 'CASE_F_NORMAL_PROJECT_CANNOT_MODIFY_OLYMPUS_NOX' (-not $f.allowed -and
-        -not $f.aegisStarted -and $f.state -eq 'OLYMPUS_OWNED_TARGET_BLOCKED')
-
-    # Deterministic ordering sentinel for every admitted path: scope gate precedes
-    # its first expensive marker; no elapsed-time assertion is used.
-    foreach ($accepted in @($b,$c)) {
-        $firstMarker = [Array]::FindIndex([string[]]$accepted.events, [Predicate[string]]{ param($event) $event.StartsWith('EXPENSIVE_WORK_MARKER:', [StringComparison]::Ordinal) })
-        Check 'EXPENSIVE_WORK_SENTINEL_GATE_PRECEDES_FIRST_MARKER' ($accepted.decision -eq 'ACCEPTED' -and
-            $accepted.events[0] -eq 'CHEAP_SCOPE_GATE' -and $firstMarker -gt 0)
+    # E/H/K — absence of current/durable authorization, self-activation and arbitrary claims stop early.
+    foreach ($case in @(
+        [pscustomobject]@{ id='NO_MAINTAIN'; authorization='NONE'; caller='USER' },
+        [pscustomobject]@{ id='AEGIS_SELF_ACTIVATION'; authorization='CURRENT_EXPLICIT_MAINTAIN'; caller='AEGIS_SELF' },
+        [pscustomobject]@{ id='PROMPT_CLAIM'; authorization='PROMPT_CLAIM'; caller='USER' }
+    )) {
+        $rejected = Invoke-Maintain $case.authorization $case.caller @('SENTINEL')
+        Check "CASE_$($case.id)_REJECTS_BEFORE_WORK" ($rejected.authorization -eq 'UNPROVEN' -and
+            $rejected.decision -eq 'REJECTED' -and $rejected.events.Count -eq 2 -and
+            $rejected.events[0] -eq 'AUTH_CHECK' -and $rejected.events[1] -eq 'SCOPE_DECISION')
     }
 
-    Write-Output 'MAINTENANCE SCOPE QUALIFICATION: PASS (static Core/adapter contracts + deterministic synthetic ordering; no agent/runtime execution)'
+    # F/G — Kael and child agents are never authorized Aegis entry paths.
+    foreach ($caller in @('KAEL','CHILD')) {
+        $denied = Invoke-Maintain 'CURRENT_EXPLICIT_MAINTAIN' $caller @('SENTINEL')
+        Check "CASE_${caller}_AEGIS_INVOCATION_DENIED" ($denied.decision -eq 'REJECTED' -and $denied.events.Count -eq 2)
+    }
+
+    # I/J — current-run durable auth accepts immediately; absent durable auth rejects without work.
+    $checkpoint = Invoke-Maintain 'DURABLE_CURRENT_RUN_AUTH' 'USER' @('RESUME_SAME_TASK')
+    $noCheckpointAuth = Invoke-Maintain 'NONE' 'USER' @('HISTORICAL_RECONSTRUCTION_SENTINEL')
+    Check 'CASE_I_DURABLE_CURRENT_RUN_AUTH_ACCEPTS' ($checkpoint.authorization -eq 'VALID' -and
+        $checkpoint.decision -eq 'ACCEPTED' -and $checkpoint.events[0] -eq 'AUTH_CHECK' -and
+        $checkpoint.events[1] -eq 'SCOPE_DECISION')
+    Check 'CASE_J_CHECKPOINT_WITHOUT_AUTH_REJECTS_IMMEDIATELY' ($noCheckpointAuth.decision -eq 'REJECTED' -and
+        $noCheckpointAuth.events.Count -eq 2 -and $noCheckpointAuth.events -notcontains 'EXPENSIVE_WORK_SENTINEL:HISTORICAL_RECONSTRUCTION_SENTINEL')
+
+    # L/M — explicit admission never broadens task scope or grants destructive effects.
+    Check 'CASE_L_UNRELATED_SCOPE_BROADENING_BLOCKED' (
+        (Permit-Operation @('EDIT_SRC_FOO_TS','RUN_FOO_TEST') 'CHANGE_GLOBAL_SETTINGS' $false) -eq 'DENIED_SCOPE_BROADENING')
+    Check 'CASE_M_UNAUTHORIZED_HIGH_IMPACT_OPERATION_BLOCKED' (
+        (Permit-Operation @('EDIT_SRC_FOO_TS') 'PUSH' $false) -eq 'DENIED_SCOPE_BROADENING' -and
+        (Permit-Operation @('PUSH') 'PUSH' $false) -eq 'BLOCKED_HIGH_IMPACT' -and
+        (Permit-Operation @('PUSH') 'PUSH' $true) -eq 'ALLOWED')
+
+    # O — accepted and rejected flows both place work strictly after authorization and scope.
+    foreach ($accepted in @($olympus,$userProject,$ordinaryEdit,$gitTask,$checkpoint)) {
+        $work = [Array]::FindIndex([string[]]$accepted.events, [Predicate[string]]{ param($event) $event.StartsWith('EXPENSIVE_WORK_SENTINEL:', [StringComparison]::Ordinal) })
+        Check 'EXPENSIVE_WORK_SENTINEL_AFTER_AUTH_AND_SCOPE' ($accepted.events[0] -eq 'AUTH_CHECK' -and
+            $accepted.events[1] -eq 'SCOPE_DECISION' -and $work -gt 1)
+    }
+
+    Write-Output 'MAINTENANCE AUTHORIZATION / SCOPE QUALIFICATION: PASS (Core/adapter static contracts + deterministic synthetic cases; no live runtime claim)'
     exit 0
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
-    Write-Output 'MAINTENANCE SCOPE QUALIFICATION: FAIL'
+    Write-Output 'MAINTENANCE AUTHORIZATION / SCOPE QUALIFICATION: FAIL'
     exit 1
 }

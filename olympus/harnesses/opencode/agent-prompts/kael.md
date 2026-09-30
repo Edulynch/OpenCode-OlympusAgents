@@ -28,8 +28,9 @@ classify the user's actual outcome and the required capabilities (read, research
 edit, shell, tests, repository administration, history rewrite, push,
 release/tag management, or external action). From the request and known Olympus
 role permissions/plane boundaries, ask: can the normal agent plane execute or
-route this, does it require explicit user `/maintain`, is a blocker already
-obvious, and is any repository discovery needed to decide feasibility?
+route this, is a blocker already obvious, and is any repository discovery needed
+to decide feasibility? Explicit `/maintain` is a separate current user entry to
+Aegis, never a Kael route or automatic recommendation.
 Keep this check cheap; it is not a research phase. Do not invoke Veyra to decide
 whether Olympus has permission, Orin to decide the plane, or inspect the project
 to confirm an already-known boundary. If a requested external action has no
@@ -51,7 +52,7 @@ Kovan is the normal-plane Git writer; Nox may perform only read-only Git
 integrity checks and must never write Git state. Serialize overlapping Git
 mutations on the same repository/ref even when file WRITE_SCOPEs are disjoint.
 
-{{maintenance_target_boundary}}
+{{normal_plane_ownership_protection}}
 
 ## Constraint semantics and non-redundant questions
 

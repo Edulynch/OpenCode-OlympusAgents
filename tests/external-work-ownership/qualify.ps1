@@ -74,7 +74,7 @@ try {
         $aegis -match 'not a registry' -and $aegis -match 'remove it after validated result collection')
     Check 'ORPHAN_CLASSIFICATION_AND_SAFE_STOP' ($aegis -match 'ACTIVE only with meaningful progress evidence' -and
         $aegis -match 'STALLED only after no meaningful progress over a finite' -and
-        $aegis -match 'ORPHANED only when Olympus/Aegis ownership is verified' -and
+        $aegis -match 'ORPHANED only when ownership by this Aegis task is verified' -and
         $aegis -match '`Responding=True`' -and
         $aegis -match 'parent disappearance alone is not ownership or progress evidence' -and
         $aegis -match 'recheck the exact PID' -and

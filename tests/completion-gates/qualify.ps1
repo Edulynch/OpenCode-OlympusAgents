@@ -45,7 +45,8 @@ try {
         $docs -match 'No native family-wide wait|no documented family-wide wait' -and $docs -match 'session/active' -and
         $docs -match 'CLI `opencode run` exit or a root assistant response is not a session-family completion signal')
     Check 'ROUTING_BOUNDARY' ($command -match 'subagent: true' -and $command -match 'Do not delegate' -and
-        $aegis -match 'Do not invoke normal Olympus workers' -and $aegis -match 'only in response to the user.s explicit')
+        $aegis -match 'Do not invoke normal Olympus workers' -and
+        $aegis -match 'The only entry path is the user.s current explicit `/maintain` invocation')
     $good = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='succeeded'; validated=$true}
     $bad = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='failed'; validated=$false}
     $missing = [pscustomobject]@{known=$false; terminal=$false; collected=$false; familyKnown=$false; inboxEmpty=$false; parentConsumed=$false; outcome=''; validated=$false}

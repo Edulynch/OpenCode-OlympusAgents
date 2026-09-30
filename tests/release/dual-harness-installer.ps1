@@ -132,11 +132,15 @@ try {
     # G/I: subset verification ignores the other installed harness, including its drift.
     $subset = New-Target 'subset-verify'
     $subsetInstall = Install $subset 'all'
+    $subsetCleanCodexVerify = Verify $subset 'codex'
+    $subsetCleanOpenVerify = Verify $subset 'opencode'
+    Check 'G_SUBSET_VERIFY_ALL_CLEAN_PASS' ($subsetInstall.Code -eq 0 -and
+        $subsetCleanCodexVerify.Code -eq 0 -and $subsetCleanOpenVerify.Code -eq 0)
     $subsetCodexPath = Join-Path $subset '.codex/config.toml'
     [IO.File]::AppendAllText($subsetCodexPath, "`n# drift`n", $utf8)
     $subsetCodexVerify = Verify $subset 'codex'
     $subsetOpenVerify = Verify $subset 'opencode'
-    Check 'G_SUBSET_VERIFY' ($subsetInstall.Code -eq 0 -and $subsetCodexVerify.Code -ne 0 -and
+    Check 'G_SUBSET_VERIFY_ISOLATES_DRIFT' ($subsetCodexVerify.Code -ne 0 -and
         $subsetCodexVerify.Text -match 'OLYMPUS_VERIFY: .* FAIL' -and $subsetOpenVerify.Code -eq 0)
     $subsetOpPath = Join-Path $subset '.opencode/agents/kael.md'
     [IO.File]::AppendAllText($subsetOpPath, "`n# drift`n", $utf8)

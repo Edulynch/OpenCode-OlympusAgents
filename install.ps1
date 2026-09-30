@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$')]
-    [string]$Version = 'v0.3.0-beta.4',
+    [string]$Version = 'v0.3.0-beta.5',
     [string]$Target = (Get-Location).Path,
     [ValidateSet('opencode', 'codex', 'all')]
     [string]$Harness = 'opencode',
@@ -15,7 +15,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$ReleaseVersion = 'v0.3.0-beta.4' # Must equal this installer's default and published tag.
+$ReleaseVersion = 'v0.3.0-beta.5' # Must equal this installer's default and published tag.
 $owned = $null
 
 function Get-DeclaredReleaseVersion([string]$Source) {

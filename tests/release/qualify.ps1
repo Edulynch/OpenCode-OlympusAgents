@@ -174,7 +174,7 @@ try {
     $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1',$script:CandidateVersion,'v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
     if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
         Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
-        Check 'R0_EXPECTED_VERSION_BETA4' ($script:CandidateVersion -ceq 'v0.3.0-beta.4')
+        Check 'R0_EXPECTED_VERSION_BETA5' ($script:CandidateVersion -ceq 'v0.3.0-beta.5')
         Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
         Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
     } elseif ($ResumeAtR1) { Write-Output 'REVALIDATION_START: R1 (previously collected R0/alpha/RC gates not rerun).' }
@@ -350,36 +350,44 @@ try {
     $releaseNotes = $changelog.Substring($notesStart, $notesEnd - $notesStart)
     $rawUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/install.ps1"
     $installCommand = "irm $rawUrl | iex"
-    $verifyCommand = "& ([scriptblock]::Create((irm '$rawUrl'))) -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -VerifyOnly"
+    $codexInstall = "& ([scriptblock]::Create((irm '$rawUrl'))) -Harness codex"
+    $allInstall = "& ([scriptblock]::Create((irm '$rawUrl'))) -Harness all"
+    $opencodeVerifyCommand = "& ([scriptblock]::Create((irm '$rawUrl'))) -Harness opencode -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -VerifyOnly"
+    $codexVerifyCommand = "& ([scriptblock]::Create((irm '$rawUrl'))) -Harness codex -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -VerifyOnly"
+    $allVerifyCommand = "& ([scriptblock]::Create((irm '$rawUrl'))) -Harness all -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -VerifyOnly"
     Check 'R25_RELEASE_NOTES_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Installation\s*$' -and $releaseNotes.Contains($installCommand))
-    Check 'R25_RELEASE_NOTES_VERIFY_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Verify installation\s*$' -and $releaseNotes.Contains($verifyCommand))
-    Check 'R25_RELEASE_NOTES_COMMANDS_PIN_SAME_TAG' ($installCommand.Contains("/$($script:CandidateVersion)/") -and
-        $verifyCommand.Contains("/$($script:CandidateVersion)/") -and $verifyCommand.Contains("-Version '$($script:CandidateVersion)'"))
-    Check 'R25_CANDIDATE_RELEASE_HIGHLIGHTS' (@('Olympus Harness Core','single canonical role, policy, model-intent','deterministic OpenCode and Codex adapters',
-        'experimental Codex runtime support','GPT-6.1 Sol','bounded multi-agent orchestration','capability contract',
-        'OpenCode hard DENY remains supported','Codex DENY and Codex Aegis remain documented gaps','Aegis Early Scope Gate',
-        'target ownership','Fix `/maintain` generated frontmatter','`-VerifyOnly`' | Where-Object { -not $releaseNotes.Contains($_) }).Count -eq 0)
-    Check 'R25_ISSUE1_AND_CAPABILITY_GAPS_NOT_OVERCLAIMED' ($releaseNotes -match 'Issue #1.*remains open and upstream' -and
-        $releaseNotes -match 'does not claim to fix it' -and $releaseNotes -match 'not full Codex parity' -and
-        $releaseNotes -match 'Codex DENY and Codex Aegis remain documented gaps' -and
-        $releaseNotes -notmatch '(?i)Codex (?:has|provides|supports) (?:full parity|hard DENY|Aegis)')
+    Check 'R25_RELEASE_NOTES_VERIFY_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Verify installation\s*$' -and
+        $releaseNotes.Contains($opencodeVerifyCommand) -and $releaseNotes.Contains($codexVerifyCommand) -and $releaseNotes.Contains($allVerifyCommand))
+    $releaseCommands = @($installCommand,$codexInstall,$allInstall,$opencodeVerifyCommand,$codexVerifyCommand,$allVerifyCommand)
+    $unpinnedCommands = @($releaseCommands | Where-Object { -not $_.Contains("/$($script:CandidateVersion)/") })
+    $verifyCommands = @($opencodeVerifyCommand,$codexVerifyCommand,$allVerifyCommand)
+    $unversionedVerifyCommands = @($verifyCommands | Where-Object { -not $_.Contains("-Version '$($script:CandidateVersion)'") })
+    Check 'R25_RELEASE_NOTES_COMMANDS_PIN_SAME_TAG' ($unpinnedCommands.Count -eq 0 -and $unversionedVerifyCommands.Count -eq 0)
+    $requiredHighlights = @('Dual Harness Installer','-Harness opencode','-Harness codex','-Harness all',
+        'installed_harnesses','additive','legacy OpenCode installations','PowerShell 5.1','PowerShell 7','Olympus Harness Core',
+        'VerifyOnly','user-owned','does not claim full parity')
+    $missingHighlights = @($requiredHighlights | Where-Object { -not $releaseNotes.Contains($_) })
+    Check 'R25_DUAL_HARNESS_RELEASE_HIGHLIGHTS' ($missingHighlights.Count -eq 0)
+    Check 'R25_CAPABILITY_GAPS_NOT_OVERCLAIMED' ($releaseNotes -match 'DENY\s*=\s*GAP' -and
+        $releaseNotes -match 'AEGIS\s*=\s*GAP' -and $releaseNotes -match 'ACTIVITY_VISIBILITY\s*=\s*PARTIAL/BASIC' -and
+        $releaseNotes -match 'does not claim full parity' -and $releaseNotes -notmatch '(?i)Codex (?:has|provides|supports) (?:full parity|hard DENY|Aegis)')
     Check 'R25_BETA_RELEASE_NO_MASTER_SOURCE' ($releaseNotes -notmatch '(?i)raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/master/install\.ps1' -and
         $versionText -match 'archive/refs/tags/\$Version\.zip')
 
     $releaseGate = Join-Path $PSScriptRoot 'github-release-notes.ps1'
     $gateGood = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody $releaseNotes 2>&1 | Out-String)
-    Check 'R26_RELEASE_GATE_ACCEPTS_BOTH_PINNED_COMMANDS' ($LASTEXITCODE -eq 0 -and $gateGood -match "RELEASE_NOTES_CONTRACT: $($script:CandidateRegex) PASS")
+    Check 'R26_RELEASE_GATE_ACCEPTS_PINNED_HARNESS_COMMANDS' ($LASTEXITCODE -eq 0 -and $gateGood -match "RELEASE_NOTES_CONTRACT: $($script:CandidateRegex) PASS")
     $gateDerived = (& pwsh -NoProfile -File $releaseGate -ReleaseBody $releaseNotes 2>&1 | Out-String)
     Check 'R26_RELEASE_GATE_DERIVES_CANDIDATE_VERSION' ($LASTEXITCODE -eq 0 -and
         $gateDerived -match "RELEASE_NOTES_CONTRACT: $($script:CandidateRegex) PASS")
     $gateBad = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody ($releaseNotes -replace '(?s)## Verify installation.*', '') 2>&1 | Out-String)
     Check 'R26_RELEASE_GATE_REJECTS_MISSING_VERIFY' ($LASTEXITCODE -ne 0 -and $gateBad -match 'RELEASE_NOTES_VERIFY_MISSING')
     $gateWrongTag = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody ($releaseNotes.Replace("-Version '$($script:CandidateVersion)'", "-Version 'v0.3.0-beta.2'")) 2>&1 | Out-String)
-    Check 'R26_RELEASE_GATE_REJECTS_TAG_MISMATCH' ($LASTEXITCODE -ne 0 -and $gateWrongTag -match 'RELEASE_NOTES_VERIFY_PIN_MISMATCH')
+    Check 'R26_RELEASE_GATE_REJECTS_TAG_MISMATCH' ($LASTEXITCODE -ne 0 -and $gateWrongTag -match 'RELEASE_NOTES_HARNESS_VERIFY_MISSING')
     $gateText = [IO.File]::ReadAllText($releaseGate)
     Check 'R26_GATE_READS_PUBLISHED_GITHUB_RELEASE_BODY' ($gateText -match 'gh\.Source release view' -and
         $gateText -match 'release\.body' -and $gateText -match 'RELEASE_NOTES_INSTALL_PIN_MISMATCH' -and
-        $gateText -match 'RELEASE_NOTES_VERIFY_PIN_MISMATCH')
+        $gateText -match 'RELEASE_NOTES_HARNESS_VERIFY_MISSING')
 
     $badVersionTarget = New-Target 'bad-version'
     $badVersion = (& pwsh -NoProfile -File $installer -Version 'v1.2.3-preview.1' -Target $badVersionTarget -SourceArchive $candidateArchive 2>&1 | Out-String)

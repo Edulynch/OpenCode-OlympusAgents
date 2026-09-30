@@ -4,9 +4,10 @@
 
 El perfil experimental y sus qualifications estáticas están implementados. Ya
 hay evidencia previa de dos tareas root-only en fixtures, una PASS y otra
-PARTIAL. Faltan gates runtime importantes: uso de roles, paralelismo, approvals
-interactivos, enforcement real de permisos Windows y lifecycle de child/results.
-No se declara ganador entre runtimes.
+PARTIAL; una invocation adicional `codex exec` terminó sin cumplir la edición
+porque su sandbox era read-only. Faltan gates runtime importantes: uso de roles,
+paralelismo, approvals interactivos, enforcement real de permisos Windows y
+lifecycle de child/results. No se declara ganador entre runtimes.
 
 ## WHAT WORKS
 
@@ -17,6 +18,14 @@ No se declara ganador entre runtimes.
 - La tabla ROLE conserva Kael/Sol `gpt-6.1-sol high`, especialistas Sol en Sol con effort original, Luna en `gpt-6-luna max`; Thales continúa `xhigh`. No queda `gpt-6-sol` funcional en perfiles Codex/OpenCode. Literales de esa forma en tests de migración/detección son fixtures negativos, no configuración runtime.
 - Evidencia previa auditada: Codex root-only completó una edición trivial de fixture en 109.9 s con verificación directa, 0 children y una revalidación segura después de un intento read-only que no cumplió aceptación. No valida Kovan ni permission profile normal.
 - Evidencia previa auditada: Codex root-only cambió la función del fixture de calculadora en 69.7 s. Su comando unittest falló en el sandbox por no encontrar `python`; Aegis ejecutó host-side los mismos 2 tests en el fixture temporal y pasaron. El caso sigue PARTIAL y no cuenta como Kovan→Nox.
+- Smoke adicional de esta continuación: `codex exec --strict-config --json` en
+  un Git root desechable terminó con exit 0 y evento `turn.completed` en 16 s;
+  el root intentó la edición pero Codex la rechazó por `read-only sandbox`.
+  `target.md` siguió `Status: pending`, no cambió ningún archivo y el resultado
+  terminal se consumió. Fueron 26,859 input tokens (20,480 cached) y 178 output;
+  costo no disponible. `agents.enabled=false` se pasó como override para que
+  esta prueba no lanzara children. No califica el fast path Olympus ni el
+  enforcement del profile.
 - Mapeo estático de OpenCode actual: 12 roles; config declara Kael como default y el runtime model esperado. La qualification nueva compara los modelos/efforts del roster con la tabla y verifica que `.opencode/**` y `opencode.jsonc` sigan idénticos al baseline.
 - Research oficial actual de OpenAI/Codex recuperado el 2026-09-29 para instrucciones, custom agents, config, permissions, approvals, modelos, App Server, CLI, MCP, skills y hooks. Context7 no estuvo disponible; se consultaron directamente endpoints Markdown oficiales.
 
@@ -24,10 +33,10 @@ No se declara ganador entre runtimes.
 
 - TOML/config syntax, custom role roster y nombres se parsean estáticamente; no se demostró spawn/discovery runtime de los 10 roles.
 - El modelo/effort aparece en el catálogo bundled; no se inspeccionó en runtime el modelo seleccionado para un child.
-- Codex documenta `CODEX.md` mediante `project_doc_fallback_filenames`, instrucciones jerárquicas y project config en proyectos trusted. Un registro previo de este experimento informó que Codex cargó `CODEX.md`; la inspección `debug prompt-input` de esta continuación no expuso el texto/path del root, así que ese load no se vuelve a declarar como gate runtime reproducido. `--strict-config` no es aceptado por `codex debug`; el CLI no tiene `codex debug agents`. `codex agents` es un browser de sesiones de agente del App Server, no una prueba de descubrimiento del catálogo de roles.
+- Codex documenta `CODEX.md` mediante `project_doc_fallback_filenames`, instrucciones jerárquicas y project config en proyectos trusted. Un registro previo informó que Codex cargó `CODEX.md`; la inspección `debug prompt-input` de esta continuación no expuso el texto/path del root, así que ese load no se vuelve a declarar como gate runtime reproducido. `codex exec --strict-config` terminó sin error de configuración, pero usó sandbox read-only y no demuestra por sí solo qué permission profile fue efectivo. `--strict-config` no es aceptado por `codex debug`; el CLI no tiene `codex debug agents`. `codex agents` es un browser de sesiones de agente del App Server, no una prueba de descubrimiento del catálogo de roles.
 - `agents.max_concurrent_threads_per_session = 4`, suppress-recursion por role, routing selectivo, trivial fast path, permission profiles y boundaries son configuración/policy estática. No se midieron con children.
-- No se probó enforcement de `olympus-project`/`olympus-readonly`, `windows.sandbox = "elevated"`, ALLOW/ASK/DENY, request_permissions, approvals o paths protegidos en runtime.
-- OpenCode: este host reporta `v2.0.20` y el artefacto auditado previo informa `opencode debug config` exit 0. No hubo TUI/prompt de regresión. La llamada de inspección `debug config`/`debug agents` de esta continuación quedó sin resultado recogido al reiniciarse el server; no se repitió. El source/model static gate y comparación con baseline sí pasó.
+- No se probó enforcement de `olympus-project`/`olympus-readonly`, `windows.sandbox = "elevated"`, ALLOW/ASK/DENY, request_permissions, approvals o paths protegidos en runtime. El rechazo read-only del CLI no-interactivo no cuenta como Olympus DENY.
+- OpenCode: este host reporta `v2.0.20`; tras el restart se ejecutaron y recolectaron `opencode debug config` exit 0 y `opencode debug agents` exit 0, cuyo resultado contiene Kael. Hay 12 fuentes de rol en `.opencode/agents/`; no hubo TUI/prompt conversacional. El source/model static gate y comparación con baseline también pasó.
 - Las filas experimentales OpenCode no se ejecutaron; el benchmark comparable está incompleto.
 
 ## GAPS
@@ -52,12 +61,12 @@ No se declara ganador entre runtimes.
 
 - El runtime ofrece custom-agent TOML con model/effort por role, config local trusted, multi-agent y límite de threads, además de App Server thread/turn/item APIs y continuation/resume documentados.
 - Permission profiles y preguntas de permisos filesystem/network son primitives nativas útiles para probar, aunque beta/partial y no equivalentes por sí solas a Olympus authority grants.
-- Dos smokes Codex root-only existentes demuestran edición/lectura en fixtures; no prueban routing ni dan superioridad comparativa.
+- Los dos smokes Codex root-only previos demostraron edición/lectura en fixtures. La invocation adicional normal `codex exec` mostró que el modo no interactivo es read-only y puede terminar exit 0 con la aceptación incumplida; no prueba routing ni da superioridad comparativa.
 - No se observó ventaja comparativa de calidad/costo/velocidad.
 
 ## RISKS
 
-- **Permissions/authority:** sandbox de Windows no calificado; root/child policy y runtime overrides pueden divergir. Un `tool success` no prueba que no apareció UI de approval; un denial de perfil tampoco debe confundirse con Olympus DENY sin enforcement.
+- **Permissions/authority:** sandbox de Windows no calificado; root/child policy y runtime overrides pueden divergir. `codex exec` no interactivo sin `--sandbox` fue read-only; `--sandbox` toma el camino legacy y no califica `default_permissions`. Un `tool success` no prueba que no apareció UI de approval; un denial read-only tampoco equivale a Olympus DENY.
 - **Lifecycle/results:** la guía asegura espera/colección de resultados solicitados, pero el propio experimento no vio child/result. `idle`, ausencia de texto o un exit aislado no son prueba de DONE.
 - **Question barrier:** Codex puede surfacear approval desde child thread directamente al usuario.
 - **Session isolation:** thread independiente no implica workspace/worktree independiente; no permitir writers paralelos solapados.

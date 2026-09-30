@@ -66,6 +66,7 @@ OpenCode llevan provider (`openai/`); Codex usa el slug desnudo equivalente.
 | ALLOW / ASK / DENY | PARTIAL | Permission profiles y `approval_policy = "on-request"` se aproximan, pero no son grants Olympus por operación/role. Ver “Authority y permisos”; no se asume semántica idéntica ni que approval pueda elevar un boundary DENY. |
 | `request_permissions` | PARTIAL | Codex tiene una herramienta para pedir un subconjunto de permisos de filesystem/network, con aprobación del cliente y scope por turno/sesión. No es una authority grant Olympus, ni se verificó su comportamiento frente a paths protegidos. |
 | Sandbox, writable roots y shell | PARTIAL | Permission profiles beta gobiernan filesystem/network de comandos locales. `:workspace` protege `.codex` y `.git`; el perfil experimental hace read-only `.opencode`, `opencode.jsonc`, `CODEX.md` y entrypoints del installer/bootstrap. No equivale a ACL de herramientas por role ni restringe automáticamente MCP/connectors/UI. |
+| `codex exec` non-interactive write | PARTIAL | En un fixture temporal, `codex exec --strict-config` sin `--sandbox` terminó `turn.completed` pero rechazó la edición como `read-only sandbox`; el archivo no cambió. La CLI puede salir 0 aunque la aceptación haya fallado. No prueba enforcement de `default_permissions`; añadir `--sandbox` selecciona el camino legacy y omite esos profiles. |
 | Enforcement en Windows | PARTIAL | El proyecto fija `windows.sandbox = "elevated"`; documentación oficial señala que `unelevated` es más débil y puede no admitir carveouts split read/write. Config válida no prueba que el sandbox elevado esté instalado ni que deniegue cada path; no se calificó runtime. |
 | Olympus-owned protection | PARTIAL | Config intenta proteger runtime OpenCode, instrucciones Codex, `.codex`, `.git` e entrypoints de instalación. Son límites del profile/sandbox y policy, no una primitive de ownership Olympus ni ACL de SO. No rebajar protección para obtener compatibilidad; probar enforcement antes de uso real. |
 | Repos sibling / rutas externas | PARTIAL | Codex permite añadir roots/permisos, subjecto al runtime/approval. Olympus requiere scope exacto y decisión explícita del usuario; no se configuró un grant amplio ni se probó acceso cross-repository. |
@@ -128,7 +129,10 @@ parent y que overrides runtime del parent se reaplican al spawn incluso si el
 custom agent declaró otros defaults. Por tanto, `default_permissions` por role
 no es una garantía de ACL inmutable. La selección `elevated` se configura solo en
 el proyecto experimental; no cambia el config global ni autoriza un fallback
-`unelevated`.
+`unelevated`. El smoke no-interactivo no calificó el perfil: su read-only denial
+no debe etiquetarse como Olympus `DENY`, y el sandbox legacy de `--sandbox` no
+es evidencia de `default_permissions`. La UI interactiva aún debe probar ALLOW,
+ASK y DENY solo en fixtures sintéticos.
 
 ## Fuentes oficiales consultadas
 

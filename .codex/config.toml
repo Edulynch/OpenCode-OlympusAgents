@@ -1,0 +1,43 @@
+# Project-only Codex experiment. Loaded only for trusted projects.
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
+approval_policy = "on-request"
+default_permissions = "olympus-project"
+project_doc_fallback_filenames = ["CODEX.md"]
+project_doc_max_bytes = 32768
+
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 4
+
+# Required on native Windows for Codex to enforce protected-path write
+# carveouts. This overrides no user/global file and does not fall back to the
+# weaker unelevated sandbox.
+[windows]
+sandbox = "elevated"
+
+# Permission profiles are Codex's local-command filesystem boundary. Keep the
+# Codex-native .codex and .git protections supplied by :workspace as well.
+[permissions.olympus-project]
+description = "Olympus Codex experiment: project writes with Olympus-owned resources denied."
+extends = ":workspace"
+
+[permissions.olympus-project.filesystem.":workspace_roots"]
+"." = "write"
+".opencode" = "read"
+"opencode.jsonc" = "read"
+"install.ps1" = "read"
+"scripts/bootstrap.ps1" = "read"
+"CODEX.md" = "read"
+
+[permissions.olympus-readonly]
+description = "Olympus Codex read-only specialist profile; Olympus-owned resources denied."
+extends = ":read-only"
+
+[permissions.olympus-readonly.filesystem.":workspace_roots"]
+"." = "read"
+".opencode" = "read"
+"opencode.jsonc" = "read"
+"install.ps1" = "read"
+"scripts/bootstrap.ps1" = "read"
+"CODEX.md" = "read"

@@ -1,4 +1,4 @@
-"""Static qualification for the experimental Olympus Codex profile."""
+"""Static Codex adapter qualification against the canonical Olympus sources."""
 
 from __future__ import annotations
 
@@ -13,33 +13,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 AGENTS = ROOT / ".codex" / "agents"
-BASELINE = "c11d4f59370871a5c0978daab2512ea39c0928c0"
-EXPECTED = {
-    "veyra": ("gpt-6-luna", "max", "olympus-readonly"),
-    "orin": ("gpt-6-luna", "max", "olympus-readonly"),
-    "atlas": ("gpt-6.1-sol", "high", "olympus-readonly"),
-    "kovan": ("gpt-6-luna", "max", "olympus-project"),
-    "argus": ("gpt-6.1-sol", "high", "olympus-readonly"),
-    "nox": ("gpt-6-luna", "max", "olympus-readonly"),
-    "vera": ("gpt-6-luna", "max", "olympus-readonly"),
-    "talos": ("gpt-6.1-sol", "high", "olympus-readonly"),
-    "thales": ("gpt-6.1-sol", "xhigh", "olympus-readonly"),
-    "helios": ("gpt-6.1-sol", "high", "olympus-readonly"),
-}
-OPENCODE_EXPECTED = {
-    "kael": ("gpt-6.1-sol", "high"),
-    "veyra": ("gpt-6-luna", "max"),
-    "orin": ("gpt-6-luna", "max"),
-    "atlas": ("gpt-6.1-sol", "high"),
-    "kovan": ("gpt-6-luna", "max"),
-    "argus": ("gpt-6.1-sol", "high"),
-    "nox": ("gpt-6-luna", "max"),
-    "vera": ("gpt-6-luna", "max"),
-    "talos": ("gpt-6.1-sol", "high"),
-    "thales": ("gpt-6.1-sol", "xhigh"),
-    "helios": ("gpt-6.1-sol", "high"),
-    "aegis": ("gpt-6-luna", "max"),
-}
 
 
 def require(condition: bool, message: str) -> None:
@@ -52,91 +25,87 @@ def toml(path: Path) -> dict:
         return tomllib.load(stream)
 
 
-def opencode_model(path: Path) -> tuple[str, str]:
-    text = path.read_text(encoding="utf-8")
-    match = re.search(
-        r"(?m)^model:\s*[\"']?openai/([A-Za-z0-9._-]+)#(low|medium|high|xhigh|max|ultra)[\"']?\s*$",
-        text,
-    )
-    require(match is not None, f"missing OpenCode model/effort: {path.name}")
-    return match.group(1), match.group(2)
-
-
 def main() -> int:
     require(sys.version_info >= (3, 11), "Python 3.11+ is required for tomllib")
+    models = toml(ROOT / "olympus" / "core" / "models.toml")
+    policy = toml(ROOT / "olympus" / "policies" / "orchestration.toml")
+    capabilities = toml(ROOT / "olympus" / "harnesses" / "capabilities.toml")
+    canonical = {path.stem for path in (ROOT / "olympus" / "roles").glob("*.md")}
+    supported_children = canonical - {"kael", "aegis"}
+    require(len(canonical) == 12 and canonical == set(models["roles"]), "canonical role/model roster mismatch")
+
     config_path = ROOT / ".codex" / "config.toml"
     config = toml(config_path)
-    require(config["model"] == "gpt-6.1-sol", "Kael model drifted")
-    require(config["model_reasoning_effort"] == "high", "Kael effort drifted")
+    kael = models["roles"]["kael"]
+    kael_family = models["families"][kael["family"]]
+    require(config["model"] == kael_family["codex"], "Kael model drifted from Core")
+    require(config["model_reasoning_effort"] == kael["effort"], "Kael effort drifted from Core")
     require(config["approval_policy"] == "on-request", "approval policy drifted")
     require(config["default_permissions"] == "olympus-project", "default profile drifted")
     require(config["project_doc_fallback_filenames"] == ["CODEX.md"], "Codex root doc fallback drifted")
     require(config["project_doc_max_bytes"] == 32768, "Codex project-doc limit drifted")
     require(config["agents"]["enabled"] is True, "Codex multi-agent support must be enabled")
-    require(config["agents"]["max_concurrent_threads_per_session"] == 4, "child concurrency cap must be four")
-    require("sandbox_mode" not in config, "legacy sandbox mode must not shadow permission profiles")
-    require("sandbox_workspace_write" not in config, "legacy workspace-write settings must not shadow permission profiles")
+    require(config["agents"]["max_concurrent_threads_per_session"] == policy["max_children"], "Codex native cap differs from canonical max children")
+    require("sandbox_mode" not in config and "sandbox_workspace_write" not in config, "legacy sandbox settings must not shadow permission profiles")
 
     profiles = config["permissions"]
     require(set(profiles) == {"olympus-project", "olympus-readonly"}, "unexpected permission profiles")
     require(profiles["olympus-project"]["extends"] == ":workspace", "project profile must extend :workspace")
-    require(profiles["olympus-readonly"]["extends"] == ":read-only", "specialist profile must extend :read-only")
+    require(profiles["olympus-readonly"]["extends"] == ":read-only", "specialist profile must be read-only")
     project_fs = profiles["olympus-project"]["filesystem"][":workspace_roots"]
     read_fs = profiles["olympus-readonly"]["filesystem"][":workspace_roots"]
-    protected = {".opencode", "opencode.jsonc", "install.ps1", "scripts/bootstrap.ps1", "CODEX.md"}
-    require(project_fs.get(".") == "write", "project profile must allow workspace writes")
-    require(read_fs.get(".") == "read", "specialist profile must be read-only")
-    require(all(project_fs.get(path) == "read" for path in protected), "project profile lost a protected Olympus path")
-    require(all(read_fs.get(path) == "read" for path in protected), "read-only profile lost a protected Olympus path")
+    protected = {".opencode", "opencode.jsonc", "install.ps1", "scripts/bootstrap.ps1", "scripts/render_harnesses.py", "olympus", "CODEX.md"}
+    require(project_fs.get(".") == "write" and read_fs.get(".") == "read", "workspace permission profiles drifted")
+    require(all(project_fs.get(path) == "read" for path in protected), "project profile lost an Olympus-owned read-only path")
+    require(all(read_fs.get(path) == "read" for path in protected), "read-only profile lost an Olympus-owned read-only path")
     require(config["windows"]["sandbox"] == "elevated", "Windows must use the stronger local sandbox")
 
     files = sorted(AGENTS.glob("*.toml"))
-    require({path.stem for path in files} == set(EXPECTED), "custom-agent roster differs from expected Olympus roles")
-    names: set[str] = set()
+    require({path.stem for path in files} == supported_children, "Codex custom-agent roster differs from supported canonical roles")
     for path in files:
         role = toml(path)
-        name = role["name"]
-        require(name not in names, f"duplicate role identifier: {name}")
-        names.add(name)
-        require(name == path.stem, f"filename/name mismatch: {path.name}")
-        require(role.get("description"), f"missing description: {path.name}")
-        require(role.get("developer_instructions"), f"missing instructions: {path.name}")
-        model, effort, permission = EXPECTED[name]
-        require(role["model"] == model, f"model mismatch: {name}")
-        require(role["model_reasoning_effort"] == effort, f"effort mismatch: {name}")
-        require(role["default_permissions"] == permission, f"permission profile mismatch: {name}")
+        name = path.stem
+        intent = models["roles"][name]
+        family = models["families"][intent["family"]]
+        require(role["name"] == name, f"filename/name mismatch: {path.name}")
+        require(role.get("description") and role.get("developer_instructions"), f"incomplete agent: {path.name}")
+        require(role["model"] == family["codex"], f"model mismatch with Core: {name}")
+        require(role["model_reasoning_effort"] == intent["effort"], f"effort mismatch with Core: {name}")
+        require(role["default_permissions"] == ("olympus-project" if name == "kovan" else "olympus-readonly"), f"permission profile mismatch: {name}")
         require(role.get("agents", {}).get("enabled") is False, f"recursive delegation not disabled: {name}")
 
     codex_docs = (ROOT / "CODEX.md").read_text(encoding="utf-8")
-    require(all(f"`{name}`" in codex_docs for name in EXPECTED), "root routing references a missing role")
+    require(all(f"`{name}`" in codex_docs for name in supported_children), "root routing references a missing supported role")
     require("Aegis is intentionally not a Codex custom agent" in codex_docs, "Aegis gap must remain explicit")
     require(not (ROOT / "AGENTS.md").exists(), "do not add AGENTS.md: it can alter other runtimes")
-    codex_runtime_text = "\n".join(
-        path.read_text(encoding="utf-8") for path in [config_path, ROOT / "CODEX.md", *files]
-    )
+    require(not (AGENTS / "aegis.toml").exists(), "unsafe Codex Aegis entrypoint must stay absent")
+    codex_runtime_text = "\n".join(path.read_text(encoding="utf-8") for path in [config_path, ROOT / "CODEX.md", *files])
     require("gpt-6-sol" not in codex_runtime_text, "stale Sol model identifier found in Codex runtime files")
     require("gpt-6-luna" in codex_runtime_text, "Luna roles must remain Luna")
-    require(not (AGENTS / "aegis.toml").exists(), "unsafe Codex Aegis entrypoint must stay absent")
+    require(capabilities["codex"]["ALLOW"] == "SUPPORTED", "Codex ALLOW capability drifted")
+    require(capabilities["codex"]["ASK"] == "ADAPTABLE", "Codex ASK capability drifted")
+    require(capabilities["codex"]["DENY"] == "GAP", "Codex hard DENY gap must remain explicit")
+    require(capabilities["codex"]["AEGIS"] == "GAP", "Codex Aegis gap must remain explicit")
+    require(capabilities["codex"]["RESULT_DELIVERY"] == "SUPPORTED", "Codex result delivery capability drifted")
+    require(capabilities["codex"]["MULTI_AGENT"] == "SUPPORTED" and capabilities["codex"]["BOUNDED_PARALLELISM"] == "SUPPORTED", "runtime-confirmed multi-agent capabilities drifted")
 
     opencode_agents = ROOT / ".opencode" / "agents"
     opencode_files = sorted(opencode_agents.glob("*.md"))
-    require({path.stem for path in opencode_files} == set(OPENCODE_EXPECTED), "OpenCode roster changed")
-    for path in opencode_files:
-        require(opencode_model(path) == OPENCODE_EXPECTED[path.stem], f"OpenCode model/effort drifted: {path.name}")
-    opencode_config = (ROOT / "opencode.jsonc").read_text(encoding="utf-8")
-    require('"default_agent": "kael"' in opencode_config, "OpenCode Kael default drifted")
-    require('"model": "openai/gpt-6.1-sol"' in opencode_config, "OpenCode default model drifted")
-    opencode_runtime_text = "\n".join(
-        path.read_text(encoding="utf-8") for path in [ROOT / "opencode.jsonc", *opencode_files]
-    )
+    require({path.stem for path in opencode_files} == canonical, "OpenCode roster changed")
+    opencode_runtime_text = "\n".join(path.read_text(encoding="utf-8") for path in [ROOT / "opencode.jsonc", *opencode_files])
     require("gpt-6-sol" not in opencode_runtime_text, "stale Sol model identifier found in OpenCode runtime files")
-    untouched = subprocess.run(
-        ["git", "diff", "--quiet", BASELINE, "--", ".opencode", "opencode.jsonc"],
+    require('"default_agent": "kael"' in (ROOT / "opencode.jsonc").read_text(encoding="utf-8"), "OpenCode default agent drifted")
+    render = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "render_harnesses.py"), "check", "--harness", "all"],
         cwd=ROOT,
         check=False,
-        timeout=15,
+        timeout=45,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
-    require(untouched.returncode == 0, "OpenCode runtime files differ from the stated baseline")
+    require(render.returncode == 0, "generated adapters drifted: " + render.stdout + render.stderr)
 
     codex = shutil.which("codex")
     if codex:
@@ -151,19 +120,17 @@ def main() -> int:
         )
         catalog = json.loads(result.stdout)
         available = {entry["slug"]: entry for entry in catalog["models"]}
-        for name, (model, effort, _) in {"kael": ("gpt-6.1-sol", "high", "olympus-project"), **EXPECTED}.items():
-            require(model in available, f"Codex bundled model catalog lacks {model} for {name}")
+        for role, intent in models["roles"].items():
+            model = models["families"][intent["family"]]["codex"]
+            require(model in available, f"Codex bundled model catalog lacks {model} for {role}")
             efforts = {item["effort"] for item in available[model]["supported_reasoning_levels"]}
-            require(effort in efforts, f"Codex model {model} lacks {effort} for {name}")
+            require(intent["effort"] in efforts, f"Codex model {model} lacks {intent['effort']} for {role}")
         print("Codex bundled model catalog: PASS")
     else:
         print("Codex CLI absent: bundled model catalog check skipped")
 
     print("Olympus Codex static profile qualification: PASS")
-    print(
-        f"Codex custom agents: {len(files)}; Aegis: intentionally absent; concurrency cap: 4; "
-        f"OpenCode roles: {len(opencode_files)}; OpenCode files unchanged from {BASELINE[:7]}"
-    )
+    print(f"Codex specialists: {len(files)}; Kael is root; Aegis: explicit GAP; max children: {policy['max_children']}; OpenCode roles: {len(opencode_files)}")
     return 0
 
 

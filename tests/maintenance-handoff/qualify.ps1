@@ -75,7 +75,12 @@ try {
     $concurrencyPattern = '(?s)NORMAL is cost/context-aware:.*?(?=\r?\nReliable delayed background notifications)'
     Check 'MH14_MODELS' ($models.Count -eq 12 -and $modelMapValid)
     $baselineConcurrency = ([regex]::Match($baseKael, $concurrencyPattern).Value).Replace('Sorin','Thales')
-    Check 'MH15_CONCURRENCY' (([regex]::Match($kael, $concurrencyPattern).Value) -ceq $baselineConcurrency -and $kael -match 'MAX_ACTIVE_CHILDREN = 4')
+    $currentConcurrency = [regex]::Match($kael, $concurrencyPattern).Value
+    # Generated surfaces are deterministic UTF-8/LF; normalize native git output
+    # before comparing semantic policy across Windows PowerShell/PowerShell 7.
+    $baselineConcurrency = $baselineConcurrency -replace "`r`n?", "`n"
+    $currentConcurrency = $currentConcurrency -replace "`r`n?", "`n"
+    Check 'MH15_CONCURRENCY' ($currentConcurrency -ceq $baselineConcurrency -and $kael -match 'MAX_ACTIVE_CHILDREN = 4')
     Check 'MH10_ROUTING' ($kael -match 'Kael → Aegis remains denied' -and
         $kael -match 'Kael → Aegis remains DENIED' -and $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: aegis' -and
         $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')

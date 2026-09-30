@@ -1,0 +1,57 @@
+# Canonical model intent. Harness identifiers are adapter translations.
+
+[families.sol]
+opencode = "openai/gpt-6.1-sol"
+codex = "gpt-6.1-sol"
+
+[families.luna]
+opencode = "openai/gpt-6-luna"
+codex = "gpt-6-luna"
+
+[roles.kael]
+family = "sol"
+effort = "high"
+
+[roles.veyra]
+family = "luna"
+effort = "max"
+
+[roles.orin]
+family = "luna"
+effort = "max"
+
+[roles.atlas]
+family = "sol"
+effort = "high"
+
+[roles.kovan]
+family = "luna"
+effort = "max"
+
+[roles.argus]
+family = "sol"
+effort = "high"
+
+[roles.nox]
+family = "luna"
+effort = "max"
+
+[roles.vera]
+family = "luna"
+effort = "max"
+
+[roles.talos]
+family = "sol"
+effort = "high"
+
+[roles.thales]
+family = "sol"
+effort = "xhigh"
+
+[roles.helios]
+family = "sol"
+effort = "high"
+
+[roles.aegis]
+family = "luna"
+effort = "max"

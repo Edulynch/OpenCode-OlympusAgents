@@ -4,7 +4,7 @@ For Olympus maintainers, contributors, installation debugging, qualification, an
 
 ## Architecture
 
-OpenCode is the runtime; Olympus is the orchestration and decision layer. Kael coordinates the normal agent plane; hidden Aegis The Keeper is separate and privileged.
+Olympus Core defines role responsibilities, model intent, routing, authority, result lifecycle, and maintenance-plane semantics. OpenCode and Codex adapters express that same Core in their native surfaces. Kael is the single conceptual ROOT ORCHESTRATOR: OpenCode represents it as its primary agent, while Codex represents it as the root thread. Aegis remains a separate privileged Olympus maintenance role, supported only through OpenCode's explicit `/maintain` entry.
 
 Kael checks feasibility and plane routing from the request **before** delegated research or planning. `/maintain` is reserved for Olympus development/maintenance/configuration/installation, Olympus framework bug/gap repair, or a user-explicit Olympus escape hatch because such a gap blocks normal completion. Ordinary user-project work, including ordinary Git administration, remains in the normal plane; Git alone is not an Aegis capability boundary. Kael does not automatically delegate to Aegis. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
 
@@ -183,11 +183,13 @@ If drift occurs, inspect the reported path and manifest, back up any intentional
 
 ### Current model mapping
 
-Olympus Sol slots now use **GPT-6.1 Sol** without changing their reasoning
-effort: Kael, Atlas, Argus, Talos and Helios use `high`; Thales uses `xhigh`.
-Veyra, Orin, Kovan, Nox, Vera and hidden Aegis remain on **GPT-6 Luna Max**.
-The root OpenCode default follows Kael on GPT-6.1 Sol. Qualify the complete
-mapping and installer model checks with:
+`olympus/core/models.toml` is the sole conceptual role→family/effort map.
+Harness-specific identifiers are translations from that file: Sol currently
+renders as `openai/gpt-6.1-sol` for OpenCode and `gpt-6.1-sol` for Codex; Luna
+remains GPT-6 Luna. Sol roles retain `high` except Thales (`xhigh`); Luna roles
+retain `max`. Change a family identifier in Core and re-render—do not update
+agent files or installer model tables by hand. Qualify the model mapping and
+installer check with:
 
 ```powershell
 pwsh -NoProfile -File ./tests/model-migration/qualify.ps1
@@ -199,6 +201,10 @@ model actually used at that time; it is not a current model assignment.
 From the source checkout root, use the current harnesses (PowerShell 7; some require `opencode`, Git, and Node):
 
 ```powershell
+python scripts/render_harnesses.py render --harness all
+python scripts/render_harnesses.py check --harness all
+python tests/harness-core/qualify.py
+python tests/codex/validate_profile.py
 pwsh -NoProfile -File ./tests/model-migration/qualify.ps1
 pwsh -NoProfile -File ./tests/trivial-fast-path/qualify.ps1
 pwsh -NoProfile -File ./tests/phase4c/qualify.ps1
@@ -217,6 +223,12 @@ pwsh -NoProfile -File ./tests/completion-gates/qualify.ps1
 pwsh -NoProfile -File ./tests/result-reconciliation/qualify.ps1
 pwsh -NoProfile -File ./tests/maintenance-handoff/qualify.ps1
 ```
+
+`check` is read-only. Harness-core qualification tests renderer idempotence,
+drift/missing-output detection, canonical role/model/policy sources, and
+cross-harness capability claims. Codex static qualification uses the local
+bundled model catalogue when `codex` is installed; it does not run an
+interactive Codex smoke.
 
 Phase 4C covers bootstrap security and static Maintenance Plane checks; the separate Maintenance handoff qualifier covers Issue #2 policy and synthetic event ordering, not interactive delivery. The Preflight harness checks policy ordering, boundaries and a small cart/auth fixture **statically**; it does not execute agents or verify actual child count, discovery tool calls or latency. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Adaptive Concurrency / FAST checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release qualification's `-MockOpenCode` mode uses a task-local deterministic CLI fixture to exercise installer/bootstrap and verification behavior without contacting a live OpenCode runtime; it does not establish runtime agent/plugin discovery. The release, dirty-worktree, and installer compatibility harnesses use **local source**, not the remote tag, and do not test the interactive UI. The dirty-worktree harness checks unrelated bytes, Git status, index diffs, managed conflict/drift, reinstall and a local-source managed update. The compatibility harness launches the installer via both Windows PowerShell 5.1 (when present) and PowerShell 7 into separate disposable Git projects, and tests missing `pwsh` with a process-local PATH. Some harnesses retain disposable fixtures; check their output. The adaptive-concurrency harness's `DOC` check verifies that the README describes NORMAL as the default using only useful parallelism, FAST as explicitly requested with up to four agents, and FAST as preserving checks and task dependencies.
 

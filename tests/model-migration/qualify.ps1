@@ -27,70 +27,50 @@ function Model-Spec([string]$path) {
     }
 }
 
-$sol = [ordered]@{
-    kael   = @('gpt-6.1-sol', 'high',  'primary')
-    thales = @('gpt-6.1-sol', 'xhigh', 'subagent')
-    atlas  = @('gpt-6.1-sol', 'high',  'subagent')
-    argus  = @('gpt-6.1-sol', 'high',  'subagent')
-    talos  = @('gpt-6.1-sol', 'high',  'subagent')
-    helios = @('gpt-6.1-sol', 'high',  'subagent')
+$modelsText = Text 'olympus/core/models.toml'
+$models = [ordered]@{}
+foreach ($match in [regex]::Matches($modelsText, '(?ms)^\[roles\.(?<role>[a-z]+)\]\s*\r?\nfamily\s*=\s*"(?<family>[^"]+)"\s*\r?\neffort\s*=\s*"(?<effort>[^"]+)"')) {
+    $familyBlock = [regex]::Match($modelsText, '(?ms)^\[families\.' + [regex]::Escape($match.Groups['family'].Value) + '\]\s*\r?\nopencode\s*=\s*"(?<model>[^"]+)"')
+    if (-not $familyBlock.Success) { throw "MODEL_FAMILY_MISSING: $($match.Groups['family'].Value)" }
+    $name = $match.Groups['role'].Value
+    $modelId = ($familyBlock.Groups['model'].Value -split '/')[-1]
+    $mode = if ($name -ceq 'kael') { 'primary' } else { 'subagent' }
+    $models[$name] = @($modelId, $match.Groups['effort'].Value, $mode)
 }
-$luna = [ordered]@{
-    veyra = @('gpt-6-luna', 'max', 'subagent')
-    orin  = @('gpt-6-luna', 'max', 'subagent')
-    kovan = @('gpt-6-luna', 'max', 'subagent')
-    nox   = @('gpt-6-luna', 'max', 'subagent')
-    vera  = @('gpt-6-luna', 'max', 'subagent')
-    aegis = @('gpt-6-luna', 'max', 'subagent')
-}
+$expectedIds = @($models.Keys)
+Check 'MODEL_SOURCE_CANONICAL_ROSTER' ($expectedIds.Count -eq 12 -and $modelsText -match '(?m)^\[families\.sol\]$' -and $modelsText -match '(?m)^\[families\.luna\]$')
 
 $agentsRoot = Join-Path $root '.opencode/agents'
 $agentFiles = @(Get-ChildItem -LiteralPath $agentsRoot -Filter '*.md' -File)
-$expectedIds = @($sol.Keys) + @($luna.Keys)
 $actualIds = @($agentFiles | ForEach-Object BaseName)
 Check 'ROSTER_12_ROLES' ($agentFiles.Count -eq 12 -and
     [string]::Join(',', @($actualIds | Sort-Object)) -ceq [string]::Join(',', @($expectedIds | Sort-Object)))
 
-foreach ($set in @(@{ Name='SOL'; Roles=$sol }, @{ Name='LUNA'; Roles=$luna })) {
-    foreach ($name in $set.Roles.Keys) {
-        $spec = Model-Spec ".opencode/agents/$name.md"
-        $wanted = $set.Roles[$name]
-        Check ("$($set.Name)_$($name.ToUpperInvariant())") ($null -ne $spec -and
-            $spec.Id -ceq $wanted[0] -and $spec.Effort -ceq $wanted[1] -and $spec.Mode -ceq $wanted[2])
-    }
+foreach ($name in $models.Keys) {
+    $spec = Model-Spec ".opencode/agents/$name.md"
+    $wanted = $models[$name]
+    Check ("CORE_MODEL_$($name.ToUpperInvariant())") ($null -ne $spec -and
+        $spec.Id -ceq $wanted[0] -and $spec.Effort -ceq $wanted[1] -and $spec.Mode -ceq $wanted[2])
 }
 
 $config = Text 'opencode.jsonc'
-Check 'ROOT_DEFAULT_GPT61_SOL' ($config -match '(?m)^\s*"model"\s*:\s*"openai/gpt-6\.1-sol"\s*,?\s*$')
+Check 'ROOT_DEFAULT_MODEL_FROM_CORE' ($config -match '(?m)^\s*"model"\s*:\s*"openai/gpt-6\.1-sol"\s*,?\s*$' -and
+    $models['kael'][0] -ceq 'gpt-6.1-sol')
 
 $installer = Text 'scripts/bootstrap.ps1'
-$installerMapValid = $true
-foreach ($set in @($sol, $luna)) {
-    foreach ($name in $set.Keys) {
-        $wanted = $set[$name]
-        $expectedEntry = '(?m)^\s*"' + [regex]::Escape($name) + '"=@\("' +
-            [regex]::Escape($wanted[0]) + '","' + [regex]::Escape($wanted[1]) + '","' +
-            [regex]::Escape($wanted[2]) + '"\)\s*$'
-        if ($installer -notmatch $expectedEntry) { $installerMapValid = $false }
-    }
-}
-Check 'INSTALLER_EFFECTIVE_ROLE_MAP' $installerMapValid
-Check 'INSTALLER_MODEL_DISCOVERY' ($installer -match 'openai/gpt-6\.1-sol' -and
-    $installer -match 'openai/gpt-6-luna' -and $installer -notmatch 'openai/gpt-6-sol')
+Check 'INSTALLER_DERIVES_MODELS_FROM_GENERATED_ROLES' ($installer -match 'function Get-Expected-Agents' -and
+    $installer -match 'Join-Path.*\.opencode/agents' -and $installer -match '\(\?m\)\^model:' -and
+    $installer -notmatch '(?m)^\s*"(?:kael|thales|atlas|argus|talos|helios|veyra|orin|kovan|nox|vera|aegis)"=@\(')
+Check 'INSTALLER_MODEL_DISCOVERY' ($installer -notmatch '(?m)^\s*"(?:kael|thales|atlas|argus|talos|helios|veyra|orin|kovan|nox|vera|aegis)"=@\(')
 
 $fixture = Text 'tests/release/fixtures/opencode.ps1'
 Check 'RELEASE_MODEL_FIXTURE_CURRENT_AND_STABLE' ($fixture -match "openai/gpt-6\.1-sol" -and
     $fixture -match "openai/gpt-6-sol" -and $fixture -match "openai/gpt-6-luna" -and
     $fixture -match 'stable v0\.2\.0 installer')
 
-$trackedTests = @(& git -C $root ls-files -- 'tests')
-if ($LASTEXITCODE -ne 0) { throw 'GIT_TEST_INVENTORY_FAILED' }
-$currentSources = @('opencode.jsonc', 'scripts/bootstrap.ps1') +
+$currentSources = @('opencode.jsonc', 'CODEX.md', '.codex/config.toml') +
     @($agentFiles | ForEach-Object { $_.FullName }) +
-    @($trackedTests | Where-Object {
-        [IO.Path]::GetExtension($_) -in @('.ps1', '.md') -and
-        $_ -cnotin @('tests/model-migration/qualify.ps1', 'tests/release/fixtures/opencode.ps1')
-    })
+    @(Get-ChildItem -LiteralPath (Join-Path $root '.codex/agents') -Filter '*.toml' -File | ForEach-Object { $_.FullName })
 $legacyReferences = @($currentSources | Where-Object {
     $path = if ([IO.Path]::IsPathRooted($_)) { $_ } else { Join-Path $root $_ }
     [IO.File]::ReadAllText($path) -match 'gpt-6-sol'

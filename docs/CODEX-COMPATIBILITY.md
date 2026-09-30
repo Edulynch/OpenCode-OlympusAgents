@@ -1,11 +1,10 @@
 # Olympus → Codex: compatibility matrix
 
-Revisado el 2026-09-29 contra documentación oficial actual de OpenAI y Codex
-CLI `0.159.1`. La documentación oficial Markdown respondió correctamente desde
-`developers.openai.com/codex/`. Context7 no estuvo disponible en esta sesión;
-no se usó memoria histórica como sustituto de las fuentes oficiales. Este perfil
-es experimental y local a esta rama. No modifica beta.3 ni las superficies
-OpenCode.
+La matriz documenta el adapter Codex soportado desde Olympus Core, contra la
+documentación oficial consultada el 2026-09-29 y la evidencia runtime previa
+suministrada por el usuario para esta modularización. Los smokes aceptados no se
+repitieron aquí. El proyecto mantiene un capability contract explícito; las
+limitaciones de Codex no reducen garantías Core ni implican paridad con OpenCode.
 
 ## Clasificación
 
@@ -48,33 +47,35 @@ OpenCode llevan provider (`openai/`); Codex usa el slug desnudo equivalente.
 |---|---|---|
 | Instrucciones jerárquicas `AGENTS.md` | ADAPTABLE | Codex concatena instrucciones globales y de proyecto por directorio; `AGENTS.override.md`/`AGENTS.md` preceden a los nombres fallback. El experimento usa `project_doc_fallback_filenames = ["CODEX.md"]` para no añadir un `AGENTS.md` que también alteraría otros harnesses. Config local solo se carga en proyectos trusted. |
 | Configuración local `.codex/config.toml` | DIRECT_MAPPING | Codex reconoce config por proyecto trusted. Aquí declara modelo root, aprobación, permission profiles, fallback `CODEX.md`, multi-agent y límite de threads. |
-| Kael como root orchestrator | ADAPTABLE | El root recibe la policy de `CODEX.md`; Codex no necesita ni instala un custom-agent `kael`. Kael decide por instrucciones cuándo mantener trabajo root-only o solicitar agentes. |
-| Roles custom Veyra, Orin, Atlas, Kovan, Argus, Nox, Vera, Talos, Thales y Helios | ADAPTABLE | `.codex/agents/<role>.toml` define nombre, descripción e instrucciones, más model/effort y perfil por defecto. No es un ACL Olympus por role ni una restricción de herramientas independiente. Los diez perfiles parsean; no se invocaron en este turno. |
-| Modelo y reasoning effort por role | DIRECT_MAPPING | Custom-agent TOML acepta `model` y `model_reasoning_effort`; config raíz selecciona Kael. Modelo y effort pasan el catálogo local. |
-| Multi-agent habilitado | DIRECT_MAPPING | `[agents].enabled = true` habilita las herramientas multi-agent. La disponibilidad nativa no obliga a usarlas. |
+| Kael como root orchestrator | SUPPORTED | La sesión root representa al único Kael conceptual; no se crea un child `kael`. Root smoke previo: PASS. |
+| Roles custom Veyra, Orin, Atlas, Kovan, Argus, Nox, Vera, Talos, Thales y Helios | SUPPORTED | Diez TOML generados desde el adapter. Runtime evidencia previa incluye Kael→Veyra y Kovan→Nox funcionales; no afirma smoke individual para cada rol. |
+| Modelo y reasoning effort por role | SUPPORTED | Una fuente Core define familia/effort; el adapter traduce IDs a TOML/Codex. El catálogo bundled valida los slugs y efforts. |
+| Multi-agent habilitado | SUPPORTED | `[agents].enabled = true`; fan-out/fan-in acotado de cuatro children tiene evidencia runtime PASS. |
 | Delegación Kael → specialist | ADAPTABLE | Codex puede delegar cuando se pide o las instrucciones aplicables lo indican. Kael mantiene selección explícita; Codex no ofrece un allowlist Olympus que impida al root escoger otro agente. |
 | Supresión de specialists no necesarios | ADAPTABLE | La policy de Kael prohíbe fan-out por disponibilidad. No delegar es una decisión de Kael, no una regla nativa Codex. |
 | Trivial-task fast path | ADAPTABLE | `Kael → one writer → direct lightweight verification → DONE` está en `CODEX.md`; Codex puede seguirlo. No existe un fast path nativo que fuerce cero specialists para tareas pequeñas. |
-| Máximo cuatro children | DIRECT_MAPPING | `agents.max_concurrent_threads_per_session = 4` limita threads de agentes abiertos, excluyendo el root. La unidad nativa es threads abiertos, no un contador Olympus de trabajo activo; resultado runtime pendiente. |
-| Paralelismo acotado e independencia | ADAPTABLE | Codex puede trabajar en paralelo y esperar la colección de resultados. Kael debe confirmar independencia y dependencias; el límite de cuatro no implementa por sí mismo el scheduler Olympus ni una cola con semántica equivalente. |
+| Máximo cuatro children | SUPPORTED | Cap nativo Codex = cuatro desde Core; fan-out/fan-in de 4 pasó y se observó concurrencia real de al menos 2. No se afirma equivalencia de scheduler más allá de esta evidencia. |
+| Paralelismo acotado e independencia | SUPPORTED | Evidencia previa: fan-out/fan-in bounded PASS y concurrencia real ≥2. Kael conserva ownership de independencia y dependencias. |
 | Delegación recursiva | DIRECT_MAPPING | Cada custom role pone `[agents].enabled = false`, deshabilitando sus herramientas multi-agent. La restricción estática existe; no se verificó invocación runtime. |
 | Question barrier | PARTIAL | El prompt pide que children devuelvan `NEED_AUTHORITY` a Kael, pero Codex permite approval/permission requests originadas desde un thread hijo y la UI puede presentarlas directamente al usuario. No se garantiza que toda pregunta atraviese primero Kael. |
-| Completion barrier | ADAPTABLE | La guía oficial indica que Codex espera a que los resultados solicitados estén disponibles y devuelve una respuesta consolidada. Kael aún debe inspeccionar el resultado y no concluir con children pendientes o desconocidos. |
-| Result propagation | ADAPTABLE | La respuesta consolidada es la primitive nativa documentada. App Server expone historial e items del thread; el perfil requiere que Kael valide y consuma el resultado original. No se midió entrega de children en un smoke de esta ejecución. |
-| Missing-result reconciliation | PARTIAL | App Server tiene `thread/read`, historial y filtros experimentales `parentThreadId`/`ancestorThreadId`. No se documenta un protocolo Olympus de reconciliación/recovery ni se probó un resultado perdido; tratar ausencia como `COMPLETION_UNCONFIRMED`, no como fracaso. |
+| Completion barrier | SUPPORTED | Bounded fan-out/fan-in de cuatro children pasó; Kael conserva obligación de no concluir con trabajo requerido desconocido o no consumido. |
+| Result propagation | SUPPORTED | Child result delivery PASS en la evidencia runtime previa suministrada por el usuario. |
+| Missing-result reconciliation | PARTIAL | App Server tiene `thread/read`, historial y filtros experimentales `parentThreadId`/`ancestorThreadId`. Recovery runtime de un resultado perdido no está demostrado; ausencia sigue siendo `COMPLETION_UNCONFIRMED`, no fracaso. |
 | No blind retry | ADAPTABLE | `CODEX.md` prohíbe reemplazar/repetir sin reconciliar el child original y sus efectos. Es policy, no un mecanismo nativo que previene retries o duplicación de side effects. |
-| ALLOW / ASK / DENY | PARTIAL | Permission profiles y `approval_policy = "on-request"` se aproximan, pero no son grants Olympus por operación/role. Ver “Authority y permisos”; no se asume semántica idéntica ni que approval pueda elevar un boundary DENY. |
+| ALLOW | SUPPORTED | `DIRECT_MAPPING` según evidencia runtime previa. El scope exacto y la autorización Olympus continúan siendo requisitos. |
+| ASK | ADAPTABLE | Approval nativa confirmada por el usuario en la evidencia previa; no es autorización anticipada y una solicitud de child puede mostrarse fuera de Kael. |
+| DENY | GAP | No hay equivalencia demostrada para protección hard Olympus. No reducir DENY Core ni tratar una aprobación ordinaria como elevación permitida. |
 | `request_permissions` | PARTIAL | Codex tiene una herramienta para pedir un subconjunto de permisos de filesystem/network, con aprobación del cliente y scope por turno/sesión. No es una authority grant Olympus, ni se verificó su comportamiento frente a paths protegidos. |
 | Sandbox, writable roots y shell | PARTIAL | Permission profiles beta gobiernan filesystem/network de comandos locales. `:workspace` protege `.codex` y `.git`; el perfil experimental hace read-only `.opencode`, `opencode.jsonc`, `CODEX.md` y entrypoints del installer/bootstrap. No equivale a ACL de herramientas por role ni restringe automáticamente MCP/connectors/UI. |
 | `codex exec` non-interactive write | PARTIAL | En un fixture temporal, `codex exec --strict-config` sin `--sandbox` terminó `turn.completed` pero rechazó la edición como `read-only sandbox`; el archivo no cambió. La CLI puede salir 0 aunque la aceptación haya fallado. No prueba enforcement de `default_permissions`; añadir `--sandbox` selecciona el camino legacy y omite esos profiles. |
 | Enforcement en Windows | PARTIAL | El proyecto fija `windows.sandbox = "elevated"`; documentación oficial señala que `unelevated` es más débil y puede no admitir carveouts split read/write. Config válida no prueba que el sandbox elevado esté instalado ni que deniegue cada path; no se calificó runtime. |
 | Olympus-owned protection | PARTIAL | Config intenta proteger runtime OpenCode, instrucciones Codex, `.codex`, `.git` e entrypoints de instalación. Son límites del profile/sandbox y policy, no una primitive de ownership Olympus ni ACL de SO. No rebajar protección para obtener compatibilidad; probar enforcement antes de uso real. |
 | Repos sibling / rutas externas | PARTIAL | Codex permite añadir roots/permisos, subjecto al runtime/approval. Olympus requiere scope exacto y decisión explícita del usuario; no se configuró un grant amplio ni se probó acceso cross-repository. |
-| Aegis maintenance plane | GAP | No se demostró una entrada segura equivalente a usuario explícitamente `/maintain` → Aegis, inaccesible a Kael. Aegis no es custom agent Codex; el mantenimiento privilegiado permanece en el plane OpenCode existente. |
+| Aegis maintenance plane | GAP | No existe entrada Codex segura equivalente a usuario explícitamente `/maintain` → Aegis, inaccesible a Kael. No se instala ni inventa un Aegis Codex. |
 | Lifecycle de child/result | PARTIAL | Ver tabla de lifecycle debajo. Codex tiene eventos nativos, pero no se observó un child en ejecución en este experimento y no se asume equivalencia con el problema upstream OpenCode `No tool output found`. |
 | Continuation / resume | PARTIAL | `codex resume` y App Server `thread/resume` continúan threads guardados. Esto no prueba que un child perdido pueda reanudarse con identidad/resultado original ni que side effects se puedan repetir con seguridad. |
 | Session/thread isolation | PARTIAL | Cada agent tiene thread identificable; `/agent` permite inspeccionar threads. Children heredan sandbox/runtime del parent. No hay evidencia de worktree/filesystem separado por child; `codex --worktree` aísla una sesión root, no establece aislamiento de cada child. |
-| Activity HUD | PARTIAL | Codex CLI `/agent` y clientes compatibles muestran activity/threads y resultados. No se añadió equivalente al Activity plugin Olympus ni un HUD agregado con sus mismos contadores/barriers. |
+| Activity visibility | PARTIAL | Codex usa visibilidad nativa de agentes/threads. No se recrea el Activity HUD OpenCode ni se reclama igual observabilidad agregada. |
 | Installer / VerifyOnly | GAP | El installer Olympus existente gestiona OpenCode y no se modifica. No hay instalación/upgrade/rollback/VerifyOnly del perfil Codex. |
 | Config global/per-project | ADAPTABLE | Codex admite `~/.codex/agents/` y `.codex/agents/`, además de config local de proyecto trusted. Este experimento instala solo perfil local; no crea sincronizador global ni extiende el installer. |
 | Shell tool | PARTIAL | Shell local es nativo y sandboxed según el modo/profile activo; el flujo normal puede ejecutar comandos. No hay equivalencia probada para permisos de shell por role como en OpenCode. |

@@ -1,0 +1,2 @@
+# Shared orchestration invariants consumed by both harness adapters.
+max_children = 4

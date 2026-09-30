@@ -20,7 +20,8 @@ function Is-OlympusOwned([string]$path, [string[]]$manifestPaths = @()) {
     $p = $path.Replace('\','/').TrimStart('/').ToLowerInvariant()
     $fixed = @('.opencode/agents/', '.opencode/commands/maintain.md',
         '.opencode/plugins/olympus-activity/', '.opencode/orchestrator-install.json',
-        '.opencode/opencode.json', '.opencode/opencode.jsonc', 'opencode.jsonc', 'opencode.json')
+        '.opencode/opencode.json', '.opencode/opencode.jsonc', '.codex/', 'CODEX.md',
+        'olympus/', 'scripts/render_harnesses.py', 'opencode.jsonc', 'opencode.json')
     if (@($fixed | Where-Object { $p.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { return $true }
     foreach ($entry in $manifestPaths) {
         $declared = $entry.Replace('\','/').TrimStart('/').ToLowerInvariant()
@@ -229,9 +230,20 @@ try {
 
     foreach ($path in @('.opencode/agents/kovan.md','.opencode/commands/maintain.md',
         '.opencode/orchestrator-install.json','.opencode/opencode.json','.opencode/opencode.jsonc',
+        '.codex/agents/kovan.toml','.codex/config.toml','CODEX.md','olympus/core/models.toml',
+        'olympus/roles/kael.md','olympus/policies/authority.md','scripts/render_harnesses.py',
         'opencode.json','opencode.jsonc')) {
         Check ('AUTH9_NATIVE_DENY_' + ($path -replace '[^A-Za-z0-9]','_')) ((Native-Decision $nativeRules 'edit' $path) -eq 'DENY')
     }
+    $normalAgents = @(Get-ChildItem -LiteralPath (Join-Path $root '.opencode/agents') -Filter '*.md' -File | Where-Object BaseName -ne 'aegis')
+    $coreProtectionValid = @($normalAgents | Where-Object {
+        $agentRules = Read-NativeRules ([IO.File]::ReadAllText($_.FullName)) @($config.permissions)
+        @('olympus/core/models.toml','olympus/roles/kael.md','olympus/policies/authority.md',
+          '.codex/config.toml','CODEX.md','scripts/render_harnesses.py' | Where-Object {
+            (Native-Decision $agentRules 'edit' $_) -ne 'DENY'
+        }).Count -gt 0
+    }).Count -eq 0
+    Check 'AUTH9_CORE_AND_GENERATOR_PROTECTED_FOR_NORMAL_AGENTS' $coreProtectionValid
     $bootstrap = Text 'scripts/bootstrap.ps1'
     $managedBlock = [regex]::Match($bootstrap, '(?s)\$Managed\s*=\s*@\((.*?)\)').Groups[1].Value
     $managedPaths = @([regex]::Matches($managedBlock, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value }) + '.opencode/orchestrator-install.json'

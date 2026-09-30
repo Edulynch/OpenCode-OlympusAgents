@@ -464,21 +464,28 @@ function Report([string]$Repo, $Detection, $Plan, [string]$Status, [string]$Vers
     Write-Output "STATUS:"; Write-Output $Status
 }
 
-function Validate-Install([string]$Repo) {
-    $expected = @{
-        "kael"=@("gpt-6.1-sol","high","primary")
-        "thales"=@("gpt-6.1-sol","xhigh","subagent")
-        "atlas"=@("gpt-6.1-sol","high","subagent")
-        "argus"=@("gpt-6.1-sol","high","subagent")
-        "talos"=@("gpt-6.1-sol","high","subagent")
-        "helios"=@("gpt-6.1-sol","high","subagent")
-        "veyra"=@("gpt-6-luna","max","subagent")
-        "orin"=@("gpt-6-luna","max","subagent")
-        "kovan"=@("gpt-6-luna","max","subagent")
-        "nox"=@("gpt-6-luna","max","subagent")
-        "vera"=@("gpt-6-luna","max","subagent")
-        "aegis"=@("gpt-6-luna","max","subagent")
+function Get-Expected-Agents {
+    $agentsRoot = Join-Path $SourceRoot '.opencode/agents'
+    $files = @(Get-ChildItem -LiteralPath $agentsRoot -Filter '*.md' -File)
+    $expected = @{}
+    foreach ($file in $files) {
+        $text = [IO.File]::ReadAllText($file.FullName)
+        $model = [regex]::Match($text, '(?m)^model:\s*["'']?openai/(?<id>[^#"''\s]+)#(?<effort>[A-Za-z]+)["'']?\s*$')
+        $mode = [regex]::Match($text, '(?m)^mode:\s*(?<mode>primary|subagent)\s*$')
+        if (-not $model.Success -or -not $mode.Success) {
+            Fail 'SOURCE_AGENT_MODEL_INVALID' ("Generated role metadata is incomplete: " + $file.Name)
+        }
+        $expected[$file.BaseName] = @($model.Groups['id'].Value, $model.Groups['effort'].Value, $mode.Groups['mode'].Value)
     }
+    $managedAgentCount = @($Managed | Where-Object { $_ -match '^\.opencode/agents/[^/]+\.md$' }).Count
+    if ($files.Count -ne $managedAgentCount -or $expected.Count -ne $managedAgentCount) {
+        Fail 'SOURCE_AGENT_ROSTER_INVALID' 'Generated OpenCode role files do not match the installer-managed roster.'
+    }
+    return $expected
+}
+
+function Validate-Install([string]$Repo) {
+    $expected = Get-Expected-Agents
     $lastMismatch = $null
     Push-Location $Repo
     try {

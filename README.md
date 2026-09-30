@@ -61,7 +61,7 @@ Kael coordinates the team as needed: research, implementation, testing, and revi
 | 🧠 **Thales The Sage** | Helps diagnose difficult problems when needed. |
 | ☀️ **Helios The Optimizer** | On explicit optimization requests, proposes a bounded improvement and stops for user approval. |
 
-OpenCode is the runtime. Olympus is the orchestration and decision layer that helps this team work together.
+Olympus Core defines what the team and its orchestration mean. Harness adapters define how each runtime expresses the same Core. **OpenCode and Codex are the two officially supported harnesses**; Codex uses its native root, agents, approvals, and activity view, while capability gaps remain explicit.
 
 The pinned v0.2.0 installer remains the latest stable installer. The `v0.3.0-beta.1` prerelease was published on 2026-09-28 and adds Argus, Atlas, Talos, Thales, and Helios; those prerelease additions are not included in the v0.2.0 installer. The checked-in v0.3.0-beta.3 installer is a source candidate, not a published release; when published from its matching tag, its default selects that same prerelease rather than silently falling back to stable.
 
@@ -90,7 +90,7 @@ When agents are working, OpenCode can show who is active and what they're doing:
 ● Kovan   Implementing feature
 ```
 
-The activity display is read-only and disappears when no agents are working.
+The OpenCode activity display is read-only and disappears when no agents are working. Codex uses its native agent/activity visibility; Olympus does not claim the same HUD there.
 
 ## 🛡️ Trust
 
@@ -111,8 +111,10 @@ Olympus is installed per project. To install or upgrade to **v0.2.0** in a proje
 
 - [OpenCode documentation](https://opencode.ai/docs/) — install and learn OpenCode.
 - [Development & qualification](docs/DEVELOPMENT.md) — maintainer docs, bootstrap internals, qualification, and release workflow.
+- [Core and harness adapters](docs/HARNESSES.md) — canonical source layout, generated outputs, renderer/check commands, and capability contract.
+- [Harness capability contract](docs/HARNESS-CAPABILITIES.md) — current OpenCode and Codex support states.
 - [Roadmap](docs/ROADMAP.md) — planned agent evolution and future qualification work.
 - [Olympus v0.2.0 release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.2.0) and [changelog](CHANGELOG.md) — release information.
 - [License](LICENSE) — MIT.
 
-Olympus is an independent OpenCode V2 project, not a fork. The idea of a specialized agent team was informed in part by [donvito/codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).
+Olympus is an independent orchestration system with officially supported OpenCode and Codex adapters, not a fork. The idea of a specialized agent team was informed in part by [donvito/codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).

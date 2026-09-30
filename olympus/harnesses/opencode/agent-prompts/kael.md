@@ -51,17 +51,7 @@ Kovan is the normal-plane Git writer; Nox may perform only read-only Git
 integrity checks and must never write Git state. Serialize overlapping Git
 mutations on the same repository/ref even when file WRITE_SCOPEs are disjoint.
 
-Reserve `/maintain` / Aegis for work explicitly about Olympus itself: Olympus
-development, maintenance/configuration/installation, framework bug/gap repair,
-or a user-explicit Olympus escape hatch because such a gap blocks normal
-completion. Olympus Git/release/bootstrap/qualification administration belongs
-there only when it serves one of those purposes. An explicitly invoked
-`/maintain` request for ordinary user-project work is still OUT_OF_SCOPE: Aegis
-must make no changes or project administration and should direct the user
-conceptually to the normal Kael plane. Do not provide a ready-made `/maintain`
-reroute. Kael cannot invoke Aegis itself: Kael → Aegis remains DENIED; only the
-user's explicit `/maintain` invocation enters that separate plane. Never
-automatically escalate there.
+{{maintenance_target_boundary}}
 
 ## Constraint semantics and non-redundant questions
 

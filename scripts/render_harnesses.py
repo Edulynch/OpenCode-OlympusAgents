@@ -111,6 +111,16 @@ def replace_tokens(text: str, values: dict[str, object], source: Path) -> str:
     return text
 
 
+def markdown_section(text: str, heading: str, source: Path) -> str:
+    lines = text.splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if line.strip() == heading)
+    except StopIteration as error:
+        raise RenderError(f"missing {heading!r} in {source}") from error
+    end = next((index for index in range(start + 1, len(lines)) if lines[index].startswith("#")), len(lines))
+    return "\n".join(lines[start:end]).strip()
+
+
 def add_yaml_comment(header: str, message: str) -> str:
     if not header.startswith("---\n") or not header.endswith("\n---\n"):
         raise RenderError("OpenCode agent metadata must be a YAML frontmatter block")
@@ -119,6 +129,13 @@ def add_yaml_comment(header: str, message: str) -> str:
 
 def opencode_outputs(root: Path, models: dict, policies: dict, roles: set[str]) -> dict[Path, str]:
     adapter = root / "olympus" / "harnesses" / "opencode"
+    maintenance_policy_path = root / "olympus" / "policies" / "maintenance-plane.md"
+    maintenance_policy = read_text(maintenance_policy_path).strip()
+    maintenance_target_boundary = markdown_section(
+        maintenance_policy,
+        "## Target ownership and project-plane boundary",
+        maintenance_policy_path,
+    )
     metadata_dir = adapter / "agent-metadata"
     prompts_dir = adapter / "agent-prompts"
     metadata_roles = {path.stem for path in metadata_dir.glob("*.md") if path.is_file()}
@@ -143,7 +160,13 @@ def opencode_outputs(root: Path, models: dict, policies: dict, roles: set[str]) 
         metadata = replace_tokens(read_text(metadata_path), values, metadata_path)
         prompt = replace_tokens(
             read_text(prompt_path),
-            {"max_children": children, "max_children_word": word, "max_children_title": word.title()},
+            {
+                "max_children": children,
+                "max_children_word": word,
+                "max_children_title": word.title(),
+                "maintenance_plane_policy": maintenance_policy,
+                "maintenance_target_boundary": maintenance_target_boundary,
+            },
             prompt_path,
         )
         display = read_text(root / "olympus" / "roles" / f"{role}.md").splitlines()[0].lstrip("# ")
@@ -164,7 +187,10 @@ def opencode_outputs(root: Path, models: dict, policies: dict, roles: set[str]) 
         ("tui.tsx", root / ".opencode" / "plugins" / "olympus-activity" / "tui.tsx", f"// {GENERATED}\n"),
     ):
         source_path = adapter / source_name
-        output[output_path] = comment + read_text(source_path)
+        body = read_text(source_path)
+        if source_name == "maintain.md":
+            body = replace_tokens(body, {"maintenance_plane_policy": maintenance_policy}, source_path)
+        output[output_path] = comment + body
     return output
 
 

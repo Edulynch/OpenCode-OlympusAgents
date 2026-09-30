@@ -25,6 +25,7 @@ try {
     $admin = Section $aegis 'Olympus administrative fast path'
     $mission = Section $kael 'Mission and routing'
     $handoff = Section $kael 'Explicit Aegis result handoff'
+    $maintenanceBoundary = Section $kael 'Target ownership and project-plane boundary'
 
     Check ORDER ($mission.IndexOf('Capability Preflight') -ge 0 -and
         $mission.IndexOf('Capability Preflight') -lt $mission.IndexOf('choose DIRECT') -and
@@ -45,8 +46,8 @@ try {
     # A second known normal-plane blocker must precede optional discovery.
     Check CAPABILITY_BLOCKED ($preflight -match 'external action has no\s+available authorized path' -and
         $preflight -match 'explain the blocker before optional research')
-    Check BOUNDARY ($preflight -match 'Kael → Aegis remains DENIED' -and
-        $preflight -match 'only the\s+user.s explicit `/maintain` invocation' -and
+    Check BOUNDARY ($maintenanceBoundary -match 'Kael → Aegis remains DENIED' -and
+        $maintenanceBoundary -match 'only the\s+user.s explicit `/maintain` invocation' -and
         $handoff -match 'cannot invoke or' -and $handoff -match 'delegate to Aegis' -and
         $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: aegis\s*\r?\n\s*effect: allow')
 
@@ -69,7 +70,8 @@ try {
         $admin -match 'Do not first\s+inventory source' -and $admin -match 'history\s+rewrite plus push' -and
         $admin -match 'non-mutating' -and $admin -match 'not definitive remote write')
     Check MAINTENANCE_BOUNDARY ($aegis -match 'explicit `/maintain` invocation' -and
-        $aegis -match 'Olympus-only task boundary' -and $aegis -match 'OUT_OF_SCOPE' -and
+        $aegis -match 'Target ownership and project-plane boundary' -and
+        $aegis -match 'Cheap scope gate — before any other work' -and $aegis -match 'OUT_OF_SCOPE' -and
         $aegis -match 'no project administration' -and
         $aegis -match '(?s)action: subagent\s+resource: "\*"\s+effect: deny')
     Check INVARIANTS ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and

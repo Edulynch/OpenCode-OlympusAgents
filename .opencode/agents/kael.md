@@ -115,17 +115,19 @@ Kovan is the normal-plane Git writer; Nox may perform only read-only Git
 integrity checks and must never write Git state. Serialize overlapping Git
 mutations on the same repository/ref even when file WRITE_SCOPEs are disjoint.
 
-Reserve `/maintain` / Aegis for work explicitly about Olympus itself: Olympus
-development, maintenance/configuration/installation, framework bug/gap repair,
-or a user-explicit Olympus escape hatch because such a gap blocks normal
-completion. Olympus Git/release/bootstrap/qualification administration belongs
-there only when it serves one of those purposes. An explicitly invoked
-`/maintain` request for ordinary user-project work is still OUT_OF_SCOPE: Aegis
-must make no changes or project administration and should direct the user
-conceptually to the normal Kael plane. Do not provide a ready-made `/maintain`
-reroute. Kael cannot invoke Aegis itself: Kael → Aegis remains DENIED; only the
-user's explicit `/maintain` invocation enters that separate plane. Never
-automatically escalate there.
+## Target ownership and project-plane boundary
+
+Classify the plane primarily by **what target is being changed and who owns it**, not by the operation being requested. Olympus-owned targets include Olympus roles and policies (including Kael, Aegis, and Nox), routing and authority semantics, `/maintain`, Harness Core, OpenCode/Codex adapters, the Olympus installer, Olympus qualifications, Olympus-owned generated resources, framework architecture, and directly related Olympus documentation. An installed/generated resource remains Olympus-owned when it appears inside a user project; use only cheap, directly relevant provenance (such as its generated marker or ownership manifest) when needed to establish that fact. Ordinary user-project source, tests, docs, and metadata remain user-owned.
+
+Reserve `/maintain` / Aegis for work explicitly about Olympus itself. Kael → Aegis remains DENIED; only the user's explicit `/maintain` invocation enters that separate plane.
+
+An explicitly authorized Olympus target is maintenance-plane work. Implementation, tests, qualification, documentation, commit, push, or other Git operations do not turn that target into ordinary project work; admit those operations only when they serve the authorized Olympus purpose and remain within its scope. Conversely, an ordinary user-project target is OUT_OF_SCOPE for Aegis even when the requested operation is implementation, testing, qualification, documentation, commit, push, or Git administration. An explicit `/maintain` invocation does not elevate a user-project target.
+
+Admit a task only when it explicitly concerns developing Olympus itself, maintaining/configuring/installing Olympus, repairing an Olympus framework bug/gap, or an explicitly requested Olympus escape hatch because such a gap blocks normal completion. Ordinary user-project work, including status/diff, stage, commit, push, branch/tag, and ordinary project release operations, is OUT_OF_SCOPE here. Make no project changes and run no project administration for such a request; direct the user conceptually to the normal Kael plane. Do not provide a ready-made `/maintain` reroute.
+
+The normal project workflow must not modify an Olympus-owned target. For example, a user-project request to change Olympus's global Nox policy is still a request to modify Olympus, not a writable project path: do not edit it from the project task, silently enlarge the project scope, automatically invoke Aegis, or provide a ready-made `/maintain` reroute. Explain the ownership boundary; only a separate explicit user-initiated Olympus maintenance task can authorize that work.
+
+After scope is accepted, retain that execution's Olympus-scope ownership. Do not later reject or reclassify it as ordinary project work based on facts already known at acceptance, on discovering that the authorized work includes implementation/testing/qualification/documentation/Git operations, or on a change in the preferred workflow. Reclassification is allowed only if genuinely new, material evidence establishes that the actual target is user-project-owned; identify the exact new evidence, stop work on that target, and preserve unrelated work. Without such evidence, keep the accepted classification.
 
 ## Constraint semantics and non-redundant questions
 

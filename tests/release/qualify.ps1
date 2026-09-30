@@ -288,6 +288,18 @@ try {
         $hashDrift.Text -match 'OLYMPUS_VERIFY_REASON: MANAGED_FILE_MISMATCH' -and
         (Get-ProjectSnapshot $driftTarget) -ceq $driftSnapshot)
 
+    $missingTarget = New-Target 'verify-managed-file-missing'
+    $missingInstall = Install $missingTarget $candidateArchive 'v0.3.0-beta.3'
+    if ($missingInstall.Code -ne 0) { throw 'Beta.3 fixture install failed before missing-file verification.' }
+    $missingFile = Join-Path $missingTarget '.opencode/agents/aegis.md'
+    Remove-Item -LiteralPath $missingFile -Force
+    $missingSnapshot = Get-ProjectSnapshot $missingTarget
+    $missingVerify = Verify $missingTarget $candidateArchive 'v0.3.0-beta.3'
+    Check 'R24_MANAGED_FILE_MISSING_FAIL' ($missingVerify.Code -ne 0 -and
+        $missingVerify.Text -match '(?m)^OLYMPUS_VERIFY: v0\.3\.0-beta\.3 FAIL\s*$' -and
+        $missingVerify.Text -match 'OLYMPUS_VERIFY_REASON: MANAGED_FILE_MISSING' -and
+        (Get-ProjectSnapshot $missingTarget) -ceq $missingSnapshot)
+
     $retiredAgentTarget = New-Target 'verify-retired-agent-active'
     $retiredInstall = Install $retiredAgentTarget $candidateArchive 'v0.3.0-beta.3'
     if ($retiredInstall.Code -ne 0) { throw 'Beta.3 fixture install failed before retired-agent verification.' }

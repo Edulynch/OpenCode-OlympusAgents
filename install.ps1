@@ -111,7 +111,7 @@ function Assert-InstalledRelease([string]$Source, [string]$RequestedVersion, [st
             throw "SOURCE_INVALID: Release managed file is missing: $path"
         }
         if (-not (Test-Path -LiteralPath $targetFile -PathType Leaf)) {
-            throw "MANAGED_FILE_MISMATCH: Installed managed file is missing: $path"
+            throw "MANAGED_FILE_MISSING: Installed managed file is missing: $path"
         }
         $sourceHash = Get-ContentHash $sourceFile
         $targetHash = Get-ContentHash $targetFile

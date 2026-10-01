@@ -2,7 +2,7 @@
 
 **Observed:** 2026-10-01
 **OpenCode:** `v2.0.21`
-**Status:** **OPEN** — static fix qualified; final human runtime smoke required.
+**Status:** **CLOSED** — static qualification and final human runtime smoke PASS.
 
 ## Confirmed runtime reproduction
 
@@ -79,64 +79,49 @@ new-session/task isolation, routing/self-activation denials, immediate reject
 without tools, no ownership gate, no expensive reconstruction, Harness Core,
 renderer, authority, maintenance handoff and result reconciliation.
 
-**Static qualification:** PASS (static only; runtime PASS is not inferred).
+**Static qualification:** PASS.
 **Implementation commit:** `464151c` (`fix(aegis): retain same-session maintenance authorization`).
-**Issue #8:** remains **OPEN** until the human runtime smoke below returns PASS.
+**Final runtime qualification:** PASS (human-observed same-session continuation; evidence below).
+**Issue #8:** **CLOSED** after the final runtime PASS.
 
-Validated suites: `python tests/maintenance-scope/qualify.py`,
+Validated affected qualifications: `python tests/maintenance-scope/qualify.py`
+(including deterministic checkpoint/resume and accepted-scope cases),
 `python tests/harness-core/qualify.py`,
 `pwsh -NoProfile -File tests/authority/qualify.ps1`,
 `pwsh -NoProfile -File tests/maintenance-handoff/qualify.ps1`,
-`pwsh -NoProfile -File tests/result-reconciliation/qualify.ps1`,
-`python scripts/render_harnesses.py check --harness all`, and `git diff --check`.
+`python scripts/render_harnesses.py check --harness opencode`, and
+`git diff --check`.
 
-## HUMAN_ACTION_REQUIRED: ISSUE_8_FINAL_RUNTIME_SMOKE
+## Final runtime validation: ISSUE_8_FINAL_RUNTIME_SMOKE
 
-Run this two-phase test against the updated OpenCode Harness output from the
-repository root. Do not infer runtime success from static tests.
+The human supplied the final two-phase runtime evidence against the updated
+OpenCode Harness output. This is interactive runtime evidence, separate from
+the deterministic static qualification above.
 
-### Phase 1 — fresh entry
+### Phase 1 — fresh entry and identity verification
 
-Start a **new** session through Olympus `/maintain` with this read-only task:
+Phase 1 created a fresh `/maintain` Aegis execution with the read-only task:
 
 ```text
-Emit exactly these fields from this read-only resume probe:
-IDENTITY: Aegis — The Keeper
 PROBE_MARKER: OLYMPUS_ISSUE8_FINAL_RESUME_20261001
 TASK_SCOPE: READ_ONLY_ISSUE8_FINAL_RUNTIME_SMOKE
-MAINTENANCE_AUTH: <state>
-AEGIS_SCOPE: <state>
-
-Do not read or modify files, run tools, delegate, or start child sessions.
-Finish after emitting the fields and record the exact Aegis child session ID.
 ```
 
-Verify the child session is `agent: aegis` and belongs to this `/maintain` root.
-Let Phase 1 finish normally and retain its exact child session ID.
+The human evidence identifies and verifies the `/maintain` root and exact child:
 
-### Phase 2 — continue the same child
-
-In PowerShell, replace the placeholder with that exact ID and run from the same
-repository/runtime configuration:
-
-```powershell
-$aegisChildId = '<exact Aegis child session ID>'
-$resumePrompt = @'
-Responde únicamente con estas cinco líneas:
-IDENTITY: <tu identidad actual>
-PROBE_MARKER: <marker retenido>
-TASK_SCOPE: <scope original retenido>
-MAINTENANCE_AUTH: <estado actual>
-AEGIS_SCOPE: <estado actual>
-
-No leas ni modifiques archivos, no ejecutes herramientas, no delegues ni abras children.
-'@
-opencode run --session $aegisChildId $resumePrompt
+```text
+ROOT_SESSION_ID: ses_f0803f106ffeiH6oHzaSEkTw0f
+AEGIS_CHILD_SESSION_ID: ses_f0803efbcffeBZTHkvyXTUOCCN
+IDENTITY: Aegis — The Keeper
 ```
 
-Do **not** add `--continue`, `--agent aegis`, or a new `/maintain` invocation.
+The original execution finished normally before its same-child continuation.
 
-**PASS requires all five fields:**
+### Phase 2 — continue the same child without a new maintenance entry
+
+PowerShell ran `opencode run --session ses_f0803efbcffeBZTHkvyXTUOCCN <resume-prompt>`
+from the same runtime configuration. The continuation used no new `/maintain`,
+`--agent aegis`, `--continue`, delegation, or file modification. It returned:
 
 ```text
 IDENTITY: Aegis — The Keeper
@@ -146,5 +131,20 @@ MAINTENANCE_AUTH: VALID
 AEGIS_SCOPE: ACCEPTED
 ```
 
-Report the captured Phase 1/Phase 2 outputs and child ID. Until the user supplies
-this runtime PASS, keep Issue #8 **OPEN**.
+Final runtime findings:
+
+```text
+RESUME_MECHANISM: SUPPORTED
+IDENTITY_RETAINED: PASS
+MARKER_RETAINED: PASS
+TASK_SCOPE_RETAINED: PASS
+MAINTENANCE_AUTH_RETAINED: PASS
+AEGIS_SCOPE_RETAINED: PASS
+AGENT_SUBSTITUTION: NO
+OLYMPUS_DEFECT_FIXED: YES
+CHECKPOINT_RESUME_RUNTIME: SUPPORTED
+ISSUE_8_CHECKPOINT_RESUME: PASS
+```
+
+The exact identity, marker, original scope, and accepted authorization states
+were retained in the resumed child. Issue #8 is **CLOSED**.

@@ -229,6 +229,8 @@ pwsh -NoProfile -File ./tests/result-reconciliation/qualify.ps1
 pwsh -NoProfile -File ./tests/maintenance-handoff/qualify.ps1
 ```
 
+`tests/maintenance-scope/qualify.ps1` checks byte-zero frontmatter in both canonical and generated files, and `tests/authority/qualify.ps1` is the live effective-agent probe that changes to this checkout and runs `opencode debug agents`. Run both after any Harness Core render has finished; do not overlap either with a process that renders/rewrites this checkout's `.opencode` outputs. This isolates only the byte/runtime-sensitive gates and does not require serializing unrelated read-only qualifications.
+
 `check` is read-only. Harness-core qualification tests renderer idempotence,
 drift/missing-output detection, canonical role/model/policy sources, and
 cross-harness capability claims. Codex static qualification uses the local

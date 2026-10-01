@@ -23,7 +23,7 @@
 - Git and an existing Git project
 - OpenCode V2 and the configured models when installing OpenCode; Codex CLI when using Codex
 
-Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Replace `<TAG>` with a published release tag that includes the dual-harness installer. The current source identifies as `v0.4.0`; this branch is not tagged or published. Project scope remains the installer default; global installation is a separate Windows-qualified foundation.
+Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Replace `<TAG>` with a published release tag that includes the dual-harness installer. The current source targets the planned corrective patch `v0.4.1`. Tag `v0.4.0` exists and contains the foundation, but final release validation failed on contradictory documentation, so no GitHub Release was created. Project scope remains the installer default; global installation is a separate Windows-qualified foundation.
 
 #### OpenCode (default)
 
@@ -49,7 +49,7 @@ Run the downloaded script as a script block to pass installer parameters:
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness all
 ```
 
-Add `-Target (Get-Location).Path` when invoking from outside the project root. Each selection is additive: installing one harness does not remove the other. A published tag must contain this feature; the existing release tag is not changed by this source-branch work.
+Add `-Target (Get-Location).Path` when invoking from outside the project root. Each selection is additive: installing one harness does not remove the other. A published tag must contain this feature; the existing `v0.4.0` tag is not changed by this source work and is not a GitHub Release.
 
 Verify just the requested project-local harness surface without writing files:
 
@@ -130,7 +130,7 @@ Olympus treats an installed project as trusted. Kovan and Nox can run commands f
 
 ## 🔄 Update
 
-Earlier published beta.5 remains project-local. This branch's `v0.4.0` installer keeps `-Scope project` and `-Harness opencode` as defaults; `-Harness` accepts `opencode`, `codex`, or `all`. The v0.4.0 global foundation is not published. Project verification checks only the requested managed harness subset, is read-only, and does not launch mutable runtime discovery in the target. See [Harness installation](docs/HARNESSES.md) for global static-install behavior and runtime limitations.
+Earlier published beta.5 remains a historical project-local release. Tagged v0.4.0 keeps `-Scope project` and `-Harness opencode` as defaults; `-Harness` accepts `opencode`, `codex`, or `all`. Its tagged installer/static qualification passed, but final release validation found a documentation contradiction; no GitHub Release v0.4.0 exists. The planned v0.4.1 patch corrects that documentation. Project verification checks only the requested managed harness subset, is read-only, and does not launch mutable runtime discovery in the target. See [Harness installation](docs/HARNESSES.md) for global static-install behavior and runtime limitations.
 
 ## 🆘 Troubleshooting
 

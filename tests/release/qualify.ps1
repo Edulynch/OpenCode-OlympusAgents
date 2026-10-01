@@ -177,7 +177,7 @@ try {
     $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1',$script:CandidateVersion,'v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
     if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
         Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
-        Check 'R0_EXPECTED_VERSION_V040' ($script:CandidateVersion -ceq 'v0.4.0')
+        Check 'R0_EXPECTED_VERSION_V041' ($script:CandidateVersion -ceq 'v0.4.1')
         Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
         Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
     } elseif ($ResumeAtR1) { Write-Output 'REVALIDATION_START: R1 (previously collected R0/alpha/RC gates not rerun).' }

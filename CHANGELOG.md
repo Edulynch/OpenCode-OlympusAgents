@@ -1,8 +1,53 @@
-# Unreleased
+# Release notes
+
+## v0.4.1
+
+**Status: planned corrective patch release; do not tag or publish until validation passes.**
+
+This patch corrects the release-facing documentation contradiction found during final validation of tagged v0.4.0. It does not claim to resolve the existing Issue #1, #7, or #10 gaps, Codex `DENY = GAP`, or Codex `AEGIS = GAP`.
+
+### Highlights
+
+- Carry forward the Olympus Harness Core and its deterministic OpenCode and Codex adapters.
+- Derive full agent display identities from one Core source and map Sol roles to GPT-6.1 Sol while Luna roles remain on GPT-6 Luna.
+- Retain the Dual Harness Installer for OpenCode and Codex. `-Harness opencode`, `-Harness codex`, and `-Harness all` are additive; `installed_harnesses` records manifest ownership, VerifyOnly is read-only, and user-owned files are preserved. Existing legacy OpenCode installations remain upgradeable.
+- Keep the public Windows installer launchable from PowerShell 5.1 and PowerShell 7; PowerShell 7 runs the bootstrap.
+- Carry forward the Windows-qualified global static-install foundation with manifests, hash-checked update, safe uninstall of owned files only, and non-destructive project-to-global migration; project scope remains the default.
+- Correct the release-state documentation; the v0.4.0 tag remains unchanged and has no GitHub Release.
+
+### Capability limits
+
+- Global static installation is supported for both harnesses, but global runtime discovery is **GAP** for OpenCode and **SUPPORTED** for Codex (based on supplied runtime evidence). OpenCode global installation must not be treated as runtime-qualified.
+- Codex `DENY = GAP`, `AEGIS = GAP`, `RESULT_RECONCILIATION = PARTIAL`, and `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; Codex ASK is adaptable, not identical to OpenCode ASK. This release does not claim full parity.
+- OpenCode V2 Issue #1 remains OPEN upstream (`No tool output found`); Olympus reconciles original results where possible and forbids blind retry, but does not fix upstream result correlation.
+- Issue #7 remains OPEN because OpenCode global runtime discovery is a known GAP. Issue #10 remains OPEN because child-to-parent summaries may omit exact structured fields.
+- Global installation is Windows-qualified. No Unix global install/runtime qualification is claimed.
+
+## Installation
+
+Use these commands only after the planned v0.4.1 release is published, from the root of the trusted Git project:
+
+```powershell
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.1/install.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.1/install.ps1'))) -Harness codex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.1/install.ps1'))) -Harness all
+```
+
+The default is project-local OpenCode. Global commands are separate; their static install success does not imply OpenCode global runtime discovery support.
+
+## Verify installation
+
+Each command verifies only the selected managed project-local harness subset and is read-only:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.1/install.ps1'))) -Harness opencode -Version 'v0.4.1' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.1/install.ps1'))) -Harness codex -Version 'v0.4.1' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.1/install.ps1'))) -Harness all -Version 'v0.4.1' -Target (Get-Location).Path -VerifyOnly
+```
 
 ## v0.4.0
 
-**Status: unreleased source candidate; no tag or GitHub Release has been created.**
+**Status: tagged build on master. Tagged installer, VerifyOnly, and static qualification passed; final release validation failed because release-facing documentation still falsely said the merge/tag had not occurred. No GitHub Release v0.4.0 was created. The tag is immutable; v0.4.1 is the planned corrective patch.**
 
 ### Highlights
 

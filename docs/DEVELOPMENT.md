@@ -6,7 +6,7 @@ For Olympus maintainers, contributors, installation debugging, qualification, an
 
 Olympus Core defines role responsibilities, model intent, routing, authority, result lifecycle, and maintenance-plane semantics. OpenCode and Codex adapters express that same Core in their native surfaces. Kael is the single conceptual ROOT ORCHESTRATOR: OpenCode represents it as its primary agent, while Codex represents it as the root thread. Aegis remains a separate privileged Olympus maintenance role, supported only through OpenCode's explicit `/maintain` entry.
 
-Kael checks feasibility and plane routing from the request **before** delegated research or planning. `/maintain` is reserved for Olympus development/maintenance/configuration/installation, Olympus framework bug/gap repair, or a user-explicit Olympus escape hatch because such a gap blocks normal completion. Ordinary user-project work, including ordinary Git administration, remains in the normal plane; Git alone is not an Aegis capability boundary. Kael does not automatically delegate to Aegis. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
+Kael checks feasibility and plane routing from the request **before** delegated research or planning. Explicit `/maintain` accepts its delivered task in any repository; its command entry is sufficient authorization. Ordinary user-project work, including ordinary Git administration, remains in the normal plane; Git alone is not an Aegis capability boundary. Kael does not automatically delegate to Aegis. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
 
 ### Authority Grants — beta.3
 
@@ -63,9 +63,9 @@ The project-wide `external_directory` default is ASK, not blanket ALLOW or DENY;
 normal agents have no wildcard external allow. This supports repositories outside
 the current root—including monorepo/sibling/multi-repo layouts—only after native
 user approval and exact Kael scope. Layouts are not hardcoded. Native DENY is
-never elevated by text, WRITE_SCOPE, or an Authority Grant. `/maintain` remains
-exclusively Olympus maintenance and is never the route for ordinary project
-authority requests.
+never elevated by text, WRITE_SCOPE, or an Authority Grant. The explicit
+`/maintain` command enters Aegis for its delivered task in any repository; it is
+not an automatic route for ordinary project authority requests.
 
 ### Trivial task / authority fast path
 
@@ -279,17 +279,25 @@ The passive, read-only plugin uses native OpenCode child-session list and status
 
 ## Aegis Plane (explicit maintenance operations)
 
-Kael → Aegis: **DENIED** (not an automatic escalation path). User → `/maintain <task>` → Aegis is admitted only for Olympus development/maintenance/configuration/installation, Olympus framework bug/gap repair, or an explicitly requested Olympus escape hatch because such a gap blocks normal completion. An ordinary project task remains OUT_OF_SCOPE even after `/maintain` was invoked; make no project changes or run project administration, and direct the user conceptually to the normal Kael plane. Do not provide a ready-made `/maintain` reroute. Aegis is hidden and outside normal agent routing.
+Kael → Aegis: **DENIED**; child → Aegis: **DENIED**. User → `/maintain <task>` → Aegis accepts the delivered task in any repository. Aegis is hidden, cannot self-activate, and cannot accept automatic escalation or broaden task scope.
 
-The first Aegis action is a **cheap scope gate**: identify only the current repository if needed, actual target, target owner, and the command template's explicit authorization (using at most one or two cheap identifiers if necessary). Emit `AEGIS_SCOPE: ACCEPTED` or `AEGIS_SCOPE: REJECTED` before broad exploration, searches, qualification, implementation, long analysis, subagents, commits, push, or other project/repository administration. REJECTED stops immediately without changes or administration. ACCEPTED records Olympus-scope ownership for that run; it cannot later become ordinary project work based on the same facts or on implementation/testing/qualification/docs/Git operations. Reclassify only on new, material evidence that the actual target is user-project-owned, and state the exact evidence.
+Fresh command entry immediately emits `MAINTENANCE_AUTH: VALID` and `AEGIS_SCOPE: ACCEPTED`, then executes the delivered task. No classification phase, repository ownership gate, independent invocation proof, envelope, durable authorization marker or provenance reconstruction. Same-run runtime resume preserves accepted task scope; a genuinely new execution requires `/maintain` again. An uncertain resume or unauthenticated entry fails closed immediately without tools or long reasoning.
 
-Classify maintenance versus normal work primarily by **target ownership**, not operation. Olympus roles and policies (including global Nox), `/maintain`, routing/authority, Harness Core, adapters, installer, qualifications, Olympus-owned generated resources, architecture and directly related framework docs are Olympus targets. Their implementation, testing, qualification, documentation, commit, push, and other Git work remain maintenance when explicitly authorized and in scope. Ordinary project source, tests, docs, or metadata are normal-plane work even if their requested operation is Git or qualification. The normal project workflow must not directly modify an Olympus-owned target: a project request to change global Nox is not permission to edit it from that project, and must not trigger an automatic Aegis invocation. Explain the ownership boundary without broadening the project task.
+The normal project workflow must not directly modify an Olympus-owned target, such as global Nox, or automatically invoke Aegis. Explain that project-plane boundary without broadening the task. This protection does not restrict explicit `/maintain` admission by repository or target ownership.
 
-Ordinary trusted-project Git (status/diff, task-owned staging, explicitly requested commit/push, branch/tag work, or ordinary project release) belongs to the normal Kael/Kovan plane. Kovan may perform it only within the task's explicit repository/Git ownership; stage only task-owned paths. Destructive or high-impact operations such as history rewrite, force-push, reset/clean, destructive ref changes, or publishing require explicit, proportionate authorization, but do not route to Aegis solely because Git is involved. Olympus repository/release operations are Aegis work only when directly serving an admitted Olympus purpose.
+Ordinary trusted-project Git (status/diff, task-owned staging, explicitly requested commit/push, branch/tag work, or ordinary project release) belongs to the normal Kael/Kovan plane. Kovan may perform it only within the task's explicit repository/Git ownership; stage only task-owned paths. Destructive or high-impact operations such as history rewrite, force-push, reset/clean, destructive ref changes, or publishing require explicit, proportionate authorization, but do not route to Aegis solely because Git is involved. Explicit `/maintain` may authorize repository operations within its delivered task; it does not implicitly authorize destructive or high-impact work outside that task.
 
-Aegis separates admitted Olympus repository administration from software-development investigation. Admitted Olympus Git operations start with Git-scoped non-mutating feasibility checks (target, scope, state, remote and tools as relevant), not application architecture. Read/authentication evidence alone does not prove remote write permission.
+Aegis separates authorized repository administration from software-development investigation. Authorized Git operations start with Git-scoped non-mutating feasibility checks (target, scope, state, remote and tools as relevant), not application architecture. Read/authentication evidence alone does not prove remote write permission.
 
 Parallel Aegis administration is permitted through shell and OpenCode session APIs, not through Olympus child-agent routing. It must track every launched root and descendant, join, collect and validate required results before declaring success; unknown/uncollected children mean PARTIAL or COMPLETION_UNCONFIRMED. Do not serialize independent jobs as a substitute for joining them.
+
+The Aegis entry fix is statically qualified by `tests/maintenance-scope/qualify.ps1`,
+`tests/maintenance-handoff/qualify.ps1`, frontmatter, routing, authority,
+reconciliation, renderer, and affected installer/bootstrap checks. A user-provided
+real-runtime smoke on 2026-09-30 returned `MAINTENANCE_AUTH: VALID` and
+`AEGIS_SCOPE: ACCEPTED` in about 5.5 seconds, with zero requested tools, file
+changes, or child sessions and no tests. This demonstrates the fresh-entry
+contract only; it is not evidence for Codex Aegis or a live checkpoint/restore.
 
 External work ownership is the outer lifecycle rule for work Aegis launches to fulfill the current user request: PowerShell processes, scripts/controllers, builds, tests, benchmark controllers, disposable validation and OpenCode roots created through session APIs. Normal synchronous commands whose tool call returns only on completion are already owned. **Foreground/join is mandatory**, regardless of duration or a request to run in the background: launch → track → wait/join → collect → validate → final response. Aegis briefly explains that it will wait rather than detach. Progress updates are not final responses. A launcher exit is not sufficient when subordinate work survives it; reuse the family-aware completion gate below. A reliably completing controller can own its own subordinate jobs; Aegis waits for and validates its terminal report rather than duplicating that controller's tracking. Independent external jobs can still run in parallel, provided all required jobs are joined before finalization.
 

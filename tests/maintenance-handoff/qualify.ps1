@@ -85,12 +85,11 @@ try {
         $kael -match 'Kael → Aegis remains DENIED' -and $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: aegis' -and
         $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
     Check 'MH11_EXPLICIT' ($command -match '(?m)^agent: aegis\r?$' -and $command -match '(?m)^subagent: true\r?$' -and
-        $command -match 'user explicitly invoked `/maintain`' -and $kael -match 'user → `/maintain`\s+remains explicit-only')
-    Check 'MH16_TEMPLATE_AUTHORIZATION' ($command -match 'The user explicitly invoked `/maintain` and authorizes this maintenance task:' -and
-        $aegis -match 'when the `/maintain` command template starts this agent and states that the user invoked `/maintain` and authorized the described task' -and
-        $aegis -match 'treat that template declaration as authoritative proof of authorization' -and
-        $aegis -match 'Do not require the literal `/maintain` event to appear in this isolated child session.s history' -and
-        $aegis -match 'This recognizes the explicit user invocation; it does not create a new authorization mechanism or widen Aegis.s authority')
+        $command -match 'user invoked /maintain' -and $kael -match 'user → `/maintain`\s+remains explicit-only')
+    Check 'MH16_TEMPLATE_AUTHORIZATION' ($command -match 'The user invoked /maintain and authorizes the following task:' -and
+        $aegis -match 'Accept the template declaration as sufficient for the current task' -and
+        $aegis -match 'immediately emit `MAINTENANCE_AUTH: VALID` and `AEGIS_SCOPE: ACCEPTED`' -and
+        $aegis -match 'Do not independently prove the literal invocation or classify target ownership')
     Check 'MH12_UI_BOUNDARY' ($kael -match 'not\s+OpenCode.s rendered "Maintenance failed" badge' -and
         $docs -match 'does not claim to change or suppress' -and $docs -match 'persisted after terminal completion is unproven')
     Check 'MH13_ISSUE1' ($kael -match 'MISSING PARENT TOOL OUTPUT != CHILD FAILURE' -and

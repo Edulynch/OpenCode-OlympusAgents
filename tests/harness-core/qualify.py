@@ -83,9 +83,9 @@ def main() -> int:
     maintenance_policy = (ROOT / "olympus" / "policies" / "maintenance-plane.md").read_text(encoding="utf-8").strip()
     check(
         "MAINTENANCE_SCOPE_CORE_CONTRACT",
-        "Cheap scope gate — before any other work" in maintenance_policy
-        and "what target is being changed and who owns it" in maintenance_policy
-        and "genuinely new, material evidence" in maintenance_policy
+        "COMMAND_ENTRY → MAINTENANCE_AUTH_VALID → AEGIS_SCOPE_ACCEPTED → TASK_EXECUTION" in maintenance_policy
+        and "in any repository, including ordinary user projects" in maintenance_policy
+        and "fail closed immediately" in maintenance_policy
         and "global Nox policy" in maintenance_policy,
     )
 
@@ -172,7 +172,7 @@ def main() -> int:
     check("OPENCODE_AEGIS_AND_COMMAND_DERIVE_CORE_POLICY", maintenance_policy in aegis_prompt and maintenance_policy in maintain_command)
     check(
         "OPENCODE_KAEL_DERIVES_CORE_TARGET_BOUNDARY",
-        "Classify the plane primarily by **what target is being changed and who owns it**" in kael_prompt
+        "The normal project workflow must not modify an Olympus-owned target" in kael_prompt
         and "do not edit it from the project task" in kael_prompt,
     )
 

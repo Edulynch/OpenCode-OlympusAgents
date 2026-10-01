@@ -97,13 +97,13 @@ The OpenCode and Codex adapters use the same Olympus Core, but their capabilitie
 
 ### Out-of-scope project work
 
-Workers return `NEED_AUTHORITY` only when they discover an otherwise legitimate scope not yet delegated. Kael classifies requests as ALLOW, NATIVE_ASK, or DENY. For an exact eligible project-owned path covered by native ASK, Kael delegates the exact task/scope as `NATIVE_ASK`: the child attempts the tool and OpenCode's native permission UI obtains the user's one-shot decision; this is not pre-approval and does not trigger a duplicate Kael QUESTION. Rejection/cancellation stops without fallback. If native ASK does not apply, Kael uses the Question Barrier when needed. Explicit user prohibitions and Olympus-owned native DENYs cannot be overridden. `/maintain` remains Olympus-only.
+Workers return `NEED_AUTHORITY` only when they discover an otherwise legitimate scope not yet delegated. Kael classifies requests as ALLOW, NATIVE_ASK, or DENY. For an exact eligible project-owned path covered by native ASK, Kael delegates the exact task/scope as `NATIVE_ASK`: the child attempts the tool and OpenCode's native permission UI obtains the user's one-shot decision; this is not pre-approval and does not trigger a duplicate Kael QUESTION. Rejection/cancellation stops without fallback. If native ASK does not apply, Kael uses the Question Barrier when needed. Explicit user prohibitions and Olympus-owned native DENYs cannot be overridden. Explicit `/maintain` accepts the delivered task in any repository.
 
 ## 🔧 Maintenance
 
-Use `/maintain <task>` only for Olympus itself: Olympus development, maintenance/configuration/installation, framework bug or gap repair, or an explicitly requested Olympus escape hatch when such a gap blocks normal completion. It invokes the hidden 🛡️ Aegis The Keeper executor, separate from the normal agent team; Kael cannot invoke Aegis automatically. Ordinary user-project work—including status/diff, stage, commit, push, branch/tag, or project releases—belongs to the normal Kael plane and does not require Aegis merely because it uses Git. Destructive or high-impact Git operations require explicit, proportionate authorization, but not Aegis solely because they are Git. An ordinary project task remains out of scope even if `/maintain` is invoked.
+Use `/maintain <task>` to explicitly invoke the hidden 🛡️ Aegis The Keeper executor in any repository. The Olympus-owned command immediately establishes `MAINTENANCE_AUTH: VALID` and `AEGIS_SCOPE: ACCEPTED` for the delivered task, without a second provenance or ownership gate. Kael cannot invoke Aegis automatically. Normal work, including project releases, belongs to the normal Kael plane by recommendation because it offers routing, specialists and fast-path work. Destructive or high-impact operations require explicit task authorization.
 
-Canonical display identities live in `olympus/core/identities.toml`; OpenCode and Codex derive display descriptions from this source. Aegis — The Keeper (`aegis`) is the hidden Olympus-only maintenance identity and is not a normal team worker.
+Canonical display identities live in `olympus/core/identities.toml`; OpenCode and Codex derive display descriptions from this source. Aegis — The Keeper (`aegis`) is the hidden maintenance identity and is not a normal team worker.
 
 ## ⚡ NORMAL vs FAST
 

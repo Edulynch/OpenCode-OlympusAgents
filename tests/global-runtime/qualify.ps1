@@ -20,7 +20,16 @@ $script:evidence = [ordered]@{
     started_at = (Get-Date).ToString('o')
     source_root = $source
     run_root = $run
-    qualification = 'owned standalone OpenCode serve processes; direct GET /api/agent with directory context'
+    qualification = 'owned standalone OpenCode serve processes; GET /api/agent with explicit fixture directory context; isolated XDG roots and OPENCODE_TEST_HOME'
+    runtime_contract = [ordered]@{
+        cli_version = $null
+        agent_list_operation = 'GET /api/agent (OpenAPI agent.list); query directory is the location context'
+        context_directory = $null
+        context_load = 'first location-scoped API request initializes that location; verify from its response/logs'
+        standalone_process = 'qualification-owned opencode serve PID; no managed-service discovery'
+        home_resolution = 'bundled CLI v2.0.20 uses OPENCODE_TEST_HOME ?? os.homedir() for Global.Path.home; HOME/USERPROFILE alone do not isolate its native Windows home'
+        config_resolution = 'OPENCODE_CONFIG_DIR override for A; XDG_CONFIG_HOME default global root for B'
+    }
     cli = $null
     cli_version = $null
     expected_agent_ids = @()
@@ -87,6 +96,7 @@ function Set-IsolatedEnvironment(
         XDG_CACHE_HOME=(Join-Path $isolatedHome '.cache')
         TMP=$isolatedTemp
         TEMP=$isolatedTemp
+        OPENCODE_TEST_HOME=$isolatedHome
         OLYMPUS_GLOBAL_RUNTIME_RUN_ID=$runId
         OLYMPUS_GLOBAL_RUNTIME_CONTROL=$ControlName
     }
@@ -95,7 +105,7 @@ function Set-IsolatedEnvironment(
         [IO.Directory]::CreateDirectory($path) | Out-Null
     }
     foreach ($key in @('OPENCODE_CONFIG_DIR','OPENCODE_DATA_DIR','OPENCODE_STATE_DIR','OPENCODE_CACHE_DIR',
-        'OPENCODE_SERVER_PASSWORD','OPENCODE_SERVER_USERNAME')) {
+        'OPENCODE_TEST_HOME','OPENCODE_SERVER_PASSWORD','OPENCODE_SERVER_USERNAME')) {
         [void]$StartInfo.Environment.Remove($key)
     }
     foreach ($key in $paths.Keys) { $StartInfo.Environment[$key] = [string]$paths[$key] }
@@ -159,6 +169,15 @@ function Get-ConfigPath([string]$Text) {
     return $matches[0]
 }
 
+function Get-PathEntry([string]$Text, [string]$Name) {
+    $matches = @($Text -split "`r?`n" | ForEach-Object {
+        $match = [regex]::Match([string]$_, '^\s*' + [regex]::Escape($Name) + '\s{2,}(?<path>.+?)\s*$')
+        if ($match.Success) { [IO.Path]::GetFullPath($match.Groups['path'].Value.Trim()) }
+    } | Where-Object { $_ })
+    if ($matches.Count -ne 1) { throw "OPENCODE_PATH_DISCOVERY_FAILED: expected one absolute $Name path, found $($matches.Count).`n$Text" }
+    return $matches[0]
+}
+
 function Get-ProjectStatus([string]$Target) {
     $status = @(& git -C $Target status --porcelain --untracked-files=all 2>&1)
     if ($LASTEXITCODE -ne 0) { throw "FIXTURE_GIT_STATUS_FAILED: $($status -join "`n")" }
@@ -193,13 +212,81 @@ function Get-ProfileLeaks([string]$Text) {
     return @($leaks | Sort-Object -Unique)
 }
 
+function Get-OpenCodeConfigPathLeaks([string]$Text, [string[]]$AllowedRoots) {
+    $normalizedText = $Text.Replace('\\','\').Replace('/','\')
+    $pattern = '(?i)(?<path>[A-Z]:\\(?:[^\\\s"'']+\\)*(?:\.opencode|\.claude|\.agents|\.config\\opencode|\.local\\(?:share|state)\\opencode|\.cache\\opencode)(?:\\[^\\\s"'']*)*)'
+    $allowed = @($AllowedRoots | Where-Object { $_ } | ForEach-Object {
+        [IO.Path]::GetFullPath($_).TrimEnd([char[]]@('\','/')).Replace('/','\')
+    } | Sort-Object -Unique)
+    $leaks = [System.Collections.Generic.List[string]]::new()
+    foreach ($match in [regex]::Matches($normalizedText,$pattern)) {
+        $candidate = [string]$match.Groups['path'].Value.TrimEnd([char[]]@('\','/'))
+        $inside = $false
+        foreach ($rootPath in $allowed) {
+            if ($candidate.Equals($rootPath,[StringComparison]::OrdinalIgnoreCase) -or
+                $candidate.StartsWith($rootPath + '\',[StringComparison]::OrdinalIgnoreCase)) { $inside = $true; break }
+        }
+        if (-not $inside) { $leaks.Add($candidate) }
+    }
+    return @($leaks | Sort-Object -Unique)
+}
+
+function Start-ServerOutputCapture($Process) {
+    $capture = [pscustomobject]@{
+        stdout_reader=$Process.StandardOutput
+        stderr_reader=$Process.StandardError
+        stdout_pending=$null
+        stderr_pending=$null
+        stdout_lines=[System.Collections.Generic.List[string]]::new()
+        stderr_lines=[System.Collections.Generic.List[string]]::new()
+    }
+    $capture.stdout_pending = $capture.stdout_reader.ReadLineAsync()
+    $capture.stderr_pending = $capture.stderr_reader.ReadLineAsync()
+    return $capture
+}
+
+function Update-ServerOutputCapture($Capture) {
+    foreach ($streamName in @('stdout','stderr')) {
+        $readerProperty = $streamName + '_reader'
+        $pendingProperty = $streamName + '_pending'
+        $linesProperty = $streamName + '_lines'
+        while ($null -ne $Capture.$pendingProperty -and $Capture.$pendingProperty.IsCompleted) {
+            $line = $Capture.$pendingProperty.GetAwaiter().GetResult()
+            if ($null -eq $line) { $Capture.$pendingProperty = $null; break }
+            $Capture.$linesProperty.Add([string]$line)
+            $Capture.$pendingProperty = $Capture.$readerProperty.ReadLineAsync()
+        }
+    }
+}
+
+function Get-ServerOutputText($Capture) {
+    Update-ServerOutputCapture $Capture
+    return [pscustomobject]@{
+        stdout=($Capture.stdout_lines -join "`n")
+        stderr=($Capture.stderr_lines -join "`n")
+    }
+}
+
+function Assert-ServerIsolation($Capture, $Control, [string[]]$AllowedRoots) {
+    $output = Get-ServerOutputText $Capture
+    $text = $output.stdout + "`n" + $output.stderr
+    $leaks = @(Get-OpenCodeConfigPathLeaks $text $AllowedRoots)
+    $profileLeaks = @(Get-ProfileLeaks $text)
+    $allLeaks = @(@($leaks) + @($profileLeaks) | Sort-Object -Unique)
+    if ($allLeaks.Count -gt 0) {
+        $Control.real_profile_paths_observed = $profileLeaks
+        $Control.config_path_leaks = $leaks
+        throw ('OPENCODE_GLOBAL_ISOLATION_LEAK: ' + ($allLeaks -join ', '))
+    }
+}
+
 function Get-FreeLoopbackPort {
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
     try { $listener.Start(); return ([Net.IPEndPoint]$listener.LocalEndpoint).Port }
     finally { $listener.Stop() }
 }
 
-function Get-ServerIdentity($Process, $Record) {
+function Get-ServerIdentity($Process, $Record, [bool]$RequireListener = $true) {
     $Process.Refresh()
     if ($Process.HasExited) { throw "OWNED_SERVER_EXITED: PID $($Record.pid) exited before ownership validation." }
     $actual = Get-CimInstance Win32_Process -Filter "ProcessId = $($Record.pid)" -ErrorAction Stop
@@ -210,24 +297,37 @@ function Get-ServerIdentity($Process, $Record) {
     $actualStart = $Process.StartTime.ToUniversalTime().ToString('o')
     if ($actualStart -cne [string]$Record.process_start_utc) { throw 'OWNED_SERVER_IDENTITY_MISMATCH: process start time changed.' }
     if ([int]$actual.ParentProcessId -ne [int]$Record.parent_pid) { throw 'OWNED_SERVER_IDENTITY_MISMATCH: parent PID changed.' }
-    if ([string]$actual.CommandLine -notlike "*$($Record.command_marker)*") {
+    if ([string]$actual.CommandLine -cne [string]$Record.command_line -or [string]$actual.CommandLine -notlike "*$($Record.command_marker)*") {
         throw 'OWNED_SERVER_IDENTITY_MISMATCH: exact serve arguments are absent from the command line.'
     }
-    $listenerConnections = @(Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort ([int]$Record.port) -State Listen -ErrorAction SilentlyContinue)
+    $parent = Get-CimInstance Win32_Process -Filter "ProcessId = $($Record.parent_pid)" -ErrorAction Stop
+    if ($null -eq $parent -or [int]$parent.ProcessId -ne [int]$Record.parent_pid) { throw 'OWNED_SERVER_IDENTITY_MISMATCH: recorded parent PID is absent.' }
+    $parentStart = if ($parent.CreationDate -is [DateTime]) {
+        ([DateTime]$parent.CreationDate).ToUniversalTime()
+    } else {
+        [DateTimeOffset]::Parse([string]$parent.CreationDate,[Globalization.CultureInfo]::InvariantCulture).UtcDateTime
+    }
+    $recordedParentStart = [DateTimeOffset]::Parse([string]$Record.parent_start_utc,[Globalization.CultureInfo]::InvariantCulture).UtcDateTime
+    if ([Math]::Abs(($parentStart - $recordedParentStart).TotalSeconds) -gt 1) { throw 'OWNED_SERVER_IDENTITY_MISMATCH: parent process start time changed.' }
+    $listenerConnections = @()
+    if ($RequireListener) {
+        $listenerConnections = @(Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort ([int]$Record.port) -State Listen -ErrorAction SilentlyContinue)
+    }
     $listenerPids = @($listenerConnections | ForEach-Object { [int]$_.OwningProcess } | Sort-Object -Unique)
-    if ($listenerPids.Count -ne 1 -or $listenerPids[0] -ne [int]$Record.pid) {
+    if ($RequireListener -and ($listenerPids.Count -ne 1 -or $listenerPids[0] -ne [int]$Record.pid)) {
         throw "OWNED_SERVER_IDENTITY_MISMATCH: endpoint listener PID(s) '$($listenerPids -join ',')' do not match launched PID $($Record.pid)."
     }
-    return [pscustomobject]@{ pid=[int]$actual.ProcessId; executable=[string]$actual.ExecutablePath; command_line=[string]$actual.CommandLine; listener_pid=$listenerPids[0]; process_start_utc=$actualStart }
+    return [pscustomobject]@{ pid=[int]$actual.ProcessId; executable=[string]$actual.ExecutablePath; command_line=[string]$actual.CommandLine; listener_pid=$(if ($listenerPids.Count) { $listenerPids[0] } else { $null }); process_start_utc=$actualStart; parent_pid=[int]$parent.ProcessId; parent_start_utc=$parentStart.ToString('o') }
 }
 
-function Stop-OwnedServer($Process, $Record, $StdoutTask, $StderrTask) {
+function Stop-OwnedServer($Process, $Record, $OutputCapture) {
     if ($null -eq $Process) { return [pscustomobject]@{ stdout=''; stderr=''; exit_code=$null } }
     $Process.Refresh()
     if (-not $Process.HasExited) {
         # Recheck exact PID, start time, executable, parent, command line and
         # unique endpoint immediately before stopping this owned server.
-        $identity = Get-ServerIdentity $Process $Record
+        $requireListener = $Record.Contains('listener_identity') -and ($null -ne $Record['listener_identity'])
+        $identity = Get-ServerIdentity $Process $Record ([bool]$requireListener)
         $Record.cleanup_identity = $identity
         $Process.Kill($false)
         if (-not $Process.WaitForExit(15000)) { throw "OWNED_SERVER_CLEANUP_BLOCKED: exact PID $($Record.pid) did not exit after termination." }
@@ -236,8 +336,15 @@ function Stop-OwnedServer($Process, $Record, $StdoutTask, $StderrTask) {
     $Process.Refresh()
     $Record.exit_code = $Process.ExitCode
     $Record.stopped_at = (Get-Date).ToString('o')
-    $stdout = $StdoutTask.GetAwaiter().GetResult()
-    $stderr = $StderrTask.GetAwaiter().GetResult()
+    if ($null -ne $OutputCapture) {
+        for ($attempt=0; $attempt -lt 100 -and ($null -ne $OutputCapture.stdout_pending -or $null -ne $OutputCapture.stderr_pending); $attempt++) {
+            Update-ServerOutputCapture $OutputCapture
+            if ($null -ne $OutputCapture.stdout_pending -or $null -ne $OutputCapture.stderr_pending) { Start-Sleep -Milliseconds 10 }
+        }
+        $collected = Get-ServerOutputText $OutputCapture
+        $stdout = $collected.stdout
+        $stderr = $collected.stderr
+    } else { $stdout = ''; $stderr = '' }
     # `opencode serve` writes its generated Basic-auth password to stdout.
     # The qualification consumes it only in memory; retained logs redact it.
     $stdout = [regex]::Replace($stdout,'(?im)^(\s*server password\s+)\S+','$1<redacted>')
@@ -257,6 +364,10 @@ function Invoke-Control([ValidateSet('A','B')][string]$Name, [string]$ControlRoo
     $isolatedHome = Join-Path $ControlRoot 'home'
     $configRoot = if ($Name -eq 'A') { Join-Path $ControlRoot 'explicit-config' } else { $null }
     $expectedConfigRoot = if ($Name -eq 'A') { [IO.Path]::GetFullPath($configRoot) } else { [IO.Path]::GetFullPath((Join-Path $isolatedHome '.config/opencode')) }
+    $allowedRoots = @($ControlRoot,$isolatedHome,(Join-Path $isolatedHome 'AppData/Roaming'),
+        (Join-Path $isolatedHome 'AppData/Local'),(Join-Path $isolatedHome '.config'),
+        (Join-Path $isolatedHome '.local/share'),(Join-Path $isolatedHome '.local/state'),
+        (Join-Path $isolatedHome '.cache'),(Join-Path $ControlRoot 'temp'),$expectedConfigRoot,$fixture)
     foreach ($directory in @($fixture,$isolatedHome,(Join-Path $ControlRoot 'temp'),
         (Join-Path $isolatedHome 'AppData/Roaming'),(Join-Path $isolatedHome 'AppData/Local'),(Join-Path $isolatedHome '.config'),
         (Join-Path $isolatedHome '.local/share'),(Join-Path $isolatedHome '.local/state'),(Join-Path $isolatedHome '.cache'))) {
@@ -278,7 +389,7 @@ function Invoke-Control([ValidateSet('A','B')][string]$Name, [string]$ControlRoo
     $control = [ordered]@{
         control=$Name
         status='IN_PROGRESS'
-        environment=[ordered]@{ home=$isolatedHome; config_directory=$expectedConfigRoot; fixture=$fixture; temp=(Join-Path $ControlRoot 'temp'); OPENCODE_CONFIG_DIR=$(if ($Name -eq 'A') { $expectedConfigRoot } else { $null }) }
+        environment=[ordered]@{ HOME=$isolatedHome; USERPROFILE=$isolatedHome; APPDATA=(Join-Path $isolatedHome 'AppData/Roaming'); LOCALAPPDATA=(Join-Path $isolatedHome 'AppData/Local'); OPENCODE_TEST_HOME=$isolatedHome; XDG_CONFIG_HOME=(Join-Path $isolatedHome '.config'); cwd=[IO.Path]::GetFullPath($fixture); effective_config_root=$expectedConfigRoot; temp=(Join-Path $ControlRoot 'temp'); OPENCODE_CONFIG_DIR=$(if ($Name -eq 'A') { $expectedConfigRoot } else { $null }) }
         installer_exit_code=$null
         installer_output=$null
         verifyonly_exit_code=$null
@@ -289,6 +400,10 @@ function Invoke-Control([ValidateSet('A','B')][string]$Name, [string]$ControlRoo
         api_request=$null
         api_context_directory=$null
         api_agent_ids=@()
+        api_agents=@()
+        config_path_leaks=@()
+        runtime_path_resolution=$null
+        aegis_generated_resource=$null
         origin_probe_id=$null
         origin_probe_description=$null
         origin_probe_visible=$false
@@ -298,14 +413,17 @@ function Invoke-Control([ValidateSet('A','B')][string]$Name, [string]$ControlRoo
     $script:evidence.controls[$Name] = $control
     Save-Evidence
 
-    if ($Name -eq 'B') {
-        $pathProbe = Invoke-CapturedProcess $script:evidence.cli @('debug','paths') $fixture $ControlRoot $null $Name
-        Check 'GLOBAL_RUNTIME_B_ISOLATED_HOME_PATH_PROBE' ($pathProbe.ExitCode -eq 0)
-        $resolvedByCli = Get-ConfigPath ($pathProbe.Stdout + $pathProbe.Stderr)
-        $control.cli_resolved_config_directory = $resolvedByCli
-        Check 'GLOBAL_RUNTIME_B_CLI_ROOTS_UNDER_ISOLATED_HOME' ($resolvedByCli -ieq $expectedConfigRoot) (
-            "Expected isolated root $expectedConfigRoot but opencode debug paths resolved $resolvedByCli.`n$($pathProbe.Stdout)$($pathProbe.Stderr)")
-    }
+    $pathProbe = Invoke-CapturedProcess $script:evidence.cli @('debug','paths') $fixture $ControlRoot $configRoot $Name
+    Check "GLOBAL_RUNTIME_$($Name)_ISOLATED_HOME_PATH_PROBE" ($pathProbe.ExitCode -eq 0)
+    $pathProbeText = $pathProbe.Stdout + $pathProbe.Stderr
+    $resolvedByCli = Get-ConfigPath $pathProbeText
+    $resolvedHomeByCli = Get-PathEntry $pathProbeText 'home'
+    $control.runtime_path_resolution = [ordered]@{ cli_home=$resolvedHomeByCli; cli_config=$resolvedByCli; config_override_used=($Name -eq 'A') }
+    Check "GLOBAL_RUNTIME_$($Name)_CLI_HOME_IS_ISOLATED" ($resolvedHomeByCli -ieq [IO.Path]::GetFullPath($isolatedHome)) (
+        "Expected isolated OpenCode Global.Path.home $isolatedHome but opencode debug paths resolved $resolvedHomeByCli.`n$pathProbeText")
+    Check "GLOBAL_RUNTIME_$($Name)_CLI_CONFIG_ROOT_IS_ISOLATED" ($resolvedByCli -ieq $expectedConfigRoot) (
+        "Expected isolated root $expectedConfigRoot but opencode debug paths resolved $resolvedByCli.`n$pathProbeText")
+    $script:evidence.runtime_contract.cli_version = $script:evidence.cli_version
 
     $installArguments = @('-NoLogo','-NoProfile','-File',$installer,'-SourceRoot',$source,'-Target',$fixture,
         '-Scope','global','-Harness','opencode')
@@ -316,6 +434,24 @@ function Invoke-Control([ValidateSet('A','B')][string]$Name, [string]$ControlRoo
         $control.installer_output -match 'OLYMPUS_GLOBAL_INSTALL: OPENCODE .* READY' -and
         (Test-Path -LiteralPath (Join-Path $expectedConfigRoot 'agents/kael.md') -PathType Leaf) -and
         (Test-Path -LiteralPath (Join-Path $expectedConfigRoot 'olympus/orchestrator-install.json') -PathType Leaf)) $control.installer_output
+    $installedAgentIds = @(Get-ChildItem -LiteralPath (Join-Path $expectedConfigRoot 'agents') -Filter '*.md' -File | ForEach-Object { $_.BaseName } | Sort-Object -Unique)
+    $sourceAegisPath = Join-Path $source '.opencode/agents/aegis.md'
+    $installedAegisPath = Join-Path $expectedConfigRoot 'agents/aegis.md'
+    $aegisSourceHash = (Get-FileHash -LiteralPath $sourceAegisPath -Algorithm SHA256).Hash
+    $aegisInstalledHash = if (Test-Path -LiteralPath $installedAegisPath -PathType Leaf) { (Get-FileHash -LiteralPath $installedAegisPath -Algorithm SHA256).Hash } else { $null }
+    $aegisText = if ($aegisInstalledHash) { [IO.File]::ReadAllText($installedAegisPath) } else { '' }
+    $control.aegis_generated_resource = [ordered]@{
+        source_sha256=$aegisSourceHash
+        installed_sha256=$aegisInstalledHash
+        generated_marker=($aegisText -match 'GENERATED BY scripts/render_harnesses\.py')
+        hidden=($aegisText -match '(?m)^hidden:\s*true\s*$')
+        mode_subagent=($aegisText -match '(?m)^mode:\s*subagent\s*$')
+        verified=($aegisInstalledHash -ceq $aegisSourceHash -and $aegisText -match 'GENERATED BY scripts/render_harnesses\.py' -and
+            $aegisText -match '(?m)^hidden:\s*true\s*$' -and $aegisText -match '(?m)^mode:\s*subagent\s*$')
+    }
+    Check "GLOBAL_RUNTIME_$($Name)_ALL_GENERATED_AGENTS_INSTALLED" ($installedAgentIds.Count -eq 12 -and
+        @($ExpectedAgentIds | Where-Object { $_ -notin $installedAgentIds }).Count -eq 0)
+    Check "GLOBAL_RUNTIME_$($Name)_GENERATED_AEGIS_RESOURCE" ([bool]$control.aegis_generated_resource.verified)
     if ($Name -eq 'A') {
         Check 'GLOBAL_RUNTIME_A_COMPLETE_OPEN_CODE_LAYOUT' ((Test-Path (Join-Path $expectedConfigRoot 'agents/veyra.md')) -and
             (Test-Path (Join-Path $expectedConfigRoot 'commands/maintain.md')) -and
@@ -383,6 +519,7 @@ This temporary qualification-only agent proves which global config root the owne
         effective_config_directory=$expectedConfigRoot
         effective_home=$isolatedHome
         fixture_directory=[IO.Path]::GetFullPath($fixture)
+        launch_environment=[ordered]@{}
         expected_result_path=$evidencePath
         stdout_path=$stdoutPath
         stderr_path=$stderrPath
@@ -399,14 +536,29 @@ This temporary qualification-only agent proves which global config root the owne
     $startInfo.RedirectStandardError = $true
     $startInfo.WorkingDirectory = $record.working_directory
     foreach ($argument in $serverArguments) { $startInfo.ArgumentList.Add([string]$argument) }
-    [void](Set-IsolatedEnvironment $startInfo $ControlRoot $configRoot $Name)
+    $launchEnvironment = Set-IsolatedEnvironment $startInfo $ControlRoot $configRoot $Name
+    $record.launch_environment = [ordered]@{
+        HOME=$startInfo.Environment['HOME']
+        USERPROFILE=$startInfo.Environment['USERPROFILE']
+        APPDATA=$startInfo.Environment['APPDATA']
+        LOCALAPPDATA=$startInfo.Environment['LOCALAPPDATA']
+        OPENCODE_CONFIG_DIR=$startInfo.Environment['OPENCODE_CONFIG_DIR']
+        OPENCODE_TEST_HOME=$startInfo.Environment['OPENCODE_TEST_HOME']
+        XDG_CONFIG_HOME=$startInfo.Environment['XDG_CONFIG_HOME']
+        XDG_DATA_HOME=$startInfo.Environment['XDG_DATA_HOME']
+        XDG_STATE_HOME=$startInfo.Environment['XDG_STATE_HOME']
+        XDG_CACHE_HOME=$startInfo.Environment['XDG_CACHE_HOME']
+        TEMP=$startInfo.Environment['TEMP']
+        TMP=$startInfo.Environment['TMP']
+        cwd=$startInfo.WorkingDirectory
+        effective_config_root=$expectedConfigRoot
+    }
     $serverPassword = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
     $startInfo.Environment['OPENCODE_SERVER_PASSWORD'] = $serverPassword
     $server = [Diagnostics.Process]::new()
     $server.StartInfo = $startInfo
     $serverStarted = $false
-    $stdoutTask = $null
-    $stderrTask = $null
+    $outputCapture = $null
     $controlFailure = $null
     $serverOutput = [pscustomobject]@{ stdout=''; stderr=''; exit_code=$null }
     try {
@@ -418,13 +570,13 @@ This temporary qualification-only agent proves which global config root the owne
         $serverArgumentsText = ($serverArguments -join ' ')
         $record.command_line = '"' + $record.executable + '" ' + $serverArgumentsText
         Save-Receipt
-        $stdoutTask = $server.StandardOutput.ReadToEndAsync()
-        $stderrTask = $server.StandardError.ReadToEndAsync()
+        $outputCapture = Start-ServerOutputCapture $server
         $deadline = [DateTime]::UtcNow.AddSeconds(45)
         $identity = $null
         while ([DateTime]::UtcNow -lt $deadline) {
             $server.Refresh()
             if ($server.HasExited) { throw "OWNED_SERVER_START_FAILED: PID $($server.Id) exited with code $($server.ExitCode)." }
+            Assert-ServerIsolation $outputCapture $control $allowedRoots
             try {
                 $identity = Get-ServerIdentity $server $record
                 break
@@ -456,9 +608,21 @@ This temporary qualification-only agent proves which global config root the owne
         $response = $null
         $responseText = ''
         try {
-            $response = $httpClient.SendAsync($httpRequest).GetAwaiter().GetResult()
+            $responseTask = $httpClient.SendAsync($httpRequest)
+            $responseDeadline = [DateTime]::UtcNow.AddSeconds(30)
+            while (-not $responseTask.IsCompleted -and [DateTime]::UtcNow -lt $responseDeadline) {
+                Assert-ServerIsolation $outputCapture $control $allowedRoots
+                Start-Sleep -Milliseconds 50
+            }
+            if (-not $responseTask.IsCompleted) { throw 'AGENT_API_TIMEOUT: fixture-scoped GET /api/agent did not return in 30 seconds.' }
+            $response = $responseTask.GetAwaiter().GetResult()
             $control.api_status = [int]$response.StatusCode
             $responseText = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            # A location-scoped API request initializes the server-side location
+            # and its configuration/agent sources. Inspect emitted path evidence
+            # before parsing or accepting any roster (including an empty one).
+            Start-Sleep -Milliseconds 250
+            Assert-ServerIsolation $outputCapture $control $allowedRoots
         } finally {
             if ($null -ne $response) { $response.Dispose() }
             $httpRequest.Dispose()
@@ -480,10 +644,20 @@ This temporary qualification-only agent proves which global config root the owne
                 if ($_.Contains('id')) { [string]$_['id'] } elseif ($_.Contains('name')) { [string]$_['name'] }
             }
         } | Where-Object { $_ } | Sort-Object -Unique)
+        $control.api_agents = @($agents | ForEach-Object {
+            if ($_ -is [System.Collections.IDictionary]) {
+                [ordered]@{
+                    id=$(if ($_.Contains('id')) { [string]$_['id'] } elseif ($_.Contains('name')) { [string]$_['name'] } else { $null })
+                    hidden=$(if ($_.Contains('hidden')) { [bool]$_['hidden'] } else { $null })
+                    mode=$(if ($_.Contains('mode')) { [string]$_['mode'] } else { $null })
+                    description=$(if ($_.Contains('description')) { [string]$_['description'] } else { $null })
+                }
+            }
+        } | Where-Object { $_.id })
         $control.api_agent_ids = $agentIds
         $record.latest_progress_at = (Get-Date).ToString('o')
         $record.progress_counter = 2
-        $record.progress_evidence = 'HTTP 200 GET /api/agent returned request location for fixture and parsed roster'
+        $record.progress_evidence = 'owned endpoint returned HTTP 200 for GET /api/agent with exact fixture location; roster parsed after isolation guard'
         $record.api_request = $control.api_request
         $record.api_status = $control.api_status
         $record.api_context_directory = $contextDirectory
@@ -501,21 +675,18 @@ This temporary qualification-only agent proves which global config root the owne
     } finally {
         if (-not $serverStarted) {
             if ($null -ne $server) { $server.Dispose() }
-        } elseif ($server.HasExited -and $null -eq $stdoutTask) {
-            $record.exit_code = $server.ExitCode
-            $record.stopped_at = (Get-Date).ToString('o')
-            [IO.File]::WriteAllText($stdoutPath,'',$utf8)
-            [IO.File]::WriteAllText($stderrPath,'',$utf8)
-            $serverOutput.exit_code = $server.ExitCode
-            $server.Dispose()
-            Save-Receipt
         } elseif ($null -ne $server) {
-            $serverOutput = Stop-OwnedServer $server $record $stdoutTask $stderrTask
+            $serverOutput = Stop-OwnedServer $server $record $outputCapture
         }
     }
 
-    $serverLogs = [IO.File]::ReadAllText($stderrPath)
-    $control.real_profile_paths_observed = @(Get-ProfileLeaks ($serverLogs + "`n" + [IO.File]::ReadAllText($stdoutPath)))
+    $serverLogs = [IO.File]::ReadAllText($stderrPath) + "`n" + [IO.File]::ReadAllText($stdoutPath)
+    $control.real_profile_paths_observed = @(Get-ProfileLeaks $serverLogs)
+    $control.config_path_leaks = @(Get-OpenCodeConfigPathLeaks $serverLogs $allowedRoots)
+    if (($control.real_profile_paths_observed.Count -gt 0 -or $control.config_path_leaks.Count -gt 0) -and
+        $controlFailure -notmatch '^OPENCODE_GLOBAL_ISOLATION_LEAK:') {
+        $controlFailure = 'OPENCODE_GLOBAL_ISOLATION_LEAK: ' + (@(@($control.real_profile_paths_observed) + @($control.config_path_leaks) | Sort-Object -Unique) -join ', ')
+    }
     if ($controlFailure) {
         $control.status = 'FAILED'
         $control.failure = $controlFailure
@@ -531,6 +702,7 @@ This temporary qualification-only agent proves which global config root the owne
         $record.listener_identity.listener_pid -eq $record.pid -and $control.api_status -eq 200)
     $checkResults.explicit_agent_request_context = [bool]($control.api_context_directory -ieq [IO.Path]::GetFullPath($fixture))
     $checkResults.no_real_profile_path_leaks = [bool](@($control.real_profile_paths_observed).Count -eq 0)
+    $checkResults.no_isolated_config_path_leaks = [bool](@($control.config_path_leaks).Count -eq 0)
     $lowerIds = @($control.api_agent_ids | ForEach-Object { $_.ToLowerInvariant() })
     $probeAgent = @($agents | Where-Object {
         if ($_ -is [System.Collections.IDictionary]) {
@@ -541,16 +713,20 @@ This temporary qualification-only agent proves which global config root the owne
     if ($probeAgent.Count -gt 0 -and [string]$probeAgent[0].description -ceq $probeDescription) { $control.origin_probe_visible = $true }
     $checkResults.isolated_global_origin_marker = [bool]$control.origin_probe_visible
     $checkResults.roster_nonempty = [bool](@($control.api_agent_ids).Count -gt 0)
-    $missingIds = @($ExpectedAgentIds | Where-Object { $_.ToLowerInvariant() -notin $lowerIds })
-    $coreMissing = @(@('kael','veyra','kovan','nox','aegis') | Where-Object { $_ -notin $lowerIds })
-    $checkResults.expected_olympus_roster = [bool]($missingIds.Count -eq 0 -and $coreMissing.Count -eq 0)
+    $requiredVisibleIds = @($ExpectedAgentIds | Where-Object { $_ -ine 'aegis' })
+    $missingIds = @($requiredVisibleIds | Where-Object { $_.ToLowerInvariant() -notin $lowerIds })
+    $aegisApiRecords = @($control.api_agents | Where-Object { [string]$_.id -ieq 'aegis' })
+    $aegisApiRepresentationValid = ($aegisApiRecords.Count -eq 0 -or [bool]$aegisApiRecords[0].hidden)
+    $checkResults.aegis_generated_resource_correct = [bool]$control.aegis_generated_resource.verified
+    $checkResults.aegis_hidden_or_not_listed = [bool]$aegisApiRepresentationValid
+    $checkResults.expected_olympus_roster = [bool]($missingIds.Count -eq 0 -and $aegisApiRepresentationValid -and $control.aegis_generated_resource.verified)
     $checkResults.no_project_local_fallback = [bool]$control.fixture_no_project_local_olympus
     $checkResults.verifyonly_read_only = [bool]($control.verifyonly_exit_code -eq 0)
     $control.checks = $checkResults
     $failedChecks = @($checkResults.Keys | Where-Object { -not $checkResults[$_] })
     $control.status = if ($failedChecks.Count -eq 0) { 'PASS' } else { 'FAIL' }
     if ($failedChecks.Count -gt 0) {
-        $control.failure = "Failed checks: $($failedChecks -join ', '); missing Olympus IDs=$($missingIds -join ','); marker=$probeId; roster=$($control.api_agent_ids -join ',')"
+        $control.failure = "Failed checks: $($failedChecks -join ', '); missing visible Olympus IDs=$($missingIds -join ','); marker=$probeId; roster=$($control.api_agent_ids -join ','); aegis_api_count=$($aegisApiRecords.Count); aegis_resource_verified=$($control.aegis_generated_resource.verified)"
     }
     Write-Output "GLOBAL_RUNTIME_$($Name)_REAL_PROFILE_PATH_OBSERVATIONS: $($control.real_profile_paths_observed -join ', ')"
     $record.status = 'TERMINAL_COLLECTED'
@@ -593,12 +769,25 @@ try {
     $controlARoot = Join-Path $run 'control-A'
     [IO.Directory]::CreateDirectory($controlARoot) | Out-Null
     $controlA = Invoke-ControlAndCollect 'A' $controlARoot $expectedAgentIds
+    if ([string]$controlA.failure -match '^OPENCODE_GLOBAL_ISOLATION_LEAK:') {
+        $script:evidence.classification = 'ISOLATION_LEAK_CONTROL_A'
+        $script:evidence.failure = [string]$controlA.failure
+        Save-Evidence
+        throw [string]$controlA.failure
+    }
 
     # A is completely stopped, its response/config/logs have been collected,
     # and a V2-frontmatter marker has tested its loader before the independent B.
     $controlBRoot = Join-Path $run 'control-B'
     [IO.Directory]::CreateDirectory($controlBRoot) | Out-Null
     $controlB = Invoke-ControlAndCollect 'B' $controlBRoot $expectedAgentIds
+
+    if ([string]$controlB.failure -match '^OPENCODE_GLOBAL_ISOLATION_LEAK:') {
+        $script:evidence.classification = 'ISOLATION_LEAK_CONTROL_B'
+        $script:evidence.failure = [string]$controlB.failure
+        Save-Evidence
+        throw [string]$controlB.failure
+    }
 
     $aPass = $controlA.status -eq 'PASS'
     $bPass = $controlB.status -eq 'PASS'
@@ -611,9 +800,7 @@ try {
     Save-Evidence
     $completed = $aPass -and $bPass
     if ($aPass -and $bPass) {
-        Write-Output 'OPENCODE_GLOBAL_RUNTIME_DISCOVERY: PASS (A explicit OPENCODE_CONFIG_DIR; B isolated true global path; dedicated owned server PIDs; GET /api/agent with fixture directory; no model execution)'
-    } elseif (-not $aPass -and $bPass) {
-        Write-Output 'OPENCODE_GLOBAL_RUNTIME_DISCOVERY: PASS via B; CONTROL A failed, so OPENCODE_CONFIG_DIR precedence/custom-root behavior needs correction or explicit documentation.'
+        Write-Output 'OPENCODE_GLOBAL_RUNTIME_DISCOVERY: PASS (A explicit OPENCODE_CONFIG_DIR; B no OPENCODE_CONFIG_DIR with isolated XDG global default; OPENCODE_TEST_HOME isolates native Windows home; dedicated owned server PIDs; GET /api/agent with fixture directory; no model execution)'
     } else {
         Write-Output "OPENCODE_GLOBAL_RUNTIME_DISCOVERY: PARTIAL ($($script:evidence.classification))"
         $exitCode = 1
@@ -622,7 +809,8 @@ try {
 } catch {
     $script:evidence.failure = $_.Exception.Message
     if ($script:evidence.classification -eq 'IN_PROGRESS') {
-        $script:evidence.classification = if ($_.Exception.Message -match 'CONTROL_A|GLOBAL_RUNTIME_A_|CONTROL_A_FAILED') { 'CONTROL_A_FAILED' }
+        $script:evidence.classification = if ($_.Exception.Message -match 'OPENCODE_GLOBAL_ISOLATION_LEAK') { 'ISOLATION_LEAK' }
+            elseif ($_.Exception.Message -match 'CONTROL_A|GLOBAL_RUNTIME_A_|CONTROL_A_FAILED') { 'CONTROL_A_FAILED' }
             elseif ($_.Exception.Message -match 'CONTROL_B|GLOBAL_RUNTIME_B_|CONTROL_B_FAILED') { 'CONTROL_A_PASS_CONTROL_B_FAILED' }
             else { 'FAILED' }
     }
@@ -632,17 +820,14 @@ try {
     Write-Output "GLOBAL_RUNTIME_QUALIFICATION: $($script:evidence.classification)"
     exit 1
 } finally {
-    # The server process families are collected and stopped inside Invoke-Control.
-    # Remove the recovery receipt only after result collection and classification.
-    if ($completed -and (Test-Path -LiteralPath $receiptPath)) { Remove-Item -LiteralPath $receiptPath -Force }
-    if ($completed -and (Test-Path -LiteralPath $run -PathType Container)) {
-        for ($attempt=1; $attempt -le 10; $attempt++) {
-            try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop; break }
-            catch {
-                if ($attempt -eq 10) { Write-Output "CLEANUP_DEFERRED: $run"; break }
-                Start-Sleep -Milliseconds 500
-            }
-        }
+    # Keep the validated evidence and redacted logs for review. Remove the
+    # per-run recovery receipt only after every planned process is terminal or
+    # never started; otherwise preserve it for safe reconciliation.
+    if (Test-Path -LiteralPath $receiptPath) {
+        $receiptState = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json -Depth 30
+        $unresolvedProcesses = @($receiptState.processes | Where-Object { $_.status -notin @('PLANNED','TERMINAL_COLLECTED') })
+        if ($unresolvedProcesses.Count -eq 0) { Remove-Item -LiteralPath $receiptPath -Force }
+        else { Write-Output "RECOVERY_RECEIPT_RETAINED: $receiptPath" }
     }
 }
 exit $exitCode

@@ -151,7 +151,7 @@ unresolved work. Phase 3 evidence class: USER_EXECUTED_LIVE_EVIDENCE; see
 
 ## Local/bootstrap installation
 
-From an Olympus source checkout, project bootstrap targets the **root of a separate, trusted Git project** on Windows with Git and PowerShell 7 available. OpenCode project installation additionally requires the OpenCode CLI and configured models; Codex-only project installation does not invoke OpenCode. The public installer can be launched from Windows PowerShell 5.1 or PowerShell 7 and delegates bootstrap to installed `pwsh`. `-Scope project` is the default and remains beta.5-compatible; `-Harness` accepts `opencode` (default), `codex`, or `all`, case-insensitively. `-Scope global` is a branch-only v0.4.0 foundation and writes to the evidenced harness user directories; it does not overwrite global base config and is currently Windows-qualified. `-Version` accepts only Olympus SemVer `vX.Y.Z`, `vX.Y.Z-alpha.N`, `vX.Y.Z-beta.N`, or `vX.Y.Z-rc.N`; the remote source must be the immutable matching tag.
+From an Olympus source checkout, project bootstrap targets the **root of a separate, trusted Git project** on Windows with Git and PowerShell 7 available. OpenCode project installation additionally requires the OpenCode CLI and configured models; Codex-only project installation does not invoke OpenCode. The public installer can be launched from Windows PowerShell 5.1 or PowerShell 7 and delegates bootstrap to installed `pwsh`. `-Scope project` remains the default and its behavior is compatible with beta.5; `-Harness` accepts `opencode` (default), `codex`, or `all`, case-insensitively. `-Scope global` is the unreleased v0.4.0 foundation and writes to the evidenced harness user directories; it does not overwrite global base config and is currently Windows-qualified. Global OpenCode runtime discovery is `GAP`, while Codex global runtime is `SUPPORTED` based on supplied runtime evidence. `-Version` accepts only Olympus SemVer `vX.Y.Z`, `vX.Y.Z-alpha.N`, `vX.Y.Z-beta.N`, or `vX.Y.Z-rc.N`; the remote source must be the immutable matching tag.
 
 ```powershell
 pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project' -DryRun
@@ -298,16 +298,12 @@ user-provided fresh-entry runtime smoke on 2026-09-30 returned
 `MAINTENANCE_AUTH: VALID` and `AEGIS_SCOPE: ACCEPTED` in about 5.5 seconds, with
 zero requested tools, file changes or child sessions. It did not qualify resume.
 
-On 2026-10-01, a user-provided two-turn `opencode run --session <id>` runtime
-reproduction retained Aegis identity, marker and original task scope but returned
-`UNPROVEN` / `REJECTED`. Read-only export confirmed role-attributed assistant
-history and Aegis session identity; OpenCode `v2.0.21` exposes session
-continuation but no dedicated maintenance-auth metadata field. The Olympus
-contract now retains the prior Aegis assistant acceptance only for continuation
-of that same stored Aegis conversation and freezes its original task scope.
-Static qualification is required; a fresh two-phase human runtime smoke is
-still pending, so Issue #8 remains OPEN. Evidence, root cause, tests and exact
-smoke steps are in [ISSUE-8-CHECKPOINT-RESUME.md](ISSUE-8-CHECKPOINT-RESUME.md).
+The final user-provided runtime smoke on 2026-10-01 passed: Aegis identity,
+marker, original task scope, `MAINTENANCE_AUTH`, and `AEGIS_SCOPE` were retained;
+explicit same-child `opencode run --session <id>` continuation worked. Issue #8
+is **CLOSED**. The evidence and scope limits are recorded in
+[ISSUE-8-CHECKPOINT-RESUME.md](ISSUE-8-CHECKPOINT-RESUME.md); this audit did not
+rerun that smoke.
 
 External work ownership is the outer lifecycle rule for work Aegis launches to fulfill the current user request: PowerShell processes, scripts/controllers, builds, tests, benchmark controllers, disposable validation and OpenCode roots created through session APIs. Normal synchronous commands whose tool call returns only on completion are already owned. **Foreground/join is mandatory**, regardless of duration or a request to run in the background: launch → track → wait/join → collect → validate → final response. Aegis briefly explains that it will wait rather than detach. Progress updates are not final responses. A launcher exit is not sufficient when subordinate work survives it; reuse the family-aware completion gate below. A reliably completing controller can own its own subordinate jobs; Aegis waits for and validates its terminal report rather than duplicating that controller's tracking. Independent external jobs can still run in parallel, provided all required jobs are joined before finalization.
 

@@ -23,7 +23,7 @@
 - Git and an existing Git project
 - OpenCode V2 and the configured models when installing OpenCode; Codex CLI when using Codex
 
-Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Replace `<TAG>` with a published release tag that includes the dual-harness installer. The default remains project-local for beta.5 compatibility. The v0.4.0 global-install foundation is branch-only, Windows-qualified, and has not been published.
+Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Replace `<TAG>` with a published release tag that includes the dual-harness installer. The current source identifies as `v0.4.0`; this branch is not tagged or published. Project scope remains the installer default; global installation is a separate Windows-qualified foundation.
 
 #### OpenCode (default)
 
@@ -91,7 +91,7 @@ Kael coordinates the team as needed: research, implementation, testing, and revi
 | **Thales — The Sage** (`thales`) | Helps diagnose difficult problems when needed. |
 | **Helios — The Optimizer** (`helios`) | On explicit optimization requests, proposes a bounded improvement and stops for user approval. |
 
-Olympus Core defines what the team and its orchestration mean. Harness adapters define how each runtime expresses the same Core. **OpenCode and Codex are the two officially supported harnesses**; Codex uses its native root, agents, approvals, and activity view, while capability gaps remain explicit.
+Olympus Core defines what the team and its orchestration mean. Harness adapters define how each runtime expresses the same Core. **OpenCode and Codex are the two supported project-local harnesses**; Codex uses its native root, agents, approvals, and activity view, while capability gaps remain explicit. Global static installation is supported for both, but global runtime discovery is `GAP` for OpenCode and `SUPPORTED` for Codex; see the [capability contract](docs/HARNESS-CAPABILITIES.md).
 
 The OpenCode and Codex adapters use the same Olympus Core, but their capabilities are not identical. OpenCode provides hard DENY, the explicit `/maintain` → Aegis entry, and the Activity HUD. Codex supports multi-agent work, result delivery, ALLOW, and adaptable ASK; DENY and Aegis remain gaps, and activity visibility is basic/partial. See the [capability contract](docs/HARNESS-CAPABILITIES.md).
 
@@ -130,7 +130,7 @@ Olympus treats an installed project as trusted. Kovan and Nox can run commands f
 
 ## 🔄 Update
 
-The published beta.5 installer is project-local; use the exact published tag with the desired feature. `-Scope project` and `-Harness opencode` remain defaults; `-Harness` accepts `opencode`, `codex`, or `all`. The v0.4.0 global foundation in this branch is not in a release yet. Project verification checks only the requested managed harness subset, is read-only, and does not launch mutable runtime discovery in the target. See [Harness installation](docs/HARNESSES.md) for the unreleased global design and limitations.
+Earlier published beta.5 remains project-local. This branch's `v0.4.0` installer keeps `-Scope project` and `-Harness opencode` as defaults; `-Harness` accepts `opencode`, `codex`, or `all`. The v0.4.0 global foundation is not published. Project verification checks only the requested managed harness subset, is read-only, and does not launch mutable runtime discovery in the target. See [Harness installation](docs/HARNESSES.md) for global static-install behavior and runtime limitations.
 
 ## 🆘 Troubleshooting
 

@@ -5,6 +5,10 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $installer = Join-Path $source 'install.ps1'
+$installerText = [IO.File]::ReadAllText($installer)
+$candidateVersionMatch = [regex]::Match($installerText, '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''')
+if (-not $candidateVersionMatch.Success) { throw 'RELEASE_IDENTITY_INVALID: Installer default version is unavailable.' }
+$candidateVersion = $candidateVersionMatch.Groups[1].Value
 $run = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) ('opencode\olympus-global-installer-' + [guid]::NewGuid().ToString('N'))
 $originalPath = $env:PATH
 $originalOpenCodeRoot = $env:OPENCODE_CONFIG_DIR
@@ -92,7 +96,7 @@ try {
     $localManifestPath = Join-Path $project '.opencode/orchestrator-install.json'
     $localManifest = Get-Content -LiteralPath $localManifestPath -Raw | ConvertFrom-Json
     Check 'PROJECT_SCOPE_ALL_INSTALL' ($localInstall.Code -eq 0 -and $localManifest.scope -eq 'project' -and
-        $localManifest.installed_version -eq 'v0.3.0-beta.5' -and $localManifest.installed_harnesses.Count -eq 2 -and
+        $localManifest.installed_version -eq $candidateVersion -and $localManifest.installed_harnesses.Count -eq 2 -and
         $localManifest.installed_harnesses[0] -eq 'opencode' -and $localManifest.installed_harnesses[1] -eq 'codex')
     $projectBeforeVerify = Snapshot $project
     $projectVerify = Run-Installer $project @('-Harness','all','-VerifyOnly')

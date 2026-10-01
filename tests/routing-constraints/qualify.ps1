@@ -14,11 +14,8 @@ function Route([string]$purpose, [string]$operation, [bool]$explicitMaintain = $
                [bool]$explicitOlympusEscape = $false, [bool]$highImpact = $false,
                [bool]$authorized = $false) {
     $olympus = $purpose -eq 'olympus' -or $explicitOlympusEscape
-    if ($olympus -and $explicitMaintain) {
+    if ($explicitMaintain) {
         return [pscustomobject]@{ plane='AEGIS'; action='ADMIT'; confirmation=$false }
-    }
-    if ($purpose -eq 'user-project' -and $explicitMaintain) {
-        return [pscustomobject]@{ plane='OUT_OF_SCOPE'; action='NO_CHANGE'; confirmation=$false }
     }
     if ($purpose -eq 'user-project') {
         $confirmation = $highImpact -and -not $authorized
@@ -62,12 +59,10 @@ try {
 
     Check 'POLICY_ORDINARY_GIT_NORMAL' ($kael -match 'Ordinary Git work in a trusted user project belongs to the normal plane' -and
         $kovan -match 'Kovan is the normal-plane Git writer for an explicitly requested operation' -and
-        $aegis -match 'Ordinary user-project work, including status/diff, stage, commit, push' -and
+        $aegis -match 'Kael remains the recommended normal workflow' -and
         $readme -match 'project releases.*belongs to the normal Kael plane')
-    Check 'POLICY_AEGIS_OLYMPUS_ONLY' ($kael -match 'Reserve `/maintain` / Aegis for work explicitly about Olympus itself' -and
-        $aegis -match 'Admit a task only when it explicitly concerns developing Olympus itself' -and
-        $command -match '(?s)Ordinary user-project work.*OUT_OF_SCOPE' -and
-        $docs -match 'Aegis is admitted only for Olympus development')
+    Check 'POLICY_AEGIS_ANY_REPOSITORY' ($aegis -match 'in any repository, including ordinary user projects' -and
+        $command -match 'MAINTENANCE_AUTH: VALID' -and $command -match 'AEGIS_SCOPE: ACCEPTED')
     Check 'POLICY_GIT_IMPACT_NOT_PLANE' ($kael -match '(?s)Destructive or high-impact Git\s+operations require explicit, proportionate user authorization, but still do not\s+require Aegis solely because they are Git' -and
         $kovan -match '(?s)History rewrites, force-pushes.*operations require explicit user authority.*proportionate preflight')
     Check 'POLICY_GIT_ONLY_OWNERSHIP' ($kael -match 'TASK_TYPE: GIT_ONLY or\s+MIXED' -and
@@ -113,7 +108,7 @@ try {
     Check 'ROUTE_HIGH_IMPACT_AUTH_NOT_AEGIS' ($highImpact.plane -eq 'NORMAL' -and
         $highImpact.action -eq 'NEEDS_EXPLICIT_AUTHORIZATION' -and $highImpact.confirmation)
     Check 'ROUTE_HIGH_IMPACT_EXPLICIT_STAYS_NORMAL' ($highImpactAuthorized.plane -eq 'NORMAL' -and $highImpactAuthorized.action -eq 'ALLOW')
-    Check 'ROUTE_ORDINARY_PROJECT_MAINTAIN_OUT_OF_SCOPE' ($ordinaryMaintain.plane -eq 'OUT_OF_SCOPE' -and $ordinaryMaintain.action -eq 'NO_CHANGE')
+    Check 'ROUTE_EXPLICIT_PROJECT_MAINTAIN_ACCEPTED' ($ordinaryMaintain.plane -eq 'AEGIS' -and $ordinaryMaintain.action -eq 'ADMIT')
 
     Check 'SCOPE_GIT_ONLY_AND_MIXED_TASK_CONTRACTS' ( (Git-Contract 'GIT_ONLY' 'NOT_APPLICABLE' 'repo:trusted; operation:commit; paths:owned') -and
         (Git-Contract 'MIXED' 'src/task-owned' 'repo:trusted; operation:stage-commit; paths:src/task-owned') -and

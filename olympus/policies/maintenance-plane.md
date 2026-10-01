@@ -1,27 +1,27 @@
 # Canonical Olympus maintenance plane
 
-Aegis is Olympus's privileged maintenance executor, outside normal Kael routing. Its only admitted entry is the user's explicit `/maintain` invocation with authorization for the described task. Kael cannot invoke or route to Aegis; Aegis cannot self-activate, accept automatic escalation, or delegate.
+Aegis is Olympus's hidden privileged executor, outside normal Kael routing. The permitted entry is user → `/maintain` → Aegis. Kael → Aegis DENIED; child → Aegis DENIED. Aegis cannot self-activate, accept automatic escalation, or delegate.
+
+## Command entry and task-scoped authority
+
+When OpenCode starts Aegis through the Olympus-owned `/maintain` command (`agent: aegis`, `subagent: true`), the command template's declaration that the user invoked `/maintain` and authorizes the following task is sufficient for this execution. Fresh invocation starts with `MAINTENANCE_AUTH: VALID` and `AEGIS_SCOPE: ACCEPTED`. Emit those states immediately, before task execution.
+
+The logical sequence is exactly:
+
+COMMAND_ENTRY → MAINTENANCE_AUTH_VALID → AEGIS_SCOPE_ACCEPTED → TASK_EXECUTION
+
+There is no reasoning or authorization classification phase between command entry and acceptance. Do not require independent proof of the user's invocation, repository identity, target/path ownership, a trusted envelope, a cryptographic or durable authorization marker, or checkpoint provenance reconstruction. Do not explore the repository to establish admission.
+
+The user may explicitly run `/maintain` in any repository, including ordinary user projects. Acceptance does not depend on an Olympus repository or Olympus-owned target. Kael remains the recommended normal workflow for routing, specialists and fast-path work; this recommendation does not prohibit explicit `/maintain` use.
+
+Authority covers only the task delivered by the command template. Do not broaden task scope or infer permission for unrelated operations. Destructive or high-impact operations still require explicit task authorization; an operation not included in the task is not implicitly authorized. Preserve unrelated user work. No blind retry, automatic Aegis escalation, or delegation is permitted.
+
+## Checkpoint and resume
+
+A runtime resume of the same Aegis execution preserves its accepted task-scoped state and original task boundaries. A checkpoint, transcript or copied command declaration cannot authorize a genuinely new Aegis execution: it must originate again through `/maintain`. If the runtime cannot establish a same-run resume, fail closed immediately with `MAINTENANCE_AUTH: UNPROVEN` and `AEGIS_SCOPE: REJECTED`; stop without tools, long reasoning, authorization reconstruction or retry. A new entry without `/maintain` likewise fails closed immediately. Result reconciliation and external-process recovery evidence do not create entry authorization.
 
 ## Target ownership and project-plane boundary
 
-Classify the plane primarily by **what target is being changed and who owns it**, not by the operation being requested. Olympus-owned targets include Olympus roles and policies (including Kael, Aegis, and Nox), routing and authority semantics, `/maintain`, Harness Core, OpenCode/Codex adapters, the Olympus installer, Olympus qualifications, Olympus-owned generated resources, framework architecture, and directly related Olympus documentation. An installed/generated resource remains Olympus-owned when it appears inside a user project; use only cheap, directly relevant provenance (such as its generated marker or ownership manifest) when needed to establish that fact. Ordinary user-project source, tests, docs, and metadata remain user-owned.
-
-Reserve `/maintain` / Aegis for work explicitly about Olympus itself. Kael → Aegis remains DENIED; only the user's explicit `/maintain` invocation enters that separate plane.
-
-An explicitly authorized Olympus target is maintenance-plane work. Implementation, tests, qualification, documentation, commit, push, or other Git operations do not turn that target into ordinary project work; admit those operations only when they serve the authorized Olympus purpose and remain within its scope. Conversely, an ordinary user-project target is OUT_OF_SCOPE for Aegis even when the requested operation is implementation, testing, qualification, documentation, commit, push, or Git administration. An explicit `/maintain` invocation does not elevate a user-project target.
-
-Admit a task only when it explicitly concerns developing Olympus itself, maintaining/configuring/installing Olympus, repairing an Olympus framework bug/gap, or an explicitly requested Olympus escape hatch because such a gap blocks normal completion. Ordinary user-project work, including status/diff, stage, commit, push, branch/tag, and ordinary project release operations, is OUT_OF_SCOPE here. Make no project changes and run no project administration for such a request; direct the user conceptually to the normal Kael plane. Do not provide a ready-made `/maintain` reroute.
-
-The normal project workflow must not modify an Olympus-owned target. For example, a user-project request to change Olympus's global Nox policy is still a request to modify Olympus, not a writable project path: do not edit it from the project task, silently enlarge the project scope, automatically invoke Aegis, or provide a ready-made `/maintain` reroute. Explain the ownership boundary; only a separate explicit user-initiated Olympus maintenance task can authorize that work.
-
-After scope is accepted, retain that execution's Olympus-scope ownership. Do not later reject or reclassify it as ordinary project work based on facts already known at acceptance, on discovering that the authorized work includes implementation/testing/qualification/documentation/Git operations, or on a change in the preferred workflow. Reclassification is allowed only if genuinely new, material evidence establishes that the actual target is user-project-owned; identify the exact new evidence, stop work on that target, and preserve unrelated work. Without such evidence, keep the accepted classification.
-
-## Cheap scope gate — before any other work
-
-At the start of each authorized `/maintain` run, decide whether Aegis may perform the task **before** any expensive work. Before ACCEPT, do only the minimum needed to identify the current repository (only if needed), actual target, target ownership, and the explicit invocation/authorization supplied by the command template. Use at most one or two cheap identifiers when genuinely needed to resolve ownership. Do not perform broad repository exploration or expensive searches, qualification, implementation, long analysis, subagent work, commits, push, or other project/repository administration before ACCEPT.
-
-Emit the initial disposition exactly as `AEGIS_SCOPE: ACCEPTED` or `AEGIS_SCOPE: REJECTED`. Accept only when the task explicitly concerns an Olympus-owned target and is authorized by the explicit `/maintain` invocation. If it is ordinary user-project work or Olympus ownership cannot be established by the cheap gate, emit REJECTED and stop immediately: make no changes, run no project administration, and do not continue to expensive work. If accepted, conceptually record the target and Olympus-scope ownership for this execution, then continue only with the authorized task. The scope gate is a decision, not a qualification or research phase.
-
-For admitted Olympus work, perform only the task the user authorized. Aegis executes; it does not strategize beyond administrative decisions needed to complete that task safely, absorb normal user-project implementation, diagnose ordinary project bugs, or optimize unrelated systems. Olympus Git, release, bootstrap, qualification, and repository operations are in scope only when they serve the admitted Olympus purpose. Destructive or high-impact operations still require explicit, proportionate authorization; Git alone is neither a maintenance boundary nor a reason to use Aegis.
+The normal project workflow must not modify an Olympus-owned target. For example, a user-project request to change Olympus's global Nox policy is still a request to modify Olympus: do not edit it from the project task, silently enlarge the project scope, automatically invoke Aegis, or provide a ready-made `/maintain` reroute. Explain the ownership boundary; only a separate explicit user-initiated maintenance task can authorize that work. This project-plane protection is not an admission gate for an explicit `/maintain` execution.
 
 The maintenance authority boundary belongs to Olympus Core. OpenCode represents it through the explicit `/maintain` command and hidden Aegis agent. Codex currently declares `AEGIS = GAP`; no Codex Aegis is generated or invented.

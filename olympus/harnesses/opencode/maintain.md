@@ -1,10 +1,10 @@
 ---
-description: Explicitly run scoped Olympus framework maintenance outside Kael routing.
+description: Explicitly run a task in any repository outside Kael routing.
 agent: aegis
 subagent: true
 ---
 
-The user explicitly invoked `/maintain` and authorizes this maintenance task:
+The user invoked /maintain and authorizes the following task:
 
 $ARGUMENTS
 

@@ -20,7 +20,7 @@
 | `DENY` | SUPPORTED | GAP |
 | `AEGIS` | SUPPORTED | GAP |
 | `ACTIVITY_VISIBILITY` | SUPPORTED | PARTIAL |
-| `GLOBAL_RUNTIME_DISCOVERY` | PARTIAL | SUPPORTED |
+| `GLOBAL_RUNTIME_DISCOVERY` | GAP | SUPPORTED |
 
 OpenCode provides native hard DENY, explicit `/maintain` → Aegis, and the Activity HUD. Codex currently uses adaptable/native ASK, reports DENY and Aegis as GAP, and relies on basic/partial native activity visibility. Do not infer stronger enforcement than these states claim.
-Global install file placement and global runtime discovery are separate claims. `GLOBAL_RUNTIME_DISCOVERY = PARTIAL` means runtime agent discovery is not yet demonstrated for that harness in an isolated environment; `SUPPORTED` requires runtime discovery evidence for that harness.
+Global install file placement and global runtime discovery are separate claims. `GLOBAL_RUNTIME_DISCOVERY = GAP` means an isolated runtime omitted required global agents; `PARTIAL` means evidence is incomplete or inconclusive; `SUPPORTED` requires isolated paths and the expected runtime roster.

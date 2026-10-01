@@ -81,7 +81,7 @@ Path evidence gathered for this foundation:
 
 | Harness | Windows evidence | Unix-like evidence | Global resources used |
 |---|---|---|---|
-| OpenCode | Installed CLI `opencode debug paths` reported `config = C:\\Users\\…\\.config\\opencode`; `OPENCODE_CONFIG_DIR` is a current CLI override. | Official current docs specify `~/.config/opencode`; no Unix runtime was available. | Official agent/plugin docs identify `~/.config/opencode/agents/` and `~/.config/opencode/plugins/`; global commands use the same config-root `commands/` convention. The user-owned `opencode.json` is not overwritten; Kael is available by explicit selection, but no global default-agent change is made. |
+| OpenCode | Fresh CLI child `opencode debug paths` reported home/config/data/cache/state/tmp/log within isolated HOME, four XDG roots, and TEMP. `OPENCODE_CONFIG_DIR` selects the config layer only; it is not a sandbox for all global paths. | Official current docs specify `~/.config/opencode`; no Unix runtime was available. | Official agent/plugin docs identify `~/.config/opencode/agents/` and `~/.config/opencode/plugins/`; global commands use the same config-root `commands/` convention. The user-owned `opencode.json` is not overwritten; Kael is available by explicit selection, but no global default-agent change is made. |
 | Codex | Current CLI help resolves user configuration from `~/.codex/config.toml`; the current CLI accepts `CODEX_HOME` and profiles at `$CODEX_HOME/<name>.config.toml`. | Current official docs specify `~/.codex` unless `CODEX_HOME` is set; no Unix runtime was available. | Global custom agents at `~/.codex/agents/`, profile `olympus.config.toml`, and the global instructions file `AGENTS.md`. The existing base `config.toml` is not modified; use `codex --profile olympus`. Existing `AGENTS.md` is a user-owned conflict and is never overwritten. |
 
 Current official path/config references (consulted 2026-09-30): [OpenCode
@@ -107,7 +107,7 @@ runtime discovery is a separate contract:
 
 | Harness | Global support | Runtime evidence and blocker |
 |---|---|---|
-| OpenCode | **PARTIAL** | CLI `2.0.20`; latest run `8c5ca42da1bf48d7935f9e1a4da59066` launched its own `opencode serve` (PID `32408`, `127.0.0.1:64669`) with explicit `OPENCODE_CONFIG_DIR`, isolated XDG roots and `OPENCODE_TEST_HOME`; installer, generated-resource checks and read-only `VerifyOnly` passed. The fixture was clean. Its location-scoped API request returned HTTP 200, but before parsing the response roster the isolation guard found runtime watcher subscriptions to the real profile's `.opencode`, `.claude/skills`, and `.agents/skills`. The run is rejected as `OPENCODE_GLOBAL_ISOLATION_LEAK`; no roster is accepted and Control B was not run. The exact server was stopped after identity/listener rechecks; logs and evidence were collected and the recovery receipt removed. This run therefore does not meet the no-real-profile-contact requirement. Evidence: `%TEMP%\\opencode\\olympus-global-runtime-8c5ca42da1bf48d7935f9e1a4da59066`. |
+| OpenCode | **GAP** | CLI `2.0.20`; run `4b1610d3387a4afcaa8fe24336ef0362` preflighted `opencode debug paths` in fresh A/B processes sharing the same isolated `HOME`, `USERPROFILE`, four XDG roots, and `TEMP/TMP`; every required path, including `tmp` and `log`, resolved inside those roots, with zero real-profile paths in runtime output. Both global installs and read-only `VerifyOnly` passed; each clean fixture returned HTTP 200 for `GET /api/agent` with the exact fixture location. The first response was empty; one explicit lazy-load probe returned only built-ins (`build`, `compaction`, `explore`, `general`, `plan`, `summary`, `title`). No Olympus agent or either diagnostic marker appeared, although all 12 generated global agent files were installed and verified and the hidden/subagent Aegis resource hash matched. Both owned servers were stopped after identity/listener checks and evidence/logs collected. Global custom-agent discovery remains a GAP and issue #7 stays OPEN. Evidence: `C:\Users\Public\opencode-olympus-qualification\olympus-global-runtime-4b1610d3387a4afcaa8fe24336ef0362`. |
 | Codex | **SUPPORTED** | The user-provided Codex runtime evidence classifies `CODEX_GLOBAL_RUNTIME: SUPPORTED`. It was accepted as supplied and not re-run during this continuation; no additional Codex smoke or profile investigation was performed. Existing `DENY = GAP` and `AEGIS = GAP` classifications are unchanged. |
 
 OpenCode's official current config docs confirm global agents under
@@ -122,13 +122,15 @@ files and the installer-owned project override/migration paths are covered by
 isolated installer tests; no runtime semantic merge is claimed.
 
 The generated capability row `GLOBAL_RUNTIME_DISCOVERY` is per-harness:
-OpenCode remains `PARTIAL` after its latest owned-server run detected real-profile
-watchers and rejected the result; Codex is `SUPPORTED` based on the user's
-provided runtime PASS evidence, accepted without a repeat smoke. The OpenCode
-qualification `tests/global-runtime/qualify.ps1` records the exact server PID,
-endpoint, effective config root, fixture cwd, API request and logs, and rejects
-real-profile paths before parsing the response roster. The latest evidence is
-under `%TEMP%\opencode\olympus-global-runtime-8c5ca42da1bf48d7935f9e1a4da59066`.
+OpenCode is `GAP` because its isolated runtime omitted the installed global
+Olympus agents in both config modes; Codex remains `SUPPORTED` based on the
+user-provided runtime PASS evidence and was not re-run. The OpenCode
+qualification `tests/global-runtime/qualify.ps1` records the fresh child
+environment, all effective `debug paths`, exact server PID/endpoint, config
+root, clean fixture cwd, first and lazy-load API responses, logs, and
+real-profile sentinel results. `OPENCODE_CONFIG_DIR` is a config-layer
+override, not a sandbox for global data/cache/state paths. Latest evidence:
+`C:\Users\Public\opencode-olympus-qualification\olympus-global-runtime-4b1610d3387a4afcaa8fe24336ef0362`.
 No Unix global install/runtime is qualified.
 
 ### Codex global runtime evidence
@@ -154,7 +156,7 @@ pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Scope global -Harness all -Dr
 # Automated global path/ownership/verify/update/uninstall fixtures.
 pwsh -NoProfile -File ./tests/global-installer/qualify.ps1
 
-# Standalone OpenCode runtime roster discovery (expected PARTIAL until isolated).
+# OpenCode global path isolation and roster qualification.
 pwsh -NoProfile -File ./tests/global-runtime/qualify.ps1
 ```
 

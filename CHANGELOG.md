@@ -1,10 +1,16 @@
 # Release notes
 
-## v0.4.1
+## [Unreleased]
 
-**Status: planned corrective patch release; do not tag or publish until validation passes.**
+Changes after v0.4.2 go here.
 
-This patch corrects the release-facing documentation contradiction found during final validation of tagged v0.4.0. It does not claim to resolve the existing Issue #1, #7, or #10 gaps, Codex `DENY = GAP`, or Codex `AEGIS = GAP`.
+## v0.4.2
+
+This corrective release makes release-facing documentation remain truthful when
+the exact validated `master` commit becomes an immutable tag. Product/version
+content is kept separate from per-release execution state. Release validation
+history is recorded below; neither validation tag is represented as a published
+GitHub Release.
 
 ### Highlights
 
@@ -13,7 +19,8 @@ This patch corrects the release-facing documentation contradiction found during 
 - Retain the Dual Harness Installer for OpenCode and Codex. `-Harness opencode`, `-Harness codex`, and `-Harness all` are additive; `installed_harnesses` records manifest ownership, VerifyOnly is read-only, and user-owned files are preserved. Existing legacy OpenCode installations remain upgradeable.
 - Keep the public Windows installer launchable from PowerShell 5.1 and PowerShell 7; PowerShell 7 runs the bootstrap.
 - Carry forward the Windows-qualified global static-install foundation with manifests, hash-checked update, safe uninstall of owned files only, and non-destructive project-to-global migration; project scope remains the default.
-- Correct the release-state documentation; the v0.4.0 tag remains unchanged and has no GitHub Release.
+- Replace transient pre-tag claims with tag-transition-stable product and version documentation; add semantic regression coverage for the same bytes before and after tagging.
+- Record the historical v0.4.0 and v0.4.1 validation-tag failures without representing either as a published GitHub Release.
 
 ### Capability limits
 
@@ -25,12 +32,12 @@ This patch corrects the release-facing documentation contradiction found during 
 
 ## Installation
 
-Use these commands only after the planned v0.4.1 release is published, from the root of the trusted Git project:
+Choose a published version from [GitHub Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases), then run the matching immutable-tag command from the root of the trusted Git project:
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.1/install.ps1 | iex
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.1/install.ps1'))) -Harness codex
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.1/install.ps1'))) -Harness all
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.2/install.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.2/install.ps1'))) -Harness codex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.2/install.ps1'))) -Harness all
 ```
 
 The default is project-local OpenCode. Global commands are separate; their static install success does not imply OpenCode global runtime discovery support.
@@ -40,14 +47,20 @@ The default is project-local OpenCode. Global commands are separate; their stati
 Each command verifies only the selected managed project-local harness subset and is read-only:
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.1/install.ps1'))) -Harness opencode -Version 'v0.4.1' -Target (Get-Location).Path -VerifyOnly
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.1/install.ps1'))) -Harness codex -Version 'v0.4.1' -Target (Get-Location).Path -VerifyOnly
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.1/install.ps1'))) -Harness all -Version 'v0.4.1' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.2/install.ps1'))) -Harness opencode -Version 'v0.4.2' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.2/install.ps1'))) -Harness codex -Version 'v0.4.2' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.2/install.ps1'))) -Harness all -Version 'v0.4.2' -Target (Get-Location).Path -VerifyOnly
 ```
+
+## v0.4.1
+
+**History: v0.4.1 is an immutable validation tag. Release validation failed because release-facing documentation still described that version as upcoming and advised against publishing it. No GitHub Release v0.4.1 was created.**
+
+The corrective release line records the documentation and qualification fixes in v0.4.2.
 
 ## v0.4.0
 
-**Status: tagged build on master. Tagged installer, VerifyOnly, and static qualification passed; final release validation failed because release-facing documentation still falsely said the merge/tag had not occurred. No GitHub Release v0.4.0 was created. The tag is immutable; v0.4.1 is the planned corrective patch.**
+**History: v0.4.0 is an immutable validation tag on the integrated `master` foundation. Release validation failed because release-facing documentation still named beta.5 as the active baseline and contradicted the established integration/tag state. No GitHub Release v0.4.0 was created.**
 
 ### Highlights
 

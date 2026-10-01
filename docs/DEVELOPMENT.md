@@ -151,7 +151,7 @@ unresolved work. Phase 3 evidence class: USER_EXECUTED_LIVE_EVIDENCE; see
 
 ## Local/bootstrap installation
 
-From an Olympus source checkout, project bootstrap targets the **root of a separate, trusted Git project** on Windows with Git and PowerShell 7 available. OpenCode project installation additionally requires the OpenCode CLI and configured models; Codex-only project installation does not invoke OpenCode. The public installer can be launched from Windows PowerShell 5.1 or PowerShell 7 and delegates bootstrap to installed `pwsh`. `-Scope project` remains the default and its behavior is compatible with beta.5; `-Harness` accepts `opencode` (default), `codex`, or `all`, case-insensitively. The v0.4.0 tag contains the global installation foundation and tagged installer/static qualification passed, but final release validation failed because release-facing documentation contradicted the tag/merge state; no GitHub Release v0.4.0 was created. The current source targets planned v0.4.1 to correct the documentation. `-Scope global` writes to the evidenced harness user directories, does not overwrite global base config, and is currently Windows-qualified. Global OpenCode runtime discovery is `GAP`, while Codex global runtime is `SUPPORTED` based on supplied runtime evidence. `-Version` accepts only Olympus SemVer `vX.Y.Z`, `vX.Y.Z-alpha.N`, `vX.Y.Z-beta.N`, or `vX.Y.Z-rc.N`; the remote source must be the immutable matching tag.
+From an Olympus source checkout, project bootstrap targets the **root of a separate, trusted Git project** on Windows with Git and PowerShell 7 available. OpenCode project installation additionally requires the OpenCode CLI and configured models; Codex-only project installation does not invoke OpenCode. The public installer can be launched from Windows PowerShell 5.1 or PowerShell 7 and delegates bootstrap to installed `pwsh`. `-Scope project` remains the default and its behavior is compatible with beta.5; `-Harness` accepts `opencode` (default), `codex`, or `all`, case-insensitively. The v0.4.0 and v0.4.1 immutable validation tags both failed release validation because of release-facing documentation contradictions; neither resulted in a GitHub Release. `-Scope global` writes to the evidenced harness user directories, does not overwrite global base config, and is currently Windows-qualified. Global OpenCode runtime discovery is `GAP`, while Codex global runtime is `SUPPORTED` based on supplied runtime evidence. `-Version` accepts only Olympus SemVer `vX.Y.Z`, `vX.Y.Z-alpha.N`, `vX.Y.Z-beta.N`, or `vX.Y.Z-rc.N`; the remote source must be the immutable matching tag.
 
 ```powershell
 pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project' -DryRun
@@ -217,6 +217,7 @@ pwsh -NoProfile -File ./tests/activity-hud/qualify.ps1
 pwsh -NoProfile -File ./tests/adaptive-concurrency/qualify.ps1
 pwsh -NoProfile -File ./tests/autonomy/qualify.ps1
 pwsh -NoProfile -File ./tests/release/qualify.ps1 -MockOpenCode
+pwsh -NoProfile -File ./tests/release/tag-transition-stability.ps1
 pwsh -NoProfile -File ./tests/release/installer-compatibility.ps1
 pwsh -NoProfile -File ./tests/release/dual-harness-installer.ps1
 pwsh -NoProfile -File ./tests/release/dirty-worktree.ps1
@@ -327,4 +328,33 @@ For any external process that may outlive its launcher/runtime, retain a minimal
 
 ## Release process
 
-Every release/prerelease note set must include `Installation` and `Verify installation` sections with install and verify commands pinned to the **same exact immutable release tag**; a beta/prerelease must never use `master` as its canonical installer source. `tests/release/qualify.ps1` checks the candidate notes and the release-notes gate's acceptance/rejection behavior. After publishing a GitHub Release, run `pwsh -NoProfile -File ./tests/release/github-release-notes.ps1 -Version <tag>`; that gate reads the actual GitHub Release body and fails unless both commands are present and pinned to that tag. Run qualification → review release readiness (including remaining static-vs-interactive gaps and documentation) → tag the reviewed commit → validate the installer against the **tagged** source/URL in disposable Git projects → publish the release → verify the published Release notes. `tests/release/qualify.ps1` is a local-source check, not a substitute for tagged installer validation. Do not move an existing release tag or change released content as part of documentation maintenance.
+Release-facing documentation is committed as product/version content, not as an
+ephemeral release-state ledger. A candidate commit must remain truthful both
+before tagging and after that exact commit is tagged; do not write that the
+active version is still future, untagged, unmerged, pending publication, or
+forbidden from publication. Keep execution status in qualification output and
+this procedure.
+
+Use this state machine for each release:
+
+1. **Master validated.** Run release/version and documentation-claim
+   qualifications on the exact `master` commit. Review capability gaps and
+   static-versus-interactive limits; release notes must include `Installation`
+   and `Verify installation` sections with commands pinned to the same version.
+2. **Tag candidate.** Create the candidate tag from the validated commit. A
+   beta/prerelease must not use mutable `master` as its installer source.
+3. **Validate the immutable remote tag.** Fetch/inspect that exact tag and run
+   installer and VerifyOnly checks against its tag-shaped source/URL in
+   disposable Git projects. Local-source `tests/release/qualify.ps1` does not
+   replace this tagged-source validation.
+4. **If PASS, create the GitHub Release.** Use the same tag and validated notes,
+   then run `pwsh -NoProfile -File ./tests/release/github-release-notes.ps1
+   -Version <tag>` to check the actual published Release body.
+5. **If FAIL, keep the tag immutable and advance the patch version.** Do not
+   move, delete, or recreate the failed tag; make corrections on `master`,
+   validate the next patch candidate, and repeat the state machine. A failed
+   validation tag does not itself constitute a published release.
+
+The release-notes gate checks the actual GitHub body after publication and
+rejects missing or mismatched install/verification commands. The local
+qualification checks are deterministic and do not create tags or releases.

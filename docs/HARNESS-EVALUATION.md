@@ -3,12 +3,12 @@
 This document consolidates evidence already observed or statically qualified.
 It does not declare a winner. The historical baseline was master
 `c90ff16bbf70b3ae7fca53657f147c3bcd89be50` (`v0.3.0-beta.5`); the v0.4.0
-foundation is now integrated into master and tagged. Tagged installer/static
-qualification passed, but final release validation failed on contradictory
-release-facing documentation, so no GitHub Release v0.4.0 was created. The
-planned v0.4.1 patch corrects that documentation. No interactive multi-agent
-smoke was repeated for this maintenance run. User-supplied runtime evidence
-remains identified as such rather than relabeled as task-executed.
+foundation is integrated into master and tagged. Release validation of the
+v0.4.0 and v0.4.1 validation tags failed on release-facing documentation
+contradictions; no GitHub Release was created for either tag. These are
+historical validation facts, not a comparative harness result. No interactive
+multi-agent smoke was repeated for this maintenance run. User-supplied runtime
+evidence remains identified as such rather than relabeled as task-executed.
 
 ## OpenCode evidence
 
@@ -85,10 +85,11 @@ the runtime recorded them; monetary cost was unavailable.
 
 ## Current global-install foundation
 
-The v0.4.0 tag contains this foundation, but it is not a GitHub Release: final
-release validation found a contradictory documentation claim. The planned
-v0.4.1 corrective patch updates release-facing documentation; this evidence
-does not declare a harness victory.
+The v0.4.0 tag contains this foundation. Release validation for the v0.4.0
+and v0.4.1 validation tags failed because release-facing documentation
+misstated version/tag state; neither produced a GitHub Release. The corrective
+v0.4 line records the documentation-model repair separately from these
+historical facts. This evidence does not declare a harness victory.
 
 - The public API adds `-Scope project|global`; project remains the default. The
   existing project manifest now records `scope = project`; legacy manifests

@@ -100,20 +100,21 @@ release or harness victory.
   than the temporary config's runtime. The current standalone equivalent is
   `opencode api --standalone --param directory=<fixture> agent.list`, backed by
   the installed OpenAPI operation `agent.list` (`GET /api/agent`).
-- The repeatable `tests/global-runtime/qualify.ps1` run installed all 15 global
-  resources into its isolated config root and queried standalone
-  `agent.list` from a clean Git fixture without project-local Olympus files.
-  The CLI exited 0 but returned `data: []`. Its logs confirmed the temporary
-  `OPENCODE_CONFIG_DIR`, yet the private server still subscribed to the real
-  Windows profile's `.opencode`, `.claude/skills`, and `.agents/skills` despite
-  isolated `HOME`, `USERPROFILE`, `HOMEDRIVE`/`HOMEPATH`, `APPDATA`, XDG, and temp
-  values. The user config and project fixture remained unchanged. This is not
-  isolated evidence: it neither proves an Olympus install defect nor supports a
-  runtime PASS. The qualifier rejects the profile leakage and preserves the
-  response/logs/evidence under its printed temporary run directory. OpenCode
-  global remains **PARTIAL**; the exact blocker is that a clean isolated
-  standalone runtime both observes real profile paths and returns an empty agent
-  roster.
+- The latest `tests/global-runtime/qualify.ps1` run installed all 15 global
+  resources into each isolated config root and queried `GET /api/agent` from the
+  qualification's own fresh `opencode serve` process (not the managed service),
+  with the clean Git fixture as request context. Control A used explicit
+  `OPENCODE_CONFIG_DIR` (PID `71728`, endpoint `127.0.0.1:64589`); control B
+  unset it and resolved the isolated-home default (PID `38044`, endpoint
+  `127.0.0.1:57170`). Both returned HTTP 200 and the exact fixture directory,
+  but `data: []` and no unique global-origin marker. Both server logs subscribed
+  to real-profile `.opencode`, `.claude/skills`, and `.agents/skills` paths,
+  despite isolated environment roots. The fixtures contained no project-local
+  Olympus resources. Both owned servers were stopped after exact identity and
+  listener checks; logs/results were collected and the recovery receipt removed.
+  This neither proves an Olympus install defect nor supports a runtime PASS.
+  OpenCode global remains **PARTIAL**. Evidence remains under
+  `%TEMP%\opencode\olympus-global-runtime-08217ba3adf64a9cb9b53ac75f6bd8b6`.
 - Codex global path evidence: current CLI help declares `~/.codex/config.toml`,
   `$CODEX_HOME`, and profiles at `$CODEX_HOME/<profile>.config.toml`; current
   official docs confirm `$CODEX_HOME/agents/` and global `AGENTS.md` (with
@@ -121,9 +122,14 @@ release or harness victory.
   agents, root instructions, and an `olympus.config.toml` profile, leaves base
   `config.toml` untouched, and selects the profile with `codex --profile
   olympus`. `codex doctor --json` under the isolated `CODEX_HOME` confirmed the
-  config/state root but reported no credentials. `codex agents --help` describes
-  browsing agent sessions, not custom-agent discovery. No model-backed
-  headless execution was performed; Codex global is **PARTIAL**, not SUPPORTED.
+  config/state root but reported no credentials. In this continuation,
+  `codex login status` against the actual user profile reported authenticated,
+  but no process API-key environment variable was available. No credentials
+  were copied or used and the real profile was not modified; its authentication
+  cannot safely be reused by an isolated `CODEX_HOME` without a human login.
+  `codex agents --help` describes browsing agent sessions, not custom-agent
+  discovery. No model-backed headless execution was performed; Codex global is
+  **PARTIAL**, not SUPPORTED. `HUMAN_ACTION_REQUIRED: CODEX_GLOBAL_RUNTIME_SMOKE`.
 - `-Harness all` uses separate OpenCode and Codex global roots/manifests.
   `VerifyOnly` checks the selected global manifest/files without mixing scopes.
   User-owned global config, drifted resources, or conflicting user `AGENTS.md`
@@ -154,9 +160,10 @@ was collected.
 Global runtime classification: **OpenCode PARTIAL** (both owned isolated-server
 controls returned HTTP 200 with the fixture directory context but an empty agent
 roster; each also logged subscriptions to real-profile paths, so isolation was
-not established), **Codex PARTIAL** (isolated global files and `CODEX_HOME` were
-confirmed; `codex doctor` reported no isolated credentials, so runtime agent
-discovery requires a human smoke). See `docs/HARNESSES.md` for control evidence
+not established), **Codex PARTIAL** (static global installation passes; the real
+profile reports authenticated but cannot be used for this isolated smoke without
+changing or copying credentials, so runtime agent discovery requires a human
+login to isolated `CODEX_HOME`). See `docs/HARNESSES.md` for control evidence
 and the Codex smoke requirement.
 
 ## Future real-task collection template

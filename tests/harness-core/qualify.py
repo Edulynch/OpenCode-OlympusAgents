@@ -219,8 +219,9 @@ def main() -> int:
     check("CODEX_RESULT_DELIVERY_SUPPORTED", capabilities["codex"]["RESULT_DELIVERY"] == "SUPPORTED")
     check("CAPABILITY_CONTRACT_COMPLETE", set(capabilities) == {"opencode", "codex"} and all(set(value) == EXPECTED_CAPABILITIES for value in capabilities.values()) and all(state in {"SUPPORTED", "ADAPTABLE", "PARTIAL", "GAP", "NOT_NEEDED"} for value in capabilities.values() for state in value.values()))
     check("CODEX_ACTIVITY_IS_BASIC_PARTIAL", capabilities["codex"]["ACTIVITY_VISIBILITY"] == "PARTIAL")
-    check("GLOBAL_RUNTIME_DISCOVERY_NOT_OVERCLAIMED", all(
-        capabilities[harness]["GLOBAL_RUNTIME_DISCOVERY"] == "PARTIAL" for harness in ("opencode", "codex")))
+    check("GLOBAL_RUNTIME_DISCOVERY_EVIDENCE_STATES",
+        capabilities["opencode"]["GLOBAL_RUNTIME_DISCOVERY"] == "PARTIAL" and
+        capabilities["codex"]["GLOBAL_RUNTIME_DISCOVERY"] == "SUPPORTED")
     check("CODEX_ASK_ADAPTABLE", capabilities["codex"]["ASK"] == "ADAPTABLE")
 
     protected_paths = ("olympus/**", ".codex/**", "CODEX.md", "scripts/render_harnesses.py")

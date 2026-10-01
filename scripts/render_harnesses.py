@@ -305,7 +305,7 @@ def capability_doc(capabilities: dict) -> str:
         [
             "",
             "OpenCode provides native hard DENY, explicit `/maintain` → Aegis, and the Activity HUD. Codex currently uses adaptable/native ASK, reports DENY and Aegis as GAP, and relies on basic/partial native activity visibility. Do not infer stronger enforcement than these states claim.",
-            "Global install file placement and global runtime discovery are separate claims. `GLOBAL_RUNTIME_DISCOVERY = PARTIAL` means the installer is statically qualified but runtime agent discovery is not yet demonstrated in an isolated environment.",
+            "Global install file placement and global runtime discovery are separate claims. `GLOBAL_RUNTIME_DISCOVERY = PARTIAL` means runtime agent discovery is not yet demonstrated for that harness in an isolated environment; `SUPPORTED` requires runtime discovery evidence for that harness.",
             "",
         ]
     )

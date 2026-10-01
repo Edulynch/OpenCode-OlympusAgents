@@ -107,8 +107,8 @@ runtime discovery is a separate contract:
 
 | Harness | Global support | Runtime evidence and blocker |
 |---|---|---|
-| OpenCode | **PARTIAL** | CLI `2.0.20`; the latest qualification run `08217ba3adf64a9cb9b53ac75f6bd8b6` ran both isolated controls against the qualification's own `opencode serve` PIDs, not the managed service. A: PID `71728`, endpoint `127.0.0.1:64589`, explicit `OPENCODE_CONFIG_DIR` at `control-A\explicit-config`. B: PID `38044`, endpoint `127.0.0.1:57170`, `OPENCODE_CONFIG_DIR` unset and CLI-resolved default under `control-B\home\.config\opencode`. Each fixture was a clean Git root with no project-local Olympus resources; `GET /api/agent?directory=<fixture>` returned HTTP 200 and that exact fixture as `location.directory`, but `data: []` and no unique isolated-origin marker. Both server logs subscribed to the real profile's `.opencode`, `.claude/skills`, and `.agents/skills`, so profile isolation and global discovery remain unproven. Both owned servers were stopped after exact identity/listener checks, their output/results collected, and the recovery receipt removed. Diagnostic evidence: `%TEMP%\opencode\olympus-global-runtime-08217ba3adf64a9cb9b53ac75f6bd8b6`. Root cause remains unresolved. |
-| Codex | **PARTIAL** | CLI `0.159.3`; isolated global install/update/VerifyOnly and conflict-safety tests pass, but authenticated runtime discovery is unproven. `codex login status` against the existing real user profile returned authenticated; no process-level API-key environment variable was present. The existing profile credentials were not copied or used for an agent run, and the real profile was not modified. The isolated `CODEX_HOME` still needs its own human login before a non-interactive global agent smoke. **`HUMAN_ACTION_REQUIRED: CODEX_GLOBAL_RUNTIME_SMOKE`.** No agent execution is claimed. `DENY = GAP` and `AEGIS = GAP` remain unchanged. |
+| OpenCode | **PARTIAL** | CLI `2.0.20`; latest run `8c5ca42da1bf48d7935f9e1a4da59066` launched its own `opencode serve` (PID `32408`, `127.0.0.1:64669`) with explicit `OPENCODE_CONFIG_DIR`, isolated XDG roots and `OPENCODE_TEST_HOME`; installer, generated-resource checks and read-only `VerifyOnly` passed. The fixture was clean. Its location-scoped API request returned HTTP 200, but before parsing the response roster the isolation guard found runtime watcher subscriptions to the real profile's `.opencode`, `.claude/skills`, and `.agents/skills`. The run is rejected as `OPENCODE_GLOBAL_ISOLATION_LEAK`; no roster is accepted and Control B was not run. The exact server was stopped after identity/listener rechecks; logs and evidence were collected and the recovery receipt removed. This run therefore does not meet the no-real-profile-contact requirement. Evidence: `%TEMP%\\opencode\\olympus-global-runtime-8c5ca42da1bf48d7935f9e1a4da59066`. |
+| Codex | **SUPPORTED** | The user-provided Codex runtime evidence classifies `CODEX_GLOBAL_RUNTIME: SUPPORTED`. It was accepted as supplied and not re-run during this continuation; no additional Codex smoke or profile investigation was performed. Existing `DENY = GAP` and `AEGIS = GAP` classifications are unchanged. |
 
 OpenCode's official current config docs confirm global agents under
 `~/.config/opencode/agents/`, `OPENCODE_CONFIG_DIR` as a custom config directory,
@@ -121,36 +121,22 @@ and precedence, not runtime discovery. A global install plus unrelated project
 files and the installer-owned project override/migration paths are covered by
 isolated installer tests; no runtime semantic merge is claimed.
 
-The generated capability row `GLOBAL_RUNTIME_DISCOVERY` remains `PARTIAL` for
-both harnesses until clean runtime evidence is collected. The OpenCode
-qualification `tests/global-runtime/qualify.ps1` owns and records each server
-PID, endpoint, effective config root, fixture cwd, API context and roster; it
-queries its own `serve` process and explicitly fails on real-profile path
-observations. The latest A/B controls returned HTTP 200 with the fixture context
-but an empty roster and logged real-profile paths; output/evidence remains under
-the printed `%TEMP%\opencode\olympus-global-runtime-<run-id>` directory. Codex's
-real profile is authenticated, but using it would violate the no-profile-write
-isolation constraint; the isolated profile requires human login. No Unix global
-install/runtime is qualified.
+The generated capability row `GLOBAL_RUNTIME_DISCOVERY` is per-harness:
+OpenCode remains `PARTIAL` after its latest owned-server run detected real-profile
+watchers and rejected the result; Codex is `SUPPORTED` based on the user's
+provided runtime PASS evidence, accepted without a repeat smoke. The OpenCode
+qualification `tests/global-runtime/qualify.ps1` records the exact server PID,
+endpoint, effective config root, fixture cwd, API request and logs, and rejects
+real-profile paths before parsing the response roster. The latest evidence is
+under `%TEMP%\opencode\olympus-global-runtime-8c5ca42da1bf48d7935f9e1a4da59066`.
+No Unix global install/runtime is qualified.
 
-### Human action required: Codex global runtime smoke
+### Codex global runtime evidence
 
-The isolated Codex fixture has no credentials, and Aegis did not use the user's
-real Codex credentials or delegate to a Codex agent. To complete the smoke, sign
-in with the isolated `CODEX_HOME` below, then run the headless command from the
-fixture repository (which contains no project-local Olympus files):
-
-```powershell
-$env:CODEX_HOME = '<isolated-run>\codex-home'
-codex login
-codex exec --profile olympus --sandbox read-only --ask-for-approval never --cd '<isolated-run>\trusted-fixture' --json 'Use the globally configured Olympus custom agent named veyra to inspect README.md and return exactly GLOBAL_CODEX_VEYRA_DISCOVERED.'
-```
-
-Expected PASS evidence: the global root instructions are active, Codex invokes
-the custom `veyra` agent from `$CODEX_HOME/agents/veyra.toml`, and the terminal
-result contains `GLOBAL_CODEX_VEYRA_DISCOVERED`; the fixture remains free of
-`.codex`, `CODEX.md`, and other project-local Olympus resources. Do not count
-the static presence of the files alone as PASS.
+The user-provided Codex runtime evidence is recorded as
+`CODEX_GLOBAL_RUNTIME: SUPPORTED`. It was not rerun during this continuation; no
+further Codex profile/authentication investigation or additional smoke was
+performed.
 
 Global uninstall is available only for manifest/hash-verified resources. It
 leaves parent directories, base harness configuration, and project-local state

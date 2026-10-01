@@ -291,22 +291,23 @@ Aegis separates authorized repository administration from software-development i
 
 Parallel Aegis administration is permitted through shell and OpenCode session APIs, not through Olympus child-agent routing. It must track every launched root and descendant, join, collect and validate required results before declaring success; unknown/uncollected children mean PARTIAL or COMPLETION_UNCONFIRMED. Do not serialize independent jobs as a substitute for joining them.
 
-The Aegis entry fix is statically qualified by `tests/maintenance-scope/qualify.ps1`,
-`tests/maintenance-handoff/qualify.ps1`, frontmatter, routing, authority,
-reconciliation, renderer, and affected installer/bootstrap checks. A user-provided
-real-runtime smoke on 2026-09-30 returned `MAINTENANCE_AUTH: VALID` and
-`AEGIS_SCOPE: ACCEPTED` in about 5.5 seconds, with zero requested tools, file
-changes, or child sessions and no tests. This demonstrates the fresh-entry
-contract only; it is not evidence for Codex Aegis or a live checkpoint/restore.
+The Aegis fresh-entry contract is statically qualified by
+`tests/maintenance-scope/qualify.ps1`, `tests/maintenance-handoff/qualify.ps1`,
+frontmatter, routing, authority, reconciliation and renderer checks. A
+user-provided fresh-entry runtime smoke on 2026-09-30 returned
+`MAINTENANCE_AUTH: VALID` and `AEGIS_SCOPE: ACCEPTED` in about 5.5 seconds, with
+zero requested tools, file changes or child sessions. It did not qualify resume.
 
-The 2026-10-01 checkpoint/resume inspection found OpenCode `v2.0.21` session
-continuation flags (`opencode run --continue` / `--session <id>`) but no explicit
-checkpoint operation in the installed CLI. A controlled same-run Aegis
-checkpoint/resume was not safely executable from the current child without
-delegating another Aegis child or racing a prompt into the active one. Therefore
-authorization retention and task-scope retention remain unproven;
-`CHECKPOINT_RESUME_RUNTIME: GAP`, Issue #8 stays open. Evidence and the exact
-limits are in [ISSUE-8-CHECKPOINT-RESUME.md](ISSUE-8-CHECKPOINT-RESUME.md).
+On 2026-10-01, a user-provided two-turn `opencode run --session <id>` runtime
+reproduction retained Aegis identity, marker and original task scope but returned
+`UNPROVEN` / `REJECTED`. Read-only export confirmed role-attributed assistant
+history and Aegis session identity; OpenCode `v2.0.21` exposes session
+continuation but no dedicated maintenance-auth metadata field. The Olympus
+contract now retains the prior Aegis assistant acceptance only for continuation
+of that same stored Aegis conversation and freezes its original task scope.
+Static qualification is required; a fresh two-phase human runtime smoke is
+still pending, so Issue #8 remains OPEN. Evidence, root cause, tests and exact
+smoke steps are in [ISSUE-8-CHECKPOINT-RESUME.md](ISSUE-8-CHECKPOINT-RESUME.md).
 
 External work ownership is the outer lifecycle rule for work Aegis launches to fulfill the current user request: PowerShell processes, scripts/controllers, builds, tests, benchmark controllers, disposable validation and OpenCode roots created through session APIs. Normal synchronous commands whose tool call returns only on completion are already owned. **Foreground/join is mandatory**, regardless of duration or a request to run in the background: launch → track → wait/join → collect → validate → final response. Aegis briefly explains that it will wait rather than detach. Progress updates are not final responses. A launcher exit is not sufficient when subordinate work survives it; reuse the family-aware completion gate below. A reliably completing controller can own its own subordinate jobs; Aegis waits for and validates its terminal report rather than duplicating that controller's tracking. Independent external jobs can still run in parallel, provided all required jobs are joined before finalization.
 

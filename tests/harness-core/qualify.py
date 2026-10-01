@@ -85,8 +85,12 @@ def main() -> int:
         "MAINTENANCE_SCOPE_CORE_CONTRACT",
         "COMMAND_ENTRY → MAINTENANCE_AUTH_VALID → AEGIS_SCOPE_ACCEPTED → TASK_EXECUTION" in maintenance_policy
         and "in any repository, including ordinary user projects" in maintenance_policy
-        and "fail closed immediately" in maintenance_policy
-        and "global Nox policy" in maintenance_policy,
+        and "fails closed immediately" in maintenance_policy
+        and "global Nox policy" in maintenance_policy
+        and "maintenance_authorization = accepted_for_current_execution" in maintenance_policy
+        and "prior Aegis-authored `assistant` message" in maintenance_policy
+        and "A genuinely new session cannot inherit this state" in maintenance_policy
+        and "The new turn cannot replace or enlarge `accepted_scope`" in maintenance_policy,
     )
 
     canonical_roles = {path.stem for path in (ROOT / "olympus" / "roles").glob("*.md")}

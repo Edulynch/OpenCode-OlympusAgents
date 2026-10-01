@@ -86,12 +86,12 @@ release or harness victory.
 - The public API adds `-Scope project|global`; project remains the default. The
   existing project manifest now records `scope = project`; legacy manifests
   without scope continue to mean project.
-- OpenCode global path evidence: installed `opencode debug paths` reported the
-  Windows config root under the user's `.config/opencode`; current official docs
-  specify `~/.config/opencode`, global `agents/`, `commands/`, and `plugins/`,
-  plus `OPENCODE_CONFIG_DIR`. Global Olympus writes those managed resources and
-  leaves `opencode.json` untouched; Kael is available by explicit selection,
-  not forced as the user's global default.
+- OpenCode global path evidence: fresh child `opencode debug paths` resolved
+  `home`, `config`, `data`, `cache`, `state`, `tmp`, and `log` inside the
+  isolated HOME, XDG, and TEMP roots. `OPENCODE_CONFIG_DIR` selects a config
+  layer only; the qualification does not treat it as a sandbox for the other
+  global path subsystems. Global Olympus leaves `opencode.json` untouched;
+  Kael is available by explicit selection, not forced as the user's default.
 - The earlier disposable probe returned `[]` from `opencode debug agents` after
   installing the official-path global agent files. Installed CLI `2.0.20`
   source shows that `cli.debug.agents` calls `agent.list` through the default
@@ -100,19 +100,26 @@ release or harness victory.
   than the temporary config's runtime. The current standalone equivalent is
   `opencode api --standalone --param directory=<fixture> agent.list`, backed by
   the installed OpenAPI operation `agent.list` (`GET /api/agent`).
-- The latest `tests/global-runtime/qualify.ps1` run `8c5ca42da1bf48d7935f9e1a4da59066`
-  installed the global resources in an isolated explicit config root and
-  queried `GET /api/agent` on its own fresh `opencode serve` process (PID
-  `32408`, endpoint `127.0.0.1:64669`), not the managed service. The clean Git
-  fixture had no project-local Olympus resources. The request returned HTTP
-  200, then the isolation guard found runtime watcher subscriptions to the real
-  profile's `.opencode`, `.claude/skills`, and `.agents/skills` paths before
-  parsing the response roster. It failed `OPENCODE_GLOBAL_ISOLATION_LEAK`; no
-  roster was accepted and Control B was not run. The exact owned server was
-  stopped after identity/listener checks and its output/evidence collected.
-  This run does not satisfy the no-real-profile-contact requirement. OpenCode
-  global remains **PARTIAL**; evidence is under
-  `%TEMP%\opencode\olympus-global-runtime-8c5ca42da1bf48d7935f9e1a4da59066`.
+- The latest `tests/global-runtime/qualify.ps1` run
+  `4b1610d3387a4afcaa8fe24336ef0362` passed the prelaunch path assertion in
+  both controls with the exact same isolated HOME/XDG/TEMP roots. A set
+  `OPENCODE_CONFIG_DIR` only for its config layer; B left it unset and used the
+  actual XDG-resolved global config root. Global
+  OpenCode install and read-only VerifyOnly passed in both controls, with clean
+  fixtures containing none of the listed project config/instruction files.
+- The qualification-owned servers were PID `55276` at `127.0.0.1:54036` (A)
+  and PID `65084` at `127.0.0.1:51904` (B). Both location-scoped
+  `GET /api/agent` responses were HTTP 200 and named their exact fixture. The
+  first response was `data: []`; exactly one explicit read-only lazy-load
+  diagnostic returned only the built-ins `build`, `compaction`, `explore`,
+  `general`, `plan`, `summary`, and `title`. The 12 generated global agents
+  were installed and VerifyOnly-verified, the hidden/subagent Aegis resource
+  hash matched, but no Olympus agent or either temporary diagnostic marker
+  appeared. No real-profile path appeared in effective paths, server output,
+  or API responses. This reproduces a global custom-agent discovery gap in CLI
+  2.0.20 after correcting the harness isolation; OpenCode global runtime is
+  **GAP** and issue #7 remains OPEN. Logs and evidence are under
+  `C:\Users\Public\opencode-olympus-qualification\olympus-global-runtime-4b1610d3387a4afcaa8fe24336ef0362`.
 - Codex global runtime discovery is **SUPPORTED** based on user-provided PASS
   evidence. It was accepted as supplied and not re-run during this continuation;
   no further Codex smoke or profile investigation was performed.
@@ -143,9 +150,10 @@ was collected.
 | Implementation + tests | Codex | PARTIAL | 69.7 s | 0 | 0 | 0 observed | 0 observed; no children | 0 observed | `gpt-6.1-sol` | `high` configured; not emitted by event | 84,593 input (77,824 cached), 501 output, 45 reasoning; cost unavailable | `python -m unittest` failed inside sandbox because `python` was unavailable; Aegis ran the same two fixture tests host-side and both passed. Not Kovan → Nox. |
 | Equivalent task set | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | No apples-to-apples result exists. |
 
-Global runtime classification: **OpenCode PARTIAL** (the latest owned-server
-request returned HTTP 200, but real-profile watcher subscriptions triggered the
-isolation guard before its response roster was parsed; Control B was not run),
+Global runtime classification: **OpenCode GAP** (both isolated controls passed
+path assertions and returned HTTP 200 for their exact fixture contexts, but
+the runtime omitted the installed Olympus custom agents after the explicit
+lazy-load diagnostic; no real-profile path was observed),
 **Codex SUPPORTED** (user-provided PASS evidence, accepted without a repeat
 smoke). See `docs/HARNESSES.md` for the per-harness evidence.
 

@@ -80,7 +80,7 @@ without tools, no ownership gate, no expensive reconstruction, Harness Core,
 renderer, authority, maintenance handoff and result reconciliation.
 
 **Static qualification:** PASS (static only; runtime PASS is not inferred).
-**Implementation commit:** recorded after commit.
+**Implementation commit:** `464151c` (`fix(aegis): retain same-session maintenance authorization`).
 **Issue #8:** remains **OPEN** until the human runtime smoke below returns PASS.
 
 Validated suites: `python tests/maintenance-scope/qualify.py`,

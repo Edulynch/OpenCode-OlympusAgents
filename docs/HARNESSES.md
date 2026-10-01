@@ -53,7 +53,7 @@ outputs**.
 | Shared contract presentation | `docs/HARNESS-CAPABILITIES.md` |
 
 The installer accepts `-Scope project` (the default and project-scope behavior
-remains compatible with beta.5) or the v0.4.0 foundation `-Scope global`; either scope accepts
+remains compatible with beta.5) or the v0.4.0 tagged foundation `-Scope global`; either scope accepts
 `-Harness opencode`, `-Harness codex`, or
 `-Harness all`; the default remains `opencode` for the existing one-line install
 experience. It discovers generated adapter outputs under `.opencode/**` and
@@ -75,7 +75,7 @@ Project `VerifyOnly` verifies generated source, scope/version metadata, manifest
 ownership, and hashes only; it does not launch OpenCode runtime discovery or any
 optional external tooling in the project target.
 
-## Global installation foundation (v0.4.0, branch-only)
+## Global installation foundation (introduced in tagged v0.4.0)
 
 Path evidence gathered for this foundation:
 
@@ -142,10 +142,14 @@ performed.
 
 Global uninstall is available only for manifest/hash-verified resources. It
 leaves parent directories, base harness configuration, and project-local state
-untouched. No release containing this foundation has been published.
+untouched. The v0.4.0 tag contains this foundation and its tagged installer and
+static qualification passed; final release validation failed because release-
+facing documentation contradicted the actual tag/merge state. No GitHub Release
+v0.4.0 was created. The planned v0.4.1 patch corrects release-facing
+documentation and aligns the next-release identity metadata.
 
-Branch qualification entry points (these are not commands for the published
-beta.5 tag):
+Static qualification entry points for this foundation (the source defaults to
+the planned v0.4.1 target; beta.5 references below remain historical):
 
 ```powershell
 # Read-only plan from a checkout; writes nothing to either global root.
@@ -213,7 +217,7 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/inst
 ```
 
 No generic plugin framework, automatic harness detection, or additional
-harness is introduced. The current `feature/v0.4.0-foundation` branch adds a
-narrow global scope to the existing installer only; it is not in a published
-tag. A future harness may be added only through a separate adapter that
+harness is introduced. The v0.4.0 tag added a narrow global scope to the
+existing installer only; v0.4.1 is the planned corrective documentation patch,
+not a new harness release. A future harness may be added only through a separate adapter that
 satisfies and honestly declares the Olympus capability contract.

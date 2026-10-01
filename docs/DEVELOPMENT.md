@@ -299,6 +299,15 @@ real-runtime smoke on 2026-09-30 returned `MAINTENANCE_AUTH: VALID` and
 changes, or child sessions and no tests. This demonstrates the fresh-entry
 contract only; it is not evidence for Codex Aegis or a live checkpoint/restore.
 
+The 2026-10-01 checkpoint/resume inspection found OpenCode `v2.0.21` session
+continuation flags (`opencode run --continue` / `--session <id>`) but no explicit
+checkpoint operation in the installed CLI. A controlled same-run Aegis
+checkpoint/resume was not safely executable from the current child without
+delegating another Aegis child or racing a prompt into the active one. Therefore
+authorization retention and task-scope retention remain unproven;
+`CHECKPOINT_RESUME_RUNTIME: GAP`, Issue #8 stays open. Evidence and the exact
+limits are in [ISSUE-8-CHECKPOINT-RESUME.md](ISSUE-8-CHECKPOINT-RESUME.md).
+
 External work ownership is the outer lifecycle rule for work Aegis launches to fulfill the current user request: PowerShell processes, scripts/controllers, builds, tests, benchmark controllers, disposable validation and OpenCode roots created through session APIs. Normal synchronous commands whose tool call returns only on completion are already owned. **Foreground/join is mandatory**, regardless of duration or a request to run in the background: launch → track → wait/join → collect → validate → final response. Aegis briefly explains that it will wait rather than detach. Progress updates are not final responses. A launcher exit is not sufficient when subordinate work survives it; reuse the family-aware completion gate below. A reliably completing controller can own its own subordinate jobs; Aegis waits for and validates its terminal report rather than duplicating that controller's tracking. Independent external jobs can still run in parallel, provided all required jobs are joined before finalization.
 
 Before launch, ensure the full lifecycle can be observed and joined; otherwise report BLOCKED without launching. No detached handoff, user PID/status polling, global registry, daemon or scheduled monitor. On Windows, necessary child processes must be headless (no visible console or focus stealing) while Aegis captures their output, errors, exit code and results. Prefer direct shell execution to extra child shells. On a finite timeout, inspect and safely stop owned work when possible, then report TIMEOUT/PARTIAL/BLOCKED without silently leaving required jobs active. Kael relays only the terminal Aegis outcome, not an in-progress controller as a finished task.

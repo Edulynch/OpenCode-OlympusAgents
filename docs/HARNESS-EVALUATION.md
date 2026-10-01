@@ -8,9 +8,10 @@ evidence remains identified as such rather than relabeled as task-executed.
 
 ## OpenCode evidence
 
-- Olympus declares full Aegis support: an explicitly invoked `/maintain`
-  command enters the hidden Aegis agent, separate from Kael routing. Aegis is
-  never a normal Kael child or automatic escalation route.
+- The OpenCode project adapter supports explicit `/maintain` entry to the hidden
+  Aegis agent, separate from Kael routing. Aegis is never a normal Kael child or
+  automatic escalation route. This does not claim global OpenCode runtime
+  discovery; that capability remains `GAP`.
 - Olympus `DENY` is a native hard boundary in OpenCode agent permissions and
   the Core authority contract. It is not an ASK/approval path.
 - The passive Activity HUD reads OpenCode session state and displays active

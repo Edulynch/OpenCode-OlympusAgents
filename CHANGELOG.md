@@ -1,5 +1,61 @@
 # Unreleased
 
+## v0.4.0
+
+**Status: unreleased source candidate; no tag or GitHub Release has been created.**
+
+### Highlights
+
+- Add Olympus Harness Core as the canonical role, policy, model-intent, display-identity, orchestration, and capability source; deterministically render the OpenCode and Codex adapters.
+- Derive full agent display identities from one Core source and migrate Sol roles to GPT-6.1 Sol while Luna roles remain on GPT-6 Luna.
+- Retain the Dual Harness Installer for OpenCode and Codex. `-Harness opencode`, `-Harness codex`, and `-Harness all` are additive; `installed_harnesses` records manifest ownership, VerifyOnly is read-only, and user-owned files are preserved. Existing legacy OpenCode installations remain upgradeable.
+- Keep the public Windows installer launchable from PowerShell 5.1 and PowerShell 7; PowerShell 7 runs the bootstrap.
+- Add a Windows-qualified global static-install foundation with manifests, hash-checked update, safe uninstall of owned files only, and non-destructive project-to-global migration; project scope remains the default.
+- Close Issue #8 after the supplied same-child runtime continuation PASS retained Aegis identity, marker, task scope, `MAINTENANCE_AUTH`, and `AEGIS_SCOPE`.
+
+### Capability limits
+
+- Global static installation is supported for both harnesses, but global runtime discovery is **GAP** for OpenCode and **SUPPORTED** for Codex (based on supplied runtime evidence). OpenCode global installation must not be treated as runtime-qualified.
+- Codex `DENY = GAP`, `AEGIS = GAP`, `RESULT_RECONCILIATION = PARTIAL`, and `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; Codex ASK is adaptable, not identical to OpenCode ASK. This release does not claim full parity.
+- OpenCode V2 Issue #1 remains OPEN upstream (`No tool output found`); Olympus seeks and consumes the original result when recoverable, reports `COMPLETION_UNCONFIRMED` when it is not, and forbids blind retry, but does not fix upstream result correlation.
+- Issue #10 remains OPEN: child-to-parent summaries may omit exact structured fields. Existing completion gates and no-blind-retry semantics remain in place; the observed loss reduces orchestration fidelity and may require blocking/recovery when exact fields are needed.
+- Global installation is Windows-qualified. No Unix global install/runtime qualification is claimed.
+
+## Installation
+
+Open PowerShell in the root of the trusted Git project and use the exact immutable v0.4.0 tag:
+
+```powershell
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.0/install.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.0/install.ps1'))) -Harness codex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.0/install.ps1'))) -Harness all
+```
+
+The default is project-local OpenCode. Global commands are separate; their static install success does not imply OpenCode global runtime discovery support:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.0/install.ps1'))) -Scope global -Harness opencode
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.0/install.ps1'))) -Scope global -Harness codex
+```
+
+## Verify installation
+
+Each command verifies only the selected managed project-local harness subset and is read-only:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.0/install.ps1'))) -Harness opencode -Version 'v0.4.0' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.0/install.ps1'))) -Harness codex -Version 'v0.4.0' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.0/install.ps1'))) -Harness all -Version 'v0.4.0' -Target (Get-Location).Path -VerifyOnly
+```
+
+Global `VerifyOnly` checks installed global manifests and managed hashes; it does not prove runtime discovery:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.0/install.ps1'))) -Scope global -Harness opencode -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.0/install.ps1'))) -Scope global -Harness codex -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.0/install.ps1'))) -Scope global -Harness all -VerifyOnly
+```
+
 ## v0.3.0-beta.5
 
 ### Highlights

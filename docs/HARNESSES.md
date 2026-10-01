@@ -52,8 +52,8 @@ outputs**.
 | Codex | `CODEX.md`, `.codex/config.toml`, `.codex/agents/*.toml` |
 | Shared contract presentation | `docs/HARNESS-CAPABILITIES.md` |
 
-The installer accepts `-Scope project` (the default and beta.5-compatible
-behavior) or the v0.4.0 foundation `-Scope global`; either scope accepts
+The installer accepts `-Scope project` (the default and project-scope behavior
+remains compatible with beta.5) or the v0.4.0 foundation `-Scope global`; either scope accepts
 `-Harness opencode`, `-Harness codex`, or
 `-Harness all`; the default remains `opencode` for the existing one-line install
 experience. It discovers generated adapter outputs under `.opencode/**` and
@@ -160,8 +160,10 @@ pwsh -NoProfile -File ./tests/global-installer/qualify.ps1
 pwsh -NoProfile -File ./tests/global-runtime/qualify.ps1
 ```
 
-OpenCode still provides the `/maintain` command, hidden Aegis, native ASK, hard
-DENY, Activity HUD, roles, models, permissions, and installer-managed surface.
+The OpenCode project adapter provides the `/maintain` command, hidden Aegis,
+native ASK, hard DENY, Activity HUD, roles, models, permissions, and
+installer-managed surface. This project capability statement does not imply
+global runtime discovery, which remains a `GAP`.
 Codex installation does not imply capability parity: Codex multi-agent and
 result delivery are supported, ALLOW is supported, ASK is adaptable, DENY and
 Aegis remain gaps, and activity visibility is partial/basic. See the generated

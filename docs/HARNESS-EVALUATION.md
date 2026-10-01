@@ -23,8 +23,9 @@ evidence remains identified as such rather than relabeled as task-executed.
   found`. Olympus retains original-result reconciliation and a no-blind-retry
   rule; absence is not treated as failure or permission to duplicate work. This
   task did not attempt to fix upstream OpenCode.
-- The Olympus-only maintenance plane and explicit-user `/maintain` boundary are
-  part of Core. Ordinary user-project work remains outside Aegis.
+- Explicit `/maintain` immediately authorizes only its delivered task through
+  the hidden Aegis entry, regardless of repository ownership. It is not an
+  automatic route for ordinary project work.
 - Project-local `VerifyOnly` is now managed-source/version/manifest/hash
   verification only. It does not run `opencode debug config` or `debug agents`
   in the target; issue #6's temporary-artifact path is tested with a mutating
@@ -150,10 +151,13 @@ was collected.
 | Implementation + tests | Codex | PARTIAL | 69.7 s | 0 | 0 | 0 observed | 0 observed; no children | 0 observed | `gpt-6.1-sol` | `high` configured; not emitted by event | 84,593 input (77,824 cached), 501 output, 45 reasoning; cost unavailable | `python -m unittest` failed inside sandbox because `python` was unavailable; Aegis ran the same two fixture tests host-side and both passed. Not Kovan → Nox. |
 | Equivalent task set | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | No apples-to-apples result exists. |
 
-Global runtime classification: **OpenCode PARTIAL** (the isolated API probe
-returned an empty roster while observing the user's profile), **Codex PARTIAL**
-(isolated `CODEX_HOME` confirmed, but runtime agent discovery needs credentials).
-See `docs/HARNESSES.md` for exact commands and the required Codex human smoke.
+Global runtime classification: **OpenCode PARTIAL** (both owned isolated-server
+controls returned HTTP 200 with the fixture directory context but an empty agent
+roster; each also logged subscriptions to real-profile paths, so isolation was
+not established), **Codex PARTIAL** (isolated global files and `CODEX_HOME` were
+confirmed; `codex doctor` reported no isolated credentials, so runtime agent
+discovery requires a human smoke). See `docs/HARNESSES.md` for control evidence
+and the Codex smoke requirement.
 
 ## Future real-task collection template
 

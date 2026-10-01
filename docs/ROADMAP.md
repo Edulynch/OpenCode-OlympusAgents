@@ -6,14 +6,14 @@ Maintainer-facing, directional, evidence-driven and subject to validation. This 
 
 - Harness Core, OpenCode adapter, and experimental Codex adapter are present; their declared capability differences remain explicit.
 - The dual-harness project-local installer is published. `-Scope project` remains the default; Codex/OpenCode/All selection is supported.
-- Completion/reconciliation, external-work ownership, authority, and the explicit Olympus-only `/maintain` maintenance plane are part of Core. OpenCode has Aegis, hard DENY, native ASK, and the passive Activity HUD. Codex DENY/Aegis remain gaps and activity visibility is basic/partial.
-- Upstream OpenCode result-correlation issue #1 remains OPEN; Olympus keeps no-blind-retry/result reconciliation. Issue #2–#5 are CLOSED. Issue #6 is tracked independently and closes only after its read-only acceptance qualification passes.
+- Completion/reconciliation, external-work ownership, authority, and the explicit `/maintain` → Aegis maintenance entry are part of Core. OpenCode has Aegis, hard DENY, native ASK, and the passive Activity HUD. Codex DENY/Aegis remain gaps and activity visibility is basic/partial.
+- Upstream OpenCode result-correlation issue #1 remains OPEN; Olympus keeps no-blind-retry/result reconciliation. Issues #2–#6 are CLOSED; #3 stays closed because its expensive pre-auth delay is corrected. Auth bridge #9 is CLOSED after the fresh-entry runtime smoke; checkpoint/resume #8 and global discovery #7 remain OPEN.
 - This branch additionally qualifies VerifyOnly isolation and full identities, and implements a **branch-only** global-install foundation. No v0.4.0 release, tag, or master merge is made here.
 
 ## IN PROGRESS / NEXT
 
-- `feature/v0.4.0-foundation`: one canonical Full Agent Display Identity source and adapters that derive it; global OpenCode/Codex/All installer foundation, manifests, verification, update, safe uninstall, and non-destructive project→global migration. Project-local beta.5 behavior stays default/backwards-compatible.
-- Global OpenCode runtime discovery remains unqualified: current isolated `opencode debug agents` returned an empty roster even with documented global resources. Do not describe global runtime availability as complete until that evidence is resolved.
+- `feature/v0.4.0-foundation`: one canonical Full Agent Display Identity source and adapters that derive it is DONE + statically qualified; global OpenCode/Codex/All installer foundation, manifests, verification, update, safe uninstall, and non-destructive project→global migration are implemented and statically qualified. Project-local beta.5 behavior stays default/backwards-compatible.
+- Global OpenCode runtime discovery remains PARTIAL: fresh owned-server controls A (`OPENCODE_CONFIG_DIR`) and B (isolated home) both returned HTTP 200 with the fixture directory but an empty agent roster, and both logged real-profile paths. The result collector was repaired after control evidence was collected; a synthetic replay passed, but no duplicate runtime run was made. Do not describe global runtime availability as complete until clean isolated evidence passes.
 - Codex DENY and Codex Aegis remain explicit GAPs. Research found no demonstrated hard-deny equivalent or safely enforced privileged maintenance entry; do not use prompt-only theater or weaken Core.
 - Real-project OpenCode-vs-Codex comparison remains NEXT. Existing Codex fixture measurements do not establish a winner or comparative quality/cost/speed.
 
@@ -44,7 +44,7 @@ The table captures shipped roles and current in-validation identities. Model ent
 | `talos` — Talos — The Sentinel | GPT-6 Sol High | Security defect and trust-boundary reasoning | SHIPPED; optional, Security Routing Gate only |
 | `thales` — Thales — The Sage | GPT-6 Sol XHigh | High-uncertainty diagnostic escalation | SHIPPED: native evolution of Sorin; live routing qualified |
 | `helios` — Helios — The Optimizer | GPT-6 Sol High | Explicit-only optimization feasibility and evidence-bounded proposal | SHIPPED; user-executed live qualification passed |
-| `aegis` — Aegis — The Keeper | GPT-6 Luna Max | Hidden privileged Olympus framework maintenance via explicit `/maintain`; never a Kael child | SHIPPED on OpenCode; `CODEX_AEGIS = GAP` |
+| `aegis` — Aegis — The Keeper | GPT-6 Luna Max | Hidden privileged task executor through explicit `/maintain`; never a Kael child or ownership gate | SHIPPED on OpenCode; `CODEX_AEGIS = GAP` |
 
 ## Defect routing and diagnostic budget — Phase 6 shipped
 
@@ -59,7 +59,7 @@ Explicit user optimization intent may engage Helios; a performance fact alone ne
 
 ## Command UX — EXPLORATION
 
-Existing `/maintain` enters the explicit Olympus Maintenance plane only; it does not handle ordinary user-project Git administration. Candidate concepts below are not implemented commitments; exact names and behavior require validation:
+Existing `/maintain` explicitly enters the hidden Aegis executor for its delivered task; it is never an automatic authority route. Normal user-project workflow remains Kael's recommended route. Candidate concepts below are not implemented commitments; exact names and behavior require validation:
 
 - `/power`: use all useful specialists and safe available parallelism aggressively, without bypassing role purity, dependencies, completion, writer ownership, or diagnostic gates.
 - `/plan`: explicit planning workflow.
@@ -79,7 +79,7 @@ Existing `/maintain` enters the explicit Olympus Maintenance plane only; it does
 | 6 — Argus The Bug Hunter | **SHIPPED** | Optional functional diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. No implementation or direct discovery. |
 | 7 — Talos The Sentinel | **SHIPPED** | Bounded security defect and trust-boundary diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. |
 | 8 — Helios The Optimizer | **SHIPPED** | Explicit-only feasibility/proposal, mandatory user approval, before/after validation; user-executed live cases A and B passed. |
-| 9 — Aegis evolution | **SHIPPED on OpenCode; Codex GAP** | Hidden Aegis on Luna Max preserves Olympus-only `/maintain`, explicit-user-only entry, Kael's denial boundary, and result reconciliation; executor, not strategist. |
+| 9 — Aegis evolution | **SHIPPED on OpenCode; Codex GAP** | Hidden Aegis on Luna Max accepts the explicit `/maintain` command's task declaration immediately, without repository ownership/provenance admission; preserves Kael/child denials, task scope, and result reconciliation. |
 | 10 — Command UX | **EXPLORATION** | Validate a small useful repertoire: candidate `/power`, `/plan`, `/fast`, `/performance`; avoid command sprawl. |
 | 11 — Integrated Routing Qualification | **PLANNED** | Fixtures: simple edit, complex feature, functional bug, security bug, operational/build issue, difficult/flaky diagnosis, third-party bug, optimization request, explicit planning, power mode, maintenance boundary. |
 | 12 — Release | **PLANNED** | Only after integrated qualification. |

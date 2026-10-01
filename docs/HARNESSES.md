@@ -15,7 +15,7 @@ guarantee.
 | `olympus/policies/routing.md` and `orchestration.toml` | Specialist suppression, trivial fast path, direct-root ownership, bounded parallelism, and the canonical maximum of four children. |
 | `olympus/policies/result-lifecycle.md` | Question barrier, completion barrier, original-result reconciliation, and no-blind-retry semantics. |
 | `olympus/policies/authority.md` | Canonical ALLOW / ASK / DENY meaning. |
-| `olympus/policies/maintenance-plane.md` | Olympus-only privileged maintenance semantics and the explicit-user boundary. |
+| `olympus/policies/maintenance-plane.md` | Task-scoped Aegis authority established by explicit `/maintain` command entry, and the no-automatic-escalation boundary. |
 | `olympus/harnesses/capabilities.toml` | The two-harness capability contract (`SUPPORTED`, `ADAPTABLE`, `PARTIAL`, `GAP`, `NOT_NEEDED`). |
 | `olympus/harnesses/opencode/` | OpenCode permission/frontmatter, native role-prompt representation, `/maintain`, default config, and activity plugin sources. |
 | `olympus/harnesses/codex/` | Codex-native role-prompt representation, root instructions, project config, and permission profile. Codex has no Aegis agent. |
@@ -107,8 +107,8 @@ runtime discovery is a separate contract:
 
 | Harness | Global support | Runtime evidence and blocker |
 |---|---|---|
-| OpenCode | **PARTIAL** | Current CLI `2.0.20` exposes `opencode api --standalone` and the installed API source identifies `agent.list` (`GET /api/agent`) as the roster endpoint. The runtime qualifier installed all 15 managed resources in an isolated config root, used a clean fixture with no project-local Olympus files, and queried standalone `agent.list`; it returned exit 0 with `data: []`. Despite isolated `HOME`, `USERPROFILE`, `HOMEDRIVE`/`HOMEPATH`, `APPDATA`, XDG, and temp values, server logs subscribed to the real profile's `.opencode`, `.claude/skills`, and `.agents/skills`. The qualifier rejects that leakage and retains the failed logs; this is not isolated evidence and cannot establish an Olympus install defect or a PASS. The prior `opencode debug agents` check is not standalone: its command has no `--standalone` flag and installed source resolves the default managed service. |
-| Codex | **PARTIAL** | Global `AGENTS.md`, profile, and 10 custom-agent TOMLs install under an isolated `CODEX_HOME`. Current CLI `0.159.1` `codex doctor --json` confirmed that `CODEX_HOME` and its state/config paths were the fixture, but reported no credentials. `codex agents` lists sessions, not the custom-agent roster; a headless model execution was not run. Global runtime discovery is therefore unproven. `DENY = GAP` and `AEGIS = GAP` remain unchanged. |
+| OpenCode | **PARTIAL** | CLI `2.0.20`; controls A and B each installed all 15 managed resources in a clean fixture with no project-local Olympus files, then queried `GET /api/agent?directory=<fixture>` from the qualification's own fresh `opencode serve` process. A used explicit `OPENCODE_CONFIG_DIR`; B had it unset and `opencode debug paths` resolved the isolated-home config root. Both endpoints returned HTTP 200 with the correct fixture `location.directory`, but `data: []`; the unique global-origin marker was absent. Logs from both PIDs subscribed to the actual user's `.opencode`, `.claude/skills`, and `.agents/skills`, so neither run proves profile isolation. Both owned servers were stopped and their results collected. Retained control records classify A_FAIL_B_FAIL; the first run's final PowerShell result collector also raised an object-shape error after recording both controls. The collector and explicit profile-leak check were corrected afterward and received a synthetic collector replay only; no duplicate OpenCode runtime query was made. Root cause (OpenCode loader/config semantics versus environment/profile leakage) remains unresolved. Evidence: `%TEMP%\opencode\olympus-global-runtime-37efb90310e8416996676ea89c17876b`. |
+| Codex | **PARTIAL** | CLI `0.159.3`; isolated global installation wrote `AGENTS.md` and 10 custom-agent TOMLs under a temporary `CODEX_HOME`; the clean fixture had no `.codex`, `CODEX.md`, or `.opencode`. `codex doctor --json` independently reported the same isolated `CODEX_HOME` and `auth.credentials: fail` / “no Codex credentials were found” (doctor overall exit 1); it did not run an agent. The CLI also warned it would not create PATH aliases under the temporary home. No credential or secret was copied, and no headless model execution was attempted. Global instructions/specialist contribution to runtime remains unproven. `DENY = GAP` and `AEGIS = GAP` remain unchanged. |
 
 OpenCode's official current config docs confirm global agents under
 `~/.config/opencode/agents/`, `OPENCODE_CONFIG_DIR` as a custom config directory,
@@ -123,12 +123,13 @@ isolated installer tests; no runtime semantic merge is claimed.
 
 The generated capability row `GLOBAL_RUNTIME_DISCOVERY` remains `PARTIAL` for
 both harnesses until clean runtime evidence is collected. The OpenCode
-qualification `tests/global-runtime/qualify.ps1` rejects profile/config/skill
-path leakage, verifies the user config and fixture remain unchanged, and keeps
-stdout, stderr, and `evidence.json` under the printed
-`%TEMP%\opencode\olympus-global-runtime-<run-id>` path on failure. The latest
-run's exact blocker is profile-path leakage plus an empty standalone roster.
-No Unix global install/runtime is qualified.
+qualification `tests/global-runtime/qualify.ps1` now owns its server PIDs,
+checks API request context and the unique global-origin marker, and explicitly
+fails on real-profile path observations; failed control evidence remains under
+the printed `%TEMP%\opencode\olympus-global-runtime-<run-id>` path. The latest
+controls observed both profile-path leakage and an empty roster. A qualification
+result-collection fix was replayed synthetically only; runtime discovery has not
+been revalidated. No Unix global install/runtime is qualified.
 
 ### Human action required: Codex global runtime smoke
 

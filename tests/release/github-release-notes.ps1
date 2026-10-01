@@ -10,6 +10,25 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 function Assert-ReleaseNotes([string]$Body, [string]$Tag) {
+    $escapedTag = [regex]::Escape($Tag)
+    $unpublishable = '(?i)\b(?:future|upcoming|planned|pending|not\s+(?:yet\s+)?(?:tagged|publishable|published|released)|(?:do|must)\s+not\s+(?:tag|publish|release)|not\s+publishable|awaiting\s+(?:a\s+)?(?:tag|release))\b'
+    $tagAbsent = '(?i)\b(?:not\s+(?:yet\s+)?tagged|tag\s+(?:is\s+)?(?:absent|pending)|not\s+(?:yet\s+)?published|not\s+(?:yet\s+)?released|no\s+GitHub\s+Release|release\s+not\s+(?:yet\s+)?created|publication\s+pending)\b'
+    $tagPresent = '(?i)\b(?:tagged|tag\s+(?:exists|was\s+created|has\s+been\s+created)|already\s+published|release\s+published|was\s+released)\b'
+    foreach ($line in ($Body -split '\r?\n')) {
+        if ($line -match $escapedTag -and ($line -match $unpublishable -or $line -match $tagAbsent -or $line -match $tagPresent)) {
+            throw 'RELEASE_NOTES_EPHEMERAL_TAG_STATE: Static release notes must not encode whether this tag/release is pending, absent, or already created.'
+        }
+        if ($line -match $escapedTag -and $line -match '(?i)v0\.3\.0-beta\.5') {
+            throw 'RELEASE_NOTES_TARGET_OLD_BETA: The active release identity is described as the old beta baseline.'
+        }
+        if ($line -match '(?i)v0\.4\.0' -and $line -match '(?i)\b(?:unmerged|not\s+merged|not\s+integrated|integration\s+pending|not\s+on\s+master|not\s+tagged)\b') {
+            throw 'RELEASE_NOTES_FOUNDATION_UNMERGED: Documentation contradicts the integrated v0.4.0 foundation.'
+        }
+    }
+    $versionHeadings = [regex]::Matches($Body, '(?im)^##[ \t]+(v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?)[ \t]*\r?$')
+    if ($versionHeadings.Count -gt 1 -or ($versionHeadings.Count -eq 1 -and $versionHeadings[0].Groups[1].Value -cne $Tag)) {
+        throw 'RELEASE_NOTES_VERSION_MISMATCH: Release body identity does not match the active tag.'
+    }
     $installationHeading = [regex]::Matches($Body, '(?im)^##[ \t]+Installation[ \t]*\r?$')
     if ($installationHeading.Count -eq 0) {
         throw 'RELEASE_NOTES_INSTALLATION_MISSING: Required Installation heading is absent.'

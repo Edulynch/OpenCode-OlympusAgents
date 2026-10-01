@@ -177,9 +177,15 @@ try {
     $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1',$script:CandidateVersion,'v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
     if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
         Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
-        Check 'R0_EXPECTED_VERSION_V041' ($script:CandidateVersion -ceq 'v0.4.1')
+        Check 'R0_EXPECTED_VERSION_V042' ($script:CandidateVersion -ceq 'v0.4.2')
         Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
         Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
+        $transitionScript = Join-Path $PSScriptRoot 'tag-transition-stability.ps1'
+        $transitionOutput = (& pwsh -NoProfile -File $transitionScript 2>&1 | Out-String)
+        Check 'R0_TAG_TRANSITION_STABILITY' ($LASTEXITCODE -eq 0 -and
+            $transitionOutput -match 'PRE_TAG_SEMANTIC_VALIDATION: PASS' -and
+            $transitionOutput -match 'SIMULATED_POST_TAG_SEMANTIC_VALIDATION: PASS' -and
+            $transitionOutput -match 'TAG-TRANSITION-STABILITY QUALIFICATION: PASS') ("exit=$LASTEXITCODE`n$transitionOutput")
     } elseif ($ResumeAtR1) { Write-Output 'REVALIDATION_START: R1 (previously collected R0/alpha/RC gates not rerun).' }
     else { Write-Output 'REVALIDATION_START: permission checks (previously collected R0/alpha/RC gates not rerun).' }
 
@@ -387,6 +393,16 @@ try {
     Check 'R26_RELEASE_GATE_REJECTS_MISSING_VERIFY' ($LASTEXITCODE -ne 0 -and $gateBad -match 'RELEASE_NOTES_VERIFY_MISSING')
     $gateWrongTag = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody ($releaseNotes.Replace("-Version '$($script:CandidateVersion)'", "-Version 'v0.3.0-beta.2'")) 2>&1 | Out-String)
     Check 'R26_RELEASE_GATE_REJECTS_TAG_MISMATCH' ($LASTEXITCODE -ne 0 -and $gateWrongTag -match 'RELEASE_NOTES_HARNESS_VERIFY_MISSING')
+    $wrongHeadingBody = $releaseNotes.Replace("## $($script:CandidateVersion)", '## v0.4.1')
+    $gateWrongIdentity = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody $wrongHeadingBody 2>&1 | Out-String)
+    Check 'R26_RELEASE_GATE_REJECTS_ACTIVE_IDENTITY_MISMATCH' ($LASTEXITCODE -ne 0 -and
+        $gateWrongIdentity -match 'RELEASE_NOTES_VERSION_MISMATCH')
+    $gateUnstable = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody ($releaseNotes + "`n$($script:CandidateVersion) is not tagged; do not publish.") 2>&1 | Out-String)
+    Check 'R26_RELEASE_GATE_REJECTS_EPHEMERAL_TAG_STATE' ($LASTEXITCODE -ne 0 -and $gateUnstable -match 'RELEASE_NOTES_EPHEMERAL_TAG_STATE')
+    $gateOldBeta = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody ($releaseNotes + "`n$($script:CandidateVersion) is the old v0.3.0-beta.5 target.") 2>&1 | Out-String)
+    Check 'R26_RELEASE_GATE_REJECTS_OLD_BETA_IDENTITY' ($LASTEXITCODE -ne 0 -and $gateOldBeta -match 'RELEASE_NOTES_TARGET_OLD_BETA')
+    $gateUnmergedFoundation = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody ($releaseNotes + "`nThe v0.4.0 foundation remains unmerged.") 2>&1 | Out-String)
+    Check 'R26_RELEASE_GATE_REJECTS_UNMERGED_FOUNDATION' ($LASTEXITCODE -ne 0 -and $gateUnmergedFoundation -match 'RELEASE_NOTES_FOUNDATION_UNMERGED')
     $gateText = [IO.File]::ReadAllText($releaseGate)
     Check 'R26_GATE_READS_PUBLISHED_GITHUB_RELEASE_BODY' ($gateText -match 'gh\.Source release view' -and
         $gateText -match 'release\.body' -and $gateText -match 'RELEASE_NOTES_INSTALL_PIN_MISMATCH' -and

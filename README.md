@@ -6,9 +6,9 @@
 
 **Install once. Open OpenCode. Start building.**
 
-[![Release v0.2.0](https://img.shields.io/badge/release-v0.2.0-7c3aed?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.2.0)
+[![Latest release](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest)
 [![OpenCode V2](https://img.shields.io/badge/OpenCode-V2-f97316?style=flat-square)](https://opencode.ai/docs/)
-[![Windows Qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.2.0)
+[![Windows Qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](docs/HARNESSES.md)
 [![MIT License](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
 
 <p><a href="#-install">Install</a> · <a href="#-start-building">Start Building</a> · <a href="#-the-team">Agents</a> · <a href="#-normal-vs-fast">NORMAL vs FAST</a> · <a href="#-live-activity">Live Activity</a> · <a href="#-update">Update</a> · <a href="#-documentation">Docs</a></p>
@@ -23,7 +23,7 @@
 - Git and an existing Git project
 - OpenCode V2 and the configured models when installing OpenCode; Codex CLI when using Codex
 
-Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Replace `<TAG>` with a published release tag that includes the dual-harness installer. The current source targets the planned corrective patch `v0.4.1`. Tag `v0.4.0` exists and contains the foundation, but final release validation failed on contradictory documentation, so no GitHub Release was created. Project scope remains the installer default; global installation is a separate Windows-qualified foundation.
+Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Choose the current published version from [GitHub Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) and replace `<TAG>` with its immutable tag. The selected tag must include the dual-harness installer. Project scope remains the installer default; global installation is a separate Windows-qualified foundation.
 
 #### OpenCode (default)
 
@@ -49,7 +49,7 @@ Run the downloaded script as a script block to pass installer parameters:
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness all
 ```
 
-Add `-Target (Get-Location).Path` when invoking from outside the project root. Each selection is additive: installing one harness does not remove the other. A published tag must contain this feature; the existing `v0.4.0` tag is not changed by this source work and is not a GitHub Release.
+Add `-Target (Get-Location).Path` when invoking from outside the project root. Each selection is additive: installing one harness does not remove the other. Use the same exact tag for installation and verification.
 
 Verify just the requested project-local harness surface without writing files:
 
@@ -130,7 +130,7 @@ Olympus treats an installed project as trusted. Kovan and Nox can run commands f
 
 ## 🔄 Update
 
-Earlier published beta.5 remains a historical project-local release. Tagged v0.4.0 keeps `-Scope project` and `-Harness opencode` as defaults; `-Harness` accepts `opencode`, `codex`, or `all`. Its tagged installer/static qualification passed, but final release validation found a documentation contradiction; no GitHub Release v0.4.0 exists. The planned v0.4.1 patch corrects that documentation. Project verification checks only the requested managed harness subset, is read-only, and does not launch mutable runtime discovery in the target. See [Harness installation](docs/HARNESSES.md) for global static-install behavior and runtime limitations.
+For the current published version, consult [GitHub Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases). The installer defaults to project scope and OpenCode; `-Harness` accepts `opencode`, `codex`, or `all`. Project verification checks only the requested managed harness subset, is read-only, and does not launch mutable runtime discovery in the target. See [Harness installation](docs/HARNESSES.md) for global static-install behavior and runtime limitations. Historical tagged validation attempts are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## 🆘 Troubleshooting
 
@@ -146,7 +146,7 @@ Earlier published beta.5 remains a historical project-local release. Tagged v0.4
 - [Core and harness adapters](docs/HARNESSES.md) — canonical source layout, generated outputs, renderer/check commands, and capability contract.
 - [Harness capability contract](docs/HARNESS-CAPABILITIES.md) — current OpenCode and Codex support states.
 - [Roadmap](docs/ROADMAP.md) — planned agent evolution and future qualification work.
-- [Olympus v0.2.0 release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.2.0) and [changelog](CHANGELOG.md) — release information.
+- [GitHub Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) and [changelog](CHANGELOG.md) — published versions and release history.
 - [License](LICENSE) — MIT.
 
 Olympus is an independent orchestration system with officially supported OpenCode and Codex adapters, not a fork. The idea of a specialized agent team was informed in part by [donvito/codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).

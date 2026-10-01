@@ -145,6 +145,111 @@ function New-PermissionReport([bool]$attempted, [string]$execution, [string]$too
     }
 }
 
+function Compact-Evidence([string]$value) {
+    if ([string]::IsNullOrWhiteSpace($value)) { return '<empty>' }
+    $compact = ($value -replace '\s+', ' ').Trim()
+    if ($compact.Length -gt 240) { $compact = $compact.Substring(0, 240) + '...' }
+    return $compact
+}
+
+function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
+                                [string]$runtimeStderr = '', [string]$invocationError = '') {
+    $failures = [Collections.Generic.List[string]]::new()
+    $runtimeAgents = @()
+    $runtimeJsonParseable = $false
+    $runtimeJsonParseError = ''
+    $runtimeJsonRootType = 'UNAVAILABLE'
+    $runtimeJsonRootIsArray = $false
+    try {
+        $runtimeDocument = ConvertFrom-Json -InputObject $runtimeJson -Depth 100 -NoEnumerate -ErrorAction Stop
+        $runtimeJsonParseable = $true
+        if ($null -eq $runtimeDocument) {
+            $runtimeJsonRootType = 'null'
+        } else {
+            $runtimeJsonRootType = $runtimeDocument.GetType().FullName
+        }
+        if ($runtimeDocument -is [array]) {
+            $runtimeAgents = $runtimeDocument
+            $runtimeJsonRootIsArray = $true
+        }
+    } catch {
+        $runtimeJsonParseError = $_.Exception.Message
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($invocationError)) {
+        $failures.Add('runtime_invocation_error=' + (Compact-Evidence $invocationError))
+    }
+    if ($null -eq $runtimeExit) {
+        $failures.Add('runtime_exit=<unavailable>')
+    } elseif ([int]$runtimeExit -ne 0) {
+        $failures.Add("runtime_exit=$runtimeExit")
+    }
+    if (-not $runtimeJsonParseable) {
+        $failures.Add('json_parseable=false; json_error=' + (Compact-Evidence $runtimeJsonParseError))
+    } elseif (-not $runtimeJsonRootIsArray) {
+        $failures.Add("json_root=$runtimeJsonRootType (expected array)")
+    }
+
+    $kovanMatches = [Collections.Generic.List[object]]::new()
+    if ($runtimeJsonRootIsArray) {
+        foreach ($candidate in $runtimeAgents) {
+            if ($null -eq $candidate) { continue }
+            $idProperty = $candidate.PSObject.Properties['id']
+            if ($null -ne $idProperty -and $idProperty.Value -eq 'kovan') {
+                $kovanMatches.Add($candidate)
+            }
+        }
+    }
+    $kovanCount = $kovanMatches.Count
+    if ($kovanCount -eq 0) {
+        $failures.Add('kovan=missing (matches=0)')
+    } elseif ($kovanCount -gt 1) {
+        $failures.Add("kovan=duplicated (matches=$kovanCount)")
+    }
+
+    $permissionEvidence = 'not evaluated'
+    if ($kovanCount -eq 1) {
+        # Index only after proving there is exactly one match.
+        $effectiveKovan = $kovanMatches[0]
+        $permissionsProperty = $effectiveKovan.PSObject.Properties['permissions']
+        if ($null -eq $permissionsProperty) {
+            $failures.Add('kovan_permissions=missing')
+        } else {
+            try {
+                $permissions = @($permissionsProperty.Value)
+                $editWildcardDeny = @($permissions | Where-Object {
+                    $_.action -eq 'edit' -and $_.resource -eq '*' -and $_.effect -eq 'deny'
+                }).Count
+                $editPluginsAsk = @($permissions | Where-Object {
+                    $_.action -eq 'edit' -and $_.resource -eq '.opencode/plugins/**' -and $_.effect -eq 'ask'
+                }).Count
+                $activityDeny = @($permissions | Where-Object {
+                    $_.action -eq 'edit' -and $_.resource -eq '.opencode/plugins/olympus-activity/**' -and $_.effect -eq 'deny'
+                }).Count
+                $externalAsk = @($permissions | Where-Object {
+                    $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'ask'
+                }).Count
+                $externalAllow = @($permissions | Where-Object {
+                    $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'allow'
+                }).Count
+                $permissionEvidence = "edit_*_deny=$editWildcardDeny/0, edit_plugins_ask=$editPluginsAsk/1, activity_deny=$activityDeny/1, external_ask=$externalAsk/>0, external_allow=$externalAllow/0"
+                if ($editWildcardDeny -ne 0 -or $editPluginsAsk -ne 1 -or $activityDeny -ne 1 -or
+                    $externalAsk -le 0 -or $externalAllow -ne 0) {
+                    $failures.Add('effective_permission_rules_mismatch (' + $permissionEvidence + ')')
+                }
+            } catch {
+                $permissionEvidence = 'evaluation_error=' + (Compact-Evidence $_.Exception.Message)
+                $failures.Add('effective_permission_rules_unreadable (' + $permissionEvidence + ')')
+            }
+        }
+    }
+
+    $runtimeExitEvidence = if ($null -eq $runtimeExit) { '<unavailable>' } else { [string]$runtimeExit }
+    $failureEvidence = if ($failures.Count -eq 0) { 'none' } else { $failures -join ', ' }
+    $evidence = "runtime_exit=$runtimeExitEvidence; json_parseable=$runtimeJsonParseable; json_root=$runtimeJsonRootType; kovan_matches=$kovanCount; permission_rules=$permissionEvidence; stderr=$(Compact-Evidence $runtimeStderr); failures=$failureEvidence"
+    [pscustomobject]@{ passed=($failures.Count -eq 0); evidence=$evidence }
+}
+
 try {
     $kael = Text '.opencode/agents/kael.md'
     $kovan = Text '.opencode/agents/kovan.md'
@@ -351,20 +456,47 @@ try {
         -not $prohibitionFlow.attempted -and $prohibited.reason -eq 'USER_PROHIBITION' -and
         (Classify-NewScope 'ASK' $true $true) -eq 'DENY')
 
-    $runtimeAgents = $null
+    $validRuntimeFixture = '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"allow"},{"action":"edit","resource":".opencode/plugins/**","effect":"ask"},{"action":"edit","resource":".opencode/plugins/olympus-activity/**","effect":"deny"},{"action":"external_directory","resource":"*","effect":"ask"}]}]'
+    $failedRuntimeProbe = Inspect-EffectiveRules 17 $validRuntimeFixture 'fixture runtime error'
+    Check 'AUTH14_RUNTIME_COMMAND_FAILURE_HAS_EVIDENCE' (-not $failedRuntimeProbe.passed -and
+        $failedRuntimeProbe.evidence -match 'runtime_exit=17' -and $failedRuntimeProbe.evidence -match 'stderr=fixture runtime error')
+    $malformedRuntimeProbe = Inspect-EffectiveRules 0 '{malformed json'
+    Check 'AUTH14_MALFORMED_JSON_HAS_EVIDENCE' (-not $malformedRuntimeProbe.passed -and
+        $malformedRuntimeProbe.evidence -match 'json_parseable=False' -and $malformedRuntimeProbe.evidence -match 'json_error=')
+    $missingKovanProbe = Inspect-EffectiveRules 0 '[]'
+    Check 'AUTH14_MISSING_KOVAN_HAS_EVIDENCE' (-not $missingKovanProbe.passed -and
+        $missingKovanProbe.evidence -match 'json_parseable=True' -and $missingKovanProbe.evidence -match 'kovan=missing')
+    $duplicateKovanProbe = Inspect-EffectiveRules 0 '[{"id":"kovan","permissions":[]},{"id":"kovan","permissions":[]}]'
+    Check 'AUTH14_DUPLICATE_KOVAN_HAS_EVIDENCE' (-not $duplicateKovanProbe.passed -and
+        $duplicateKovanProbe.evidence -match 'kovan=duplicated \(matches=2\)')
+    $singleKovanProbe = Inspect-EffectiveRules 0 $validRuntimeFixture
+    Check 'AUTH14_SINGLE_KOVAN_EVALUATES_EFFECTIVE_RULES' ($singleKovanProbe.passed -and
+        $singleKovanProbe.evidence -match 'kovan_matches=1' -and $singleKovanProbe.evidence -match 'edit_plugins_ask=1/1')
+    $badPermissionProbe = Inspect-EffectiveRules 0 '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"deny"}]}]'
+    Check 'AUTH14_SINGLE_KOVAN_RULE_MISMATCH_FAILS' (-not $badPermissionProbe.passed -and
+        $badPermissionProbe.evidence -match 'edit_\*_deny=1/0')
+
+    $runtimeJson = ''
+    $runtimeStderrRecords = @()
+    $runtimeStderr = ''
+    $runtimeExit = $null
+    $runtimeInvocationError = ''
     Push-Location $root
     try {
-        $runtimeJson = (& opencode debug agents 2>$null | Out-String)
-        $runtimeExit = $LASTEXITCODE
-        if ($runtimeExit -eq 0) { $runtimeAgents = @($runtimeJson | ConvertFrom-Json -Depth 100) }
+        try {
+            $runtimeJson = (& opencode debug agents 2>Variable:runtimeStderrRecords | Out-String)
+            $runtimeExit = $LASTEXITCODE
+        } catch {
+            $runtimeInvocationError = $_.Exception.Message
+        }
+        $runtimeStderr = @($runtimeStderrRecords | ForEach-Object { [string]$_ }) -join "`n"
     } finally { Pop-Location }
-    $effectiveKovan = @($runtimeAgents | Where-Object id -eq 'kovan')[0]
-    Check 'AUTH14_OPENCODE_EFFECTIVE_RULES' ($null -ne $effectiveKovan -and
-        @($effectiveKovan.permissions | Where-Object { $_.action -eq 'edit' -and $_.resource -eq '*' -and $_.effect -eq 'deny' }).Count -eq 0 -and
-        @($effectiveKovan.permissions | Where-Object { $_.action -eq 'edit' -and $_.resource -eq '.opencode/plugins/**' -and $_.effect -eq 'ask' }).Count -eq 1 -and
-        @($effectiveKovan.permissions | Where-Object { $_.action -eq 'edit' -and $_.resource -eq '.opencode/plugins/olympus-activity/**' -and $_.effect -eq 'deny' }).Count -eq 1 -and
-        @($effectiveKovan.permissions | Where-Object { $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'ask' }).Count -gt 0 -and
-        @($effectiveKovan.permissions | Where-Object { $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'allow' }).Count -eq 0)
+    $runtimeInspection = Inspect-EffectiveRules $runtimeExit $runtimeJson $runtimeStderr $runtimeInvocationError
+    Write-Output ('AUTH14_EVIDENCE: ' + $runtimeInspection.evidence)
+    if (-not $runtimeInspection.passed) {
+        throw ('AUTH14_OPENCODE_EFFECTIVE_RULES FAIL: ' + $runtimeInspection.evidence)
+    }
+    Write-Output 'AUTH14_OPENCODE_EFFECTIVE_RULES PASS'
 
     $normalizedDocs = $docs -replace '\s+', ' '
     $reportingPolicy = $normalizedDocs -match '(?is)TOOL_ATTEMPT.*?TOOL_EXECUTION.*?NATIVE_PERMISSION_UI.*?USER_CONFIRMED_EXTERNAL_OBSERVATION.*?NOT_OBSERVABLE.*?Tool success does not establish that ASK was\s+absent.*?tool failure/denial alone does not establish a human rejection'

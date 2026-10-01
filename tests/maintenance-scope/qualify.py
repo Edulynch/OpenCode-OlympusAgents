@@ -57,7 +57,10 @@ def main():
     check("TASK_SCOPE_CANNOT_BROADEN", "Authority covers only the task delivered by the command template" in policy and "Do not broaden task scope" in policy)
     check("DESTRUCTIVE_NOT_IMPLICITLY_AUTHORIZED", "Destructive or high-impact operations still require explicit task authorization; an operation not included in the task is not implicitly authorized" in policy)
     for path in ("olympus/harnesses/opencode/maintain.md", ".opencode/commands/maintain.md"):
-        check("FRONTMATTER_BYTE_ZERO_" + path, (ROOT / path).read_bytes().startswith(b"---\n"))
+        raw = (ROOT / path).read_bytes()
+        check("FRONTMATTER_BYTE_ZERO_" + path, len(raw) >= 4 and raw[0] == 0x2D and raw[:3] == b"---")
+        check("FRONTMATTER_NO_UTF8_BOM_" + path, not raw.startswith(b"\xef\xbb\xbf"))
+        check("FRONTMATTER_LINE_ENDING_" + path, raw[3:5] == b"\r\n" or raw[3:4] == b"\n")
         header = text(path).split("---", 2)[1]
         check("AGENT_SUBAGENT_" + path, "agent: aegis" in header and "subagent: true" in header)
     sequence = "COMMAND_ENTRY → MAINTENANCE_AUTH_VALID → AEGIS_SCOPE_ACCEPTED → TASK_EXECUTION"

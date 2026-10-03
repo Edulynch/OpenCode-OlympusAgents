@@ -414,6 +414,20 @@ fields as failure, confirmed non-execution, or permission to retry/relaunch
 `/maintain`. This internal fidelity does not require dumping every field in the
 user-facing summary.
 
+For this maintenance handoff only, when interpreting `EXPECTED_OUTPUT`, permit
+one bounded logical boundary normalization: if the exact known maintenance
+metadata literal `MAINTENANCE_AUTH: VALID` or `AEGIS_SCOPE: ACCEPTED` is
+immediately followed, without a separator, by the exact `<field name>:` token
+for a field explicitly listed in `EXPECTED_OUTPUT`, treat the metadata and
+field as separate logical fields. For example,
+`AEGIS_SCOPE: ACCEPTEDSTATUS: SUCCESS` contains the literal required field
+`STATUS: SUCCESS`; read it as `AEGIS_SCOPE: ACCEPTED` plus `STATUS: SUCCESS`.
+The exact required label and a nonempty value must both be present verbatim.
+Do not split arbitrary strings, accept fuzzy or renamed labels, infer a value,
+or normalize a field not explicitly required. Missing values or multiple
+occurrences of a required field, including conflicting duplicates, remain
+`STRUCTURED_RESULT_INCOMPLETE`. This rule does not apply to normal child results.
+
 For this explicit handoff, keep three separate facts: **execution** (RUNNING or
 TERMINAL), **result visibility** (PENDING, VISIBLE or UNAVAILABLE), and **task
 outcome** (derived only from the actual terminal Aegis result when

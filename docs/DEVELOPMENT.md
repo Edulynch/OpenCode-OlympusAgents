@@ -276,12 +276,17 @@ Olympus owns Kael's interpretation and user-facing synthesis; OpenCode owns plat
 Issue #10's maintenance-specific exact-field contract uses `EXPECTED_OUTPUT`:
 Aegis preserves requested terminal field names and values, and Kael retains
 them through dependent decisions while allowing a concise additive summary.
-Missing or renamed required fields are `STRUCTURED_RESULT_INCOMPLETE`; this
-does not change Issue #1 missing-result/no-blind-retry semantics. The focused
-`tests/maintenance-handoff/qualify-fidelity.ps1` cases are synthetic and check
-canonical wording; they do not prove native Aegis-to-Kael runtime delivery.
-Keep Issue #10 open until a live Maintenance Handoff smoke verifies both the
-Aegis terminal output and the exact values available to Kael.
+For the confirmed missing-separator case only, Kael may recognize an exact
+field token declared in `EXPECTED_OUTPUT` immediately following either exact
+known metadata literal: `AEGIS_SCOPE: ACCEPTED` or `MAINTENANCE_AUTH: VALID`.
+No arbitrary splitting, fuzzy labels, inferred values, or duplicate required
+fields are accepted; absent or renamed fields/values remain
+`STRUCTURED_RESULT_INCOMPLETE`. This does not
+change Issue #1 missing-result/no-blind-retry semantics. The focused
+`tests/maintenance-handoff/qualify-fidelity.ps1` includes the exact runtime
+reproduction synthetically; it still does not prove native Aegis-to-Kael runtime
+delivery. Keep Issue #10 open until a new-session live Maintenance Handoff smoke
+verifies Aegis's terminal output and all exact values available to Kael.
 
 ## Trusted-project execution
 

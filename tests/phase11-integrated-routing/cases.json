@@ -1,0 +1,316 @@
+{
+  "schema_version": 1,
+  "title": "Phase 11 integrated routing A-L case matrix",
+  "cases": [
+    {
+      "id": "A",
+      "request_class": "SIMPLE_EDIT",
+      "description": "One obvious scoped edit; specialist suppression is the negative control.",
+      "trace_ids": [
+        "A"
+      ],
+      "expected_routes": {
+        "default": [
+          "kael",
+          "kovan"
+        ]
+      },
+      "request_contract": {
+        "target": "fixtures/simple/message.txt",
+        "desired_text": "Hello Phase 11 ready"
+      }
+    },
+    {
+      "id": "B",
+      "request_class": "COMPLEX_FEATURE",
+      "description": "Already-bounded multi-component feature with material dependency ordering; supplied boundaries do not justify Orin activation.",
+      "trace_ids": [
+        "B"
+      ],
+      "expected_routes": {
+        "default": [
+          "kael",
+          "atlas",
+          "kovan",
+          "nox",
+          "vera"
+        ]
+      },
+      "positive_orin_qualification": "NOT_ESTABLISHED_BY_PHASE11_CASE_B",
+      "mandatory_dependency_edges": [
+        {
+          "before_work_id": "feature-plan",
+          "after_work_id": "feature-implementation"
+        },
+        {
+          "before_work_id": "feature-implementation",
+          "after_work_id": "feature-tests"
+        },
+        {
+          "before_work_id": "feature-implementation",
+          "after_work_id": "feature-review"
+        }
+      ]
+    },
+    {
+      "id": "C",
+      "request_class": "OBVIOUS_FUNCTIONAL_BUG",
+      "description": "Deterministic localized defect with obvious cause; Argus is a forbidden over-route.",
+      "trace_ids": [
+        "C"
+      ],
+      "expected_routes": {
+        "default": [
+          "kael",
+          "kovan"
+        ]
+      }
+    },
+    {
+      "id": "D",
+      "request_class": "NONTRIVIAL_FUNCTIONAL_BUG",
+      "description": "Competing functional causes; Argus requests bounded evidence and continues in the same session.",
+      "trace_ids": [
+        "D"
+      ],
+      "expected_routes": {
+        "default": [
+          "kael",
+          "argus",
+          "veyra"
+        ]
+      },
+      "mandatory_dependency_edges": [
+        {
+          "before_work_id": "bounded-contract-evidence",
+          "after_consultation": {
+            "role": "argus",
+            "number": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "E",
+      "request_class": "SECURITY_BUG",
+      "description": "Evidence identifies a material authorization boundary; Talos classifies without exploit execution.",
+      "trace_ids": [
+        "E"
+      ],
+      "expected_routes": {
+        "default": [
+          "kael",
+          "talos"
+        ]
+      }
+    },
+    {
+      "id": "F",
+      "request_class": "OPERATIONAL_TOOLING_ISSUE",
+      "description": "Build or test-runner failure receives cheap containment; it is not automatically a product bug.",
+      "trace_ids": [
+        "F"
+      ],
+      "expected_routes": {
+        "default": [
+          "kael"
+        ]
+      }
+    },
+    {
+      "id": "G",
+      "request_class": "HARD_FLAKY_DIAGNOSIS",
+      "description": "A fixed contradictory observation sequence supports bounded uncertainty diagnosis, not random reruns.",
+      "trace_ids": [
+        "G"
+      ],
+      "expected_routes": {
+        "default": [
+          "kael",
+          "nox",
+          "thales",
+          "veyra"
+        ]
+      },
+      "mandatory_dependency_edges": [
+        {
+          "before_work_id": "fixed-flaky-observation-capture",
+          "after_work_id": "bounded-uncertainty-diagnosis"
+        },
+        {
+          "before_work_id": "fixed-sequence-source-evidence",
+          "after_consultation": {
+            "role": "thales",
+            "number": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "H",
+      "request_class": "THIRD_PARTY_BUG",
+      "description": "Collect bounded version/config evidence and prefer the safe resolution ladder; no patch/vendor/fork without approval.",
+      "trace_ids": [
+        "H"
+      ],
+      "expected_routes": {
+        "default": [
+          "kael",
+          "veyra"
+        ]
+      }
+    },
+    {
+      "id": "I",
+      "request_class": "OPTIMIZATION_INTENT_AND_NEGATIVE_CONTROL",
+      "description": "Explicit optimization intent may consult Helios, then stops for approval; fact-only observation must not activate Helios.",
+      "trace_ids": [
+        "I",
+        "I_FACT_ONLY"
+      ],
+      "expected_routes": {
+        "explicit_intent": [
+          "kael",
+          "helios"
+        ],
+        "fact_only": [
+          "kael"
+        ]
+      }
+    },
+    {
+      "id": "J",
+      "request_class": "EXPLICIT_PLANNING_AND_TRIVIAL_NEGATIVE_CONTROL",
+      "description": "Explicit planning may consult Atlas; a trivial edit suppresses Atlas.",
+      "trace_ids": [
+        "J",
+        "J_TRIVIAL"
+      ],
+      "expected_routes": {
+        "explicit_planning": [
+          "kael",
+          "atlas"
+        ],
+        "trivial": [
+          "kael",
+          "kovan"
+        ]
+      }
+    },
+    {
+      "id": "K",
+      "request_class": "FAST_VS_NORMAL",
+      "description": "FAST records useful independent writer concurrency up to four; NORMAL is separately observed.",
+      "trace_ids": [
+        "K_FAST",
+        "K_NORMAL"
+      ],
+      "expected_routes": {
+        "fast": [
+          "kael",
+          "kovan",
+          "kovan",
+          "kovan",
+          "kovan"
+        ],
+        "normal": [
+          "kael",
+          "kovan",
+          "kovan"
+        ]
+      }
+    },
+    {
+      "id": "L",
+      "request_class": "MAINTENANCE_BOUNDARY",
+      "description": "Kael never launches Aegis; only explicit user → /maintain is represented as an authorized entry.",
+      "trace_ids": [
+        "L_NORMAL",
+        "L_EXPLICIT_MAINTAIN"
+      ],
+      "expected_routes": {
+        "normal_project_task": [
+          "kael",
+          "kovan"
+        ],
+        "explicit_user_maintain": [
+          "user",
+          "/maintain",
+          "aegis"
+        ]
+      }
+    }
+  ],
+  "fresh_root_actions": [
+    {
+      "case_id": "A",
+      "scenario": "default",
+      "label": "PHASE11_CASE_A_FRESH_ROOT"
+    },
+    {
+      "case_id": "B",
+      "scenario": "default",
+      "label": "PHASE11_CASE_B_FRESH_ROOT"
+    },
+    {
+      "case_id": "C",
+      "scenario": "default",
+      "label": "PHASE11_CASE_C_FRESH_ROOT"
+    },
+    {
+      "case_id": "D",
+      "scenario": "default",
+      "label": "PHASE11_CASE_D_FRESH_ROOT"
+    },
+    {
+      "case_id": "E",
+      "scenario": "default",
+      "label": "PHASE11_CASE_E_FRESH_ROOT"
+    },
+    {
+      "case_id": "F",
+      "scenario": "default",
+      "label": "PHASE11_CASE_F_FRESH_ROOT"
+    },
+    {
+      "case_id": "G",
+      "scenario": "default",
+      "label": "PHASE11_CASE_G_FRESH_ROOT"
+    },
+    {
+      "case_id": "H",
+      "scenario": "default",
+      "label": "PHASE11_CASE_H_FRESH_ROOT"
+    },
+    {
+      "case_id": "I",
+      "scenario": "explicit_intent",
+      "label": "PHASE11_CASE_I_FRESH_ROOT"
+    },
+    {
+      "case_id": "I",
+      "scenario": "fact_only",
+      "label": "PHASE11_CASE_I_NEGATIVE_FRESH_ROOT"
+    },
+    {
+      "case_id": "J",
+      "scenario": "explicit_planning",
+      "label": "PHASE11_CASE_J_FRESH_ROOT"
+    },
+    {
+      "case_id": "J",
+      "scenario": "trivial",
+      "label": "PHASE11_CASE_J_NEGATIVE_FRESH_ROOT"
+    },
+    {
+      "case_id": "K",
+      "scenario": "fast_and_normal_separate_roots",
+      "label": "PHASE11_CASE_K_FRESH_ROOT"
+    },
+    {
+      "case_id": "L",
+      "scenario": "normal_project_task",
+      "label": "PHASE11_CASE_L_FRESH_ROOT"
+    }
+  ]
+}

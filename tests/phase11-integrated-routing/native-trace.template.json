@@ -1,0 +1,76 @@
+{
+  "TEMPLATE_ONLY_NOT_EVIDENCE": true,
+  "EVIDENCE_CLASS": "FRESH_ROOT_NATIVE",
+  "CASE_ID": null,
+  "REQUEST_CLASS": null,
+  "EXPECTED_ROUTE": null,
+  "ACTUAL_ROUTE": null,
+  "ROOT_SESSION_ID": null,
+  "CHILD_SESSIONS": [],
+  "CONSULTATION_COUNTS": {
+    "veyra": null,
+    "orin": null,
+    "kovan": null,
+    "nox": null,
+    "vera": null,
+    "atlas": null,
+    "argus": null,
+    "talos": null,
+    "thales": null,
+    "helios": null,
+    "aegis": null
+  },
+  "MAX_SIMULTANEOUS_CHILDREN": null,
+  "NEGATIVE_CONTROLS": null,
+  "ROLE_PURITY": null,
+  "DEPENDENCY_ORDER": null,
+  "RESULT_FIDELITY": {
+    "EXPECTED_RESULT": null,
+    "OBSERVED_RESULT": null,
+    "MATCHES": null,
+    "UNKNOWN": null
+  },
+  "COMPLETION_GATE": {
+    "PENDING_CHILD_COUNT": null,
+    "UNCONSUMED_RESULT_COUNT": null,
+    "UNKNOWN_EXECUTION_COUNT": null,
+    "EXACT_ONCE": null,
+    "QUESTION_BARRIER_SATISFIED": null
+  },
+  "USER_QUESTION_COUNT": null,
+  "FINAL_OUTCOME": null,
+  "ROUTING_RESULT": null,
+  "NOTES": "Template only. Replace nulls only from directly observed evidence; preserve unknown metrics as null.",
+  "ROUTE_MODE": null,
+  "GATE_FACTS": null,
+  "OPERATIONAL_PROXIES": {
+    "PROFILE": null,
+    "USEFUL_INDEPENDENT_WRITER_COUNT": null,
+    "ACTUAL_COUNTED_CONCURRENCY": null,
+    "RETRY_COUNT": null,
+    "WRITER_PATHS_UNIQUE": null,
+    "APPROVAL_REQUIRED": null,
+    "APPROVAL_GRANTED": null,
+    "IMPLEMENTATION_AFTER_APPROVAL": null,
+    "WALL_CLOCK_MS": null,
+    "MEASURED": null
+  },
+  "EVIDENCE_PROVENANCE": {
+    "CLASS": "FRESH_ROOT_NATIVE",
+    "SOURCE": null,
+    "NATIVE_ROOT_SESSION_ID": null,
+    "NATIVE_CHILD_SESSION_IDS": null,
+    "ORDER_BASIS": null,
+    "OBSERVED_AT": null,
+    "USER_REPORTED": null,
+    "FRESH_ROOT_CONFIRMED": null
+  },
+  "CAPTURE_REQUIREMENTS": [
+    "Template only; never treat its null placeholders as observed data.",
+    "For native evidence, ROOT_SESSION_ID must equal EVIDENCE_PROVENANCE.NATIVE_ROOT_SESSION_ID and be an observed ses_ ID.",
+    "Each child NATIVE_SESSION_ID must match the ordered NATIVE_CHILD_SESSION_IDS entry; each direct child's PARENT_SESSION_ID must equal the root ID.",
+    "Each event with CHILD_REF or reasoner SESSION_REF must include the matching NATIVE_SESSION_ID; preserve the trace-local reference as a join key.",
+    "Use observed order labels only for directly observed events. Internal consistency is not proof of authenticity."
+  ],
+  "EVENTS": []
+}

@@ -1,0 +1,238 @@
+{
+  "evidence_class": "POLICY_BASELINE",
+  "recorded_for_phase": "PH11-AUTHOR",
+  "captured_before_working_tree_edits": true,
+  "captured_at_local_date": "2026-10-02",
+  "repository": {
+    "root": "C:/Users/BLAUTECH/OneDrive/WORKSPACE/Personal/Tools/OpenCode-OlympusAgents",
+    "branch_at_baseline": "master",
+    "head": "a83847b84d6603aed144f5a8ce4b77de8a48fe32",
+    "local_origin_master": "a83847b84d6603aed144f5a8ce4b77de8a48fe32",
+    "working_tree_clean_before_branch_creation": true,
+    "qualification_branch_created_after_baseline_read": "qualify/phase-11-integrated-routing",
+    "remote": "https://github.com/Edulynch/OpenCode-OlympusAgents.git",
+    "remote_access_or_write_verified": false
+  },
+  "release_reference_reported_in_assignment_context": {
+    "tag": "v0.4.2",
+    "annotated_object": "bc30cb6ac41e85513d03368dea73241b8c1de3c6",
+    "peeled_commit": "591e8bcf8915da4805001abfb76e7d853217ef6b",
+    "is_head": false,
+    "verification_source": "Kael task context; no independent ref operation performed"
+  },
+  "nox_baseline_report": {
+    "session_id": "ses_effeefaa9ffeomSljdRv5MoyCf",
+    "source": "prior Nox observation supplied in the task context",
+    "suites_reported_pass": [
+      "routing-constraints",
+      "trivial-fast-path",
+      "preflight"
+    ],
+    "reported_runs_per_suite": 2,
+    "duplication_note": "The two runs were repeated measurements of the same static suites, not independent live routing cases.",
+    "remaining_suites": "NOT_RUN for conservatively scoped side effects or excluded paths; NOT_RUN is not a failure finding."
+  },
+  "writer_preflight_rechecks": {
+    "routing-constraints": {
+      "runs": 1,
+      "result": "FAILED_STATIC_ASSERTION",
+      "direct_output": "POLICY_CONSTRAINT_SEMANTICS FAIL after POLICY_ORDINARY_GIT_NORMAL, POLICY_AEGIS_ANY_REPOSITORY, POLICY_GIT_IMPACT_NOT_PLANE, and POLICY_GIT_ONLY_OWNERSHIP passed",
+      "scope": "existing static qualification script only; no diagnosis or canonical change made",
+      "does_not_establish": [
+        "live runtime routing failure",
+        "reason for discrepancy",
+        "failure of any specialist behavior"
+      ]
+    },
+    "trivial-fast-path": {
+      "runs": 2,
+      "result": "PASS",
+      "scope": "existing static and deterministic synthetic qualification script"
+    },
+    "preflight": {
+      "writer_reruns": 0,
+      "result": "NOT_RUN_BY_WRITER",
+      "reason": "Nox's prior PASS report is retained as reported; no out-of-scope preflight script was inspected or invoked."
+    }
+  },
+  "canonical_asset_sha256": {
+    ".opencode/agents/kael.md": "894B7BC1E2EE6E057286C85A6E9889C21C33D7238BD0A8A7F04F6CDD092E4C1D",
+    "olympus/policies/routing.md": "6BA11AA2EA92E16AACBA218DA2E995D3A7F61BDA2399F1D8ABFE93F10F0D838A",
+    "olympus/policies/orchestration.toml": "633E978389320E7CD1D897DAE828B03AACE924402E7E5470F8904993EEE96515"
+  },
+  "live_qualification": {
+    "guided_current_session": "NOT_CAPTURED",
+    "fresh_root_native": "NOT_CAPTURED",
+    "native_results_claimed": false,
+    "pending_labels_at_baseline_capture": [
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_A",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_B",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_C",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_D",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_E",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_F",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_G",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_H",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_I",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_J",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_K",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_L"
+    ],
+    "pending_labels": [
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_B_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_C_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
+    ],
+    "reference_only_prompts": [
+      "REFERENCE_ONLY PHASE11_CASE_A_GUIDED_RECOVERY",
+      "REFERENCE_ONLY PHASE11_CASE_I_GUIDED_RECOVERY",
+      "REFERENCE_ONLY PHASE11_CASE_I_NEGATIVE_CONTROL",
+      "REFERENCE_ONLY PHASE11_CASE_J_GUIDED_RECOVERY",
+      "REFERENCE_ONLY PHASE11_CASE_J_NEGATIVE_CONTROL",
+      "REFERENCE_ONLY PHASE11_CASE_L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERY"
+    ],
+    "current_pending_state_source": "P11-SAFE-VALIDATION-20261003 task-owner direction; original baseline labels preserved separately"
+  },
+  "recovered_user_observations": {
+    "task_id": "P11-FIX-20261003",
+    "source": "task-owner recovery report; not independently observed in this child context",
+    "recovery_rerun_performed": false,
+    "case_observations": {
+      "A": {
+        "reported_status": "PASS",
+        "reported_mode": "GUIDED_CURRENT_SESSION",
+        "case_session_id_supplied": false,
+        "native_trace_in_scoped_corpus": false
+      },
+      "I": {
+        "reported_status": "PARTIAL",
+        "reported_mode": "GUIDED_CURRENT_SESSION",
+        "limitation": "useful baseline missing",
+        "case_session_id_supplied": false,
+        "native_trace_in_scoped_corpus": false
+      },
+      "J": {
+        "reported_status": "PASS",
+        "reported_mode": "GUIDED_CURRENT_SESSION",
+        "case_session_id_supplied": false,
+        "native_trace_in_scoped_corpus": false
+      },
+      "L_negative_automatic_aegis_control": {
+        "reported_status": "PASS",
+        "case_session_id_supplied": false,
+        "native_trace_in_scoped_corpus": false
+      }
+    },
+    "recovery_sessions_not_case_evidence": [
+      {
+        "role": "kovan",
+        "session_id": "ses_effe57255ffeJWL1K6kuhu8Fr1",
+        "reported_status": "PARTIAL"
+      },
+      {
+        "role": "vera",
+        "session_id": "ses_effb08273ffebb6fzuHwVmxilk",
+        "reported_status": "PARTIAL/RETRY",
+        "reported_terminal": "SUCCEEDED"
+      }
+    ],
+    "fresh_root_native_status": "PENDING",
+    "fresh_root_labels": [
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_B_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_C_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
+    ],
+    "reference_only_labels": [
+      "REFERENCE_ONLY PHASE11_CASE_A_GUIDED_RECOVERY",
+      "REFERENCE_ONLY PHASE11_CASE_I_GUIDED_RECOVERY",
+      "REFERENCE_ONLY PHASE11_CASE_I_NEGATIVE_CONTROL",
+      "REFERENCE_ONLY PHASE11_CASE_J_GUIDED_RECOVERY",
+      "REFERENCE_ONLY PHASE11_CASE_J_NEGATIVE_CONTROL",
+      "REFERENCE_ONLY PHASE11_CASE_L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERY"
+    ],
+    "reruns_not_requested": [
+      "A",
+      "I",
+      "J",
+      "L",
+      "I_NEGATIVE",
+      "J_NEGATIVE"
+    ]
+  },
+  "regression_coverage_update": {
+    "task_id": "P11-NOX-COVERAGE-FIX-20261003",
+    "source_nox_session_id": "ses_eff5a0de1ffekZ6Qna6AISnN6g",
+    "source": "task-owner supplied terminal Nox result; not independently observed in this writer context",
+    "reported_finding": "The validator already rejects the in-memory adversaries; checked-in tests lacked direct coverage for global strict event order, result consumption before terminal, and FRESH_ROOT_NATIVE root-only relabeling.",
+    "validator_implementation_modified": false,
+    "persistent_adversaries": [
+      "Duplicate/non-strict event[1].ORDER must produce EVENT_ORDER_NOT_STRICTLY_INCREASING.",
+      "Swapped CHILD_TERMINAL/RESULT_CONSUMED order for SYN-W1 must produce RESULT_CONSUMED_WITHOUT_PRIOR_TERMINAL:SYN-W1 and RESULT_CONSUMED_BEFORE_TERMINAL:SYN-W1.",
+      "Synthetic trace A relabeled FRESH_ROOT_NATIVE with only a root session ID must fail missing native child ID and root/child provenance-join checks."
+    ],
+    "mutations_are_in_memory_copies_of_synthetic_trace_A": true,
+    "trace_corpus_modified": false,
+    "native_authenticity_claimed": false,
+    "previous_suite_count_reported": 25,
+    "current_validation": {
+      "unittest_command": "uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing -p 'test_*.py' -v",
+      "unittest_result": "PASS",
+      "unittest_count": 28,
+      "qualifier_command": "uv run --python 3.11 python -B tests/phase11-integrated-routing/qualify.py",
+      "qualifier_exit_code": 0,
+      "qualifier_status": "PARTIAL (synthetic/static artifacts valid; native qualification pending)",
+      "git_diff_check": "PASS"
+    }
+  },
+  "safe_harness_coverage_correction": {
+    "task_id": "P11-VERA-CORRECTION-20261003",
+    "source_vera_session_id": "ses_eff484aa4ffe7bBnNnwNJRZ1YH",
+    "source": "task-owner supplied terminal Vera review result; not independently observed in this writer context",
+    "source_vera_result": "PARTIAL/RETRY",
+    "reported_nox_result": "SUCCESS (task-context report)",
+    "reported_finding": "Safe-root snapshots covered 28 per-harness outputs and omitted the shared docs/HARNESS-CAPABILITIES.md included by all-mode enumeration.",
+    "qualifier_change": "Safe mode snapshots renderer.outputs_for(ROOT, 'all') and runs read-only checks for opencode, codex, and all; root-render guard and disposable fixture checks remain.",
+    "safe_root_validation": {
+      "managed_output_count_before": 29,
+      "managed_output_count_after": 29,
+      "all_managed_hash_mtime_unchanged": true,
+      "root_render_guard": "PASS",
+      "repository_root_rendered": false,
+      "read_only_renderer_checks": [
+        "opencode",
+        "codex",
+        "all"
+      ],
+      "shared_document": {
+        "path": "docs/HARNESS-CAPABILITIES.md",
+        "sha256_before": "f5c65234c198538399745052b6441e48bd86496501a62a8bcf9a333b1e161e97",
+        "sha256_after": "f5c65234c198538399745052b6441e48bd86496501a62a8bcf9a333b1e161e97",
+        "mtime_ns_before": 1790989597071443300,
+        "mtime_ns_after": 1790989597071443300,
+        "unchanged": true
+      }
+    },
+    "generated_document_modified": false,
+    "previous_manual_A1_A8_status": "PRESERVED_AS_REPORTED; not rerun",
+    "validation": {
+      "safe_harness_command": "uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-only",
+      "safe_harness_exit_code": 0,
+      "safe_harness_result": "PASS",
+      "phase11_unittest_count": 28,
+      "phase11_unittest_result": "PASS",
+      "phase11_qualifier_exit_code": 0,
+      "phase11_qualifier_status": "PARTIAL (synthetic/static artifacts valid; native qualification pending)",
+      "git_diff_check": "PASS"
+    }
+  }
+}

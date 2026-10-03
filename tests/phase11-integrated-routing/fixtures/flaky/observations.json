@@ -1,0 +1,12 @@
+{
+  "kind": "fixed synthetic contradictory sequence",
+  "same_input": {"id": "item-7", "quantity": 2},
+  "observations": [
+    {"ordinal": 1, "result": "PASS"},
+    {"ordinal": 2, "result": "TIMEOUT"},
+    {"ordinal": 3, "result": "PASS"}
+  ],
+  "randomized": false,
+  "network": false,
+  "purpose": "bounded difficult/flaky diagnosis prompt; not a live flaky test"
+}

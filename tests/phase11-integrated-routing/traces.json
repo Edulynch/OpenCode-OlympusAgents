@@ -188,26 +188,26 @@
       "ROUTE_MODE": "KAEL_ROOT",
       "EXPECTED_ROUTE": [
         "kael",
-        "atlas",
+        "veyra",
         "kovan",
         "nox",
         "vera"
       ],
       "ACTUAL_ROUTE": [
         "kael",
-        "atlas",
+        "veyra",
         "kovan",
         "nox",
         "vera"
       ],
       "CHILD_SESSIONS": [
         {
-          "TRACE_REF": "SYN-A1",
+          "TRACE_REF": "SYN-E1",
           "NATIVE_SESSION_ID": null,
-          "AGENT": "atlas",
+          "AGENT": "veyra",
           "PARENT_AGENT": "kael",
           "EXECUTION_STATE": "SUCCEEDED",
-          "WORK_ID": "feature-plan",
+          "WORK_ID": "bounded-contract-evidence",
           "WRITE_PATHS": []
         },
         {
@@ -243,12 +243,12 @@
       ],
       "CONSULTATION_COUNTS": {
         "kael": 0,
-        "veyra": 0,
+        "veyra": 1,
         "orin": 0,
         "kovan": 1,
         "nox": 1,
         "vera": 1,
-        "atlas": 1,
+        "atlas": 0,
         "argus": 0,
         "talos": 0,
         "thales": 0,
@@ -257,8 +257,8 @@
       },
       "MAX_SIMULTANEOUS_CHILDREN": 1,
       "NEGATIVE_CONTROLS": {
-        "veyra": 0,
         "orin": 0,
+        "atlas": 0,
         "argus": 0,
         "talos": 0,
         "thales": 0,
@@ -268,8 +268,8 @@
       "ROLE_PURITY": {
         "OBSERVED_ACTIONS": [
           {
-            "ROLE": "atlas",
-            "ACTION": "PLAN"
+            "ROLE": "veyra",
+            "ACTION": "READ_EVIDENCE"
           },
           {
             "ROLE": "kovan",
@@ -288,10 +288,6 @@
       },
       "DEPENDENCY_ORDER": [
         {
-          "BEFORE": "SYN-A1:RESULT",
-          "AFTER": "SYN-W1"
-        },
-        {
           "BEFORE": "SYN-W1:RESULT",
           "AFTER": "SYN-T1"
         },
@@ -301,8 +297,8 @@
         }
       ],
       "RESULT_FIDELITY": {
-        "EXPECTED_RESULT": "plan precedes implementation, tests, and review",
-        "OBSERVED_RESULT": "plan precedes implementation, tests, and review",
+        "EXPECTED_RESULT": "bounded contract evidence precedes implementation; implementation precedes tests and review",
+        "OBSERVED_RESULT": "bounded contract evidence precedes implementation; implementation precedes tests and review",
         "MATCHES": true,
         "UNKNOWN": false
       },
@@ -358,42 +354,33 @@
           "ORDER_BASIS": "synthetic",
           "KIND": "CHILD_START",
           "ACTOR_ROLE": "kael",
-          "CHILD_REF": "SYN-A1",
-          "AGENT": "atlas"
+          "CHILD_REF": "SYN-E1",
+          "AGENT": "veyra"
         },
         {
           "ORDER": 2,
           "ORDER_BASIS": "synthetic",
-          "KIND": "CONSULT",
-          "ACTOR_ROLE": "atlas",
-          "SESSION_REF": "SYN-A1",
-          "CONSULTATION_NUMBER": 1,
-          "EVIDENCE_IDS": []
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "veyra",
+          "ACTION": "READ_EVIDENCE",
+          "CHILD_REF": "SYN-E1"
         },
         {
           "ORDER": 3,
           "ORDER_BASIS": "synthetic",
-          "KIND": "ACTION",
-          "ACTOR_ROLE": "atlas",
-          "ACTION": "PLAN",
-          "CHILD_REF": "SYN-A1"
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-E1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-E1"
         },
         {
           "ORDER": 4,
           "ORDER_BASIS": "synthetic",
-          "KIND": "CHILD_TERMINAL",
-          "ACTOR_ROLE": "kael",
-          "CHILD_REF": "SYN-A1",
-          "STATE": "SUCCEEDED",
-          "RESULT_ID": "SYN-RESULT-A1"
-        },
-        {
-          "ORDER": 5,
-          "ORDER_BASIS": "synthetic",
           "KIND": "RESULT_CONSUMED",
           "ACTOR_ROLE": "kael",
-          "CHILD_REF": "SYN-A1",
-          "RESULT_ID": "SYN-RESULT-A1"
+          "CHILD_REF": "SYN-E1",
+          "RESULT_ID": "SYN-RESULT-E1"
         },
         {
           "ORDER": 6,
@@ -502,7 +489,7 @@
           "VALUE": "SUCCEEDED"
         }
       ],
-      "NOTES": "Synthetic dependency example only. Supplied boundaries are already adequate, so Orin is not activated; a positive Orin qualification is not established here. No native sessions or production feature are claimed."
+      "NOTES": "Synthetic routing example only. COMPLEX_FEATURE alone does not require Atlas; the bounded producer/consumer dependency is handled by staged Kael-owned work. Supplied boundaries are already adequate, so Orin is not activated; a positive Orin qualification is not established here. No native sessions or production feature are claimed."
     },
     {
       "TRACE_ID": "C",

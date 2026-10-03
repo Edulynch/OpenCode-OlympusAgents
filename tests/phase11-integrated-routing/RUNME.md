@@ -5,8 +5,10 @@ checked-in A–L traces are `SYNTHETIC_TRACE`; their local `SYN-*` references an
 ordered events are authored examples, not OpenCode root/child session IDs,
 timestamps, guided runs, or proof of model behavior. Static marker checks mean
 only that bounded policy text is present. The task owner separately reported
-some recovered guided outcomes (recorded below); no native per-case trace is in
-this scoped corpus and those reports do not qualify fresh-root cases.
+recovered guided outcomes and a reconciled Case B runtime observation (recorded
+below and in `baseline.json`); no native event-by-event per-case trace is
+reconstructed here, and the B2 observation does not qualify isolated Case B
+acceptance.
 
 ## Automatic local commands
 
@@ -20,10 +22,12 @@ uv run --python 3.11 python -m unittest discover -s tests/phase11-integrated-rou
 uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-only
 ```
 
-The first command validates the versioned case matrix, the event semantics,
-completion/evidence claims, and presence-only gate markers. It exits successfully
-when the authored artifacts are sound but prints `PHASE11_QUALIFICATION:
-PARTIAL` until fresh-root native evidence is captured. The second command
+The first command validates the versioned case matrix, event semantics,
+completion/evidence claims, the separately recorded B reconciliation, and
+presence-only gate markers. It reports `PHASE11_ARTIFACTS: PASS` when those
+artifacts are sound while overall qualification remains
+`PHASE11_QUALIFICATION: PARTIAL` until the required isolated fresh-root evidence
+is accepted. The second command
 applies mutations to valid authored traces and requires the prohibited variants
 to fail. The third command currently runs only the feature fixture's green
 pre-feature compatibility tests. The future feature work must add acceptance
@@ -50,8 +54,8 @@ observation and cannot produce a Case B fresh-root PASS.
 ## Remaining fresh-root work remains user action
 
 Use a separate clean disposable project copy and a **new, verified Kael root for
-each pending case**. Only B, C, D, E, F, G, H, and K below are pending fresh-root
-actions. A, I, J, and L prompt references/history are retained below but are not
+each pending case**. Only isolated B3, C, D, E, F, G, H, and K below are pending
+fresh-root actions. A, I, J, and L prompt references/history are retained below but are not
 new rerun requests. Do not reuse a guided/current session as a fresh root. Confirm the
 effective root agent, child parentage and actual roles from native session
 evidence before accepting a case. Scope each live edit to the disposable
@@ -63,14 +67,18 @@ not pre-recorded results. Capture the complete trace schema in
 - `REFERENCE_ONLY PHASE11_CASE_A_GUIDED_RECOVERY` — prior prompt reference: “In a disposable copy, change only
   `fixtures/simple/message.txt` to `Hello Phase 11 ready`. Keep this to one
   scoped edit and verify the exact requested text.”
-- `HUMAN_ACTION_REQUIRED PHASE11_CASE_B_FRESH_ROOT` — “In a disposable copy,
-  read `tests/phase11-integrated-routing/fixtures/feature/contract.md` and
+- `HUMAN_ACTION_REQUIRED PHASE11_CASE_B_FRESH_ROOT_3` — “In a **clean separate
+  disposable project copy** and a new verified Kael root (not the canonical
+  qualification repository), read
+  `tests/phase11-integrated-routing/fixtures/feature/contract.md` and
   inspect `tests/phase11-integrated-routing/fixtures/feature/`. Implement the
   specified cart discount feature within that fixture, preserving the legacy
   no-discount API and adding/running tests for the full acceptance contract.
   The contract defines the calculation-result field that presentation must
-  consume; plan that material dependency proportionately. Ask a bounded question
-  if a material ambiguity remains. Orin is not qualified by this bounded case.”
+  consume; sequence that dependency proportionately. Atlas is optional and is
+  not expected for this bounded producer/consumer dependency alone. Ask a bounded
+  question if a material ambiguity remains. Orin is not qualified by this
+  bounded case.”
 - `HUMAN_ACTION_REQUIRED PHASE11_CASE_C_FRESH_ROOT` — “In a disposable copy, fix the
   obvious `calculate_total` contract defect in
   `fixtures/obvious/cart.py`; then run its unit test. The fixture is currently
@@ -136,6 +144,50 @@ reported `Question Barrier PASS` and no-invention behavior as positive
 `USER_REPORTED` evidence only. No native trace or session ID was supplied for
 that attempt.
 
+The task owner then supplied the authoritative observation
+`PHASE11_CASE_B_FRESH_ROOT_2`. This record is preserved as a reconciliation, not
+as reconstructed native event data:
+
+- Root Kael `ses_efd70d361ffecywLukxPk5m1Sv`, outcome `succeeded`.
+- Direct children, all `succeeded` with required results consumed: Veyra
+  `ses_efd706277ffeSqUTO9GumJKt5B`; Kovan
+  `ses_efd6d87f4ffe2j4zsTzy1mAv0D`; Nox
+  `ses_efd69a153ffe0ntGQoaZVOXyZi`; Vera
+  `ses_efd69a151ffeftr0qNcEM5VEle`.
+- Reported `ACTUAL_ROUTE`: `Kael -> Veyra -> Kovan -> Nox / Vera`.
+- `CASE_B2_RUNTIME_BEHAVIOR: PASS` and
+  `CASE_B2_NATIVE_ROUTING_EVIDENCE: VALID_OBSERVATION`; however,
+  `CASE_B2_FRESH_ROOT_ISOLATION: FAIL` because the run used the canonical
+  qualification repository instead of the intended separate disposable copy.
+  Therefore `CASE_B2_FRESH_ROOT_ACCEPTANCE: PARTIAL`, not PASS.
+- The report says `domain.py` and `presentation.py` were modified and
+  `test_feature.py` created; the fixture suite passed 14/14. Vera's final result
+  was `ACCEPT` with no findings.
+- Atlas did not activate; this is not a routing defect. Planning is optional
+  unless execution dependencies materially justify a separate planner. The
+  bounded calculation-to-presentation producer/consumer dependency did not
+  justify one. Veyra efficiency was `ACCEPTABLE`; no material redundancy was
+  established.
+- Kovan initially returned `BLOCKED` for a task/grant identity mismatch. Kael
+  consumed that result, confirmed no tool execution or edit occurred, corrected
+  only the grant identity, and resumed the same Kovan session. This records
+  contract friction, not a blind retry or proven material defect. Vera's initial
+  parent delivery was interrupted; the original Vera session was retained and
+  reconciled with `RESULT_RECONCILIATION: PASS`. No upstream correlation issue
+  fix is claimed.
+- Event counts/order, consultation counts, Nox/Vera relative order, and
+  concurrency remain unknown (`null`). The synthetic A–L corpus remains
+  synthetic; no native event sequence is inferred.
+
+The current canonical checkout was separately inspected and remains a clean
+pre-feature scaffold: tracked `domain.py`, `presentation.py`, and
+`test_scaffold.py`; no `test_feature.py`; all four scaffold checks pass. This
+current-tree check is distinct from the B2 report of that session's edits; no
+feature delta or explanation for the differing snapshots is inferred, and the
+fixture was not changed here. Case B remains PARTIAL until user-controlled
+`PHASE11_CASE_B_FRESH_ROOT_3` runs in a clean separate disposable copy under a
+new verified Kael root.
+
 The task owner reported these preserved recovery outcomes: Case A `PASS`
 (`GUIDED_CURRENT_SESSION`); Case I `PARTIAL` guided, with the useful baseline
 missing; Case J `PASS` (`GUIDED_CURRENT_SESSION`); and Case L's negative
@@ -157,7 +209,8 @@ sessions only, not the Case A/I/J/L native roots. Preserve them if available.
   useful context, but not independent fresh-root evidence.
 - `FRESH_ROOT_NATIVE`: observed native evidence from a separately created,
   verified Kael root with actual child/session IDs and captured event ordering.
-  This is required for the currently pending B, C, D, E, F, G, H, and K cases.
+  This is required for the currently pending isolated B3, C, D, E, F, G, H,
+  and K cases. B2's routing observation is valid context but failed isolation.
   The recovered A/I/J/L observations remain guided/user-reported references and
   are not fresh-root evidence.
 
@@ -190,8 +243,10 @@ are marker-presence checks only.
 
 ## Current gate
 
-The A–L matrix and synthetic/mutation suite are present. Recovered guided
-outcomes above remain user-reported only; the current scoped corpus has no
-native per-case records. Fresh-root evidence is pending for B, C, D, E, F, G,
-H, and K only; A, I, J, and L are retained as reference/history, with no rerun
-requested. The phase is **IN VALIDATION / PARTIAL**, not SHIPPED.
+The A–L matrix and synthetic/mutation suite are present. Static artifact
+validation can PASS while overall qualification remains PARTIAL. Case B2 has a
+valid user-supplied routing observation but failed fresh-root isolation, so
+Case B acceptance awaits isolated B3. Fresh-root evidence remains pending for
+Case B3, C, D, E, F, G, H, and K; A, I, J, and L are retained as
+reference/history, with no rerun requested. The phase is **IN VALIDATION /
+PARTIAL**, not SHIPPED.

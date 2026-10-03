@@ -23,14 +23,14 @@
     {
       "id": "B",
       "request_class": "COMPLEX_FEATURE",
-      "description": "Bounded cart discount feature: presentation depends on the structured discount field produced by calculation; supplied boundaries do not justify Orin activation.",
+      "description": "Bounded cart discount feature: presentation depends on the structured discount field produced by calculation; this local producer/consumer dependency is sequenced by Kael and does not by itself justify Atlas or Orin.",
       "trace_ids": [
         "B"
       ],
       "expected_routes": {
         "default": [
           "kael",
-          "atlas",
+          "veyra",
           "kovan",
           "nox",
           "vera"
@@ -45,11 +45,9 @@
         "material_dependency": "domain.py:calculate_cart adds CartTotals.discount_cents before presentation.py:render_totals consumes it; discount eligibility and arithmetic stay in domain.py."
       },
       "positive_orin_qualification": "NOT_ESTABLISHED_BY_PHASE11_CASE_B",
+      "planning_gate_expectation": "COMPLEX_FEATURE_ALONE_DOES_NOT_REQUIRE_ATLAS; the bounded calculation-to-presentation dependency does not justify separate planning.",
+      "planning_gate_justification": null,
       "mandatory_dependency_edges": [
-        {
-          "before_work_id": "feature-plan",
-          "after_work_id": "feature-implementation"
-        },
         {
           "before_work_id": "feature-implementation",
           "after_work_id": "feature-tests"
@@ -258,7 +256,7 @@
     {
       "case_id": "B",
       "scenario": "default",
-      "label": "PHASE11_CASE_B_FRESH_ROOT"
+      "label": "PHASE11_CASE_B_FRESH_ROOT_3"
     },
     {
       "case_id": "C",

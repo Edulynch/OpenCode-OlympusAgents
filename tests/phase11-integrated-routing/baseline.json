@@ -234,5 +234,154 @@
       "phase11_qualifier_status": "PARTIAL (synthetic/static artifacts valid; native qualification pending)",
       "git_diff_check": "PASS"
     }
+  },
+  "phase11_b2_reconciliation": {
+    "task_id": "phase11-b2-reconcile",
+    "source": "Authoritative user-supplied runtime observation and reconciliation facts; not independently rerun or converted into a native event trace.",
+    "repository_inspection": {
+      "root": "C:/Users/BLAUTECH/OneDrive/WORKSPACE/Personal/Tools/OpenCode-OlympusAgents",
+      "branch": "qualify/phase-11-integrated-routing",
+      "head_before_this_task_edits": "5b3761acf10125a97585f9b1dbcc127d15f50828",
+      "origin": "https://github.com/Edulynch/OpenCode-OlympusAgents.git",
+      "upstream": null,
+      "preexisting_working_tree_clean": true,
+      "all_write_scope_targets_tracked": true
+    },
+    "case_b1": {
+      "attempt": "B1",
+      "promised_contract_present": false,
+      "classification": "FIXTURE_DEFECT",
+      "question_barrier": "PASS",
+      "native_root_session_id": null,
+      "native_trace_recorded": false
+    },
+    "case_b2": {
+      "label": "PHASE11_CASE_B_FRESH_ROOT_2",
+      "root": {
+        "session_id": "ses_efd70d361ffecywLukxPk5m1Sv",
+        "agent": "Kael",
+        "outcome": "succeeded"
+      },
+      "ACTUAL_ROUTE": "Kael -> Veyra -> Kovan -> Nox / Vera",
+      "direct_children": {
+        "Veyra": {
+          "session_id": "ses_efd706277ffeSqUTO9GumJKt5B",
+          "parent_session_id": "ses_efd70d361ffecywLukxPk5m1Sv",
+          "outcome": "succeeded",
+          "result_consumed": true
+        },
+        "Kovan": {
+          "session_id": "ses_efd6d87f4ffe2j4zsTzy1mAv0D",
+          "parent_session_id": "ses_efd70d361ffecywLukxPk5m1Sv",
+          "outcome": "succeeded",
+          "result_consumed": true
+        },
+        "Nox": {
+          "session_id": "ses_efd69a153ffe0ntGQoaZVOXyZi",
+          "parent_session_id": "ses_efd70d361ffecywLukxPk5m1Sv",
+          "outcome": "succeeded",
+          "result_consumed": true
+        },
+        "Vera": {
+          "session_id": "ses_efd69a151ffeftr0qNcEM5VEle",
+          "parent_session_id": "ses_efd70d361ffecywLukxPk5m1Sv",
+          "outcome": "succeeded",
+          "result_consumed": true
+        }
+      },
+      "all_required_children_terminal_and_consumed": true,
+      "classifications": {
+        "CASE_B2_RUNTIME_BEHAVIOR": "PASS",
+        "CASE_B2_NATIVE_ROUTING_EVIDENCE": "VALID_OBSERVATION",
+        "CASE_B2_FRESH_ROOT_ISOLATION": "FAIL",
+        "CASE_B2_FRESH_ROOT_ACCEPTANCE": "PARTIAL"
+      },
+      "isolation": {
+        "execution_repository": "CANONICAL_QUALIFICATION_REPOSITORY",
+        "separate_disposable_copy": false,
+        "reason": "The run was not made in the intended separate disposable copy/worktree."
+      },
+      "acceptance_status": "PARTIAL",
+      "fixture_work": {
+        "reported_modified_paths": [
+          "tests/phase11-integrated-routing/fixtures/feature/domain.py",
+          "tests/phase11-integrated-routing/fixtures/feature/presentation.py",
+          "tests/phase11-integrated-routing/fixtures/feature/test_feature.py"
+        ],
+        "feature_tests_passed": 14,
+        "feature_tests_total": 14
+      },
+      "review": {
+        "agent": "Vera",
+        "session_id": "ses_efd69a151ffeftr0qNcEM5VEle",
+        "result": "ACCEPT",
+        "findings": []
+      },
+      "planning": {
+        "atlas_activated": false,
+        "atlas_routing_defect": false,
+        "atlas_policy": "Planning is optional unless execution dependencies materially justify a separate planner.",
+        "bounded_producer_consumer_justified_planner": false,
+        "veyra_efficiency": "ACCEPTABLE",
+        "material_redundancy_proven": false
+      },
+      "contract_friction": {
+        "kovan": {
+          "session_id": "ses_efd6d87f4ffe2j4zsTzy1mAv0D",
+          "initial_result": "BLOCKED",
+          "blocker": "task/grant identity mismatch",
+          "kael_consumed_original_result": true,
+          "pre_resume_tool_execution": "NOT_EXECUTED",
+          "pre_resume_edits": 0,
+          "corrected_only": "grant identity",
+          "resumed_same_session": true,
+          "blind_retry": false
+        },
+        "vera": {
+          "session_id": "ses_efd69a151ffeftr0qNcEM5VEle",
+          "initial_parent_delivery": "INTERRUPTED",
+          "same_original_session_retained": true,
+          "result_reconciliation": "PASS",
+          "upstream_correlation_issue_fix_claimed": false
+        }
+      },
+      "result_reconciliation": {
+        "classification": "PASS",
+        "vera_session_id": "ses_efd69a151ffeftr0qNcEM5VEle",
+        "same_original_session": true,
+        "upstream_correlation_issue_fix_claimed": false
+      },
+      "unknowns": {
+        "event_count": null,
+        "event_order": null,
+        "concurrency": null,
+        "consultation_counts": null,
+        "relative_nox_vera_order": null,
+        "native_event_trace_reconstructed": false
+      },
+      "runtime_rerun_performed_by_reconciliation": false
+    },
+    "current_checkout_fixture_verification": {
+      "working_tree_pre_feature_scaffold": true,
+      "tracked_fixture_files": [
+        "tests/phase11-integrated-routing/fixtures/feature/domain.py",
+        "tests/phase11-integrated-routing/fixtures/feature/presentation.py",
+        "tests/phase11-integrated-routing/fixtures/feature/test_scaffold.py"
+      ],
+      "test_feature_py_tracked": false,
+      "test_feature_py_exists": false,
+      "scaffold_test_command": "uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing/fixtures/feature -p \"test_scaffold.py\" -v",
+      "scaffold_tests_passed": 4,
+      "scaffold_tests_total": 4,
+      "feature_fixture_paths_written_by_this_task": false,
+      "reconciliation_note": "The B2 report describes files changed during that session; the current canonical checkout was separately inspected as a clean pre-feature scaffold. No feature delta or cause of the differing snapshots is inferred."
+    },
+    "phase11_status": "PARTIAL",
+    "next_action": {
+      "label": "PHASE11_CASE_B_FRESH_ROOT_3",
+      "clean_separate_disposable_copy": true,
+      "new_verified_kael_root": true,
+      "runtime_run_performed_in_this_task": false
+    }
   }
 }

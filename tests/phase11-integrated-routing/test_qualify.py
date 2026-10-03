@@ -6,13 +6,23 @@ import copy
 import unittest
 from pathlib import Path
 
-from qualify import EIGHT_SPECIALISTS, HARD_BUDGET, load_json, run_static_baseline_checks, validate_trace
+from qualify import (
+    CASE_B2_CHILD_SESSION_IDS,
+    CASE_B2_ROOT_SESSION_ID,
+    EIGHT_SPECIALISTS,
+    HARD_BUDGET,
+    load_json,
+    run_static_baseline_checks,
+    validate_case_b_reconciliation,
+    validate_trace,
+)
 
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 CASES_DOC = load_json(HERE / "cases.json")
 TRACES_DOC = load_json(HERE / "traces.json")
+BASELINE_DOC = load_json(HERE / "baseline.json")
 CASES = {case["id"]: case for case in CASES_DOC["cases"]}
 TRACES = {trace["TRACE_ID"]: trace for trace in TRACES_DOC["traces"]}
 
@@ -47,6 +57,35 @@ class CorpusTests(unittest.TestCase):
     def test_presence_only_policy_markers_pass(self) -> None:
         self.assertEqual([], run_static_baseline_checks())
 
+    def test_case_b_no_atlas_route_is_artifact_pass_not_native_acceptance(self) -> None:
+        trace = TRACES["B"]
+        self.assertTrue(trace["GATE_FACTS"]["COMPLEX_FEATURE"])
+        self.assertFalse(trace["GATE_FACTS"]["EXPLICIT_PLANNING_INTENT"])
+        self.assertEqual(["kael", "veyra", "kovan", "nox", "vera"], trace["EXPECTED_ROUTE"])
+        self.assertEqual(trace["EXPECTED_ROUTE"], trace["ACTUAL_ROUTE"])
+        self.assertEqual(0, trace["CONSULTATION_COUNTS"]["atlas"])
+        self.assertNotIn("atlas", [child["AGENT"] for child in trace["CHILD_SESSIONS"]])
+        self.assertEqual([], validate_trace(trace, CASES["B"]))
+        self.assertEqual(
+            {"feature-tests", "feature-review"},
+            {edge["after_work_id"] for edge in CASES["B"]["mandatory_dependency_edges"]},
+        )
+
+    def test_case_b_reconciliation_keeps_identity_and_partial_classifications(self) -> None:
+        self.assertEqual([], validate_case_b_reconciliation(BASELINE_DOC))
+        report = BASELINE_DOC["phase11_b2_reconciliation"]
+        self.assertEqual("FIXTURE_DEFECT", report["case_b1"]["classification"])
+        self.assertEqual("PASS", report["case_b1"]["question_barrier"])
+        case_b2 = report["case_b2"]
+        self.assertEqual(CASE_B2_ROOT_SESSION_ID, case_b2["root"]["session_id"])
+        self.assertEqual(set(CASE_B2_CHILD_SESSION_IDS), set(case_b2["direct_children"]))
+        self.assertEqual("FAIL", case_b2["classifications"]["CASE_B2_FRESH_ROOT_ISOLATION"])
+        self.assertEqual("PARTIAL", case_b2["classifications"]["CASE_B2_FRESH_ROOT_ACCEPTANCE"])
+        self.assertEqual("PARTIAL", report["phase11_status"])
+        self.assertIsNone(case_b2["unknowns"]["event_order"])
+        self.assertIsNone(case_b2["unknowns"]["concurrency"])
+        self.assertEqual("PHASE11_CASE_B_FRESH_ROOT_3", report["next_action"]["label"])
+
     def test_synthetic_evidence_never_claims_native_session_ids(self) -> None:
         for trace_id, trace in TRACES.items():
             with self.subTest(trace=trace_id):
@@ -57,6 +96,35 @@ class CorpusTests(unittest.TestCase):
 
 
 class MutationTests(unittest.TestCase):
+    def test_b2_isolation_failure_cannot_be_promoted_to_full_acceptance(self) -> None:
+        lost_isolation = copy.deepcopy(BASELINE_DOC)
+        report = lost_isolation["phase11_b2_reconciliation"]
+        report["case_b2"]["classifications"]["CASE_B2_FRESH_ROOT_ISOLATION"] = "PASS"
+        self.assertIn("CASE_B2_CLASSIFICATION_SEPARATION_MISMATCH", validate_case_b_reconciliation(lost_isolation))
+
+        overaccepted = copy.deepcopy(BASELINE_DOC)
+        overaccepted["phase11_b2_reconciliation"]["case_b2"]["acceptance_status"] = "PASS"
+        self.assertIn("CASE_B2_ACCEPTANCE_MUST_REMAIN_PARTIAL", validate_case_b_reconciliation(overaccepted))
+
+        phase_overaccepted = copy.deepcopy(BASELINE_DOC)
+        phase_overaccepted["phase11_b2_reconciliation"]["phase11_status"] = "PASS"
+        self.assertIn("PHASE11_STATUS_MUST_REMAIN_PARTIAL", validate_case_b_reconciliation(phase_overaccepted))
+
+    def test_b2_session_identity_and_result_reconciliation_are_bound(self) -> None:
+        wrong_kovan = copy.deepcopy(BASELINE_DOC)
+        wrong_kovan["phase11_b2_reconciliation"]["case_b2"]["direct_children"]["Kovan"]["session_id"] = "ses_wrongkovan"
+        errors = validate_case_b_reconciliation(wrong_kovan)
+        self.assertIn("CASE_B2_CHILD_SESSION_ID_MISMATCH:Kovan", errors)
+        self.assertIn("CASE_B2_KOVAN_SESSION_RECONCILIATION_MISMATCH", errors)
+
+        replaced_vera = copy.deepcopy(BASELINE_DOC)
+        case_b2 = replaced_vera["phase11_b2_reconciliation"]["case_b2"]
+        case_b2["review"]["session_id"] = "ses_replacementvera"
+        case_b2["result_reconciliation"]["same_original_session"] = False
+        errors = validate_case_b_reconciliation(replaced_vera)
+        self.assertIn("CASE_B2_FINAL_REVIEW_RECONCILIATION_MISMATCH", errors)
+        self.assertIn("CASE_B2_RESULT_RECONCILIATION_MISMATCH", errors)
+
     def test_event_order_must_be_globally_strictly_increasing(self) -> None:
         trace = changed("A")
         trace["EVENTS"][1]["ORDER"] = 1
@@ -136,6 +204,43 @@ class MutationTests(unittest.TestCase):
             implementation["WRITE_PATHS"],
         )
 
+    def test_complexity_alone_does_not_justify_atlas_but_material_gate_data_can(self) -> None:
+        trace = changed("J")
+        trace["CASE_ID"] = "B"
+        trace["REQUEST_CLASS"] = CASES["B"]["request_class"]
+        trace["SCENARIO"] = "default"
+        trace["GATE_FACTS"]["EXPLICIT_PLANNING_INTENT"] = False
+        trace["GATE_FACTS"]["COMPLEX_FEATURE"] = True
+        errors = validate_trace(trace, CASES["B"])
+        self.assertIn("ATLAS_WITHOUT_EXPLICIT_INTENT_OR_MATERIAL_PLANNING_JUSTIFICATION", errors)
+
+        complex_only = copy.deepcopy(CASES["B"])
+        complex_only["planning_gate_justification"] = {
+            "basis": "COMPLEX_FEATURE",
+            "rationale": "It is complex.",
+            "material_dependencies": [],
+        }
+        self.assertIn(
+            "ATLAS_WITHOUT_EXPLICIT_INTENT_OR_MATERIAL_PLANNING_JUSTIFICATION",
+            validate_trace(trace, complex_only),
+        )
+        materially_justified = copy.deepcopy(CASES["B"])
+        materially_justified["planning_gate_justification"] = {
+            "basis": "MATERIAL_DEPENDENCY",
+            "rationale": "Independent workstreams require an explicit cross-workstream ordering decision.",
+            "material_dependencies": [
+                {
+                    "producer": "contract-selection",
+                    "consumer": "migration-design",
+                    "planning_need": "A shared compatibility decision must precede both workstreams.",
+                }
+            ],
+        }
+        self.assertNotIn(
+            "ATLAS_WITHOUT_EXPLICIT_INTENT_OR_MATERIAL_PLANNING_JUSTIFICATION",
+            validate_trace(trace, materially_justified),
+        )
+
     def test_synthetic_trace_cannot_be_relabelled_native_by_changing_label_or_root(self) -> None:
         root_only = changed("A")
         root_only["ROOT_SESSION_ID"] = "ses_forgedroot"
@@ -191,12 +296,12 @@ class MutationTests(unittest.TestCase):
         missing["DEPENDENCY_ORDER"] = missing["DEPENDENCY_ORDER"][1:]
         self.assertIn("MANDATORY_DEPENDENCY_EDGE_MISSING", failures(missing))
         reversed_edge = changed("B")
-        reversed_edge["DEPENDENCY_ORDER"][0] = {"BEFORE": "SYN-W1:RESULT", "AFTER": "SYN-A1"}
+        reversed_edge["DEPENDENCY_ORDER"][0] = {"BEFORE": "SYN-W1:RESULT", "AFTER": "SYN-E1"}
         self.assertIn("DEPENDENCY_ORDER_NOT_OBSERVED", failures(reversed_edge))
         early = changed("B")
         events = early["EVENTS"]
-        start = next(event for event in events if event.get("KIND") == "CHILD_START" and event.get("CHILD_REF") == "SYN-W1")
-        consumed = next(event for event in events if event.get("KIND") == "RESULT_CONSUMED" and event.get("CHILD_REF") == "SYN-A1")
+        start = next(event for event in events if event.get("KIND") == "CHILD_START" and event.get("CHILD_REF") == "SYN-T1")
+        consumed = next(event for event in events if event.get("KIND") == "RESULT_CONSUMED" and event.get("CHILD_REF") == "SYN-W1")
         start["ORDER"], consumed["ORDER"] = consumed["ORDER"], start["ORDER"]
         events.sort(key=lambda event: event["ORDER"])
         self.assertIn("DEPENDENCY_RESULT_NOT_CONSUMED_BEFORE_DEPENDENT_START", failures(early))
@@ -246,7 +351,7 @@ class MutationTests(unittest.TestCase):
         worker = changed("D")
         worker["CHILD_SESSIONS"][1]["PARENT_AGENT"] = "argus"
         self.assertIn("DIRECT_CHILD_ROUTE_VIOLATION:veyra", failures(worker))
-        plan = changed("B")
+        plan = changed("J")
         plan_action = next(event for event in plan["EVENTS"] if event.get("ACTOR_ROLE") == "atlas" and event.get("KIND") == "ACTION")
         plan_action["ACTION"] = "IMPLEMENT"
         self.assertIn("ROLE_ACTION_NOT_ALLOWED:atlas:IMPLEMENT", failures(plan))
@@ -312,7 +417,7 @@ class MutationTests(unittest.TestCase):
             insert_event(talos_four, {"KIND": "CONSULT", "ACTOR_ROLE": "talos", "SESSION_REF": "SYN-R1", "CONSULTATION_NUMBER": number, "EVIDENCE_IDS": [f"SYN-T{number}"]}, "CHILD_TERMINAL")
         talos_four["CONSULTATION_COUNTS"]["talos"] = 4
         self.assertIn("HARD_CONSULTATION_BUDGET_EXCEEDED:talos", failures(talos_four))
-        for trace_id, role in (("G", "thales"), ("B", "atlas"), ("I", "helios")):
+        for trace_id, role in (("G", "thales"), ("J", "atlas"), ("I", "helios")):
             with self.subTest(role=role):
                 trace = changed(trace_id)
                 session = next(child["TRACE_REF"] for child in trace["CHILD_SESSIONS"] if child["AGENT"] == role)

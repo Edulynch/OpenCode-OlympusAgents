@@ -80,6 +80,20 @@ REQUIRED_GATE_FACTS = (
     "MAINTENANCE_ENTRY_EXPLICIT",
 )
 NATIVE_SESSION_ID = re.compile(r"^ses_[A-Za-z0-9]+$")
+CASE_B2_ROOT_SESSION_ID = "ses_efd70d361ffecywLukxPk5m1Sv"
+CASE_B2_CHILD_SESSION_IDS = {
+    "Veyra": "ses_efd706277ffeSqUTO9GumJKt5B",
+    "Kovan": "ses_efd6d87f4ffe2j4zsTzy1mAv0D",
+    "Nox": "ses_efd69a153ffe0ntGQoaZVOXyZi",
+    "Vera": "ses_efd69a151ffeftr0qNcEM5VEle",
+}
+CASE_B2_CLASSIFICATIONS = {
+    "CASE_B2_RUNTIME_BEHAVIOR": "PASS",
+    "CASE_B2_NATIVE_ROUTING_EVIDENCE": "VALID_OBSERVATION",
+    "CASE_B2_FRESH_ROOT_ISOLATION": "FAIL",
+    "CASE_B2_FRESH_ROOT_ACCEPTANCE": "PARTIAL",
+}
+CASE_B2_ACTUAL_ROUTE = "Kael -> Veyra -> Kovan -> Nox / Vera"
 
 
 def load_json(path: Path) -> Any:
@@ -734,8 +748,27 @@ def validate_trace(trace: dict[str, Any], case: dict[str, Any]) -> list[str]:
         add("HELIOS_WITHOUT_EXPLICIT_OPTIMIZATION_INTENT")
     if facts.get("EXPLICIT_PLANNING_INTENT") and counts["atlas"] < 1:
         add("EXPLICIT_PLANNING_GATE_NOT_ACTIVATED")
-    if not facts.get("EXPLICIT_PLANNING_INTENT") and not facts.get("COMPLEX_FEATURE") and counts["atlas"]:
-        add("ATLAS_FOR_TRIVIAL_OR_UNREQUESTED_PLANNING")
+    if counts["atlas"] and not facts.get("EXPLICIT_PLANNING_INTENT"):
+        justification = case.get("planning_gate_justification")
+        material_dependencies = justification.get("material_dependencies") if isinstance(justification, dict) else None
+        valid_justification = (
+            isinstance(justification, dict)
+            and justification.get("basis") == "MATERIAL_DEPENDENCY"
+            and isinstance(justification.get("rationale"), str)
+            and bool(justification["rationale"].strip())
+            and isinstance(material_dependencies, list)
+            and bool(material_dependencies)
+            and all(
+                isinstance(dependency, dict)
+                and all(
+                    isinstance(dependency.get(field), str) and dependency[field].strip()
+                    for field in ("producer", "consumer", "planning_need")
+                )
+                for dependency in material_dependencies
+            )
+        )
+        if not valid_justification:
+            add("ATLAS_WITHOUT_EXPLICIT_INTENT_OR_MATERIAL_PLANNING_JUSTIFICATION")
     if facts.get("OBVIOUS_FUNCTIONAL_CAUSE") and counts["argus"]:
         add("ARGUS_FOR_OBVIOUS_FUNCTIONAL_BUG")
     if facts.get("NONTRIVIAL_FUNCTIONAL_CAUSE") and counts["argus"] < 1:
@@ -880,9 +913,144 @@ def validate_corpus() -> tuple[list[str], dict[str, Any]]:
     return failures, {"cases": cases_doc, "traces": traces_doc}
 
 
+def validate_case_b_reconciliation(baseline: dict[str, Any]) -> list[str]:
+    """Check the separately reported Case B observations without making a native trace."""
+    errors: list[str] = []
+    add = errors.append
+    report = baseline.get("phase11_b2_reconciliation")
+    if not isinstance(report, dict):
+        return ["CASE_B_RECONCILIATION_MISSING"]
+
+    case_b1 = report.get("case_b1", {})
+    if case_b1.get("classification") != "FIXTURE_DEFECT":
+        add("CASE_B1_FIXTURE_DEFECT_CLASSIFICATION_MISMATCH")
+    if case_b1.get("question_barrier") != "PASS":
+        add("CASE_B1_QUESTION_BARRIER_CLASSIFICATION_MISMATCH")
+    if case_b1.get("native_root_session_id") is not None or case_b1.get("native_trace_recorded") is not False:
+        add("CASE_B1_UNSUPPORTED_NATIVE_TRACE_CLAIM")
+
+    case_b2 = report.get("case_b2", {})
+    if case_b2.get("label") != "PHASE11_CASE_B_FRESH_ROOT_2":
+        add("CASE_B2_LABEL_MISMATCH")
+    root = case_b2.get("root", {})
+    if root != {"session_id": CASE_B2_ROOT_SESSION_ID, "agent": "Kael", "outcome": "succeeded"}:
+        add("CASE_B2_ROOT_IDENTITY_MISMATCH")
+    if case_b2.get("ACTUAL_ROUTE") != CASE_B2_ACTUAL_ROUTE:
+        add("CASE_B2_ACTUAL_ROUTE_MISMATCH")
+
+    children = case_b2.get("direct_children", {})
+    if not isinstance(children, dict) or set(children) != set(CASE_B2_CHILD_SESSION_IDS):
+        add("CASE_B2_DIRECT_CHILD_SET_MISMATCH")
+        children = children if isinstance(children, dict) else {}
+    child_ids: list[str] = []
+    for agent, session_id in CASE_B2_CHILD_SESSION_IDS.items():
+        child = children.get(agent, {})
+        if child.get("session_id") != session_id:
+            add(f"CASE_B2_CHILD_SESSION_ID_MISMATCH:{agent}")
+        if child.get("parent_session_id") != CASE_B2_ROOT_SESSION_ID:
+            add(f"CASE_B2_CHILD_PARENT_SESSION_MISMATCH:{agent}")
+        if child.get("outcome") != "succeeded" or child.get("result_consumed") is not True:
+            add(f"CASE_B2_CHILD_COMPLETION_OR_CONSUMPTION_MISMATCH:{agent}")
+        child_ids.append(str(child.get("session_id")))
+    if len(child_ids) != len(set(child_ids)) or CASE_B2_ROOT_SESSION_ID in child_ids:
+        add("CASE_B2_SESSION_IDENTITIES_NOT_UNIQUE")
+    if case_b2.get("all_required_children_terminal_and_consumed") is not True:
+        add("CASE_B2_COMPLETION_RECONCILIATION_MISMATCH")
+
+    if case_b2.get("classifications") != CASE_B2_CLASSIFICATIONS:
+        add("CASE_B2_CLASSIFICATION_SEPARATION_MISMATCH")
+    isolation = case_b2.get("isolation", {})
+    if isolation.get("execution_repository") != "CANONICAL_QUALIFICATION_REPOSITORY" or isolation.get("separate_disposable_copy") is not False:
+        add("CASE_B2_ISOLATION_EVIDENCE_MISMATCH")
+    if case_b2.get("acceptance_status") != "PARTIAL":
+        add("CASE_B2_ACCEPTANCE_MUST_REMAIN_PARTIAL")
+    if report.get("phase11_status") != "PARTIAL":
+        add("PHASE11_STATUS_MUST_REMAIN_PARTIAL")
+
+    fixture_work = case_b2.get("fixture_work", {})
+    expected_modified = [
+        "tests/phase11-integrated-routing/fixtures/feature/domain.py",
+        "tests/phase11-integrated-routing/fixtures/feature/presentation.py",
+        "tests/phase11-integrated-routing/fixtures/feature/test_feature.py",
+    ]
+    if fixture_work.get("reported_modified_paths") != expected_modified:
+        add("CASE_B2_REPORTED_FIXTURE_PATHS_MISMATCH")
+    if fixture_work.get("feature_tests_passed") != 14 or fixture_work.get("feature_tests_total") != 14:
+        add("CASE_B2_FEATURE_TEST_RESULT_MISMATCH")
+    review = case_b2.get("review", {})
+    if (
+        review.get("agent") != "Vera"
+        or review.get("session_id") != CASE_B2_CHILD_SESSION_IDS["Vera"]
+        or review.get("result") != "ACCEPT"
+        or review.get("findings") != []
+    ):
+        add("CASE_B2_FINAL_REVIEW_RECONCILIATION_MISMATCH")
+
+    planning = case_b2.get("planning", {})
+    if planning.get("atlas_activated") is not False or planning.get("atlas_routing_defect") is not False:
+        add("CASE_B2_ATLAS_CLASSIFICATION_MISMATCH")
+    if planning.get("bounded_producer_consumer_justified_planner") is not False:
+        add("CASE_B2_PLANNING_JUSTIFICATION_MISMATCH")
+    if planning.get("veyra_efficiency") != "ACCEPTABLE" or planning.get("material_redundancy_proven") is not False:
+        add("CASE_B2_VEYRA_EFFICIENCY_CLASSIFICATION_MISMATCH")
+
+    friction = case_b2.get("contract_friction", {})
+    kovan = friction.get("kovan", {})
+    if (
+        kovan.get("session_id") != CASE_B2_CHILD_SESSION_IDS["Kovan"]
+        or kovan.get("initial_result") != "BLOCKED"
+        or kovan.get("blocker") != "task/grant identity mismatch"
+        or kovan.get("kael_consumed_original_result") is not True
+        or kovan.get("pre_resume_tool_execution") != "NOT_EXECUTED"
+        or kovan.get("pre_resume_edits") != 0
+        or kovan.get("corrected_only") != "grant identity"
+        or kovan.get("resumed_same_session") is not True
+        or kovan.get("blind_retry") is not False
+        or children.get("Kovan", {}).get("session_id") != kovan.get("session_id")
+    ):
+        add("CASE_B2_KOVAN_SESSION_RECONCILIATION_MISMATCH")
+    vera = friction.get("vera", {})
+    if (
+        vera.get("session_id") != CASE_B2_CHILD_SESSION_IDS["Vera"]
+        or vera.get("initial_parent_delivery") != "INTERRUPTED"
+        or vera.get("same_original_session_retained") is not True
+        or vera.get("result_reconciliation") != "PASS"
+        or vera.get("upstream_correlation_issue_fix_claimed") is not False
+        or children.get("Vera", {}).get("session_id") != vera.get("session_id")
+    ):
+        add("CASE_B2_VERA_SESSION_RECONCILIATION_MISMATCH")
+    reconciliation = case_b2.get("result_reconciliation", {})
+    if (
+        reconciliation.get("classification") != "PASS"
+        or reconciliation.get("vera_session_id") != CASE_B2_CHILD_SESSION_IDS["Vera"]
+        or reconciliation.get("same_original_session") is not True
+        or reconciliation.get("upstream_correlation_issue_fix_claimed") is not False
+    ):
+        add("CASE_B2_RESULT_RECONCILIATION_MISMATCH")
+
+    unknowns = case_b2.get("unknowns", {})
+    for field in ("event_count", "event_order", "concurrency", "consultation_counts", "relative_nox_vera_order"):
+        if unknowns.get(field) is not None:
+            add(f"CASE_B2_UNKNOWN_METRIC_MUST_REMAIN_NULL:{field}")
+    if unknowns.get("native_event_trace_reconstructed") is not False:
+        add("CASE_B2_NATIVE_EVENTS_MUST_NOT_BE_RECONSTRUCTED")
+    if case_b2.get("runtime_rerun_performed_by_reconciliation") is not False:
+        add("CASE_B2_RUNTIME_MUST_NOT_BE_RERUN_BY_RECONCILIATION")
+
+    next_action = report.get("next_action", {})
+    if (
+        next_action.get("label") != "PHASE11_CASE_B_FRESH_ROOT_3"
+        or next_action.get("clean_separate_disposable_copy") is not True
+        or next_action.get("new_verified_kael_root") is not True
+    ):
+        add("CASE_B3_ISOLATED_NEXT_ACTION_MISMATCH")
+    return errors
+
+
 def main() -> int:
     failures, documents = validate_corpus()
     static_failures = run_static_baseline_checks()
+    reconciliation_failures = validate_case_b_reconciliation(load_json(HERE / "baseline.json"))
     for label in ("ARGUS_GATE_MARKER", "TALOS_GATE_MARKER", "ATLAS_GATE_MARKER", "HELIOS_GATE_MARKER", "THALES_GATE_MARKER", "ROOT_OWNER_MARKER", "NO_NESTED_CHILD_MARKER", "CORE_CHILD_CEILING_MARKER"):
         if label in static_failures:
             print(f"STATIC_{label}: FAIL")
@@ -892,12 +1060,15 @@ def main() -> int:
         if not any(failure.startswith(f"{trace.get('TRACE_ID')}: ") for failure in failures):
             print(f"{trace.get('TRACE_ID')}: PASS ({trace.get('EVIDENCE_CLASS')})")
     pending_fresh_root_cases = {"B", "C", "D", "E", "F", "G", "H", "K"}
+    pending_labels: list[str] = []
     for action in documents["cases"].get("fresh_root_actions", []):
         case_id = action.get("case_id")
         if case_id in pending_fresh_root_cases:
-            print(f"HUMAN_ACTION_REQUIRED PHASE11_CASE_{case_id}_FRESH_ROOT")
-    if failures:
-        for failure in failures:
+            label = action.get("label", f"PHASE11_CASE_{case_id}_FRESH_ROOT")
+            pending_labels.append(label)
+            print(f"HUMAN_ACTION_REQUIRED {label}")
+    if failures or reconciliation_failures:
+        for failure in [*failures, *reconciliation_failures]:
             print(f"FAIL: {failure}")
         print("PHASE11_QUALIFICATION: FAIL (artifact validation only)")
         return 1
@@ -906,8 +1077,9 @@ def main() -> int:
             print(f"FAIL: STATIC_{label}")
         print("PHASE11_QUALIFICATION: FAIL (bounded policy marker check)")
         return 1
-    print("MISSING_LIVE_CASES: B,C,D,E,F,G,H,K require fresh-root native evidence; A/I/J/L recovered reports remain reference-only, with no native result inferred from synthetic traces.")
-    print("PHASE11_QUALIFICATION: PARTIAL (synthetic/static artifacts valid; native qualification pending)")
+    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts and reconciled report record are internally valid; report data is not reconstructed native event evidence)")
+    print("MISSING_LIVE_CASES: " + ", ".join(pending_labels) + "; A/I/J/L recovered reports remain reference-only, with no native result inferred from synthetic traces.")
+    print("PHASE11_QUALIFICATION: PARTIAL (artifacts PASS; Case B acceptance awaits isolated B3, and other listed fresh-root cases remain pending)")
     return 0
 
 

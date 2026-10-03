@@ -1,0 +1,3343 @@
+{
+  "schema_version": 1,
+  "disclaimer": "Every record below is a hand-authored SYNTHETIC_TRACE. SYN-* references and ORDER values are local synthetic tokens, not runtime session IDs or observed timestamps.",
+  "traces": [
+    {
+      "TRACE_ID": "A",
+      "SCENARIO": "default",
+      "CASE_ID": "A",
+      "REQUEST_CLASS": "SIMPLE_EDIT",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "kovan"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "kovan"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-W1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "kovan",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "simple-message-edit",
+          "WRITE_PATHS": [
+            "fixtures/simple/message.txt"
+          ]
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 1,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 1,
+      "NEGATIVE_CONTROLS": {
+        "veyra": 0,
+        "orin": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "kael",
+            "ACTION": "ROUTE"
+          },
+          {
+            "ROLE": "kovan",
+            "ACTION": "IMPLEMENT"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "Hello Phase 11 ready",
+        "OBSERVED_RESULT": "Hello Phase 11 ready",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_ACCEPTED",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 1,
+        "ACTUAL_COUNTED_CONCURRENCY": 1,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "AGENT": "kovan"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ROUTE"
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kovan",
+          "ACTION": "IMPLEMENT",
+          "CHILD_REF": "SYN-W1",
+          "TARGET": "fixtures/simple/message.txt",
+          "REQUESTED_VALUE": "Hello Phase 11 ready"
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "RESULT_ID": "SYN-RESULT-W1",
+          "RESULT_VALUE": "Hello Phase 11 ready"
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "Synthetic-only contract: requested and consumed text is exact; no live fixture edit is claimed."
+    },
+    {
+      "TRACE_ID": "B",
+      "SCENARIO": "default",
+      "CASE_ID": "B",
+      "REQUEST_CLASS": "COMPLEX_FEATURE",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "atlas",
+        "kovan",
+        "nox",
+        "vera"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "atlas",
+        "kovan",
+        "nox",
+        "vera"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-A1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "atlas",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "feature-plan",
+          "WRITE_PATHS": []
+        },
+        {
+          "TRACE_REF": "SYN-W1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "kovan",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "feature-implementation",
+          "WRITE_PATHS": [
+            "fixtures/feature/domain.py"
+          ]
+        },
+        {
+          "TRACE_REF": "SYN-T1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "nox",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "feature-tests",
+          "WRITE_PATHS": []
+        },
+        {
+          "TRACE_REF": "SYN-V1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "vera",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "feature-review",
+          "WRITE_PATHS": []
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 1,
+        "nox": 1,
+        "vera": 1,
+        "atlas": 1,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 1,
+      "NEGATIVE_CONTROLS": {
+        "veyra": 0,
+        "orin": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "atlas",
+            "ACTION": "PLAN"
+          },
+          {
+            "ROLE": "kovan",
+            "ACTION": "IMPLEMENT"
+          },
+          {
+            "ROLE": "nox",
+            "ACTION": "TEST"
+          },
+          {
+            "ROLE": "vera",
+            "ACTION": "REVIEW"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [
+        {
+          "BEFORE": "SYN-A1:RESULT",
+          "AFTER": "SYN-W1"
+        },
+        {
+          "BEFORE": "SYN-W1:RESULT",
+          "AFTER": "SYN-T1"
+        },
+        {
+          "BEFORE": "SYN-W1:RESULT",
+          "AFTER": "SYN-V1"
+        }
+      ],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "plan precedes implementation, tests, and review",
+        "OBSERVED_RESULT": "plan precedes implementation, tests, and review",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_ACCEPTED",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 1,
+        "ACTUAL_COUNTED_CONCURRENCY": 1,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": true,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-A1",
+          "AGENT": "atlas"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CONSULT",
+          "ACTOR_ROLE": "atlas",
+          "SESSION_REF": "SYN-A1",
+          "CONSULTATION_NUMBER": 1,
+          "EVIDENCE_IDS": []
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "atlas",
+          "ACTION": "PLAN",
+          "CHILD_REF": "SYN-A1"
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-A1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-A1"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-A1",
+          "RESULT_ID": "SYN-RESULT-A1"
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "AGENT": "kovan"
+        },
+        {
+          "ORDER": 7,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kovan",
+          "ACTION": "IMPLEMENT",
+          "CHILD_REF": "SYN-W1"
+        },
+        {
+          "ORDER": 8,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 9,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 10,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-T1",
+          "AGENT": "nox"
+        },
+        {
+          "ORDER": 11,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "nox",
+          "ACTION": "TEST",
+          "CHILD_REF": "SYN-T1"
+        },
+        {
+          "ORDER": 12,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-T1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-T1"
+        },
+        {
+          "ORDER": 13,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-T1",
+          "RESULT_ID": "SYN-RESULT-T1"
+        },
+        {
+          "ORDER": 14,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-V1",
+          "AGENT": "vera"
+        },
+        {
+          "ORDER": 15,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "vera",
+          "ACTION": "REVIEW",
+          "CHILD_REF": "SYN-V1"
+        },
+        {
+          "ORDER": 16,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-V1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-V1"
+        },
+        {
+          "ORDER": 17,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-V1",
+          "RESULT_ID": "SYN-RESULT-V1"
+        },
+        {
+          "ORDER": 19,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "Synthetic dependency example only. Supplied boundaries are already adequate, so Orin is not activated; a positive Orin qualification is not established here. No native sessions or production feature are claimed."
+    },
+    {
+      "TRACE_ID": "C",
+      "SCENARIO": "default",
+      "CASE_ID": "C",
+      "REQUEST_CLASS": "OBVIOUS_FUNCTIONAL_BUG",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "kovan"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "kovan"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-W1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "kovan",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "obvious-cart-defect",
+          "WRITE_PATHS": [
+            "fixtures/obvious/cart.py"
+          ]
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 1,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 1,
+      "NEGATIVE_CONTROLS": {
+        "veyra": 0,
+        "orin": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "kael",
+            "ACTION": "ROUTE"
+          },
+          {
+            "ROLE": "kovan",
+            "ACTION": "IMPLEMENT"
+          },
+          {
+            "ROLE": "kovan",
+            "ACTION": "TEST"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "localized arithmetic correction is tested after implementation",
+        "OBSERVED_RESULT": "localized arithmetic correction is tested after implementation",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_ACCEPTED_ARGUS_ZERO",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 1,
+        "ACTUAL_COUNTED_CONCURRENCY": 1,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": true,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "AGENT": "kovan"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ROUTE"
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kovan",
+          "ACTION": "IMPLEMENT",
+          "CHILD_REF": "SYN-W1"
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kovan",
+          "ACTION": "TEST",
+          "CHILD_REF": "SYN-W1"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 7,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "The included cart fixture remains intentionally incorrect until a future fresh-root case; its failing test is not run by this offline validator."
+    },
+    {
+      "TRACE_ID": "D",
+      "SCENARIO": "default",
+      "CASE_ID": "D",
+      "REQUEST_CLASS": "NONTRIVIAL_FUNCTIONAL_BUG",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "argus",
+        "veyra"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "argus",
+        "veyra"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-R1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "argus",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "functional-diagnosis",
+          "WRITE_PATHS": []
+        },
+        {
+          "TRACE_REF": "SYN-W1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "veyra",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "bounded-contract-evidence",
+          "WRITE_PATHS": []
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 1,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 2,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 2,
+      "NEGATIVE_CONTROLS": {
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "veyra",
+            "ACTION": "READ_EVIDENCE"
+          },
+          {
+            "ROLE": "argus",
+            "ACTION": "DIAGNOSE_FUNCTIONAL"
+          },
+          {
+            "ROLE": "kael",
+            "ACTION": "ASK_USER"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [
+        {
+          "BEFORE": "SYN-W1:RESULT",
+          "AFTER": "SYN-R1:CONSULT:2"
+        }
+      ],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "No discriminating input contract is present; ask whether subtotal includes or excludes shipping.",
+        "OBSERVED_RESULT": "No discriminating input contract is present; ask whether subtotal includes or excludes shipping.",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 1,
+      "FINAL_OUTCOME": "NEEDS_USER_INPUT",
+      "ROUTING_RESULT": "SYNTHETIC_SAME_SESSION_FOLLOWUP_THEN_MINIMAL_USER_QUESTION",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 0,
+        "ACTUAL_COUNTED_CONCURRENCY": 2,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": true,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-R1",
+          "AGENT": "argus"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CONSULT",
+          "ACTOR_ROLE": "argus",
+          "SESSION_REF": "SYN-R1",
+          "CONSULTATION_NUMBER": 1,
+          "EVIDENCE_IDS": []
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "EVIDENCE_REQUEST",
+          "ACTOR_ROLE": "argus",
+          "SESSION_REF": "SYN-R1",
+          "WORKER_REF": "SYN-W1",
+          "EVIDENCE_IDS": [
+            "SYN-E1"
+          ],
+          "DISCRIMINATES": [
+            "fixture_has_discriminator",
+            "fixture_has_no_discriminator"
+          ]
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "AGENT": "veyra"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "veyra",
+          "ACTION": "READ_EVIDENCE",
+          "CHILD_REF": "SYN-W1"
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "EVIDENCE_PRODUCED",
+          "ACTOR_ROLE": "veyra",
+          "CHILD_REF": "SYN-W1",
+          "EVIDENCE_IDS": [
+            "SYN-E1"
+          ],
+          "DISTINGUISHING_FACT": "The ambiguous fixture supplies no discriminating provenance, so it does not establish whether subtotal already includes shipping.",
+          "DISCRIMINATES": [
+            "fixture_has_discriminator",
+            "fixture_has_no_discriminator"
+          ]
+        },
+        {
+          "ORDER": 7,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "EVIDENCE_DELIVERED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "EVIDENCE_IDS": [
+            "SYN-E1"
+          ]
+        },
+        {
+          "ORDER": 8,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 9,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "RESULT_ID": "SYN-RESULT-W1",
+          "EVIDENCE_IDS": [
+            "SYN-E1"
+          ]
+        },
+        {
+          "ORDER": 10,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CONSULT",
+          "ACTOR_ROLE": "argus",
+          "SESSION_REF": "SYN-R1",
+          "CONSULTATION_NUMBER": 2,
+          "EVIDENCE_IDS": [
+            "SYN-E1"
+          ]
+        },
+        {
+          "ORDER": 11,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "argus",
+          "ACTION": "DIAGNOSE_FUNCTIONAL",
+          "CHILD_REF": "SYN-R1"
+        },
+        {
+          "ORDER": 12,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-R1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-R1"
+        },
+        {
+          "ORDER": 13,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-R1",
+          "RESULT_ID": "SYN-RESULT-R1"
+        },
+        {
+          "ORDER": 14,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ASK_USER"
+        },
+        {
+          "ORDER": 15,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "USER_QUESTION",
+          "ACTOR_ROLE": "kael",
+          "QUESTION_ID": "SYN-Q-D1",
+          "BOUNDED": true,
+          "QUESTION": "Does the input contract define subtotal as already including shipping, or as excluding shipping?"
+        },
+        {
+          "ORDER": 16,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "NEEDS_USER_INPUT"
+        }
+      ],
+      "NOTES": "Synthetic path preserves the fixture’s ambiguity: the new fact is absence of discriminating provenance, so Argus does not invent a diagnosis and Kael asks the smallest binary question."
+    },
+    {
+      "TRACE_ID": "E",
+      "SCENARIO": "default",
+      "CASE_ID": "E",
+      "REQUEST_CLASS": "SECURITY_BUG",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "talos"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "talos"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-R1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "talos",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "security-boundary-classification",
+          "WRITE_PATHS": []
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 1,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 1,
+      "NEGATIVE_CONTROLS": {
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "kael",
+            "ACTION": "ROUTE"
+          },
+          {
+            "ROLE": "talos",
+            "ACTION": "DIAGNOSE_SECURITY"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "bounded security diagnosis; no exploit or implementation",
+        "OBSERVED_RESULT": "bounded security diagnosis; no exploit or implementation",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_ACCEPTED_TALOS_ONLY",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 0,
+        "ACTUAL_COUNTED_CONCURRENCY": 1,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": true,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-R1",
+          "AGENT": "talos"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CONSULT",
+          "ACTOR_ROLE": "talos",
+          "SESSION_REF": "SYN-R1",
+          "CONSULTATION_NUMBER": 1,
+          "EVIDENCE_IDS": []
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ROUTE"
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "talos",
+          "ACTION": "DIAGNOSE_SECURITY",
+          "CHILD_REF": "SYN-R1"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-R1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-R1"
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-R1",
+          "RESULT_ID": "SYN-RESULT-R1"
+        },
+        {
+          "ORDER": 7,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "Synthetic gate illustration, not a finding about any real security boundary."
+    },
+    {
+      "TRACE_ID": "F",
+      "SCENARIO": "default",
+      "CASE_ID": "F",
+      "REQUEST_CLASS": "OPERATIONAL_TOOLING_ISSUE",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael"
+      ],
+      "CHILD_SESSIONS": [],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 0,
+      "NEGATIVE_CONTROLS": {
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "kael",
+            "ACTION": "ROUTE"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "bounded tooling containment, not bug diagnosis",
+        "OBSERVED_RESULT": "bounded tooling containment, not bug diagnosis",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_CONTAINMENT_ONLY",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 0,
+        "ACTUAL_COUNTED_CONCURRENCY": 0,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": true,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ROUTE"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "OPERATIONAL_RESPONSE",
+          "ACTOR_ROLE": "kael",
+          "CLASSIFICATION": "TOOLING_ONLY",
+          "SUGGESTION": "Use the documented test-runner command or request environment setup; do not install or classify a product bug.",
+          "INSTALL_ATTEMPTED": false,
+          "PRODUCT_BUG_ESTABLISHED": false
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "Synthetic contract response to the prompt premise only: no command was run, no runner failure was observed, and no install or product-bug claim is made."
+    },
+    {
+      "TRACE_ID": "G",
+      "SCENARIO": "default",
+      "CASE_ID": "G",
+      "REQUEST_CLASS": "HARD_FLAKY_DIAGNOSIS",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "nox",
+        "thales",
+        "veyra"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "nox",
+        "thales",
+        "veyra"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-N0",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "nox",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "fixed-flaky-observation-capture",
+          "WRITE_PATHS": []
+        },
+        {
+          "TRACE_REF": "SYN-R1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "thales",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "bounded-uncertainty-diagnosis",
+          "WRITE_PATHS": []
+        },
+        {
+          "TRACE_REF": "SYN-W1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "veyra",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "fixed-sequence-source-evidence",
+          "WRITE_PATHS": []
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 1,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 1,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 2,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 2,
+      "NEGATIVE_CONTROLS": {
+        "orin": 0,
+        "kovan": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "nox",
+            "ACTION": "TEST"
+          },
+          {
+            "ROLE": "veyra",
+            "ACTION": "READ_EVIDENCE"
+          },
+          {
+            "ROLE": "thales",
+            "ACTION": "DIAGNOSE_UNCERTAINTY"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [
+        {
+          "BEFORE": "SYN-N0:RESULT",
+          "AFTER": "SYN-R1"
+        },
+        {
+          "BEFORE": "SYN-W1:RESULT",
+          "AFTER": "SYN-R1:CONSULT:2"
+        }
+      ],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "one bounded same-session continuation, then calibrated terminal uncertainty",
+        "OBSERVED_RESULT": "one bounded same-session continuation, then calibrated terminal uncertainty",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_ACCEPTED_SAME_SESSION_FOLLOWUP",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 0,
+        "ACTUAL_COUNTED_CONCURRENCY": 2,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": true,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-N0",
+          "AGENT": "nox"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "nox",
+          "ACTION": "TEST",
+          "CHILD_REF": "SYN-N0"
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "EVIDENCE_DELIVERED",
+          "ACTOR_ROLE": "nox",
+          "CHILD_REF": "SYN-N0",
+          "EVIDENCE_IDS": [
+            "SYN-OBS1"
+          ],
+          "DISTINGUISHING_FACT": "The original fixed observation sequence for the same input is PASS, TIMEOUT, PASS."
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-N0",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-N0"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-N0",
+          "RESULT_ID": "SYN-RESULT-N0",
+          "EVIDENCE_IDS": [
+            "SYN-OBS1"
+          ]
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-R1",
+          "AGENT": "thales"
+        },
+        {
+          "ORDER": 7,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CONSULT",
+          "ACTOR_ROLE": "thales",
+          "SESSION_REF": "SYN-R1",
+          "CONSULTATION_NUMBER": 1,
+          "EVIDENCE_IDS": [
+            "SYN-OBS1"
+          ]
+        },
+        {
+          "ORDER": 8,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "EVIDENCE_REQUEST",
+          "ACTOR_ROLE": "thales",
+          "SESSION_REF": "SYN-R1",
+          "WORKER_REF": "SYN-W1",
+          "EVIDENCE_IDS": [
+            "SYN-E1"
+          ],
+          "DISCRIMINATES": [
+            "deterministic_input_specific_failure",
+            "random_nondeterminism"
+          ]
+        },
+        {
+          "ORDER": 9,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "AGENT": "veyra"
+        },
+        {
+          "ORDER": 10,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "veyra",
+          "ACTION": "READ_EVIDENCE",
+          "CHILD_REF": "SYN-W1"
+        },
+        {
+          "ORDER": 11,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "EVIDENCE_PRODUCED",
+          "ACTOR_ROLE": "veyra",
+          "CHILD_REF": "SYN-W1",
+          "EVIDENCE_IDS": [
+            "SYN-E1"
+          ],
+          "DISTINGUISHING_FACT": "The fixture explicitly sets randomized=false and network=false, adding source provenance beyond the result sequence.",
+          "DISCRIMINATES": [
+            "deterministic_input_specific_failure",
+            "random_nondeterminism"
+          ]
+        },
+        {
+          "ORDER": 12,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "EVIDENCE_DELIVERED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "EVIDENCE_IDS": [
+            "SYN-E1"
+          ]
+        },
+        {
+          "ORDER": 13,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 14,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "RESULT_ID": "SYN-RESULT-W1",
+          "EVIDENCE_IDS": [
+            "SYN-E1"
+          ]
+        },
+        {
+          "ORDER": 15,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CONSULT",
+          "ACTOR_ROLE": "thales",
+          "SESSION_REF": "SYN-R1",
+          "CONSULTATION_NUMBER": 2,
+          "EVIDENCE_IDS": [
+            "SYN-E1"
+          ]
+        },
+        {
+          "ORDER": 16,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "thales",
+          "ACTION": "DIAGNOSE_UNCERTAINTY",
+          "CHILD_REF": "SYN-R1"
+        },
+        {
+          "ORDER": 17,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-R1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-R1"
+        },
+        {
+          "ORDER": 18,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-R1",
+          "RESULT_ID": "SYN-RESULT-R1"
+        },
+        {
+          "ORDER": 19,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "The flaky fixture is a fixed contradictory sequence; this trace contains no random retry or runtime observation."
+    },
+    {
+      "TRACE_ID": "H",
+      "SCENARIO": "default",
+      "CASE_ID": "H",
+      "REQUEST_CLASS": "THIRD_PARTY_BUG",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "veyra"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "veyra"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-W1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "veyra",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "third-party-version-and-config-evidence",
+          "WRITE_PATHS": []
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 1,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 1,
+      "NEGATIVE_CONTROLS": {
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "veyra",
+            "ACTION": "READ_EVIDENCE"
+          },
+          {
+            "ROLE": "kael",
+            "ACTION": "ROUTE"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "bounded third-party evidence with no unapproved patch, vendor, or fork",
+        "OBSERVED_RESULT": "bounded third-party evidence with no unapproved patch, vendor, or fork",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_CONTAINMENT_LADDER",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 0,
+        "ACTUAL_COUNTED_CONCURRENCY": 1,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": true,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "AGENT": "veyra"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "veyra",
+          "ACTION": "READ_EVIDENCE",
+          "CHILD_REF": "SYN-W1"
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ROUTE"
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "No vendor, fork, or upstream patch was attempted; this is a synthetic decision path only."
+    },
+    {
+      "TRACE_ID": "I",
+      "SCENARIO": "explicit_intent",
+      "CASE_ID": "I",
+      "REQUEST_CLASS": "OPTIMIZATION_INTENT_AND_NEGATIVE_CONTROL",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "helios"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "helios"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-H1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "helios",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "explicit-optimization-feasibility",
+          "WRITE_PATHS": []
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 1,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 1,
+      "NEGATIVE_CONTROLS": {
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "kael",
+            "ACTION": "ROUTE"
+          },
+          {
+            "ROLE": "helios",
+            "ACTION": "OPTIMIZE_ADVISE"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "bounded proposal surfaced; implementation stopped pending approval",
+        "OBSERVED_RESULT": "bounded proposal surfaced; implementation stopped pending approval",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "STOP_FOR_USER_APPROVAL",
+      "ROUTING_RESULT": "SYNTHETIC_APPROVAL_BARRIER",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 0,
+        "ACTUAL_COUNTED_CONCURRENCY": 1,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": true,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": true,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-H1",
+          "AGENT": "helios"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CONSULT",
+          "ACTOR_ROLE": "helios",
+          "SESSION_REF": "SYN-H1",
+          "CONSULTATION_NUMBER": 1,
+          "EVIDENCE_IDS": []
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ROUTE"
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "helios",
+          "ACTION": "OPTIMIZE_ADVISE",
+          "CHILD_REF": "SYN-H1"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "PROPOSAL",
+          "ACTOR_ROLE": "helios",
+          "APPROVAL_REQUIRED": true
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "APPROVAL_GATE",
+          "ACTOR_ROLE": "kael",
+          "DECISION": "PENDING"
+        },
+        {
+          "ORDER": 7,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-H1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-H1"
+        },
+        {
+          "ORDER": 8,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-H1",
+          "RESULT_ID": "SYN-RESULT-H1"
+        },
+        {
+          "ORDER": 9,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "STOP_FOR_USER_APPROVAL"
+        }
+      ],
+      "NOTES": "Synthetic explicit-intent positive. No measurements, implementation, or approval are claimed."
+    },
+    {
+      "TRACE_ID": "I_FACT_ONLY",
+      "SCENARIO": "fact_only",
+      "CASE_ID": "I",
+      "REQUEST_CLASS": "OPTIMIZATION_INTENT_AND_NEGATIVE_CONTROL",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael"
+      ],
+      "CHILD_SESSIONS": [],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 0,
+      "NEGATIVE_CONTROLS": {
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "kael",
+            "ACTION": "ROUTE"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "fact-only negative; no optimization workflow",
+        "OBSERVED_RESULT": "fact-only negative; no optimization workflow",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_HELIOS_ZERO",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 0,
+        "ACTUAL_COUNTED_CONCURRENCY": 0,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ROUTE"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "A performance fact without an explicit request is not optimization intent; synthetic count zero is not a live observation."
+    },
+    {
+      "TRACE_ID": "J",
+      "SCENARIO": "explicit_planning",
+      "CASE_ID": "J",
+      "REQUEST_CLASS": "EXPLICIT_PLANNING_AND_TRIVIAL_NEGATIVE_CONTROL",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "atlas"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "atlas"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-A1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "atlas",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "explicit-plan",
+          "WRITE_PATHS": []
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 1,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 1,
+      "NEGATIVE_CONTROLS": {
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "kael",
+            "ACTION": "ROUTE"
+          },
+          {
+            "ROLE": "atlas",
+            "ACTION": "PLAN"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "smallest-sufficient plan only",
+        "OBSERVED_RESULT": "smallest-sufficient plan only",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_EXPLICIT_PLAN",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 0,
+        "ACTUAL_COUNTED_CONCURRENCY": 1,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": true,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-A1",
+          "AGENT": "atlas"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CONSULT",
+          "ACTOR_ROLE": "atlas",
+          "SESSION_REF": "SYN-A1",
+          "CONSULTATION_NUMBER": 1,
+          "EVIDENCE_IDS": []
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ROUTE"
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "atlas",
+          "ACTION": "PLAN",
+          "CHILD_REF": "SYN-A1"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-A1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-A1"
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-A1",
+          "RESULT_ID": "SYN-RESULT-A1"
+        },
+        {
+          "ORDER": 7,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "Explicit planning is synthetic; no command, scheduler, or new role was added."
+    },
+    {
+      "TRACE_ID": "J_TRIVIAL",
+      "SCENARIO": "trivial",
+      "CASE_ID": "J",
+      "REQUEST_CLASS": "EXPLICIT_PLANNING_AND_TRIVIAL_NEGATIVE_CONTROL",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "kovan"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "kovan"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-W1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "kovan",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "trivial-message-edit",
+          "WRITE_PATHS": [
+            "fixtures/simple/message.txt"
+          ]
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 1,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 1,
+      "NEGATIVE_CONTROLS": {
+        "veyra": 0,
+        "orin": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "kael",
+            "ACTION": "ROUTE"
+          },
+          {
+            "ROLE": "kovan",
+            "ACTION": "IMPLEMENT"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "trivial edit without Atlas planning",
+        "OBSERVED_RESULT": "trivial edit without Atlas planning",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_ATLAS_ZERO",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 1,
+        "ACTUAL_COUNTED_CONCURRENCY": 1,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "AGENT": "kovan"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ROUTE"
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kovan",
+          "ACTION": "IMPLEMENT",
+          "CHILD_REF": "SYN-W1"
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "The simple edit remains a control; Atlas count is synthetically zero."
+    },
+    {
+      "TRACE_ID": "K_FAST",
+      "SCENARIO": "fast",
+      "CASE_ID": "K",
+      "REQUEST_CLASS": "FAST_VS_NORMAL",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "kovan",
+        "kovan",
+        "kovan",
+        "kovan"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "kovan",
+        "kovan",
+        "kovan",
+        "kovan"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-W1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "kovan",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "fast-write-one",
+          "WRITE_PATHS": [
+            "fixtures/fast/one.txt"
+          ]
+        },
+        {
+          "TRACE_REF": "SYN-W2",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "kovan",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "fast-write-two",
+          "WRITE_PATHS": [
+            "fixtures/fast/two.txt"
+          ]
+        },
+        {
+          "TRACE_REF": "SYN-W3",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "kovan",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "fast-write-three",
+          "WRITE_PATHS": [
+            "fixtures/fast/three.txt"
+          ]
+        },
+        {
+          "TRACE_REF": "SYN-W4",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "kovan",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "fast-write-four",
+          "WRITE_PATHS": [
+            "fixtures/fast/four.txt"
+          ]
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 4,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 4,
+      "NEGATIVE_CONTROLS": {
+        "veyra": 0,
+        "orin": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "kael",
+            "ACTION": "ROUTE"
+          },
+          {
+            "ROLE": "kovan",
+            "ACTION": "IMPLEMENT"
+          },
+          {
+            "ROLE": "kovan",
+            "ACTION": "IMPLEMENT"
+          },
+          {
+            "ROLE": "kovan",
+            "ACTION": "IMPLEMENT"
+          },
+          {
+            "ROLE": "kovan",
+            "ACTION": "IMPLEMENT"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "four independent scoped writes with all results consumed",
+        "OBSERVED_RESULT": "four independent scoped writes with all results consumed",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_FAST_FOUR",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "FAST",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 4,
+        "ACTUAL_COUNTED_CONCURRENCY": 4,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": true,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": true,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "AGENT": "kovan"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W2",
+          "AGENT": "kovan"
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W3",
+          "AGENT": "kovan"
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W4",
+          "AGENT": "kovan"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ROUTE"
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kovan",
+          "ACTION": "IMPLEMENT",
+          "CHILD_REF": "SYN-W1",
+          "TARGET": "fixtures/fast/one.txt"
+        },
+        {
+          "ORDER": 7,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kovan",
+          "ACTION": "IMPLEMENT",
+          "CHILD_REF": "SYN-W2",
+          "TARGET": "fixtures/fast/two.txt"
+        },
+        {
+          "ORDER": 8,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kovan",
+          "ACTION": "IMPLEMENT",
+          "CHILD_REF": "SYN-W3",
+          "TARGET": "fixtures/fast/three.txt"
+        },
+        {
+          "ORDER": 9,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kovan",
+          "ACTION": "IMPLEMENT",
+          "CHILD_REF": "SYN-W4",
+          "TARGET": "fixtures/fast/four.txt"
+        },
+        {
+          "ORDER": 10,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 11,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W2",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W2"
+        },
+        {
+          "ORDER": 12,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W3",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W3"
+        },
+        {
+          "ORDER": 13,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W4",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W4"
+        },
+        {
+          "ORDER": 14,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 15,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W2",
+          "RESULT_ID": "SYN-RESULT-W2"
+        },
+        {
+          "ORDER": 16,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W3",
+          "RESULT_ID": "SYN-RESULT-W3"
+        },
+        {
+          "ORDER": 17,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W4",
+          "RESULT_ID": "SYN-RESULT-W4"
+        },
+        {
+          "ORDER": 18,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "The four simultaneous writers and counts are synthetic event arithmetic, not scheduler measurements. The fixture tree need not contain these example paths."
+    },
+    {
+      "TRACE_ID": "K_NORMAL",
+      "SCENARIO": "normal",
+      "CASE_ID": "K",
+      "REQUEST_CLASS": "FAST_VS_NORMAL",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "kovan",
+        "kovan"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "kovan",
+        "kovan"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-W1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "kovan",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "normal-write-one",
+          "WRITE_PATHS": [
+            "fixtures/normal/one.txt"
+          ]
+        },
+        {
+          "TRACE_REF": "SYN-W2",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "kovan",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "normal-write-two",
+          "WRITE_PATHS": [
+            "fixtures/normal/two.txt"
+          ]
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 2,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 2,
+      "NEGATIVE_CONTROLS": {
+        "veyra": 0,
+        "orin": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "kael",
+            "ACTION": "ROUTE"
+          },
+          {
+            "ROLE": "kovan",
+            "ACTION": "IMPLEMENT"
+          },
+          {
+            "ROLE": "kovan",
+            "ACTION": "IMPLEMENT"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "two independent scoped writes with both results consumed",
+        "OBSERVED_RESULT": "two independent scoped writes with both results consumed",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_NORMAL_TWO",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "NORMAL",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 2,
+        "ACTUAL_COUNTED_CONCURRENCY": 2,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": true,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": true,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "AGENT": "kovan"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W2",
+          "AGENT": "kovan"
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ROUTE"
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kovan",
+          "ACTION": "IMPLEMENT",
+          "CHILD_REF": "SYN-W1"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kovan",
+          "ACTION": "IMPLEMENT",
+          "CHILD_REF": "SYN-W2"
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 7,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W2",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W2"
+        },
+        {
+          "ORDER": 8,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 9,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W2",
+          "RESULT_ID": "SYN-RESULT-W2"
+        },
+        {
+          "ORDER": 10,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "Synthetic NORMAL comparison; no claim of observed native concurrency."
+    },
+    {
+      "TRACE_ID": "L_NORMAL",
+      "SCENARIO": "normal_project_task",
+      "CASE_ID": "L",
+      "REQUEST_CLASS": "MAINTENANCE_BOUNDARY",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "KAEL_ROOT",
+      "EXPECTED_ROUTE": [
+        "kael",
+        "kovan"
+      ],
+      "ACTUAL_ROUTE": [
+        "kael",
+        "kovan"
+      ],
+      "CHILD_SESSIONS": [
+        {
+          "TRACE_REF": "SYN-W1",
+          "NATIVE_SESSION_ID": null,
+          "AGENT": "kovan",
+          "PARENT_AGENT": "kael",
+          "EXECUTION_STATE": "SUCCEEDED",
+          "WORK_ID": "normal-project-fixture-edit",
+          "WRITE_PATHS": [
+            "fixtures/simple/message.txt"
+          ]
+        }
+      ],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 1,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 1,
+      "NEGATIVE_CONTROLS": {
+        "veyra": 0,
+        "orin": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "kael",
+            "ACTION": "ROUTE"
+          },
+          {
+            "ROLE": "kovan",
+            "ACTION": "IMPLEMENT"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "normal project work does not invoke Aegis",
+        "OBSERVED_RESULT": "normal project work does not invoke Aegis",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_AEGIS_ZERO",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 1,
+        "ACTUAL_COUNTED_CONCURRENCY": 1,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": false
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_START",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "AGENT": "kovan"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kael",
+          "ACTION": "ROUTE"
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "kovan",
+          "ACTION": "IMPLEMENT",
+          "CHILD_REF": "SYN-W1"
+        },
+        {
+          "ORDER": 4,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "CHILD_TERMINAL",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "STATE": "SUCCEEDED",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 5,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "RESULT_CONSUMED",
+          "ACTOR_ROLE": "kael",
+          "CHILD_REF": "SYN-W1",
+          "RESULT_ID": "SYN-RESULT-W1"
+        },
+        {
+          "ORDER": 6,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "kael",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "Synthetic normal-project path. No Aegis child was created or invoked."
+    },
+    {
+      "TRACE_ID": "L_EXPLICIT_MAINTAIN",
+      "SCENARIO": "explicit_user_maintain",
+      "CASE_ID": "L",
+      "REQUEST_CLASS": "MAINTENANCE_BOUNDARY",
+      "EVIDENCE_CLASS": "SYNTHETIC_TRACE",
+      "ROOT_SESSION_ID": null,
+      "ROUTE_MODE": "USER_MAINTAIN_ROOT",
+      "EXPECTED_ROUTE": [
+        "user",
+        "/maintain",
+        "aegis"
+      ],
+      "ACTUAL_ROUTE": [
+        "user",
+        "/maintain",
+        "aegis"
+      ],
+      "CHILD_SESSIONS": [],
+      "CONSULTATION_COUNTS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 1
+      },
+      "MAX_SIMULTANEOUS_CHILDREN": 0,
+      "NEGATIVE_CONTROLS": {
+        "kael": 0,
+        "veyra": 0,
+        "orin": 0,
+        "kovan": 0,
+        "nox": 0,
+        "vera": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0
+      },
+      "ROLE_PURITY": {
+        "OBSERVED_ACTIONS": [
+          {
+            "ROLE": "aegis",
+            "ACTION": "MAINTAIN"
+          }
+        ],
+        "VIOLATIONS": []
+      },
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {
+        "EXPECTED_RESULT": "only user → /maintain enters Aegis outside Kael child routing",
+        "OBSERVED_RESULT": "only user → /maintain enters Aegis outside Kael child routing",
+        "MATCHES": true,
+        "UNKNOWN": false
+      },
+      "COMPLETION_GATE": {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": true,
+        "QUESTION_BARRIER_SATISFIED": true
+      },
+      "USER_QUESTION_COUNT": 0,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "SYNTHETIC_EXPLICIT_USER_ENTRY_ONLY",
+      "OPERATIONAL_PROXIES": {
+        "PROFILE": "UNSPECIFIED",
+        "USEFUL_INDEPENDENT_WRITER_COUNT": 0,
+        "ACTUAL_COUNTED_CONCURRENCY": 0,
+        "RETRY_COUNT": 0,
+        "WRITER_PATHS_UNIQUE": true,
+        "APPROVAL_REQUIRED": false,
+        "APPROVAL_GRANTED": false,
+        "IMPLEMENTATION_AFTER_APPROVAL": false,
+        "WALL_CLOCK_MS": null,
+        "MEASURED": false
+      },
+      "GATE_FACTS": {
+        "EXPLICIT_OPTIMIZATION_INTENT": false,
+        "EXPLICIT_PLANNING_INTENT": false,
+        "COMPLEX_FEATURE": false,
+        "OBVIOUS_FUNCTIONAL_CAUSE": false,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": false,
+        "SECURITY_BOUNDARY": false,
+        "OPERATIONAL_TOOLING_FAILURE": false,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": false,
+        "THIRD_PARTY_BUG": false,
+        "FAST_PROFILE_REQUESTED": false,
+        "NORMAL_PROFILE_REQUESTED": false,
+        "MAINTENANCE_ENTRY_EXPLICIT": true
+      },
+      "EVIDENCE_PROVENANCE": {
+        "CLASS": "SYNTHETIC_TRACE",
+        "SOURCE": "hand-authored deterministic illustration",
+        "NATIVE_ROOT_SESSION_ID": null,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "synthetic",
+        "OBSERVED_AT": null,
+        "USER_REPORTED": false,
+        "FRESH_ROOT_CONFIRMED": false
+      },
+      "EVENTS": [
+        {
+          "ORDER": 1,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "MAINTENANCE_ENTRY",
+          "ACTOR_ROLE": "user",
+          "COMMAND": "/maintain",
+          "TARGET_ROLE": "aegis",
+          "ENTRY_ID": "SYN-ENTRY-L1"
+        },
+        {
+          "ORDER": 2,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "ACTION",
+          "ACTOR_ROLE": "aegis",
+          "ACTION": "MAINTAIN",
+          "ENTRY_REF": "SYN-ENTRY-L1"
+        },
+        {
+          "ORDER": 3,
+          "ORDER_BASIS": "synthetic",
+          "KIND": "FINAL_OUTCOME",
+          "ACTOR_ROLE": "aegis",
+          "VALUE": "SUCCEEDED"
+        }
+      ],
+      "NOTES": "This is an authored policy illustration of the explicit entry boundary, not an actual /maintain invocation or runtime observation."
+    }
+  ]
+}

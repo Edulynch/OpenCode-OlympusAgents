@@ -76,7 +76,7 @@ Existing `/maintain` explicitly enters the hidden Aegis executor for its deliver
 |---|---|---|
 | 0 — Foundation | **SHIPPED** | OpenCode V2 runtime, preflight/discovery, completion and external-work gates, HUD, trusted-project execution, Maintenance Plane, NORMAL/FAST up to four. |
 | 1 — Adaptive Concurrency finalization | **IN VALIDATION** | NORMAL 4 / FAST 6 candidate; qualify and review before merging. Not on `master`. |
-| 2 — Current Sorin baseline qualification | **PLANNED** | Explicit invocation, automatic Diagnostic Gate, and negative control where Sorin must **not** activate. |
+| 2 — Current Sorin baseline qualification | **SUPERSEDED** | The Sorin-specific qualification plan was superseded by shipped Phase 4 Thales evolution; no Sorin agent or session is to be resurrected. Evidence: the Thales evolution entry in `CHANGELOG.md` and the Phase 4 migration qualification in `tests/thales/`. |
 | 3 — Role Purity + Iterative Evidence | **SHIPPED** | Kael-mediated Role Purity, same-session Sorin evidence follow-up, no-progress stop, completion ownership, Issue #1 reconciliation and Issue #2 Maintenance safety. Static/synthetic/full regression passed; user-executed live Cases A and B passed. No third automatic Sorin consultation. |
 | 4 — Thales evolution | **SHIPPED** | Sorin visible identity → Thales The Sage; Sol XHigh deep-escalation role, user-executed live routing and deterministic negative control passed. |
 | 5 — Atlas The Planner | **SHIPPED** | Sol High, smallest sufficient execution plan; no implementation/discovery ownership; gated use. User-executed live planning and negative control passed. |
@@ -85,7 +85,7 @@ Existing `/maintain` explicitly enters the hidden Aegis executor for its deliver
 | 8 — Helios The Optimizer | **SHIPPED** | Explicit-only feasibility/proposal, mandatory user approval, before/after validation; user-executed live cases A and B passed. |
 | 9 — Aegis evolution | **SHIPPED on OpenCode; Codex GAP** | Hidden Aegis on Luna Max accepts the explicit `/maintain` command's task declaration immediately, without repository ownership/provenance admission; preserves Kael/child denials, task scope, and result reconciliation. |
 | 10 — Command UX | **EXPLORATION** | Validate a small useful repertoire: candidate `/power`, `/plan`, `/fast`, `/performance`; avoid command sprawl. |
-| 11 — Integrated Routing Qualification | **PLANNED** | Fixtures: simple edit, complex feature, functional bug, security bug, operational/build issue, difficult/flaky diagnosis, third-party bug, optimization request, explicit planning, power mode, maintenance boundary. |
+| 11 — Integrated Routing Qualification | **IN VALIDATION / PARTIAL** | Deterministic A–L matrix, semantic validator and mutation negatives are in progress. Fresh-root native evidence remains pending; this phase is not SHIPPED. |
 | 12 — Cross-harness evaluation | **PLANNED** | Controlled real-project comparison; report only evidence-backed capability, quality, cost, or speed findings. |
 
 ### Phase 3 topology and live qualification — SHIPPED

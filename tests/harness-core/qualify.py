@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import importlib.util
 import os
@@ -43,7 +44,15 @@ def check(name: str, ok: bool) -> None:
     print(f"{name} PASS")
 
 
-def run_renderer(action: str, harness: str, root: Path = ROOT) -> subprocess.CompletedProcess[str]:
+def run_renderer(
+    action: str,
+    harness: str,
+    root: Path = ROOT,
+    *,
+    safe_root_read_only: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    if safe_root_read_only and action == "render" and root.resolve() == ROOT:
+        raise AssertionError("SAFE_ROOT_RENDER_FORBIDDEN")
     return subprocess.run(
         [sys.executable, str(RENDERER), action, "--harness", harness, "--root", str(root)],
         cwd=root,
@@ -60,6 +69,25 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def snapshot_outputs(paths: set[Path]) -> dict[Path, tuple[str | None, int | None]]:
+    snapshot = {}
+    for path in paths:
+        if path.is_file():
+            snapshot[path] = (digest(path), path.stat().st_mtime_ns)
+        else:
+            snapshot[path] = (None, None)
+    return snapshot
+
+
+def report_output_snapshot(label: str, snapshot: dict[Path, tuple[str | None, int | None]]) -> None:
+    for path in sorted(snapshot, key=lambda item: item.relative_to(ROOT).as_posix().casefold()):
+        sha256, mtime_ns = snapshot[path]
+        print(
+            f"{label} {path.relative_to(ROOT).as_posix()} "
+            f"sha256={sha256 or 'MISSING'} mtime_ns={mtime_ns if mtime_ns is not None else 'MISSING'}"
+        )
+
+
 def yaml_frontmatter(text: str) -> tuple[str, int] | None:
     if not text.startswith("---\n"):
         return None
@@ -69,7 +97,15 @@ def yaml_frontmatter(text: str) -> tuple[str, int] | None:
     return text[4 : 4 + closing.start()], 4 + closing.end()
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--safe-root-read-only",
+        action="store_true",
+        help="check root-generated adapters without rendering the real repository; fixture renders remain enabled",
+    )
+    args = parser.parse_args(argv)
+    safe_root_read_only = args.safe_root_read_only
     check("PYTHON_311_PLUS", sys.version_info >= (3, 11))
     with (ROOT / "olympus" / "core" / "models.toml").open("rb") as stream:
         models = tomllib.load(stream)
@@ -244,17 +280,54 @@ def main() -> int:
         raise AssertionError("renderer could not be imported")
     renderer = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(renderer)
-    managed = renderer.outputs_for(ROOT, "all")
-    before = {path: (digest(path), path.stat().st_mtime_ns) for path in managed}
-    first = run_renderer("render", "all")
-    check("RENDER_ALL_DETERMINISTIC", first.returncode == 0 and "wrote 0 changed output(s)" in first.stdout)
-    second = run_renderer("render", "all")
-    check("SECOND_RENDER_ZERO_DIFF", second.returncode == 0 and "wrote 0 changed output(s)" in second.stdout)
-    check("RENDER_OPENCODE_COMMAND", run_renderer("check", "opencode").returncode == 0)
-    check("RENDER_CODEX_COMMAND", run_renderer("check", "codex").returncode == 0)
-    readonly = run_renderer("check", "all")
-    after = {path: (digest(path), path.stat().st_mtime_ns) for path in managed}
-    check("CHECK_MODE_READ_ONLY", readonly.returncode == 0 and before == after and "read-only" in readonly.stdout)
+    managed = set(renderer.outputs_for(ROOT, "all"))
+    before = snapshot_outputs(managed)
+    if safe_root_read_only:
+        shared_capabilities = ROOT / "docs" / "HARNESS-CAPABILITIES.md"
+        print(f"ROOT_MANAGED_OUTPUT_COUNT {len(managed)}")
+        report_output_snapshot("ROOT_MANAGED_OUTPUT_BEFORE", before)
+        check(
+            "SAFE_ROOT_ALL_OUTPUT_COVERAGE",
+            len(managed) == 29 and shared_capabilities in managed,
+        )
+        root_render_blocked = False
+        try:
+            run_renderer("render", "all", ROOT, safe_root_read_only=True)
+        except AssertionError as error:
+            root_render_blocked = str(error) == "SAFE_ROOT_RENDER_FORBIDDEN"
+        check("SAFE_ROOT_RENDER_GUARD", root_render_blocked)
+
+        opencode_check = run_renderer("check", "opencode", ROOT, safe_root_read_only=True)
+        if opencode_check.stdout:
+            print(opencode_check.stdout, end="" if opencode_check.stdout.endswith("\n") else "\n")
+        codex_check = run_renderer("check", "codex", ROOT, safe_root_read_only=True)
+        if codex_check.stdout:
+            print(codex_check.stdout, end="" if codex_check.stdout.endswith("\n") else "\n")
+        all_check = run_renderer("check", "all", ROOT, safe_root_read_only=True)
+        if all_check.stdout:
+            print(all_check.stdout, end="" if all_check.stdout.endswith("\n") else "\n")
+        after = snapshot_outputs(managed)
+        print(f"ROOT_MANAGED_OUTPUT_COUNT_AFTER {len(after)}")
+        report_output_snapshot("ROOT_MANAGED_OUTPUT_AFTER", after)
+        checks_succeeded = all(result.returncode == 0 for result in (opencode_check, codex_check, all_check))
+        checks_read_only = all(
+            "read-only" in result.stdout for result in (opencode_check, codex_check, all_check)
+        )
+        check("RENDER_OPENCODE_COMMAND", opencode_check.returncode == 0)
+        check("RENDER_CODEX_COMMAND", codex_check.returncode == 0)
+        check("RENDER_ALL_COMMAND", all_check.returncode == 0)
+        check("SAFE_ROOT_HASH_MTIME_UNCHANGED", before == after)
+        check("CHECK_MODE_READ_ONLY", checks_succeeded and checks_read_only and before == after)
+    else:
+        first = run_renderer("render", "all")
+        check("RENDER_ALL_DETERMINISTIC", first.returncode == 0 and "wrote 0 changed output(s)" in first.stdout)
+        second = run_renderer("render", "all")
+        check("SECOND_RENDER_ZERO_DIFF", second.returncode == 0 and "wrote 0 changed output(s)" in second.stdout)
+        check("RENDER_OPENCODE_COMMAND", run_renderer("check", "opencode").returncode == 0)
+        check("RENDER_CODEX_COMMAND", run_renderer("check", "codex").returncode == 0)
+        readonly = run_renderer("check", "all")
+        after = snapshot_outputs(managed)
+        check("CHECK_MODE_READ_ONLY", readonly.returncode == 0 and before == after and "read-only" in readonly.stdout)
 
     temp_base = Path.home() / "AppData" / "Local" / "Temp" / "opencode"
     if not temp_base.is_dir():
@@ -264,17 +337,22 @@ def main() -> int:
         shutil.copytree(ROOT / "olympus", fixture / "olympus")
         (fixture / "scripts").mkdir()
         shutil.copy2(RENDERER, fixture / "scripts" / RENDERER.name)
-        rendered = run_renderer("render", "all", fixture)
+        rendered = run_renderer("render", "all", fixture, safe_root_read_only=safe_root_read_only)
         check("FIXTURE_RENDER", rendered.returncode == 0)
+        fixture_second_render = run_renderer("render", "all", fixture, safe_root_read_only=safe_root_read_only)
+        check(
+            "FIXTURE_SECOND_RENDER_ZERO_DIFF",
+            fixture_second_render.returncode == 0 and "wrote 0 changed output(s)" in fixture_second_render.stdout,
+        )
         drifted = fixture / ".opencode" / "agents" / "kael.md"
         drifted.write_text(drifted.read_text(encoding="utf-8") + "\nmanual drift\n", encoding="utf-8")
-        drift_check = run_renderer("check", "opencode", fixture)
+        drift_check = run_renderer("check", "opencode", fixture, safe_root_read_only=safe_root_read_only)
         check("MANUAL_DRIFT_DETECTED", drift_check.returncode == 1 and "DRIFT drift: .opencode/agents/kael.md" in drift_check.stdout)
-        restored = run_renderer("render", "opencode", fixture)
+        restored = run_renderer("render", "opencode", fixture, safe_root_read_only=safe_root_read_only)
         check("DRIFT_RENDER_RESTORES_OUTPUT", restored.returncode == 0)
         missing = fixture / "CODEX.md"
         missing.unlink()
-        missing_check = run_renderer("check", "codex", fixture)
+        missing_check = run_renderer("check", "codex", fixture, safe_root_read_only=safe_root_read_only)
         check("MISSING_GENERATED_OUTPUT_DETECTED", missing_check.returncode == 1 and "DRIFT missing: CODEX.md" in missing_check.stdout)
 
     print("OLYMPUS_HARNESS_CORE_QUALIFICATION: PASS")

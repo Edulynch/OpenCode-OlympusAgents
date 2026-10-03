@@ -228,6 +228,7 @@ pwsh -NoProfile -File ./tests/aegis-recovery/qualify.ps1
 pwsh -NoProfile -File ./tests/completion-gates/qualify.ps1
 pwsh -NoProfile -File ./tests/result-reconciliation/qualify.ps1
 pwsh -NoProfile -File ./tests/maintenance-handoff/qualify.ps1
+pwsh -NoProfile -File ./tests/maintenance-handoff/qualify-fidelity.ps1
 ```
 
 `tests/maintenance-scope/qualify.ps1` checks byte-zero frontmatter in both canonical and generated files, and `tests/authority/qualify.ps1` is the live effective-agent probe that changes to this checkout and runs `opencode debug agents`. Run both after any Harness Core render has finished; do not overlap either with a process that renders/rewrites this checkout's `.opencode` outputs. This isolates only the byte/runtime-sensitive gates and does not require serializing unrelated read-only qualifications.
@@ -271,6 +272,16 @@ A missing parent tool output is **not** evidence that delegated work failed or n
 Issue #2 applies Issue #1's safety principle to the separate explicit `/maintain` handoff; it is not a duplicate of Issue #1. Track **execution** (RUNNING / TERMINAL), **result visibility** (PENDING / VISIBLE / UNAVAILABLE), and **task outcome** (only from the actual terminal Aegis result when visible) separately. An early `No tool output found` or platform error is not proof Aegis failed. An identifiable Aegis child still executing means `MAINTENANCE_RESULT_PENDING`, IN PROGRESS, wait for the original native result; do not finalize unconfirmed or retry. When the original later returns, consume it once, regardless of the earlier error. A TERMINAL / VISIBLE result of `SYNTHETIC_CONTRACT_UNVERIFIABLE` means execution completed but the substantive contract is unverifiable, not success; a result saying BLOCKED or PARTIAL retains that outcome. Native evidence positively establishing terminal failure is required for FAILED. Unknown child identity, or a known child's terminal result that remains unavailable after bounded native reconciliation, is `COMPLETION_UNCONFIRMED`, never an automatic retry of elevated work. An observably active known child must not be abandoned to finalize unconfirmed.
 
 Olympus owns Kael's interpretation and user-facing synthesis; OpenCode owns platform tool/subagent presentation. Olympus does not claim to change or suppress OpenCode's visible "Maintenance failed" badge. Whether the historical early badge persisted after terminal completion is unproven. `tests/maintenance-handoff/qualify.ps1` uses static assertions and synthetic timelines; `tests/maintenance-handoff/live-control.md` prepares a manual read-only healthy handoff, **not executed by Aegis** and not a requirement to reproduce the intermittent error.
+
+Issue #10's maintenance-specific exact-field contract uses `EXPECTED_OUTPUT`:
+Aegis preserves requested terminal field names and values, and Kael retains
+them through dependent decisions while allowing a concise additive summary.
+Missing or renamed required fields are `STRUCTURED_RESULT_INCOMPLETE`; this
+does not change Issue #1 missing-result/no-blind-retry semantics. The focused
+`tests/maintenance-handoff/qualify-fidelity.ps1` cases are synthetic and check
+canonical wording; they do not prove native Aegis-to-Kael runtime delivery.
+Keep Issue #10 open until a live Maintenance Handoff smoke verifies both the
+Aegis terminal output and the exact values available to Kael.
 
 ## Trusted-project execution
 

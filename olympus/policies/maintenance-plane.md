@@ -26,6 +26,16 @@ The user may explicitly run `/maintain` in any repository, including ordinary us
 
 Authority covers only the task delivered by the command template. Do not broaden task scope or infer permission for unrelated operations. Destructive or high-impact operations still require explicit task authorization; an operation not included in the task is not implicitly authorized. Preserve unrelated user work. No blind retry, automatic Aegis escalation, or delegation is permitted.
 
+### Exact structured task output
+
+When the authorized task specifies required terminal fields (for example, with
+`EXPECTED_OUTPUT`), preserve each required field name and its produced value
+exactly in Aegis's terminal result. A concise `SUMMARY` may accompany those
+fields, but must not replace, rename, paraphrase, or omit them. Include harmless
+additional fields when useful. Do not infer or invent a missing value; identify
+it as unavailable instead. This output-fidelity rule does not expand task scope,
+change execution/result reconciliation, or authorize a retry.
+
 ## Checkpoint and resume
 
 A runtime continuation of the same Aegis session preserves its accepted task-scoped state and original task boundaries under the same-session rule above. A checkpoint, transcript or copied command declaration cannot authorize a genuinely new Aegis execution: it must originate again through `/maintain`. An unknown/new session or unavailable accepted state fails closed immediately with `MAINTENANCE_AUTH: UNPROVEN` and `AEGIS_SCOPE: REJECTED`; stop without tools, long reasoning, authorization reconstruction or retry. A new entry without `/maintain` likewise fails closed immediately. Result reconciliation and external-process recovery evidence do not create entry authorization.

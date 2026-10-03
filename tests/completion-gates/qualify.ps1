@@ -32,6 +32,7 @@ try {
     $kael = Text '.opencode/agents/kael.md'
     $aegis = Text '.opencode/agents/aegis.md'
     $command = Text '.opencode/commands/maintain.md'
+    $maintenancePolicy = Text 'olympus/policies/maintenance-plane.md'
     $docs = Text 'docs/DEVELOPMENT.md'
     Check 'KAEL_JOIN' ($kael -match 'enumerate the required direct child' -and $kael -match 'consume each result' -and
         $kael -match 'Never declare final completion while a required direct child is non-terminal' -and
@@ -45,7 +46,9 @@ try {
         $docs -match 'No native family-wide wait|no documented family-wide wait' -and $docs -match 'session/active' -and
         $docs -match 'CLI `opencode run` exit or a root assistant response is not a session-family completion signal')
     Check 'ROUTING_BOUNDARY' ($command -match 'subagent: true' -and $command -match 'Do not delegate' -and
-        $aegis -match 'Do not invoke normal Olympus workers' -and $aegis -match 'only in response to the user.s explicit')
+        $aegis -match 'Do not invoke normal Olympus workers' -and
+        $maintenancePolicy -match 'permitted entry is user → `/maintain` → Aegis' -and
+        $maintenancePolicy -match 'Kael → Aegis DENIED; child → Aegis DENIED')
     $good = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='succeeded'; validated=$true}
     $bad = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='failed'; validated=$false}
     $missing = [pscustomobject]@{known=$false; terminal=$false; collected=$false; familyKnown=$false; inboxEmpty=$false; parentConsumed=$false; outcome=''; validated=$false}

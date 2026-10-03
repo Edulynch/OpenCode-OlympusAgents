@@ -399,6 +399,21 @@ explicit user `/maintain` invocation, not a request for Kael to route to Aegis.
 Do not reject the completed result because Aegis is absent from Kael's routable
 subagent allowlist, and do not apply the normal worker result contract to Aegis
 output.
+
+If the original `/maintain` task identifies required terminal fields (for
+example, through `EXPECTED_OUTPUT` or explicit field names), keep every required
+field name and value exactly as present in the actual terminal Aegis result
+available through all dependent Kael decisions. A concise `SUMMARY` may
+coexist, but cannot replace, rename, paraphrase, or omit a required field;
+unrequested extra fields are allowed. If a required field is missing or
+renamed, classify the structured output as `STRUCTURED_RESULT_INCOMPLETE`: do
+not infer or invent it from a summary or surrounding context, and do not mark
+the dependent acceptance fully satisfied. This is separate from execution and
+terminal outcome: consume the original result once, and never treat incomplete
+fields as failure, confirmed non-execution, or permission to retry/relaunch
+`/maintain`. This internal fidelity does not require dumping every field in the
+user-facing summary.
+
 For this explicit handoff, keep three separate facts: **execution** (RUNNING or
 TERMINAL), **result visibility** (PENDING, VISIBLE or UNAVAILABLE), and **task
 outcome** (derived only from the actual terminal Aegis result when

@@ -16,6 +16,7 @@ library only:
 ```text
 uv run --python 3.11 python tests/phase11-integrated-routing/qualify.py
 uv run --python 3.11 python -m unittest discover -s tests/phase11-integrated-routing -p "test_*.py" -v
+uv run --python 3.11 python -m unittest discover -s tests/phase11-integrated-routing/fixtures/feature -p "test_*.py" -v
 uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-only
 ```
 
@@ -24,12 +25,27 @@ completion/evidence claims, and presence-only gate markers. It exits successfull
 when the authored artifacts are sound but prints `PHASE11_QUALIFICATION:
 PARTIAL` until fresh-root native evidence is captured. The second command
 applies mutations to valid authored traces and requires the prohibited variants
-to fail. The Harness Core command checks root-generated adapters without root
-rendering; it retains idempotence, drift, and missing-output checks in its
-disposable fixture under the approved Temp `opencode` area. It does not modify
-real generated outputs. These commands do not start OpenCode, install packages,
-contact a network, run a live agent, run the known-bad cart test, or claim a
-performance result. `python -B` suppresses bytecode caches for that run.
+to fail. The third command currently runs only the feature fixture's green
+pre-feature compatibility tests. The future feature work must add acceptance
+tests under that fixture and rerun this same discovery command for both
+calculation and presentation, including the complete contract matrix; do not
+treat the baseline scaffold suite as those tests. The Harness Core command
+checks root-generated adapters without root rendering; it
+retains idempotence, drift, and missing-output checks in its disposable fixture
+under the approved Temp `opencode` area. It does not modify real generated
+outputs. These commands do not start OpenCode, install packages, contact a
+network, run a live agent, run the known-bad cart test, or claim a performance
+result. `python -B` suppresses bytecode caches for that run.
+
+Case B's currently checked-in feature fixture is intentionally a pre-feature
+scaffold. `CartTotals` currently has only `subtotal_cents` and `total_cents`,
+and presentation renders only those fields. The feature requires a real change
+to both components: calculation first adds the `discount_cents` result field,
+then presentation consumes that field. This result-field dependency is material
+but does not require an elaborate work pipeline. Green scaffold compatibility
+checks do not implement or qualify the discount feature. Fixture readiness (a
+linked contract plus a coherent, passing scaffold) is not a `FRESH_ROOT_NATIVE`
+observation and cannot produce a Case B fresh-root PASS.
 
 ## Remaining fresh-root work remains user action
 
@@ -47,12 +63,14 @@ not pre-recorded results. Capture the complete trace schema in
 - `REFERENCE_ONLY PHASE11_CASE_A_GUIDED_RECOVERY` — prior prompt reference: “In a disposable copy, change only
   `fixtures/simple/message.txt` to `Hello Phase 11 ready`. Keep this to one
   scoped edit and verify the exact requested text.”
-- `HUMAN_ACTION_REQUIRED PHASE11_CASE_B_FRESH_ROOT` — “In a disposable copy, implement a
-  small multi-component cart discount feature with an explicit contract,
-  separate calculation and presentation responsibilities, and compatibility
-  tests. The requirement and boundaries are supplied; do not redesign the
-  architecture. Orin is not qualified by this bounded case. Plan dependencies
-  only if they materially matter.”
+- `HUMAN_ACTION_REQUIRED PHASE11_CASE_B_FRESH_ROOT` — “In a disposable copy,
+  read `tests/phase11-integrated-routing/fixtures/feature/contract.md` and
+  inspect `tests/phase11-integrated-routing/fixtures/feature/`. Implement the
+  specified cart discount feature within that fixture, preserving the legacy
+  no-discount API and adding/running tests for the full acceptance contract.
+  The contract defines the calculation-result field that presentation must
+  consume; plan that material dependency proportionately. Ask a bounded question
+  if a material ambiguity remains. Orin is not qualified by this bounded case.”
 - `HUMAN_ACTION_REQUIRED PHASE11_CASE_C_FRESH_ROOT` — “In a disposable copy, fix the
   obvious `calculate_total` contract defect in
   `fixtures/obvious/cart.py`; then run its unit test. The fixture is currently
@@ -109,6 +127,14 @@ not pre-recorded results. Capture the complete trace schema in
   completeness.
 
 ## Recovered user-reported observations
+
+The task owner reported that Case B attempt 1 stopped before implementation
+because the promised contract was absent. Per that report, it made no changes
+and ran no validation; Kael correctly asked for the missing requirement. This
+is `FIXTURE_DEFECT`, not a routing defect and not a Case B PASS. The task owner
+reported `Question Barrier PASS` and no-invention behavior as positive
+`USER_REPORTED` evidence only. No native trace or session ID was supplied for
+that attempt.
 
 The task owner reported these preserved recovery outcomes: Case A `PASS`
 (`GUIDED_CURRENT_SESSION`); Case I `PARTIAL` guided, with the useful baseline

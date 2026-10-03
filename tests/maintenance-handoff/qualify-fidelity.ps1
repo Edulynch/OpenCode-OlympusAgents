@@ -15,7 +15,30 @@ function Check([string]$id, [bool]$ok) {
 
 # In-memory contract qualification only; it does not inspect or emulate a live
 # OpenCode session. Field values remain opaque text, including numeric-looking values.
-function Parse-Fields([string]$payload) {
+function Parse-Fields([string]$payload, [string[]]$required = @(), [bool]$maintenanceHandoff = $false) {
+    if ($maintenanceHandoff -and $required.Count -gt 0) {
+        $knownMetadata = @('MAINTENANCE_AUTH: VALID', 'AEGIS_SCOPE: ACCEPTED')
+        $normalizedLines = [System.Collections.Generic.List[string]]::new()
+        foreach ($line in ($payload -split '\r?\n')) {
+            $split = $false
+            foreach ($metadata in $knownMetadata) {
+                if (-not $line.StartsWith($metadata, [StringComparison]::Ordinal)) { continue }
+                foreach ($name in $required) {
+                    $fieldToken = $name + ':'
+                    if ($line.StartsWith($metadata + $fieldToken, [StringComparison]::Ordinal)) {
+                        [void]$normalizedLines.Add($metadata)
+                        [void]$normalizedLines.Add($line.Substring($metadata.Length))
+                        $split = $true
+                        break
+                    }
+                }
+                if ($split) { break }
+            }
+            if (-not $split) { [void]$normalizedLines.Add($line) }
+        }
+        $payload = $normalizedLines -join "`n"
+    }
+
     $fields = [System.Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
     $duplicates = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $malformed = [System.Collections.Generic.List[string]]::new()
@@ -39,8 +62,8 @@ function Parse-Fields([string]$payload) {
     [pscustomobject]@{ Fields=$fields; Duplicates=$duplicates; Malformed=$malformed }
 }
 
-function Validate-RequiredFields([string]$payload, [string[]]$required) {
-    $parsed = Parse-Fields $payload
+function Validate-RequiredFields([string]$payload, [string[]]$required, [bool]$maintenanceHandoff = $false) {
+    $parsed = Parse-Fields $payload $required $maintenanceHandoff
     if ($parsed.Malformed.Count -gt 0) {
         return [pscustomobject]@{ Status='STRUCTURED_RESULT_INCOMPLETE'; Reason='MALFORMED_FIELD'; Fields=$parsed.Fields }
     }
@@ -50,6 +73,9 @@ function Validate-RequiredFields([string]$payload, [string[]]$required) {
         }
         if ($parsed.Duplicates.Contains($name)) {
             return [pscustomobject]@{ Status='STRUCTURED_RESULT_INCOMPLETE'; Reason="DUPLICATE:$name"; Fields=$parsed.Fields }
+        }
+        if ([string]::IsNullOrWhiteSpace($parsed.Fields[$name])) {
+            return [pscustomobject]@{ Status='STRUCTURED_RESULT_INCOMPLETE'; Reason="EMPTY:$name"; Fields=$parsed.Fields }
         }
     }
     $status = if ($required.Count -eq 0) { 'COMPACT_RESULT_ACCEPTED' } else { 'STRUCTURED_RESULT_COMPLETE' }
@@ -103,7 +129,7 @@ DECISION: KEEP
         $normal.Fields['DECISION'] -ceq 'KEEP')
 
     # C/D. Maintenance-specific exact fields survive the modeled Kael validation unchanged.
-    $validated = Validate-RequiredFields $maintenanceResult $maintenanceFields
+    $validated = Validate-RequiredFields $maintenanceResult $maintenanceFields $true
     $allExact = $validated.Status -eq 'STRUCTURED_RESULT_COMPLETE'
     foreach ($name in $maintenanceFields) {
         if (-not [string]::Equals($validated.Fields[$name], (Parse-Fields $maintenanceResult).Fields[$name], [StringComparison]::Ordinal)) {
@@ -134,6 +160,47 @@ DECISION: KEEP
     Check 'CASE_H_EXTRA_FIELDS_ALLOWED' ($extra.Status -eq 'STRUCTURED_RESULT_COMPLETE' -and
         $extra.Fields['FUTURE_EXTRA'] -ceq 'allowed')
 
+    # N. Confirm the exact runtime reproduction: only the separator after known
+    # maintenance metadata is absent; every declared field/value is verbatim.
+    $runtimeReproduction = @'
+AEGIS_SCOPE: ACCEPTEDSTATUS: SUCCESS
+PROBE_MARKER: OLYMPUS_MAINTENANCE_FIDELITY_FINAL
+EXACT_ID: MNT-FINAL-42
+EXACT_COUNT: 37
+DECISION: KEEP
+'@
+    $expectedOutput = @('STATUS','PROBE_MARKER','EXACT_ID','EXACT_COUNT','DECISION')
+    $runtimeResult = Validate-RequiredFields $runtimeReproduction $expectedOutput $true
+    $runtimeOutcome = if ($runtimeResult.Status -eq 'STRUCTURED_RESULT_COMPLETE') { 'COMPLETE' } else { 'INCOMPLETE' }
+    Check 'CASE_N_REAL_REPRODUCTION_RESULT_COMPLETE' ($runtimeOutcome -ceq 'COMPLETE' -and
+        $runtimeResult.Fields['STATUS'] -ceq 'SUCCESS' -and
+        $runtimeResult.Fields['PROBE_MARKER'] -ceq 'OLYMPUS_MAINTENANCE_FIDELITY_FINAL' -and
+        $runtimeResult.Fields['EXACT_ID'] -ceq 'MNT-FINAL-42' -and
+        $runtimeResult.Fields['EXACT_COUNT'] -ceq '37' -and
+        $runtimeResult.Fields['DECISION'] -ceq 'KEEP')
+
+    $renamedBoundary = Validate-RequiredFields ($runtimeReproduction.Replace('ACCEPTEDSTATUS:', 'ACCEPTEDSTATU:')) $expectedOutput $true
+    Check 'CASE_O_RENAMED_BOUNDARY_LABEL_FAILS_CLOSED' ($renamedBoundary.Status -eq 'STRUCTURED_RESULT_INCOMPLETE' -and
+        $renamedBoundary.Reason -eq 'MISSING:STATUS')
+
+    $emptyBoundary = Validate-RequiredFields ($runtimeReproduction.Replace('STATUS: SUCCESS', 'STATUS:')) $expectedOutput $true
+    Check 'CASE_P_MISSING_BOUNDARY_VALUE_FAILS_CLOSED' ($emptyBoundary.Status -eq 'STRUCTURED_RESULT_INCOMPLETE' -and
+        $emptyBoundary.Reason -eq 'EMPTY:STATUS')
+
+    $conflictingStatus = $runtimeReproduction + "`nSTATUS: FAILED"
+    $conflicting = Validate-RequiredFields $conflictingStatus $expectedOutput $true
+    Check 'CASE_Q_CONFLICTING_DUPLICATE_STATUS_FAILS_CLOSED' ($conflicting.Status -eq 'STRUCTURED_RESULT_INCOMPLETE' -and
+        $conflicting.Reason -eq 'DUPLICATE:STATUS')
+
+    $arbitraryBoundary = $runtimeReproduction.Replace('AEGIS_SCOPE: ACCEPTED', 'OTHER_SCOPE: ACCEPTED')
+    $arbitrary = Validate-RequiredFields $arbitraryBoundary $expectedOutput $true
+    Check 'CASE_R_ARBITRARY_PREFIX_NOT_SPLIT' ($arbitrary.Status -eq 'STRUCTURED_RESULT_INCOMPLETE' -and
+        $arbitrary.Reason -eq 'MISSING:STATUS')
+
+    $undeclaredBoundary = Validate-RequiredFields $runtimeReproduction @('PROBE_MARKER','EXACT_ID','EXACT_COUNT','DECISION') $true
+    Check 'CASE_S_UNDECLARED_FIELD_NOT_NORMALIZED' ($undeclaredBoundary.Status -eq 'STRUCTURED_RESULT_COMPLETE' -and
+        -not $undeclaredBoundary.Fields.ContainsKey('STATUS'))
+
     # I/K. Consume the original terminal result once, even when incomplete; never replace it.
     $assignment = [pscustomobject]@{ Consumed=$false; ConsumedCount=0; ReplacementCount=0 }
     $first = Consume-Original $assignment $missingPayload $maintenanceFields
@@ -155,6 +222,9 @@ DECISION: KEEP
     Check 'CASE_M_MAINTENANCE_HANDOFF_CONTRACT' ($maintenancePolicy -match 'EXPECTED_OUTPUT' -and
         $maintenancePolicy -match 'preserve each required field name and its produced value' -and
         $kaelPrompt -match 'STRUCTURED_RESULT_INCOMPLETE' -and
+        $kaelPrompt -match 'bounded logical boundary normalization' -and
+        $kaelPrompt -match 'field explicitly listed in `EXPECTED_OUTPUT`' -and
+        $kaelPrompt -match 'Do not split arbitrary strings' -and
         $kaelPrompt -match 'consume the original result once' -and
         $kaelPrompt -match 'internal fidelity does not require dumping every field')
 

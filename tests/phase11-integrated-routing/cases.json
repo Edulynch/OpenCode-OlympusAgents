@@ -23,7 +23,7 @@
     {
       "id": "B",
       "request_class": "COMPLEX_FEATURE",
-      "description": "Already-bounded multi-component feature with material dependency ordering; supplied boundaries do not justify Orin activation.",
+      "description": "Bounded cart discount feature: presentation depends on the structured discount field produced by calculation; supplied boundaries do not justify Orin activation.",
       "trace_ids": [
         "B"
       ],
@@ -35,6 +35,14 @@
           "nox",
           "vera"
         ]
+      },
+      "request_contract": {
+        "contract_path": "tests/phase11-integrated-routing/fixtures/feature/contract.md",
+        "fixture_root": "tests/phase11-integrated-routing/fixtures/feature",
+        "calculation_boundary": "tests/phase11-integrated-routing/fixtures/feature/domain.py:calculate_cart",
+        "presentation_boundary": "tests/phase11-integrated-routing/fixtures/feature/presentation.py:render_totals",
+        "compatibility_requirement": "Preserve two-field CartTotals(subtotal_cents, total_cents) construction and calculate_total(subtotal_cents) as no-discount APIs.",
+        "material_dependency": "domain.py:calculate_cart adds CartTotals.discount_cents before presentation.py:render_totals consumes it; discount eligibility and arithmetic stay in domain.py."
       },
       "positive_orin_qualification": "NOT_ESTABLISHED_BY_PHASE11_CASE_B",
       "mandatory_dependency_edges": [

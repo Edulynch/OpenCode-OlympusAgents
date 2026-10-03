@@ -10,6 +10,7 @@ from qualify import EIGHT_SPECIALISTS, HARD_BUDGET, load_json, run_static_baseli
 
 
 HERE = Path(__file__).resolve().parent
+REPO_ROOT = HERE.parents[1]
 CASES_DOC = load_json(HERE / "cases.json")
 TRACES_DOC = load_json(HERE / "traces.json")
 CASES = {case["id"]: case for case in CASES_DOC["cases"]}
@@ -95,6 +96,45 @@ class MutationTests(unittest.TestCase):
         stale["RESULT_FIDELITY"]["OBSERVED_RESULT"] = "Hello Phase 11"
         stale["RESULT_FIDELITY"]["MATCHES"] = True
         self.assertIn("CASE_A_SUCCESS_WITH_STALE_OR_MISMATCHED_CONTENT", failures(stale))
+
+    def test_case_b_request_contract_links_the_feature_fixture(self) -> None:
+        request = CASES["B"].get("request_contract")
+        self.assertIsInstance(request, dict)
+        self.assertEqual(
+            "tests/phase11-integrated-routing/fixtures/feature/contract.md",
+            request["contract_path"],
+        )
+        self.assertEqual(
+            "tests/phase11-integrated-routing/fixtures/feature",
+            request["fixture_root"],
+        )
+        self.assertEqual(
+            "tests/phase11-integrated-routing/fixtures/feature/domain.py:calculate_cart",
+            request["calculation_boundary"],
+        )
+        self.assertEqual(
+            "tests/phase11-integrated-routing/fixtures/feature/presentation.py:render_totals",
+            request["presentation_boundary"],
+        )
+        self.assertIn("two-field CartTotals(subtotal_cents, total_cents)", request["compatibility_requirement"])
+        self.assertIn("domain.py:calculate_cart adds CartTotals.discount_cents", request["material_dependency"])
+        self.assertIn("presentation.py:render_totals consumes it", request["material_dependency"])
+        self.assertTrue((REPO_ROOT / request["contract_path"]).is_file())
+        self.assertTrue((REPO_ROOT / request["fixture_root"]).is_dir())
+        self.assertTrue((REPO_ROOT / request["fixture_root"] / "test_scaffold.py").is_file())
+        self.assertTrue((REPO_ROOT / request["calculation_boundary"].split(":", 1)[0]).is_file())
+        self.assertTrue((REPO_ROOT / request["presentation_boundary"].split(":", 1)[0]).is_file())
+        contract = (REPO_ROOT / request["contract_path"]).read_text(encoding="utf-8")
+        self.assertIn("pre-feature scaffold", contract.lower())
+        self.assertIn("calculate_total(subtotal_cents: int) -> int", contract)
+        self.assertIn("discount_cents: int = 0", contract)
+        self.assertIn("777 != 12,345 // 10", contract)
+        self.assertIn("777 != 12,345 - 12,111", contract)
+        implementation = next(child for child in TRACES["B"]["CHILD_SESSIONS"] if child["WORK_ID"] == "feature-implementation")
+        self.assertEqual(
+            ["fixtures/feature/domain.py", "fixtures/feature/presentation.py"],
+            implementation["WRITE_PATHS"],
+        )
 
     def test_synthetic_trace_cannot_be_relabelled_native_by_changing_label_or_root(self) -> None:
         root_only = changed("A")

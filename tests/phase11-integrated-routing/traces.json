@@ -218,7 +218,8 @@
           "EXECUTION_STATE": "SUCCEEDED",
           "WORK_ID": "feature-implementation",
           "WRITE_PATHS": [
-            "fixtures/feature/domain.py"
+            "fixtures/feature/domain.py",
+            "fixtures/feature/presentation.py"
           ]
         },
         {

@@ -62,7 +62,7 @@
   },
   "live_qualification": {
     "guided_current_session": "NOT_CAPTURED",
-    "fresh_root_native": "B3_PASS; C_PASS; D,E,F,G,H,K_PENDING",
+    "fresh_root_native": "B3_PASS; C_PASS; D_PASS; E,F,G,H,K_PENDING",
     "native_results_claimed": true,
     "pending_labels_at_baseline_capture": [
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_A",
@@ -79,7 +79,6 @@
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_L"
     ],
     "pending_labels": [
-      "HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
@@ -94,7 +93,8 @@
       "REFERENCE_ONLY PHASE11_CASE_J_NEGATIVE_CONTROL",
       "REFERENCE_ONLY PHASE11_CASE_L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERY"
     ],
-    "current_pending_state_source": "P11-C-corpus verified native evidence; original baseline, prior recovery labels, and B3-capture pending labels preserved separately"
+    "overall_status": "PARTIAL",
+    "current_pending_state_source": "P11-D-corpus current native reconciliation; original baseline, prior recovery labels, and B3/C-capture pending labels preserved as historical snapshots"
   },
   "recovered_user_observations": {
     "task_id": "P11-FIX-20261003",
@@ -766,5 +766,137 @@
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
     ],
     "case_routing_result": "CASE_C_FRESH_ROOT_NATIVE_PASS; Argus did not activate for the obvious functional defect."
+  },
+  "phase11_d_reconciliation": {
+    "task_id": "P11-D-corpus",
+    "source": "Nox original native reconciliation of V2 API metadata, exports, and complete histories; Veyra scoped expectation discovery supplied the bounded-evidence finding. This corpus writer made no API calls, accessed no original worktree/session, and did not rerun Case D.",
+    "label": "PHASE11_CASE_D_FRESH_ROOT",
+    "evidence_artifact": "tests/phase11-integrated-routing/case-d.native-trace.json",
+    "evidence_class": "FRESH_ROOT_NATIVE",
+    "repository_inspection": {
+      "root": "C:/Users/BLAUTECH/OneDrive/WORKSPACE/Personal/Tools/OpenCode-OlympusAgents",
+      "branch": "qualify/phase-11-integrated-routing",
+      "head_before_d_corpus_edits": "60eb1685ee866a59de46be09dba3555c1cd3e776",
+      "preexisting_working_tree_clean": true,
+      "origin": "https://github.com/Edulynch/OpenCode-OlympusAgents.git",
+      "origin_source": "task context",
+      "git_mutation_performed": false
+    },
+    "root_session_id": "ses_ef8c726b7ffeqWgvWlpg0NcU1Q",
+    "root_directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-d",
+    "root_agent": "kael",
+    "root_parent_session_id": null,
+    "root_parent_session_id_observation": "NOT_EXPOSED",
+    "root_terminal_outcome": "succeeded",
+    "root_terminal_message_id": "msg_1073c822e001Dd7L8U2EANc2Qv",
+    "root_execution_and_semantic_outcomes": {
+      "execution_metadata": "succeeded",
+      "semantic_final_outcome": "NEEDS_USER_INPUT"
+    },
+    "isolation": {
+      "worktree_isolation": "PASS",
+      "separately_registered_worktree": true,
+      "shares_canonical_git_common_dir": true,
+      "verified_directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-d",
+      "starting_head": "60eb1685ee866a59de46be09dba3555c1cd3e776",
+      "canonical_repository_head": "60eb1685ee866a59de46be09dba3555c1cd3e776",
+      "verified_only": true,
+      "worktree_creation_claimed": false,
+      "nox_initial_worktree_clean": true,
+      "nox_final_worktree_clean": true
+    },
+    "expected_product_route": ["kael", "veyra", "argus"],
+    "observed_unique_child_session_launch_order": ["kael", "nox", "veyra", "argus"],
+    "route_difference": "JUSTIFIED_QUALIFICATION_PREREQUISITE: Nox performed read-only isolation verification before the product diagnostic route; Veyra provided bounded evidence before one Argus consultation.",
+    "child_sessions": [
+      {"role": "nox", "session_id": "ses_ef8c67e03ffeYoAjNx6bfAmNdR", "launch_order": 1, "invocation_count": 1, "tool_state": "completed", "execution_outcome": "succeeded", "literal_return_status": null},
+      {"role": "veyra", "session_id": "ses_ef8c49280ffeiI6EQxlG6e4Pjx", "launch_order": 2, "invocation_count": 1, "tool_state": "completed", "execution_outcome": "succeeded", "literal_return_status": null},
+      {"role": "argus", "session_id": "ses_ef8c3a562ffemV1PDdCkCYmThm", "launch_order": 3, "invocation_count": 1, "tool_state": "completed", "execution_outcome": "succeeded", "literal_return_status": "INCONCLUSIVE"}
+    ],
+    "root_subagent_call_invocation_counts": {"nox": 1, "veyra": 1, "argus": 1},
+    "consultation_counts": {"argus": 1},
+    "result_ids": null,
+    "result_consumption": {
+      "root_aggregate_statement": "All three child sessions terminal and consumed.",
+      "pending_children": 0,
+      "unconsumed_results": 0,
+      "unknown_executions": 0,
+      "result_ids": null,
+      "per_result_consumption_timestamps": null,
+      "session_lifetime_exact_once": null
+    },
+    "user_question_count": 1,
+    "question_tool_calls": 0,
+    "question_barrier": "PASS",
+    "final_binary_question": "Does this sample’s subtotal of 100 already include the shipping charge of 10—yes or no?",
+    "diagnosis": {
+      "status": "INCONCLUSIVE",
+      "cause": "CAUSE_UNCONFIRMED",
+      "functional_violation_established": false,
+      "repair_supported": false,
+      "discriminating_evidence_found": false,
+      "evidence_request_made_by_argus": false,
+      "followup_consultation": false
+    },
+    "functional_violation_established": false,
+    "repair_supported": false,
+    "classifications": {
+      "CASE_D_FRESH_ROOT_NATIVE": "PASS",
+      "ISOLATION": "PASS",
+      "ARGUS_ROUTING": "PASS",
+      "NO_INVENTED_CAUSE": "PASS",
+      "NO_PROGRESS_STOP": "PASS",
+      "QUESTION_BARRIER": "PASS",
+      "ROLE_PURITY": "PASS",
+      "RESULT_FIDELITY": "PASS",
+      "COMPLETION_OWNERSHIP": "PASS",
+      "EFFICIENCY": "LEAN",
+      "CASE_D_ARGUS_FOLLOWUP": "NOT_REQUIRED",
+      "ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE": "NOT_EXERCISED"
+    },
+    "efficiency_basis": "LEAN is a qualification judgment, not measured latency or throughput.",
+    "followup": {
+      "status": "NOT_EXERCISED",
+      "case_d_followup": "NOT_REQUIRED",
+      "native_followup_demonstration": false,
+      "meaning": "Case D made no Argus evidence request; same-session follow-up runtime behavior was not demonstrated.",
+      "future_review": "An optional genuine evidence-requesting scenario remains open for final coverage review."
+    },
+    "source_integrity": {
+      "root_files_changed": "NONE",
+      "native_case_replayed_or_repaired": false,
+      "writer_source_edits_to_case_fixture": false
+    },
+    "acceptance_status": "PASS",
+    "phase11_status": "PARTIAL",
+    "pending_fresh_root_labels": [
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
+    ],
+    "case_rerun_performed_by_reconciliation": false,
+    "validation": {
+      "phase11_unittest_command": "uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing -p \"test_*.py\" -v",
+      "phase11_unittest_result": "PASS",
+      "phase11_unittest_count": 53,
+      "phase11_qualifier_command": "uv run --python 3.11 python -B tests/phase11-integrated-routing/qualify.py",
+      "phase11_qualifier_exit_code": 0,
+      "phase11_qualifier_status": "PARTIAL (B3, C, and D accepted; E/F/G/H/K fresh-root cases remain pending)",
+      "feature_fixture_tests_passed": 4,
+      "safe_harness_command": "uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-only",
+      "safe_harness_result": "PASS",
+      "safe_root_managed_output_count": 29,
+      "safe_root_hash_mtime_unchanged": true,
+      "git_diff_check": "PASS"
+    }
+  },
+  "argus_same_session_followup_runtime_coverage": {
+    "status": "NOT_EXERCISED",
+    "case_d_followup": "NOT_REQUIRED",
+    "native_followup_demonstration": false,
+    "meaning": "Case D made no Argus evidence request; same-session follow-up runtime behavior was not demonstrated.",
+    "future_review": "An optional genuine evidence-requesting scenario remains open for final coverage review."
   }
 }

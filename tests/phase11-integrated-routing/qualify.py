@@ -243,6 +243,101 @@ CASE_C_TERMINAL_FACTS = {
     "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
     "ANY_WORK_REMAINING": "NO",
 }
+CURRENT_PHASE11_PENDING_LABELS = [
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
+]
+CASE_D_ROOT_SESSION_ID = "ses_ef8c726b7ffeqWgvWlpg0NcU1Q"
+CASE_D_ROOT_DIRECTORY = "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-d"
+CASE_D_ROOT_HEAD = "60eb1685ee866a59de46be09dba3555c1cd3e776"
+CASE_D_ROOT_TERMINAL_MESSAGE_ID = "msg_1073c822e001Dd7L8U2EANc2Qv"
+CASE_D_ROOT_FINAL_FACTS = {
+    "WORKTREE_ISOLATION": "PASS",
+    "STARTING_HEAD": CASE_D_ROOT_HEAD,
+    "FILES_CHANGED": "NONE",
+    "DISCRIMINATING_EVIDENCE_FOUND": "NO",
+    "DIAGNOSIS": "UNRESOLVED",
+    "FINAL_BINARY_QUESTION": "Does this sample’s subtotal of 100 already include the shipping charge of 10—yes or no?",
+    "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+    "ANY_WORK_REMAINING": "NO",
+    "FINAL_OUTCOME": "NEEDS_USER_INPUT",
+}
+CASE_D_CHILD_SESSIONS = [
+    {
+        "TRACE_REF": "D-NOX",
+        "NATIVE_SESSION_ID": "ses_ef8c67e03ffeYoAjNx6bfAmNdR",
+        "AGENT": "nox",
+        "PARENT_AGENT": "kael",
+        "PARENT_SESSION_ID": CASE_D_ROOT_SESSION_ID,
+        "LAUNCH_ORDER": 1,
+        "INVOCATION_COUNT": 1,
+        "EXECUTION_STATE": "SUCCEEDED",
+        "FINAL_OUTCOME": "succeeded",
+        "RESULT_ID": None,
+        "PURPOSE": "read-only isolation verification",
+        "DIRECTORY": CASE_D_ROOT_DIRECTORY,
+        "PARENT_MESSAGE_ID": "msg_10738da77001sw2c1BCxYpNn7f",
+        "INVOCATION_TOOL_CALL_ID": "call_A4ea0hsgKaNiR2OIRFRJyvYN",
+        "TERMINAL_MESSAGE_ID": "msg_1073ab0ce001a1UsROefqolFon",
+        "CALL_CREATED_AT_EPOCH_MS": 1791122552718,
+        "CALL_RAN_AT_EPOCH_MS": 1791122571767,
+        "CALL_COMPLETED_AT_EPOCH_MS": 1791122679030,
+    },
+    {
+        "TRACE_REF": "D-VEYRA",
+        "NATIVE_SESSION_ID": "ses_ef8c49280ffeiI6EQxlG6e4Pjx",
+        "AGENT": "veyra",
+        "PARENT_AGENT": "kael",
+        "PARENT_SESSION_ID": CASE_D_ROOT_SESSION_ID,
+        "LAUNCH_ORDER": 2,
+        "INVOCATION_COUNT": 1,
+        "EXECUTION_STATE": "SUCCEEDED",
+        "FINAL_OUTCOME": "succeeded",
+        "RESULT_ID": None,
+        "PURPOSE": "bounded-contract evidence discovery; no discriminator found",
+        "DIRECTORY": CASE_D_ROOT_DIRECTORY,
+        "PARENT_MESSAGE_ID": "msg_1073b259a001jMCyxNlxFUkNnL",
+        "INVOCATION_TOOL_CALL_ID": "call_oLpgTpp5wYC8wwKERvmdOA6z",
+        "TERMINAL_MESSAGE_ID": "msg_1073b8049001QPsKFEXH6oxNVe",
+        "CALL_CREATED_AT_EPOCH_MS": 1791122682739,
+        "CALL_RAN_AT_EPOCH_MS": 1791122697594,
+        "CALL_COMPLETED_AT_EPOCH_MS": 1791122720177,
+    },
+    {
+        "TRACE_REF": "D-ARGUS",
+        "NATIVE_SESSION_ID": "ses_ef8c3a562ffemV1PDdCkCYmThm",
+        "AGENT": "argus",
+        "PARENT_AGENT": "kael",
+        "PARENT_SESSION_ID": CASE_D_ROOT_SESSION_ID,
+        "LAUNCH_ORDER": 3,
+        "INVOCATION_COUNT": 1,
+        "EXECUTION_STATE": "SUCCEEDED",
+        "FINAL_OUTCOME": "succeeded",
+        "RESULT_ID": None,
+        "PURPOSE": "one terminal diagnostic consultation on precollected bounded evidence",
+        "DIRECTORY": CASE_D_ROOT_DIRECTORY,
+        "PARENT_MESSAGE_ID": "msg_1073bc64c001DijUaWJWQkMZt9",
+        "INVOCATION_TOOL_CALL_ID": "call_0W8pbZttAJh4hN0upzjDO7Ja",
+        "TERMINAL_MESSAGE_ID": "msg_1073c5b890011Ppa5fJwtkxNDF",
+        "CALL_CREATED_AT_EPOCH_MS": 1791122729330,
+        "CALL_RAN_AT_EPOCH_MS": 1791122758297,
+        "CALL_COMPLETED_AT_EPOCH_MS": 1791122768271,
+    },
+]
+CASE_D_LITERAL_RETURN_STATUSES = {"nox": None, "veyra": None, "argus": "INCONCLUSIVE"}
+CASE_D_NEGATIVE_ROLES = ("kovan", "orin", "vera", "atlas", "talos", "thales", "helios", "aegis")
+CASE_D_EXPECTED_ROUTE = ["kael", "veyra", "argus"]
+CASE_D_ACTUAL_ROUTE = ["kael", "nox", "veyra", "argus"]
+CASE_D_PENDING_FOLLOWUP_COVERAGE = {
+    "status": "NOT_EXERCISED",
+    "case_d_followup": "NOT_REQUIRED",
+    "native_followup_demonstration": False,
+    "meaning": "Case D made no Argus evidence request; same-session follow-up runtime behavior was not demonstrated.",
+    "future_review": "An optional genuine evidence-requesting scenario remains open for final coverage review.",
+}
 
 
 def load_json(path: Path) -> Any:
@@ -1671,8 +1766,8 @@ def validate_phase11_b3_reconciliation(
 
     current = baseline.get("live_qualification", {})
     if not isinstance(current, dict) or (
-        current.get("pending_labels") != CASE_C_PENDING_LABELS
-        or current.get("fresh_root_native") != "B3_PASS; C_PASS; D,E,F,G,H,K_PENDING"
+        current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
+        or current.get("fresh_root_native") != "B3_PASS; C_PASS; D_PASS; E,F,G,H,K_PENDING"
         or current.get("native_results_claimed") is not True
     ):
         errors.append("CURRENT_PHASE11_PENDING_STATE_MISMATCH")
@@ -2254,8 +2349,8 @@ def validate_phase11_c_reconciliation(
 
     current = baseline.get("live_qualification", {})
     if not isinstance(current, dict) or (
-        current.get("pending_labels") != CASE_C_PENDING_LABELS
-        or current.get("fresh_root_native") != "B3_PASS; C_PASS; D,E,F,G,H,K_PENDING"
+        current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
+        or current.get("fresh_root_native") != "B3_PASS; C_PASS; D_PASS; E,F,G,H,K_PENDING"
         or current.get("native_results_claimed") is not True
     ):
         errors.append("CURRENT_PHASE11_PENDING_STATE_MISMATCH")
@@ -2278,17 +2373,469 @@ def validate_phase11_c_reconciliation(
     return errors
 
 
+def validate_native_case_d_capture(trace: dict[str, Any], case: dict[str, Any]) -> list[str]:
+    """Check Case D's native invocation evidence without inventing a synthetic lifecycle."""
+    errors: list[str] = []
+    required = (
+        "CASE_ID", "REQUEST_CLASS", "EXPECTED_ROUTE", "ACTUAL_ROUTE", "CHILD_SESSIONS",
+        "CONSULTATION_COUNTS", "MAX_SIMULTANEOUS_CHILDREN", "NEGATIVE_CONTROLS", "ROLE_PURITY",
+        "DEPENDENCY_ORDER", "RESULT_FIDELITY", "COMPLETION_GATE", "USER_QUESTION_COUNT",
+        "FINAL_OUTCOME", "ROUTING_RESULT", "NOTES", "EVIDENCE_PROVENANCE", "EVENTS",
+        "EVIDENCE_CLASS", "ROOT_SESSION_ID", "ROOT_PARENT_SESSION_ID", "ROOT_EXECUTION_OUTCOME",
+    )
+    missing = [field for field in required if field not in trace]
+    if missing:
+        return ["NATIVE_D_MISSING_REQUIRED_FIELDS:" + ",".join(missing)]
+
+    if trace.get("TRACE_ID") != "D-NATIVE" or trace.get("CASE_ID") != "D":
+        errors.append("NATIVE_D_IDENTITY_MISMATCH")
+    if case.get("id") != "D" or trace.get("REQUEST_CLASS") != case.get("request_class"):
+        errors.append("NATIVE_D_REQUEST_CLASS_MISMATCH")
+    if trace.get("EVIDENCE_CLASS") != "FRESH_ROOT_NATIVE":
+        errors.append("NATIVE_D_EVIDENCE_CLASS_MISMATCH")
+    if trace.get("SCENARIO") != "precollected_evidence" or trace.get("ROUTE_MODE") != "KAEL_ROOT":
+        errors.append("NATIVE_D_SCENARIO_OR_ROUTE_MODE_MISMATCH")
+    routes = case.get("expected_routes", {})
+    if routes.get("precollected_evidence") != CASE_D_EXPECTED_ROUTE or trace.get("EXPECTED_ROUTE") != CASE_D_EXPECTED_ROUTE:
+        errors.append("NATIVE_D_EXPECTED_PRODUCT_ROUTE_MISMATCH")
+    if trace.get("ACTUAL_ROUTE") != CASE_D_ACTUAL_ROUTE:
+        errors.append("NATIVE_D_ACTUAL_CHILD_ORDER_MISMATCH")
+    if trace.get("ROUTE_RECONCILIATION") != {
+        "EXPECTED_PRODUCT_ROUTE": CASE_D_EXPECTED_ROUTE,
+        "OBSERVED_UNIQUE_CHILD_SESSION_LAUNCH_ORDER": CASE_D_ACTUAL_ROUTE,
+        "CLASSIFICATION": "JUSTIFIED_QUALIFICATION_PREREQUISITE",
+        "JUSTIFICATION": "Nox performed read-only isolation verification before the product diagnostic route. Veyra gathered bounded evidence before one Argus consultation; the observed family is preserved without treating Nox as product diagnosis.",
+    }:
+        errors.append("NATIVE_D_ROUTE_RECONCILIATION_MISMATCH")
+
+    if (
+        trace.get("ROOT_SESSION_ID") != CASE_D_ROOT_SESSION_ID
+        or trace.get("ROOT_DIRECTORY") != CASE_D_ROOT_DIRECTORY
+        or trace.get("ROOT_AGENT") != "kael"
+        or trace.get("ROOT_TITLE") != "Phase 11 fresh-root diagnosis qualification"
+        or trace.get("ROOT_TERMINAL_MESSAGE_ID") != CASE_D_ROOT_TERMINAL_MESSAGE_ID
+    ):
+        errors.append("NATIVE_D_ROOT_IDENTITY_MISMATCH")
+    if trace.get("ROOT_PARENT_SESSION_ID") is not None or trace.get("ROOT_PARENT_SESSION_ID_OBSERVATION") != "NOT_EXPOSED":
+        errors.append("NATIVE_D_ROOT_PARENT_OBSERVATION_MISMATCH")
+    if trace.get("ROOT_EXECUTION_OUTCOME") != "succeeded" or trace.get("FINAL_OUTCOME") != "NEEDS_USER_INPUT":
+        errors.append("NATIVE_D_EXECUTION_AND_SEMANTIC_OUTCOME_CONFLATED")
+    if trace.get("ROOT_ISOLATION") != {
+        "STATUS": "PASS",
+        "SEPARATE_DISPOSABLE_WORKTREE": True,
+        "EXECUTION_REPOSITORY": "REGISTERED_LINKED_WORKTREE",
+        "SHARES_CANONICAL_GIT_COMMON_DIR": True,
+        "VERIFIED_DIRECTORY": CASE_D_ROOT_DIRECTORY,
+        "INITIAL_HEAD": CASE_D_ROOT_HEAD,
+        "VERIFIED_HEAD": CASE_D_ROOT_HEAD,
+        "CANONICAL_REPOSITORY_HEAD": CASE_D_ROOT_HEAD,
+        "VERIFICATION_ONLY": True,
+        "WORKTREE_CREATION_CLAIMED": False,
+        "NOX_INITIAL_WORKTREE_CLEAN": True,
+        "NOX_FINAL_WORKTREE_CLEAN": True,
+    }:
+        errors.append("NATIVE_D_ISOLATION_RECONCILIATION_MISMATCH")
+
+    children = trace.get("CHILD_SESSIONS")
+    if children != CASE_D_CHILD_SESSIONS:
+        errors.append("NATIVE_D_CHILD_SESSION_RECONCILIATION_MISMATCH")
+    if not isinstance(children, list) or len(children) != 3:
+        errors.append("NATIVE_D_CHILD_SESSION_SET_MISMATCH")
+        children = children if isinstance(children, list) else []
+    child_ids = [child.get("NATIVE_SESSION_ID") for child in children]
+    if len(child_ids) != len(set(child_ids)) or CASE_D_ROOT_SESSION_ID in child_ids:
+        errors.append("NATIVE_D_SESSION_IDENTITIES_NOT_UNIQUE")
+    if any(
+        child.get("PARENT_AGENT") != "kael"
+        or child.get("PARENT_SESSION_ID") != CASE_D_ROOT_SESSION_ID
+        or child.get("EXECUTION_STATE") != "SUCCEEDED"
+        or child.get("FINAL_OUTCOME") != "succeeded"
+        for child in children
+    ):
+        errors.append("NATIVE_D_CHILD_PARENT_ROLE_OR_TERMINAL_MISMATCH")
+
+    events = trace.get("EVENTS")
+    expected_kinds = [
+        "ROOT_SUBAGENT_CALL_CREATED", "ROOT_SUBAGENT_CALL_RUNNING", "ROOT_SUBAGENT_RESULT_RETURNED",
+        "ROOT_SUBAGENT_CALL_CREATED", "ROOT_SUBAGENT_CALL_RUNNING", "ROOT_SUBAGENT_RESULT_RETURNED",
+        "ROOT_SUBAGENT_CALL_CREATED", "ROOT_SUBAGENT_CALL_RUNNING", "ROOT_SUBAGENT_RESULT_RETURNED",
+        "ROOT_FINAL_COMPLETION",
+    ]
+    if not isinstance(events, list) or [event.get("KIND") for event in events] != expected_kinds:
+        errors.append("NATIVE_D_INVOCATION_EVENT_MODEL_MISMATCH")
+        events = events if isinstance(events, list) else []
+    if [event.get("ORDER") for event in events] != list(range(1, 11)) or any(
+        event.get("ORDER_BASIS") != "observed" for event in events
+    ):
+        errors.append("NATIVE_D_EVENT_ORDER_NOT_OBSERVED")
+
+    for index, child in enumerate(CASE_D_CHILD_SESSIONS):
+        group = events[index * 3:index * 3 + 3]
+        if len(group) != 3:
+            errors.append("NATIVE_D_INVOCATION_EVENT_GROUP_MISSING:" + child["TRACE_REF"])
+            continue
+        common = {
+            "ACTOR_ROLE": "kael",
+            "CHILD_REF": child["TRACE_REF"],
+            "SESSION_REF": child["TRACE_REF"],
+            "NATIVE_SESSION_ID": child["NATIVE_SESSION_ID"],
+            "AGENT": child["AGENT"],
+            "TOOL": "subagent",
+            "TOOL_CALL_ID": child["INVOCATION_TOOL_CALL_ID"],
+            "PARENT_MESSAGE_ID": child["PARENT_MESSAGE_ID"],
+            "PARENT_SESSION_ID": CASE_D_ROOT_SESSION_ID,
+        }
+        if any(any(event.get(key) != value for key, value in common.items()) for event in group):
+            errors.append("NATIVE_D_INVOCATION_SESSION_OR_ROLE_JOIN_MISMATCH:" + child["TRACE_REF"])
+        if (
+            group[0].get("CALL_CREATED_AT_EPOCH_MS") != child["CALL_CREATED_AT_EPOCH_MS"]
+            or group[1].get("CALL_RAN_AT_EPOCH_MS") != child["CALL_RAN_AT_EPOCH_MS"]
+            or group[2].get("CALL_COMPLETED_AT_EPOCH_MS") != child["CALL_COMPLETED_AT_EPOCH_MS"]
+            or not (
+                child["CALL_CREATED_AT_EPOCH_MS"]
+                < child["CALL_RAN_AT_EPOCH_MS"]
+                < child["CALL_COMPLETED_AT_EPOCH_MS"]
+            )
+        ):
+            errors.append("NATIVE_D_CALL_TIMING_RECONCILIATION_MISMATCH:" + child["TRACE_REF"])
+        if (
+            group[2].get("OBSERVED_MESSAGE_ID") != child["TERMINAL_MESSAGE_ID"]
+            or group[2].get("TOOL_STATE") != "completed"
+            or group[2].get("RETURN_STATUS") != CASE_D_LITERAL_RETURN_STATUSES[child["AGENT"]]
+            or group[2].get("CHILD_EXECUTION_OUTCOME") != "succeeded"
+            or group[2].get("RESULT_ID") is not None
+        ):
+            errors.append("NATIVE_D_LITERAL_RETURN_STATUS_OR_TOOL_STATE_MISMATCH:" + child["TRACE_REF"])
+    if any(
+        left["CALL_COMPLETED_AT_EPOCH_MS"] >= right["CALL_CREATED_AT_EPOCH_MS"]
+        for left, right in zip(CASE_D_CHILD_SESSIONS, CASE_D_CHILD_SESSIONS[1:])
+    ):
+        errors.append("NATIVE_D_NONOVERLAPPING_CHILD_ORDER_MISMATCH")
+
+    if events and events[-1].get("TERMINAL_FACTS") != CASE_D_ROOT_FINAL_FACTS:
+        errors.append("NATIVE_D_ROOT_TERMINAL_FACTS_MISMATCH")
+    if events and (
+        events[-1].get("ROOT_SESSION_ID") != CASE_D_ROOT_SESSION_ID
+        or events[-1].get("MESSAGE_ID") != CASE_D_ROOT_TERMINAL_MESSAGE_ID
+        or events[-1].get("EXECUTION_OUTCOME") != "succeeded"
+        or events[-1].get("SEMANTIC_FINAL_OUTCOME") != "NEEDS_USER_INPUT"
+        or events[-1].get("RESULT_ID") is not None
+    ):
+        errors.append("NATIVE_D_ROOT_TERMINAL_OUTCOME_MISMATCH")
+    if any(event.get("RESULT_ID") is not None for event in events) or any(
+        "RESULT_CONSUMED" in str(event.get("KIND")) for event in events
+    ):
+        errors.append("NATIVE_D_UNOBSERVED_RESULT_ID_OR_CONSUMPTION_EVENT")
+    provenance = trace.get("EVIDENCE_PROVENANCE", {})
+    if (
+        provenance.get("CLASS") != "FRESH_ROOT_NATIVE"
+        or provenance.get("NATIVE_ROOT_SESSION_ID") != CASE_D_ROOT_SESSION_ID
+        or provenance.get("NATIVE_ROOT_DIRECTORY") != CASE_D_ROOT_DIRECTORY
+        or provenance.get("NATIVE_ROOT_PARENT_SESSION_ID") is not None
+        or provenance.get("NATIVE_ROOT_PARENT_SESSION_ID_OBSERVATION") != "NOT_EXPOSED"
+        or provenance.get("NATIVE_CHILD_SESSION_IDS") != child_ids
+        or provenance.get("ORDER_BASIS") != "observed"
+        or provenance.get("OBSERVED_AT") is not None
+        or provenance.get("FRESH_ROOT_CONFIRMED") is not True
+        or provenance.get("NATIVE_PERMISSION_UI") != "NOT_OBSERVABLE"
+        or provenance.get("NATIVE_PERMISSION_DECISION") != "NOT_OBSERVABLE"
+    ):
+        errors.append("NATIVE_D_PROVENANCE_MISMATCH")
+    snapshot = trace.get("OBSERVED_TERMINAL_SNAPSHOT", {})
+    if snapshot != {
+        "OBSERVATION": "OBSERVED_NATIVE_ROOT_TERMINAL_MESSAGE",
+        "ROOT_SESSION_ID": CASE_D_ROOT_SESSION_ID,
+        "MESSAGE_ID": CASE_D_ROOT_TERMINAL_MESSAGE_ID,
+        "EXECUTION_OUTCOME": "succeeded",
+        "FACTS": CASE_D_ROOT_FINAL_FACTS,
+    }:
+        errors.append("NATIVE_D_TERMINAL_SNAPSHOT_MISMATCH")
+
+    expected_counts = {role: 0 for role in ALL_INVOCABLE_ROLES}
+    expected_counts.update({"nox": 1, "veyra": 1, "argus": 1})
+    if trace.get("CONSULTATION_COUNTS") != expected_counts or trace.get("UNIQUE_CHILD_SESSION_COUNTS") != expected_counts:
+        errors.append("NATIVE_D_CONSULTATION_OR_SESSION_COUNTS_MISMATCH")
+    if trace.get("MAX_SIMULTANEOUS_CHILDREN") != 1 or trace.get("OPERATIONAL_PROXIES", {}).get("ACTUAL_COUNTED_CONCURRENCY") != 1:
+        errors.append("NATIVE_D_CONCURRENCY_MISMATCH")
+    expected_negative = {
+        role: {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0}
+        for role in CASE_D_NEGATIVE_ROLES
+    }
+    expected_negative["BASIS"] = (
+        "Complete root history records no invocation for these nonparticipating roles. Nox is a qualification-only isolation prerequisite, while Veyra and Argus are active in the diagnostic workflow."
+    )
+    if trace.get("NEGATIVE_CONTROLS") != expected_negative:
+        errors.append("NATIVE_D_NEGATIVE_CONTROL_MISMATCH")
+    role_purity = trace.get("ROLE_PURITY", {})
+    if (
+        role_purity.get("STATUS") != "PASS"
+        or role_purity.get("ALL_CHILDREN_DIRECT") is not True
+        or role_purity.get("NESTED_DELEGATION_OBSERVED") is not False
+        or role_purity.get("ROOT_SOURCE_WRITES_OBSERVED") is not False
+        or role_purity.get("ROOT_IMPLEMENTATION_OBSERVED") is not False
+        or role_purity.get("ARGUS_REPOSITORY_EXPLORATION_OBSERVED") is not False
+        or role_purity.get("VIOLATIONS") != []
+        or role_purity.get("TOOL_COUNTS_BY_ROLE") != {
+            "kael": {"subagent": 3}, "nox": {"shell": 7}, "veyra": {"read": 1}, "argus": {}
+        }
+        or role_purity.get("NEGATIVE_ROLE_INVOCATIONS") != {role: 0 for role in CASE_D_NEGATIVE_ROLES}
+    ):
+        errors.append("NATIVE_D_ROLE_PURITY_MISMATCH")
+
+    expected_dependency = [{
+        "BEFORE": "D-VEYRA:TERMINAL",
+        "AFTER": "D-ARGUS:CALL",
+        "RELATION": "Already-collected bounded Veyra evidence was supplied to Argus before its single consultation; no per-result consumption timestamp or result ID is claimed.",
+    }]
+    if trace.get("DEPENDENCY_ORDER") != expected_dependency:
+        errors.append("NATIVE_D_PRECOLLECTED_EVIDENCE_ORDER_MISMATCH")
+    argus = trace.get("ARGUS_DIAGNOSTIC", {})
+    argus_return = events[8] if len(events) > 8 else {}
+    if (
+        argus.get("NATIVE_SESSION_ID") != CASE_D_CHILD_SESSIONS[2]["NATIVE_SESSION_ID"]
+        or argus.get("TERMINAL_MESSAGE_ID") != CASE_D_CHILD_SESSIONS[2]["TERMINAL_MESSAGE_ID"]
+        or argus.get("EXECUTION_OUTCOME") != "succeeded"
+        or argus.get("CONSULTATION_COUNT") != 1
+        or argus.get("STATUS") != "INCONCLUSIVE"
+        or argus.get("CAUSE") != "CAUSE_UNCONFIRMED. No functional violation is established."
+        or argus.get("EVIDENCE_REQUESTED") is not False
+        or argus.get("FOLLOWUP_CONSULTATION") is not False
+        or argus.get("FINAL_BINARY_QUESTION") != CASE_D_ROOT_FINAL_FACTS["FINAL_BINARY_QUESTION"]
+        or argus_return.get("TOOL_STATE") != "completed"
+        or argus_return.get("RETURN_STATUS") != argus.get("STATUS")
+        or argus.get("STATUS") != "INCONCLUSIVE"
+        or trace.get("FINAL_OUTCOME") != "NEEDS_USER_INPUT"
+    ):
+        errors.append("NATIVE_D_DIAGNOSTIC_AND_OUTCOME_STATUS_MISMATCH")
+    result = trace.get("RESULT_FIDELITY", {})
+    if (
+        result.get("MATCHES") is not True
+        or result.get("UNKNOWN") is not False
+        or result.get("ROOT_EXECUTION_OUTCOME") != "succeeded"
+        or result.get("SEMANTIC_FINAL_OUTCOME") != "NEEDS_USER_INPUT"
+        or result.get("ARGUS_EXECUTION_OUTCOME") != "succeeded"
+        or result.get("ARGUS_DIAGNOSTIC_STATUS") != "INCONCLUSIVE"
+        or result.get("CAUSE") != "CAUSE_UNCONFIRMED"
+        or result.get("FUNCTIONAL_VIOLATION_ESTABLISHED") is not False
+        or result.get("REPAIR_SUPPORTED") is not False
+    ):
+        errors.append("NATIVE_D_RESULT_FIDELITY_MISMATCH")
+    completion = trace.get("COMPLETION_GATE", {})
+    if (
+        completion.get("PENDING_CHILD_COUNT") != 0
+        or completion.get("UNCONSUMED_RESULT_COUNT") != 0
+        or completion.get("UNKNOWN_EXECUTION_COUNT") != 0
+        or completion.get("EXACT_ONCE") is not None
+        or completion.get("QUESTION_BARRIER_SATISFIED") is not True
+        or completion.get("REQUIRED_CHILD_SESSIONS_TERMINAL_AND_CONSUMED") is not True
+        or completion.get("RESULT_IDS") is not None
+        or completion.get("PER_RESULT_CONSUMPTION_TIMESTAMPS") is not None
+        or completion.get("SESSION_LIFETIME_EXACT_ONCE") is not None
+    ):
+        errors.append("NATIVE_D_COMPLETION_GATE_MISMATCH")
+    question = trace.get("QUESTION_BARRIER", {})
+    if (
+        trace.get("USER_QUESTION_COUNT") != 1
+        or question.get("STATUS") != "PASS"
+        or question.get("QUESTION") != CASE_D_ROOT_FINAL_FACTS["FINAL_BINARY_QUESTION"]
+        or question.get("QUESTION_TOOL_CALLS") != 0
+        or question.get("DISPLAYED_AFTER_ARGUS_RESULT_DELIVERY") is not True
+        or question.get("DISPLAYED_AFTER_ALL_CHILDREN_TERMINAL_AND_CONSUMED") is not True
+        or question.get("CHILD_RESULT_CONSUMPTION_TIMESTAMPS") is not None
+    ):
+        errors.append("NATIVE_D_QUESTION_BARRIER_MISMATCH")
+    if trace.get("GATE_FACTS", {}).get("NONTRIVIAL_FUNCTIONAL_CAUSE") is not None:
+        errors.append("NATIVE_D_UNESTABLISHED_CAUSE_GATE_FACT_MUST_REMAIN_UNKNOWN")
+    if trace.get("FUNCTIONAL_VIOLATION_ESTABLISHED") is True or trace.get("REPAIR_SUPPORTED") is True:
+        errors.append("NATIVE_D_UNSUPPORTED_BUG_OR_REPAIR_CLAIM")
+    expected_classifications = {
+        "CASE_D_FRESH_ROOT_NATIVE": "PASS", "ISOLATION": "PASS", "ARGUS_ROUTING": "PASS",
+        "NO_INVENTED_CAUSE": "PASS", "NO_PROGRESS_STOP": "PASS", "QUESTION_BARRIER": "PASS",
+        "ROLE_PURITY": "PASS", "RESULT_FIDELITY": "PASS", "COMPLETION_OWNERSHIP": "PASS",
+        "EFFICIENCY": "LEAN", "CASE_D_ARGUS_FOLLOWUP": "NOT_REQUIRED",
+        "ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE": "NOT_EXERCISED",
+    }
+    if trace.get("ROUTING_RESULT_DETAIL") != expected_classifications:
+        errors.append("NATIVE_D_CLASSIFICATION_MISMATCH")
+    if (
+        trace.get("CASE_D_ARGUS_FOLLOWUP") != "NOT_REQUIRED"
+        or trace.get("ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE") != "NOT_EXERCISED"
+        or trace.get("OPERATIONAL_PROXIES", {}).get("EFFICIENCY_CLASSIFICATION") != "LEAN"
+        or trace.get("OPERATIONAL_PROXIES", {}).get("MEASURED") is not False
+        or trace.get("OPERATIONAL_PROXIES", {}).get("WALL_CLOCK_MS") is not None
+        or not isinstance(trace.get("NOTES"), str)
+        or not trace.get("NOTES", "").strip()
+    ):
+        errors.append("NATIVE_D_FOLLOWUP_EFFICIENCY_OR_NOTES_MISMATCH")
+    return errors
+
+
+def validate_phase11_d_reconciliation(
+    baseline: dict[str, Any], cases_doc: dict[str, Any], trace: dict[str, Any]
+) -> list[str]:
+    """Bind native Case D evidence to current qualification state and separate coverage."""
+    cases = {case.get("id"): case for case in cases_doc.get("cases", []) if isinstance(case, dict)}
+    errors = validate_native_case_d_capture(trace, cases.get("D", {}))
+    report = baseline.get("phase11_d_reconciliation")
+    if not isinstance(report, dict):
+        return errors + ["CASE_D_RECONCILIATION_MISSING"]
+    expected_classifications = trace.get("ROUTING_RESULT_DETAIL")
+    if (
+        report.get("task_id") != "P11-D-corpus"
+        or report.get("label") != "PHASE11_CASE_D_FRESH_ROOT"
+        or report.get("evidence_artifact") != "tests/phase11-integrated-routing/case-d.native-trace.json"
+        or report.get("evidence_class") != "FRESH_ROOT_NATIVE"
+    ):
+        errors.append("CASE_D_EVIDENCE_LINK_OR_LABEL_MISMATCH")
+    if (
+        report.get("root_session_id") != CASE_D_ROOT_SESSION_ID
+        or report.get("root_directory") != CASE_D_ROOT_DIRECTORY
+        or report.get("root_agent") != "kael"
+        or report.get("root_parent_session_id") is not None
+        or report.get("root_parent_session_id_observation") != "NOT_EXPOSED"
+        or report.get("root_terminal_outcome") != "succeeded"
+        or report.get("root_terminal_message_id") != CASE_D_ROOT_TERMINAL_MESSAGE_ID
+    ):
+        errors.append("CASE_D_ROOT_RECONCILIATION_MISMATCH")
+    if report.get("classifications") != expected_classifications or report.get("acceptance_status") != "PASS":
+        errors.append("CASE_D_CLASSIFICATION_OR_ACCEPTANCE_MISMATCH")
+    if report.get("phase11_status") != "PARTIAL":
+        errors.append("CASE_D_PHASE_STATUS_MUST_REMAIN_PARTIAL")
+    if report.get("pending_fresh_root_labels") != CURRENT_PHASE11_PENDING_LABELS:
+        errors.append("CASE_D_CURRENT_PENDING_LABELS_MISMATCH")
+    if report.get("expected_product_route") != CASE_D_EXPECTED_ROUTE or report.get("observed_unique_child_session_launch_order") != CASE_D_ACTUAL_ROUTE:
+        errors.append("CASE_D_ROUTE_RECONCILIATION_MISMATCH")
+    expected_children = [
+        {
+            "role": child["AGENT"],
+            "session_id": child["NATIVE_SESSION_ID"],
+            "launch_order": child["LAUNCH_ORDER"],
+            "invocation_count": 1,
+            "tool_state": "completed",
+            "execution_outcome": "succeeded",
+            "literal_return_status": CASE_D_LITERAL_RETURN_STATUSES[child["AGENT"]],
+        }
+        for child in CASE_D_CHILD_SESSIONS
+    ]
+    if report.get("child_sessions") != expected_children:
+        errors.append("CASE_D_CHILD_SESSION_RECONCILIATION_MISMATCH")
+    if report.get("root_subagent_call_invocation_counts") != {"nox": 1, "veyra": 1, "argus": 1}:
+        errors.append("CASE_D_INVOCATION_COUNTS_MISMATCH")
+    expected_report_facts = {
+        "repository_inspection": {
+            "root": "C:/Users/BLAUTECH/OneDrive/WORKSPACE/Personal/Tools/OpenCode-OlympusAgents",
+            "branch": "qualify/phase-11-integrated-routing",
+            "head_before_d_corpus_edits": CASE_D_ROOT_HEAD,
+            "preexisting_working_tree_clean": True,
+            "origin": "https://github.com/Edulynch/OpenCode-OlympusAgents.git",
+            "origin_source": "task context",
+            "git_mutation_performed": False,
+        },
+        "root_execution_and_semantic_outcomes": {
+            "execution_metadata": "succeeded",
+            "semantic_final_outcome": "NEEDS_USER_INPUT",
+        },
+        "isolation": {
+            "worktree_isolation": "PASS",
+            "separately_registered_worktree": True,
+            "shares_canonical_git_common_dir": True,
+            "verified_directory": CASE_D_ROOT_DIRECTORY,
+            "starting_head": CASE_D_ROOT_HEAD,
+            "canonical_repository_head": CASE_D_ROOT_HEAD,
+            "verified_only": True,
+            "worktree_creation_claimed": False,
+            "nox_initial_worktree_clean": True,
+            "nox_final_worktree_clean": True,
+        },
+        "result_consumption": {
+            "root_aggregate_statement": "All three child sessions terminal and consumed.",
+            "pending_children": 0,
+            "unconsumed_results": 0,
+            "unknown_executions": 0,
+            "result_ids": None,
+            "per_result_consumption_timestamps": None,
+            "session_lifetime_exact_once": None,
+        },
+        "user_question_count": 1,
+        "question_tool_calls": 0,
+        "question_barrier": "PASS",
+        "final_binary_question": CASE_D_ROOT_FINAL_FACTS["FINAL_BINARY_QUESTION"],
+        "diagnosis": {
+            "status": "INCONCLUSIVE",
+            "cause": "CAUSE_UNCONFIRMED",
+            "functional_violation_established": False,
+            "repair_supported": False,
+            "discriminating_evidence_found": False,
+            "evidence_request_made_by_argus": False,
+            "followup_consultation": False,
+        },
+        "efficiency_basis": "LEAN is a qualification judgment, not measured latency or throughput.",
+        "source_integrity": {
+            "root_files_changed": "NONE",
+            "native_case_replayed_or_repaired": False,
+            "writer_source_edits_to_case_fixture": False,
+        },
+        "case_rerun_performed_by_reconciliation": False,
+    }
+    for field, expected in expected_report_facts.items():
+        if report.get(field) != expected:
+            errors.append(f"CASE_D_RECONCILIATION_FACT_MISMATCH:{field}")
+    if report.get("route_difference") != (
+        "JUSTIFIED_QUALIFICATION_PREREQUISITE: Nox performed read-only isolation verification before the product diagnostic route; Veyra provided bounded evidence before one Argus consultation."
+    ):
+        errors.append("CASE_D_ROUTE_DIFFERENCE_CLASSIFICATION_MISMATCH")
+    if report.get("result_ids") is not None or report.get("per_result_consumption_timestamps") is not None:
+        errors.append("CASE_D_UNOBSERVED_RESULT_CONSUMPTION_MUST_REMAIN_NULL")
+    if report.get("functional_violation_established") is not False or report.get("repair_supported") is not False:
+        errors.append("CASE_D_CAUSE_OR_REPAIR_OVERCLAIM")
+    if report.get("case_rerun_performed_by_reconciliation") is not False:
+        errors.append("CASE_D_RECONCILIATION_MUST_NOT_RERUN_CASE")
+    if report.get("followup") != CASE_D_PENDING_FOLLOWUP_COVERAGE:
+        errors.append("CASE_D_FOLLOWUP_COVERAGE_SEPARATION_MISMATCH")
+
+    coverage = baseline.get("argus_same_session_followup_runtime_coverage")
+    if coverage != CASE_D_PENDING_FOLLOWUP_COVERAGE:
+        errors.append("ARGUS_FOLLOWUP_RUNTIME_COVERAGE_PROMOTED_OR_CONFLATED")
+    current = baseline.get("live_qualification", {})
+    if not isinstance(current, dict) or (
+        current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
+        or current.get("fresh_root_native") != "B3_PASS; C_PASS; D_PASS; E,F,G,H,K_PENDING"
+        or current.get("native_results_claimed") is not True
+        or current.get("overall_status") != "PARTIAL"
+    ):
+        errors.append("CURRENT_PHASE11_PENDING_STATE_MISMATCH")
+    action_rows = [
+        action for action in cases_doc.get("fresh_root_actions", [])
+        if action.get("case_id") == "D" and action.get("label") == "PHASE11_CASE_D_FRESH_ROOT"
+    ]
+    if len(action_rows) != 1 or any(
+        action_rows[0].get(key) != value
+        for key, value in {
+            "scenario": "precollected_evidence",
+            "status": "PASS",
+            "evidence_class": "FRESH_ROOT_NATIVE",
+            "evidence_artifact": "case-d.native-trace.json",
+        }.items()
+    ):
+        errors.append("CASE_D_MATRIX_EVIDENCE_LINK_MISMATCH")
+    return errors
+
+
 def main() -> int:
     failures, documents = validate_corpus()
     static_failures = run_static_baseline_checks()
     baseline = load_json(HERE / "baseline.json")
     native_b3 = load_json(HERE / "case-b3.native-trace.json")
     native_c = load_json(HERE / "case-c.native-trace.json")
+    native_d = load_json(HERE / "case-d.native-trace.json")
     reconciliation_failures = validate_phase11_b3_reconciliation(
         baseline, documents["cases"], native_b3
     )
     case_c_failures = validate_phase11_c_reconciliation(
         baseline, documents["cases"], native_c
+    )
+    case_d_failures = validate_phase11_d_reconciliation(
+        baseline, documents["cases"], native_d
     )
     for label in ("ARGUS_GATE_MARKER", "TALOS_GATE_MARKER", "ATLAS_GATE_MARKER", "HELIOS_GATE_MARKER", "THALES_GATE_MARKER", "ROOT_OWNER_MARKER", "NO_NESTED_CHILD_MARKER", "CORE_CHILD_CEILING_MARKER"):
         if label in static_failures:
@@ -2302,7 +2849,9 @@ def main() -> int:
         print("B3-NATIVE: PASS (FRESH_ROOT_NATIVE; invocation-level capture; not inserted into synthetic traces)")
     if not case_c_failures:
         print("C-NATIVE: PASS (FRESH_ROOT_NATIVE; Argus negative control PASS; Nox isolation prerequisite kept separate from product route)")
-    pending_fresh_root_cases = {"D", "E", "F", "G", "H", "K"}
+    if not case_d_failures:
+        print("D-NATIVE: PASS (FRESH_ROOT_NATIVE; one terminal Argus diagnosis; unresolved cause correctly stops for one bounded user question)")
+    pending_fresh_root_cases = {"E", "F", "G", "H", "K"}
     pending_labels: list[str] = []
     for action in documents["cases"].get("fresh_root_actions", []):
         case_id = action.get("case_id")
@@ -2310,8 +2859,8 @@ def main() -> int:
             label = action.get("label", f"PHASE11_CASE_{case_id}_FRESH_ROOT")
             pending_labels.append(label)
             print(f"HUMAN_ACTION_REQUIRED {label}")
-    if failures or reconciliation_failures or case_c_failures:
-        for failure in [*failures, *reconciliation_failures, *case_c_failures]:
+    if failures or reconciliation_failures or case_c_failures or case_d_failures:
+        for failure in [*failures, *reconciliation_failures, *case_c_failures, *case_d_failures]:
             print(f"FAIL: {failure}")
         print("PHASE11_QUALIFICATION: FAIL (artifact validation only)")
         return 1
@@ -2320,9 +2869,10 @@ def main() -> int:
             print(f"FAIL: STATIC_{label}")
         print("PHASE11_QUALIFICATION: FAIL (bounded policy marker check)")
         return 1
-    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, isolated B3/C native invocation captures, and historical reconciliations are internally valid; validation does not authenticate source exports)")
+    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, B3/C/D native invocation captures, and historical reconciliations are internally valid; validation does not authenticate source exports)")
+    print("ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED (separate optional evidence-requesting scenario remains open for final coverage review; not a Case D blocker)")
     print("MISSING_LIVE_CASES: " + ", ".join(pending_labels) + "; A/I/J/L recovered reports remain guided/history only, with no native result inferred from synthetic traces.")
-    print("PHASE11_QUALIFICATION: PARTIAL (B3 and C accepted; D/E/F/G/H/K fresh-root cases remain pending)")
+    print("PHASE11_QUALIFICATION: PARTIAL (B3, C, and D accepted; E/F/G/H/K fresh-root cases remain pending)")
     return 0
 
 

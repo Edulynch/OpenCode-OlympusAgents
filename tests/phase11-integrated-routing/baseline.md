@@ -219,7 +219,8 @@ case.
   `ACCEPTABLE` as a qualification judgment, not a latency measurement. B3 is
   accepted; B1 remains `FIXTURE_DEFECT` with Question Barrier PASS; B2 runtime
   remains PASS while B2 isolation/acceptance remains PARTIAL. Overall Phase 11
-  remains PARTIAL; the B3 snapshot listed C, D, E, F, G, H, and K as pending.
+  remains PARTIAL; the B3 snapshot listed C, D, E, F, G, H, and K as pending
+  at that time.
   A/I/J/L recovered
   observations remain guided/history-only.
 
@@ -300,16 +301,83 @@ the synthetic trace corpus.
   Case C is accepted; B1 remains `FIXTURE_DEFECT` with Question Barrier PASS;
   B2 runtime remains PASS while isolation/acceptance remains PARTIAL; B3 remains
   PASS. The B3 capture's historical pending labels still include C as of its
-  earlier snapshot. Current pending fresh-root work is D, E, F, G, H, and K.
+  earlier snapshot. At the C snapshot, current pending fresh-root work was D,
+  E, F, G, H, and K; later Case D evidence below removes D from current pending
+  state without rewriting the historical C snapshot.
   A guided/recovered PASS, I guided PARTIAL, J guided/recovered PASS, and L's
   recovered negative automatic-Aegis PASS remain history-only, not fresh-root
   evidence. Overall Phase 11 remains **IN VALIDATION / PARTIAL**, not SHIPPED.
 
-## Reconciliation-task repository preflight
+## Prior P11-C repository preflight
 
-Before these edits, the repository was clean on branch
+Before the P11-C corpus edits, the repository was clean on branch
 `qualify/phase-11-integrated-routing` at
-`5b3761acf10125a97585f9b1dbcc127d15f50828`; all seven assigned Phase 11 targets
+`5b3761acf10125a97585f9b1dbcc127d15f50828`; the seven then-assigned Phase 11 targets
 were tracked. Origin was
 `https://github.com/Edulynch/OpenCode-OlympusAgents.git`; no upstream branch was
 configured. No Git mutation was performed.
+
+## Case D native reconciliation — `P11-D-corpus`
+
+The supplied Nox native reconciliation and Veyra scoped expectation discovery
+are recorded separately in `case-d.native-trace.json` as
+`FRESH_ROOT_NATIVE`. This writer did not access the original Case D
+worktree/session, call native APIs, replay the case, or repair a fixture.
+
+- Before this D corpus edit, the canonical repository was clean on branch
+  `qualify/phase-11-integrated-routing` at
+  `60eb1685ee866a59de46be09dba3555c1cd3e776` (read-only Git status/HEAD check).
+  The configured origin URL is from task context; no Git mutation was performed.
+- Root Kael `ses_ef8c726b7ffeqWgvWlpg0NcU1Q` has execution metadata outcome
+  `succeeded`; the semantic `FINAL_OUTCOME` is `NEEDS_USER_INPUT`. The root's
+  parent session field was not exposed and remains `null` labeled
+  `NOT_EXPOSED`. The registered qualification worktree was verified only at
+  HEAD `60eb1685ee866a59de46be09dba3555c1cd3e776`; it is a linked worktree
+  sharing the canonical Git common directory. No worktree-creation claim is
+  made. Nox reported the worktree clean before and after; the root reported
+  `FILES_CHANGED: NONE`.
+- Three direct child sessions, each terminal `succeeded` under the same root,
+  were observed in order: Nox `ses_ef8c67e03ffeYoAjNx6bfAmNdR` for read-only
+  isolation; Veyra `ses_ef8c49280ffeiI6EQxlG6e4Pjx` for bounded evidence; Argus
+  `ses_ef8c3a562ffemV1PDdCkCYmThm` for one diagnosis consultation. The observed
+  session family is Kael -> Nox -> Veyra -> Argus; the semantic product route is
+  Kael -> Veyra -> Argus. Nox is a qualification prerequisite, not product
+  diagnosis. Native tool delivery state is `completed` for all three and their
+  child-session execution outcomes are `succeeded`; the literal Nox/Veyra
+  `RETURN_STATUS` fields were not supplied and remain `null`. Argus's literal
+  `RETURN_STATUS` is `INCONCLUSIVE`, matching its diagnostic status; this is not
+  normalized to `SUCCESS` from the completed delivery or succeeded session.
+- Veyra found no input provenance or subtotal-domain contract distinguishing
+  whether the subtotal includes shipping. The already-collected bounded evidence
+  was supplied to Argus; no further discriminator was available. Argus returned
+  `INCONCLUSIVE` with `CAUSE_UNCONFIRMED`; no functional violation is established
+  and no repair is supported. The `NONTRIVIAL_FUNCTIONAL_BUG` request label is
+  not promoted into a confirmed violation or cause.
+- The root reports all three children terminal and consumed before one
+  parent-authored binary text question. `USER_QUESTION_COUNT` is 1; there were no
+  question-tool calls. The unresolved question is preserved exactly in the
+  native artifact and is not asked again here. Aggregate pending, unconsumed,
+  and unknown child counts are zero; result IDs and per-result consumption
+  timestamps remain `null`, not fabricated events. Native permission UI and
+  decision are `NOT_OBSERVABLE`.
+- Case D's bounded diagnostic-limit, isolation, Argus routing, no-invented-cause,
+  no-progress-stop, question barrier, role purity, result fidelity, and
+  completion ownership classifications are PASS. Efficiency is `LEAN` as a
+  qualification judgment, not a latency measurement. Case D follow-up is
+  `NOT_REQUIRED` because Argus made no evidence request.
+- Separately, `ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE` is
+  `NOT_EXERCISED`: Case D does not demonstrate runtime same-session follow-up.
+  An optional genuine evidence-requesting scenario remains open for final
+  coverage review; it is not a Case D blocker or an implicit pass. The synthetic
+  iterative D trace remains unchanged and continues to represent an actual
+  evidence-request/follow-up path subject to generic same-session, new-evidence,
+  production, delivery, consumption, and no-progress validation.
+- Current fresh-root work is E, F, G, H, and K. Overall Phase 11 remains
+  **IN VALIDATION / PARTIAL**, not SHIPPED. Historical B3 and C pending snapshots
+  remain unchanged.
+- Final local validation: the Phase 11 unit suite passed all 53 tests; the
+  qualifier exited 0 with its expected `PARTIAL` status; the feature fixture's
+  four compatibility tests passed; Harness Core safe-root read-only validation
+  passed with 29 managed outputs unchanged; and `git diff --check` passed. These
+  are corpus/validator checks, not a Case D replay or native-export
+  authentication.

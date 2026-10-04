@@ -75,7 +75,7 @@
     {
       "id": "D",
       "request_class": "NONTRIVIAL_FUNCTIONAL_BUG",
-      "description": "Competing functional causes; Argus requests bounded evidence and continues in the same session.",
+      "description": "Competing functional interpretations; either Argus may request bounded discriminating evidence and continue in the same session, or Kael may supply already-collected bounded evidence for one terminal Argus consultation.",
       "trace_ids": [
         "D"
       ],
@@ -84,17 +84,13 @@
           "kael",
           "argus",
           "veyra"
+        ],
+        "precollected_evidence": [
+          "kael",
+          "veyra",
+          "argus"
         ]
-      },
-      "mandatory_dependency_edges": [
-        {
-          "before_work_id": "bounded-contract-evidence",
-          "after_consultation": {
-            "role": "argus",
-            "number": 2
-          }
-        }
-      ]
+      }
     },
     {
       "id": "E",
@@ -271,8 +267,11 @@
     },
     {
       "case_id": "D",
-      "scenario": "default",
-      "label": "PHASE11_CASE_D_FRESH_ROOT"
+      "scenario": "precollected_evidence",
+      "label": "PHASE11_CASE_D_FRESH_ROOT",
+      "status": "PASS",
+      "evidence_class": "FRESH_ROOT_NATIVE",
+      "evidence_artifact": "case-d.native-trace.json"
     },
     {
       "case_id": "E",

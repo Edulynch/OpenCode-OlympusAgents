@@ -7,8 +7,10 @@ timestamps, guided runs, or proof of model behavior. Static marker checks mean
 only that bounded policy text is present. The task owner separately reported
 recovered guided outcomes and a reconciled B2 runtime observation (recorded
 below and in `baseline.json`). Separately, verified native B3 exports/history
-and CLI results are captured in `case-b3.native-trace.json`; B3 qualifies
-isolated Case B acceptance. That native invocation-level capture is not inserted
+and CLI results are captured in `case-b3.native-trace.json`; verified native
+Case C exports/history are captured in `case-c.native-trace.json`. B3 qualifies
+isolated Case B acceptance, and C qualifies isolated Case C acceptance with
+Argus correctly inactive. Neither native invocation-level capture is inserted
 into the synthetic trace corpus or reconstructed as a synthetic lifecycle.
 
 ## Automatic local commands
@@ -24,13 +26,13 @@ uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-on
 ```
 
 The first command validates the versioned case matrix, synthetic event semantics,
-completion/evidence claims, separate B1/B2/B3 reconciliations, the bounded B3
-native invocation capture, and presence-only gate markers. It reports
+completion/evidence claims, separate B1/B2/B3/C reconciliations, the bounded B3
+and C native invocation captures, and presence-only gate markers. It reports
 `PHASE11_ARTIFACTS: PASS` when those artifacts are sound while overall
 qualification remains `PHASE11_QUALIFICATION: PARTIAL` until the remaining
 isolated fresh-root evidence is accepted. The second command
-applies mutations to valid authored traces and requires the prohibited variants
-to fail. The third command currently runs only the feature fixture's green
+applies mutations to valid authored traces and bounded native captures, and
+requires the prohibited variants to fail. The third command currently runs only the feature fixture's green
 pre-feature compatibility tests. The future feature work must add acceptance
 tests under that fixture and rerun this same discovery command for both
 calculation and presentation, including the complete contract matrix; do not
@@ -87,11 +89,39 @@ implementation; Kovan preceded Nox validation and Vera review. Vera's review
 and source-review follow-up also came from the same original session. Efficiency
 `ACCEPTABLE` is a qualification judgment, not measured latency.
 
+## Case C native capture and validation boundary
+
+`case-c.native-trace.json` records the verified `PHASE11_CASE_C_FRESH_ROOT`
+history as `FRESH_ROOT_NATIVE`. It contains the two observed root invocation
+creation/return pairs plus the final root completion statement, joined to the
+unique Nox and Kovan child sessions. Observed event ordinals are not timestamps;
+only the supplied Nox return and later Kovan-call creation epoch-millisecond
+values are retained. Those observations support maximum direct-child concurrency
+of one. Result IDs, per-invocation consumption times, session-lifetime
+exact-once, retries, and duration remain unknown. The root's aggregate terminal
+statement supports zero pending, unconsumed, and unknown children.
+
+The expected product route is Kael -> Kovan. The actual unique-session family is
+Kael -> Nox -> Kovan because Nox's read-only worktree-isolation verification was
+a qualification prerequisite, not product diagnosis. The trace does not reorder
+the observed route. Nox confirmed the separate disposable copy at the recorded
+HEAD; the historical isolation Git-check exit code remains unknown.
+
+Kovan's native record reports one changed path,
+`fixtures/obvious/cart.py`, with subtraction corrected to multiplication under
+the explicit fixture contract. The specified single test passed with exit 0;
+Kovan also reported a successful `git diff --check`. The latter child result is
+recorded separately and is not projected into the literal root terminal facts.
+Argus's invocation and unique-session counts are explicitly zero, alongside the
+other recorded forbidden-role controls. Efficiency `LEAN` is qualification
+judgment, not measured performance. The B3 report's earlier historical pending
+labels still include C; the current pending set is D, E, F, G, H, and K.
+
 ## Remaining fresh-root work remains user action
 
 Use a separate clean disposable project copy and a **new, verified Kael root for
-each pending case**. Only C, D, E, F, G, H, and K below remain pending fresh-root
-actions; isolated B3 is accepted. A, I, J, and L prompt references/history are
+each pending case**. Only D, E, F, G, H, and K below remain pending fresh-root
+actions; isolated B3 and C are accepted. A, I, J, and L prompt references/history are
 retained below but are not new rerun requests. Do not reuse a guided/current
 session as a fresh root. Confirm the effective root agent, child parentage and
 actual roles from native session evidence before accepting a case. Scope each live edit to the disposable
@@ -118,8 +148,9 @@ synthetic per-session lifecycle.
   not expected for this bounded producer/consumer dependency alone. Ask a bounded
   question if a material ambiguity remains. Orin is not qualified by this
   bounded case.”
-- `HUMAN_ACTION_REQUIRED PHASE11_CASE_C_FRESH_ROOT` — “In a disposable copy, fix the
-  obvious `calculate_total` contract defect in
+- `ACCEPTED PHASE11_CASE_C_FRESH_ROOT` — native evidence is in
+  `case-c.native-trace.json`; no rerun is requested. Original prompt: “In a
+  disposable copy, fix the obvious `calculate_total` contract defect in
   `fixtures/obvious/cart.py`; then run its unit test. The fixture is currently
   intentionally wrong, so do not treat its pre-fix failure as a qualification
   failure.”
@@ -296,7 +327,7 @@ sessions only, not the Case A/I/J/L native roots. Preserve them if available.
   useful context, but not independent fresh-root evidence.
 - `FRESH_ROOT_NATIVE`: observed native evidence from a separately created,
   verified Kael root with actual child/session IDs and captured event ordering.
-  B3 now passes this bar; C, D, E, F, G, H, and K remain pending. B2's routing
+  B3 and C now pass this bar; D, E, F, G, H, and K remain pending. B2's routing
   observation is valid context but failed isolation. The recovered A/I/J/L
   observations remain guided/user-reported references and are not fresh-root
   evidence.
@@ -333,10 +364,10 @@ are marker-presence checks only.
 
 ## Current gate
 
-The A–L matrix, unchanged synthetic/mutation suite, and isolated B3 native
-capture are present. Case B1 remains a fixture defect with Question Barrier
-PASS; B2 runtime behavior remains PASS but isolation/acceptance remains PARTIAL;
-B3 fresh-root native acceptance is PASS. Fresh-root evidence remains pending
-for C, D, E, F, G, H, and K. A/I/J/L observations remain guided/history-only,
+The A–L matrix, unchanged synthetic trace corpus, expanded mutation coverage,
+and isolated B3/C native captures are present. Case B1 remains a fixture defect
+with Question Barrier PASS; B2 runtime behavior remains PASS but
+isolation/acceptance remains PARTIAL; B3 and C fresh-root native acceptance are
+PASS. Fresh-root evidence remains pending for D, E, F, G, H, and K. A/I/J/L observations remain guided/history-only,
 with no rerun requested. The overall phase is **IN VALIDATION / PARTIAL**, not
 SHIPPED.

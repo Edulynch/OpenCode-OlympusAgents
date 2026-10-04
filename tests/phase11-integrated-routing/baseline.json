@@ -62,7 +62,7 @@
   },
   "live_qualification": {
     "guided_current_session": "NOT_CAPTURED",
-    "fresh_root_native": "B3_PASS; C,D,E,F,G,H,K_PENDING",
+    "fresh_root_native": "B3_PASS; C_PASS; D,E,F,G,H,K_PENDING",
     "native_results_claimed": true,
     "pending_labels_at_baseline_capture": [
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_A",
@@ -79,7 +79,6 @@
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_L"
     ],
     "pending_labels": [
-      "HUMAN_ACTION_REQUIRED PHASE11_CASE_C_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
@@ -95,7 +94,7 @@
       "REFERENCE_ONLY PHASE11_CASE_J_NEGATIVE_CONTROL",
       "REFERENCE_ONLY PHASE11_CASE_L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERY"
     ],
-    "current_pending_state_source": "P11-B3-corpus verified native evidence; original baseline and prior recovery labels preserved separately"
+    "current_pending_state_source": "P11-C-corpus verified native evidence; original baseline, prior recovery labels, and B3-capture pending labels preserved separately"
   },
   "recovered_user_observations": {
     "task_id": "P11-FIX-20261003",
@@ -570,5 +569,202 @@
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
     ]
+  },
+  "phase11_c_reconciliation": {
+    "task_id": "P11-C-corpus",
+    "source": "Verified native OpenCode V2 read-only API exports/history and session results collected by Nox; this corpus writer made no API calls, accessed no disposable worktree, and did not rerun Case C.",
+    "label": "PHASE11_CASE_C_FRESH_ROOT",
+    "evidence_artifact": "tests/phase11-integrated-routing/case-c.native-trace.json",
+    "evidence_class": "FRESH_ROOT_NATIVE",
+    "root_session_id": "ses_efa068637ffeq7qrjCSJFLykc5",
+    "root_directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-c",
+    "root_agent": "kael",
+    "root_parent_session_id": null,
+    "root_title": "PHASE11_CASE_C fresh-root cart contract qualification",
+    "root_terminal_outcome": "succeeded",
+    "root_terminal_message_id": "msg_105fd3baa001OouobBeNyh4Nup",
+    "isolation": {
+      "worktree_isolation": "PASS",
+      "separate_disposable_copy": true,
+      "execution_repository": "SEPARATE_DISPOSABLE_COPY",
+      "verification_session_id": "ses_efa05f4dfffe9s0gk5VEbkVRA9",
+      "verified_directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-c",
+      "canonical_repository_head": "8e77742ade517d4d903e0c8aa09cd037a44aa3da",
+      "verified_head": "8e77742ade517d4d903e0c8aa09cd037a44aa3da",
+      "verification_only": true,
+      "worktree_creation_claimed": false,
+      "historical_git_check_exit_code": null
+    },
+    "observed_terminal_snapshot": {
+      "source": "OBSERVED_NATIVE_ROOT_TERMINAL_MESSAGE",
+      "root_session_id": "ses_efa068637ffeq7qrjCSJFLykc5",
+      "message_id": "msg_105fd3baa001OouobBeNyh4Nup",
+      "facts": {
+        "WORKTREE_ISOLATION": "PASS",
+        "STARTING_HEAD": "8e77742ade517d4d903e0c8aa09cd037a44aa3da",
+        "FILES_CHANGED": [
+          "tests/phase11-integrated-routing/fixtures/obvious/cart.py"
+        ],
+        "VALIDATION_COMMAND": "uv run --python 3.11 python -c \"import sys; sys.path.insert(0, r'tests/phase11-integrated-routing/fixtures/obvious'); import test_cart; test_cart.test_total_is_price_times_quantity(); print('PASS: test_total_is_price_times_quantity')\"",
+        "ENVIRONMENT": {
+          "UV_NO_SYNC": "1",
+          "UV_NO_PROJECT": "1",
+          "UV_PYTHON_DOWNLOADS": "never",
+          "PYTHONDONTWRITEBYTECODE": "1"
+        },
+        "VALIDATION_RESULT": "PASS — exit 0",
+        "UNRESOLVED_WORK": "NONE",
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+        "ANY_WORK_REMAINING": "NO"
+      }
+    },
+    "expected_product_route": [
+      "kael",
+      "kovan"
+    ],
+    "observed_unique_child_session_launch_order": [
+      "kael",
+      "nox",
+      "kovan"
+    ],
+    "route_difference": "JUSTIFIED_QUALIFICATION_PREREQUISITE: initial Nox worktree-isolation verification preceded the product correction; it is not product diagnosis.",
+    "child_sessions": [
+      {
+        "role": "nox",
+        "session_id": "ses_efa05f4dfffe9s0gk5VEbkVRA9",
+        "launch_order": 1,
+        "invocation_count": 1
+      },
+      {
+        "role": "kovan",
+        "session_id": "ses_efa03f35dffeSFO8Kg4CoukMfF",
+        "launch_order": 2,
+        "invocation_count": 1
+      }
+    ],
+    "root_subagent_call_invocation_counts": {
+      "nox": 1,
+      "kovan": 1
+    },
+    "invocation_returns_observed_once": 2,
+    "result_ids": null,
+    "result_consumption": {
+      "final_root_statement": "All required child sessions terminal and consumed.",
+      "pending_children": 0,
+      "unconsumed_results": 0,
+      "unknown_executions": 0,
+      "result_ids": null,
+      "per_invocation_consumption_timing": null,
+      "session_lifetime_exact_once": null
+    },
+    "user_question_count": 0,
+    "classifications": {
+      "CASE_C_FRESH_ROOT_NATIVE": "PASS",
+      "ISOLATION": "PASS",
+      "ROUTING": "PASS",
+      "NEGATIVE_ARGUS_CONTROL": "PASS",
+      "ROLE_PURITY": "PASS",
+      "RESULT_FIDELITY": "PASS",
+      "COMPLETION_OWNERSHIP": "PASS",
+      "EFFICIENCY": "LEAN"
+    },
+    "role_purity": {
+      "direct_children_only": true,
+      "nested_delegation": false,
+      "reviewer_edits": false,
+      "root_source_writes": false,
+      "tool_counts_by_role": {
+        "kael": {
+          "subagent": 2,
+          "read": 4,
+          "glob": 1
+        },
+        "nox": {
+          "shell": 7
+        },
+        "kovan": {
+          "read": 2,
+          "shell": 4,
+          "patch": 1
+        }
+      },
+      "negative_role_invocations": {
+        "veyra": 0,
+        "orin": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0,
+        "vera": 0
+      }
+    },
+    "same_original_session_reconciliation": {
+      "nox": {
+        "session_id": "ses_efa05f4dfffe9s0gk5VEbkVRA9",
+        "invocation_count": 1,
+        "purpose": "read-only isolation verification",
+        "result": "SUCCESS",
+        "terminal_outcome": "succeeded",
+        "verified_directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-c",
+        "verified_head": "8e77742ade517d4d903e0c8aa09cd037a44aa3da",
+        "historical_git_check_exit_code": null
+      },
+      "kovan": {
+        "session_id": "ses_efa03f35dffeSFO8Kg4CoukMfF",
+        "invocation_count": 1,
+        "result": "SUCCESS",
+        "terminal_outcome": "succeeded",
+        "reported_changed_paths": [
+          "tests/phase11-integrated-routing/fixtures/obvious/cart.py"
+        ],
+        "change": "subtraction to multiplication per the explicit documented cart contract",
+        "test_command": "uv run --python 3.11 python -c \"import sys; sys.path.insert(0, r'tests/phase11-integrated-routing/fixtures/obvious'); import test_cart; test_cart.test_total_is_price_times_quantity(); print('PASS: test_total_is_price_times_quantity')\"",
+        "test_result": "PASS",
+        "test_exit_code": 0,
+        "git_diff_check": "PASS",
+        "git_diff_check_exit_code": 0
+      }
+    },
+    "runtime_validation": {
+      "python_requested": "3.11",
+      "command": "uv run --python 3.11 python -c \"import sys; sys.path.insert(0, r'tests/phase11-integrated-routing/fixtures/obvious'); import test_cart; test_cart.test_total_is_price_times_quantity(); print('PASS: test_total_is_price_times_quantity')\"",
+      "result": "PASS",
+      "exit_code": 0,
+      "test_target": "test_cart.test_total_is_price_times_quantity",
+      "tests_passed": null,
+      "environment": {
+        "UV_NO_SYNC": "1",
+        "UV_NO_PROJECT": "1",
+        "UV_PYTHON_DOWNLOADS": "never",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "source_integrity_after_test": null
+    },
+    "unknowns": {
+      "timestamps": null,
+      "result_ids": null,
+      "per_invocation_consumption_timing": null,
+      "session_lifetime_exact_once": null,
+      "retry_count": null,
+      "wall_clock_ms": null,
+      "runtime_duration": null,
+      "native_permission_ui": "NOT_OBSERVABLE",
+      "native_permission_decision": "NOT_OBSERVABLE"
+    },
+    "efficiency_basis": "LEAN is a qualification judgment, not measured latency or throughput.",
+    "case_rerun_performed_by_reconciliation": false,
+    "acceptance_status": "PASS",
+    "phase11_status": "PARTIAL",
+    "pending_fresh_root_labels": [
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
+    ],
+    "case_routing_result": "CASE_C_FRESH_ROOT_NATIVE_PASS; Argus did not activate for the obvious functional defect."
   }
 }

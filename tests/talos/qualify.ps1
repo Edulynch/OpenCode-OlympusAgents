@@ -10,8 +10,19 @@ function Check([string]$id, [bool]$ok) { if (-not $ok) { throw "$id FAIL" }; Wri
 function Install([string]$root, [string]$target, [switch]$DryRun) {
     $args = @('-NoProfile','-File',(Join-Path $root 'install.ps1'),'-SourceRoot',$root,'-Target',$target)
     if ($DryRun) { $args += '-DryRun' }
-    $output = (& pwsh @args 2>&1 | Out-String)
-    [pscustomobject]@{ Code=$LASTEXITCODE; Output=$output }
+    $oldPath = $env:PATH
+    try {
+        # Avoid a duplicate Microsoft Store pwsh app-execution alias in installer subprocesses.
+        $windowsApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+        $pathParts = @($oldPath -split [IO.Path]::PathSeparator | Where-Object { $_ -and $_.Trim('"') -ne $windowsApps })
+        if ($pathParts -notcontains $PSHOME) { $pathParts += $PSHOME }
+        $env:PATH = $pathParts -join [IO.Path]::PathSeparator
+        $executable = Join-Path $PSHOME 'pwsh.exe'
+        $output = (& $executable @args 2>&1 | Out-String)
+        [pscustomobject]@{ Code=$LASTEXITCODE; Output=$output }
+    } finally {
+        $env:PATH = $oldPath
+    }
 }
 function Snapshot([string]$root) {
     $paths = @('src/local.txt','docs/staged.txt','notes.txt','.serena/project.yml','.opencode/user-note.txt')
@@ -50,14 +61,26 @@ try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
     $t = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/talos.md'))
     $k = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/kael.md'))
+    $codexRoot = [IO.File]::ReadAllText((Join-Path $source 'CODEX.md'))
+    $codexTalos = [IO.File]::ReadAllText((Join-Path $source '.codex/agents/talos.toml'))
+    $routing = [IO.File]::ReadAllText((Join-Path $source 'olympus/policies/routing.md'))
     $b = [IO.File]::ReadAllText((Join-Path $source 'scripts/bootstrap.ps1'))
     $r = [IO.File]::ReadAllText((Join-Path $source 'docs/ROADMAP.md'))
-    Check TA1 ($t -match '(?m)^# 🛡️ Talos The Sentinel\r?$' -and $t -match 'mode: subagent' -and $b -match '".opencode/agents/talos.md"')
+    Check TA1 ($t -match '(?m)^# Talos — The Sentinel\r?$' -and $t -match 'mode: subagent' -and $b.Contains('.opencode/agents/talos.md'))
     Check TA2 ($t -match 'model: openai/gpt-6.1-sol#high')
     Check TA3 ($k -match '(?s)action: subagent\s+resource: talos\s+effect: allow' -and $k -match 'argus, talos, and helios are valid child role IDs')
     foreach ($pair in @(@('TA4','shell'),@('TA5','edit'),@('TA6','subagent'))) { Check $pair[0] ($t -match ('(?s)action: ' + $pair[1] + '\s+resource: "\*"\s+effect: deny')) }
     Check TA7 (@('read','glob','grep','list','lsp' | Where-Object { $t -notmatch ('(?s)action: ' + $_ + '\s+resource: "\*"\s+effect: deny') }).Count -eq 0)
-    Check TA8 ($k -match '## Security Routing Gate' -and $k -match 'TRUST_BOUNDARY_UNCLEAR' -and $k -match 'EXPLOITABILITY_UNCLEAR' -and $k -match 'FIX_BOUNDARY_AMBIGUOUS' -and $t -match 'strongly evidenced SECURITY_BUG')
+    Check TA8 ($k -match '## Security Routing Gate' -and $k -match 'TRUST_BOUNDARY_UNCLEAR' -and $k -match 'EXPLOITABILITY_UNCLEAR' -and $k -match 'FIX_BOUNDARY_AMBIGUOUS' -and $t -match 'strongly evidenced material security/trust/authorization boundary defect' -and $t -match 'no additional unanswered security-specific question')
+    $routingSources = @($k, $t, $codexRoot, $codexTalos)
+    Check CASE_E_ESTABLISHED_SECURITY_BOUNDARY_TALOS_REQUIRED (@($routingSources | Where-Object { $_ -notmatch 'Talos (is )?REQUIRED|`talos` REQUIRED|must activate you' -or $_ -notmatch 'no additional unanswered security-specific question is required for\s+initial activation' }).Count -eq 0 -and
+        $k -match 'MEMBER executing an ADMIN-only account deletion requires Talos' -and
+        $routing -match 'ESTABLISHED or STRONGLY EVIDENCED MATERIAL SECURITY / TRUST / AUTHORIZATION BOUNDARY DEFECT.*Talos REQUIRED')
+    Check CASE_SECURITY_RELEVANCE_UNCONFIRMED_NOT_AUTOMATIC (@($routingSources | Where-Object { $_ -notmatch 'SECURITY_RELEVANCE_UNCONFIRMED.*(does not qualify|does not activate|not qualify|insufficient)' }).Count -eq 0)
+    Check CASE_GENERIC_SECURITY_WORDING_NOT_AUTOMATIC (@($routingSources | Where-Object { $_ -notmatch '(?s)(mere security wording|the word.*security).*?(insufficient|does not qualify|does not activate)' }).Count -eq 0)
+    Check CASE_OPERATIONAL_SECURITY_TOOL_FAILURE_NOT_AUTOMATIC (@($routingSources | Where-Object { $_ -notmatch '(?s)Trivy/Semgrep execution\s+failure.*(NOT TALOS BY DEFAULT|does NOT activate|does not activate)' }).Count -eq 0)
+    Check CASE_NON_SECURITY_FUNCTIONAL_BUG_TALOS_ZERO (@($routingSources | Where-Object { $_ -notmatch '(?s)(deterministic non-security (functional )?(defect|bug)|non-security functional defects?).*TALOS COUNT = 0' }).Count -eq 0)
+    Check CASE_UNCONFIRMED_AFFECTED_VERSION_NOT_AUTOMATIC (@($routingSources | Where-Object { $_ -notmatch '(?s)(unconfirmed affected-version/vulnerability relevance|unconfirmed affected-version/vulnerability).*?(insufficient|does NOT activate|does not activate)' }).Count -eq 0)
     Check TA9 ($k -match 'FUNCTIONAL BEHAVIOR DEFECT' -and $t -match 'TALOS COUNT = 0')
     Check TA10 ($k -match 'NOT TALOS BY DEFAULT' -and $t -match 'OPERATIONAL_ISSUE')
     Check TA11 ($k -match 'GAP / FEATURE without violated contract' -and $t -match 'GAP / FEATURE not promised')

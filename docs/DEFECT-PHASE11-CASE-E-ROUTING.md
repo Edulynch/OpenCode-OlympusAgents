@@ -1,7 +1,8 @@
 # Phase 11 Case E — security-routing coverage defect
 
-**Status:** Confirmed intended-product routing gap; no implementation in this
-recording task.
+**Status:** `FIX_IMPLEMENTED_PENDING_E2`.
+**Historical finding:** Confirmed intended-product routing gap; the original
+native attempt remains an observed routing failure and has not been rewritten.
 **Observed case result:** `NATIVE_EXECUTED_ROUTING_FAIL`.
 **Phase 11:** **IN VALIDATION / PARTIAL**.
 
@@ -87,16 +88,52 @@ for this established boundary. This records the mismatch at the product-rule
 level. It does **not** claim the assistant internally followed any particular
 reasoning or that its security classification was wrong.
 
-Read-only `git show` at the original starting HEAD
+At the time this historical assessment was recorded, read-only `git show` at
+the original starting HEAD
 `314a6bc529e0d5e17d1662e3765734b7cc80cd86` confirmed the same Kael/Talos gate
-text. `olympus/policies/routing.md` remains generic; no Core, adapter, generated,
-or global policy was changed in this task.
+text. At that time, `olympus/policies/routing.md` was generic and no Core,
+adapter, generated, or global policy had been changed.
 
-## Bounded correction goal (not implemented)
+## Implemented correction; native closure pending
 
-Align the security-routing gate with the task-authoritative invariant: an
-established material security/trust/authorization boundary activates Talos;
-Argus remains reserved for an independently gated non-security functional
-diagnosis. Preserve the prohibition on exploits and broad audits, existing
-role boundaries, and all other specialist gates. This record does not prescribe
-a redesign or implement the correction.
+The corrected invariant is: an ESTABLISHED or STRONGLY EVIDENCED MATERIAL
+SECURITY / TRUST / AUTHORIZATION BOUNDARY DEFECT being diagnosed/classified makes
+Talos REQUIRED as part of the smallest sufficient role set; no additional
+unanswered security-specific question is required for initial activation.
+Conservative negative gates remain: unconfirmed security relevance, generic
+security wording, nearby authentication/credentials, informational scanner
+output, unconfirmed affected-version relevance, operational scanner/tool
+failures without product-defect evidence, deterministic non-security functional
+defects, gaps/features and optimization do not automatically activate Talos.
+Argus remains for independently gated functional diagnosis; mixed defects use
+the evidence-supported primary classification and do not automatically invoke
+both specialists. Mediated EVIDENCE_REQUEST → bounded Veyra/Nox evidence →
+consumed terminal result → SAME Talos session behavior, budgets and no-progress
+rules are unchanged; only initial activation semantics changed.
+
+Changed source, regression and record files:
+
+- `olympus/policies/routing.md`
+- `olympus/harnesses/opencode/agent-prompts/kael.md`
+- `olympus/harnesses/opencode/agent-prompts/talos.md`
+- `olympus/harnesses/codex/root.md`
+- `olympus/harnesses/codex/agents/talos.toml`
+- `tests/talos/qualify.ps1`
+- `tests/phase11-integrated-routing/qualify.py` (updated the static marker only;
+  Case E expected route and historical native failure remain unchanged)
+- `docs/DEFECT-PHASE11-CASE-E-ROUTING.md`
+
+Generated outputs were produced by `scripts/render_harnesses.py`, not edited by
+hand: `.opencode/agents/kael.md`, `.opencode/agents/talos.md`, `CODEX.md`, and
+`.codex/agents/talos.toml`.
+
+Static validation passed: all-harness render check (29 managed outputs), Phase
+11 artifact qualification (exit 0; reports PARTIAL and retains E's observed
+failure), Phase 11 unittest suite (58 tests), harness-core safe-root read-only
+qualification, routing-constraint qualification, Talos qualification including
+the established-boundary and five negative-gate regression cases, and
+`git diff --check`. Native closure requires a fresh-root Case E2 after the
+implementation commit. Case E attempt 1 remains
+`NATIVE_EXECUTED_ROUTING_FAIL`; E remains pending, the old root is not relabelled
+PASS, Phase 11 remains PARTIAL, and Case E was not rerun in this maintenance
+task.

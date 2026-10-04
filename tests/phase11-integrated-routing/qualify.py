@@ -1165,7 +1165,7 @@ def _read_marker(path: str, marker: str) -> bool:
 def run_static_baseline_checks() -> list[str]:
     checks = (
         (".opencode/agents/kael.md", "## Functional Bug Routing Gate — optional Argus", "ARGUS_GATE_MARKER"),
-        (".opencode/agents/kael.md", "## Security Routing Gate — optional Talos", "TALOS_GATE_MARKER"),
+        (".opencode/agents/kael.md", "## Security Routing Gate — Talos required for established boundaries", "TALOS_GATE_MARKER"),
         (".opencode/agents/kael.md", "## Planning Gate — optional Atlas", "ATLAS_GATE_MARKER"),
         (".opencode/agents/kael.md", "## Optimization Gate — explicit-only Helios", "HELIOS_GATE_MARKER"),
         (".opencode/agents/kael.md", "## Diagnostic Gate", "THALES_GATE_MARKER"),

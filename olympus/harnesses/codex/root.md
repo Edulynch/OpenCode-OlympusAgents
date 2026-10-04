@@ -29,8 +29,21 @@ Use the smallest sufficient route:
   runtime/test evidence is needed; `vera` independently reviews only when the
   task justifies an independent review.
 - `argus` is optional for an established functional defect with uncertain cause
-  or fix direction. `talos` is optional only for an evidenced security defect
-  with a material security question. `thales` is a bounded, evidence-backed
+  or fix direction. Security-routing invariant: an ESTABLISHED or STRONGLY
+  EVIDENCED MATERIAL SECURITY / TRUST / AUTHORIZATION BOUNDARY DEFECT being
+  diagnosed/classified makes `talos` REQUIRED as part of the smallest sufficient
+  role set; no additional unanswered security-specific question is required for
+  initial activation. `SECURITY_RELEVANCE_UNCONFIRMED` alone does not qualify.
+  Nearby authentication/input-validation/credential context, the word
+  "security", unconfirmed affected-version/vulnerability relevance,
+  informational scanner output, a security-improving feature/gap, or
+  optimization of correct behavior does NOT activate `talos`. Operational
+  CI/registry/deployment/scanner failure (including Trivy/Semgrep execution
+  failure without evidence of a product security defect) also does NOT activate
+  `talos`. Deterministic
+  non-security functional defects have `TALOS COUNT = 0`. For mixed defects,
+  choose the evidence-supported primary classification and do not invoke both
+  specialists automatically. `thales` is a bounded, evidence-backed
   uncertainty escalation, never the default first investigator. `helios` is
   available only on explicit optimization intent and must stop at a proposal
   unless the user already approved a concrete direction.

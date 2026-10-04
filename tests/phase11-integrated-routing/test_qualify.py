@@ -16,8 +16,10 @@ from qualify import (
     run_static_baseline_checks,
     validate_case_b_reconciliation,
     validate_native_case_c_capture,
+    validate_native_case_d_capture,
     validate_native_invocation_capture,
     validate_phase11_c_reconciliation,
+    validate_phase11_d_reconciliation,
     validate_phase11_b3_reconciliation,
     validate_trace,
 )
@@ -30,6 +32,7 @@ TRACES_DOC = load_json(HERE / "traces.json")
 BASELINE_DOC = load_json(HERE / "baseline.json")
 NATIVE_B3_DOC = load_json(HERE / "case-b3.native-trace.json")
 NATIVE_C_DOC = load_json(HERE / "case-c.native-trace.json")
+NATIVE_D_DOC = load_json(HERE / "case-d.native-trace.json")
 CASES = {case["id"]: case for case in CASES_DOC["cases"]}
 TRACES = {trace["TRACE_ID"]: trace for trace in TRACES_DOC["traces"]}
 
@@ -513,6 +516,118 @@ class NativeCaseCMutationTests(unittest.TestCase):
         )
 
 
+class NativeCaseDMutationTests(unittest.TestCase):
+    def test_case_d_native_capture_accepts_bounded_diagnostic_limit_not_a_repair(self) -> None:
+        self.assertEqual(["kael", "argus", "veyra"], CASES["D"]["expected_routes"]["default"])
+        self.assertEqual(["kael", "veyra", "argus"], CASES["D"]["expected_routes"]["precollected_evidence"])
+        self.assertNotIn("mandatory_dependency_edges", CASES["D"])
+        self.assertEqual([], validate_native_case_d_capture(NATIVE_D_DOC, CASES["D"]))
+        self.assertEqual([], validate_phase11_d_reconciliation(BASELINE_DOC, CASES_DOC, NATIVE_D_DOC))
+        self.assertEqual("succeeded", NATIVE_D_DOC["ROOT_EXECUTION_OUTCOME"])
+        self.assertEqual("NEEDS_USER_INPUT", NATIVE_D_DOC["FINAL_OUTCOME"])
+        self.assertEqual("INCONCLUSIVE", NATIVE_D_DOC["ARGUS_DIAGNOSTIC"]["STATUS"])
+        self.assertEqual("CAUSE_UNCONFIRMED. No functional violation is established.", NATIVE_D_DOC["ARGUS_DIAGNOSTIC"]["CAUSE"])
+        self.assertFalse(NATIVE_D_DOC["RESULT_FIDELITY"]["FUNCTIONAL_VIOLATION_ESTABLISHED"])
+        self.assertFalse(NATIVE_D_DOC["RESULT_FIDELITY"]["REPAIR_SUPPORTED"])
+        self.assertEqual(1, NATIVE_D_DOC["CONSULTATION_COUNTS"]["argus"])
+        self.assertEqual("NOT_REQUIRED", NATIVE_D_DOC["CASE_D_ARGUS_FOLLOWUP"])
+        self.assertEqual("NOT_EXERCISED", NATIVE_D_DOC["ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE"])
+        self.assertNotIn("HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT", BASELINE_DOC["live_qualification"]["pending_labels"])
+        self.assertIn("HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT", BASELINE_DOC["phase11_c_reconciliation"]["pending_fresh_root_labels"])
+        self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
+
+    def test_case_d_native_capture_rejects_wrong_identity_parent_role_and_order(self) -> None:
+        wrong_parent = copy.deepcopy(NATIVE_D_DOC)
+        wrong_parent["CHILD_SESSIONS"][0]["PARENT_SESSION_ID"] = "ses_wrongparent"
+        self.assertIn("NATIVE_D_CHILD_SESSION_RECONCILIATION_MISMATCH", validate_native_case_d_capture(wrong_parent, CASES["D"]))
+        wrong_role = copy.deepcopy(NATIVE_D_DOC)
+        wrong_role["CHILD_SESSIONS"][1]["AGENT"] = "argus"
+        self.assertIn("NATIVE_D_CHILD_SESSION_RECONCILIATION_MISMATCH", validate_native_case_d_capture(wrong_role, CASES["D"]))
+        wrong_identity = copy.deepcopy(NATIVE_D_DOC)
+        wrong_identity["CHILD_SESSIONS"][2]["NATIVE_SESSION_ID"] = "ses_wrongargus"
+        self.assertIn("NATIVE_D_CHILD_SESSION_RECONCILIATION_MISMATCH", validate_native_case_d_capture(wrong_identity, CASES["D"]))
+        wrong_event_join = copy.deepcopy(NATIVE_D_DOC)
+        wrong_event_join["EVENTS"][4]["NATIVE_SESSION_ID"] = "ses_wrongveyra"
+        self.assertIn("NATIVE_D_INVOCATION_SESSION_OR_ROLE_JOIN_MISMATCH:D-VEYRA", validate_native_case_d_capture(wrong_event_join, CASES["D"]))
+        wrong_order = copy.deepcopy(NATIVE_D_DOC)
+        wrong_order["EVENTS"][3]["ORDER"] = 3
+        self.assertIn("NATIVE_D_EVENT_ORDER_NOT_OBSERVED", validate_native_case_d_capture(wrong_order, CASES["D"]))
+        fabricated_result = copy.deepcopy(NATIVE_D_DOC)
+        fabricated_result["EVENTS"][2]["RESULT_ID"] = "result-invented"
+        self.assertIn("NATIVE_D_UNOBSERVED_RESULT_ID_OR_CONSUMPTION_EVENT", validate_native_case_d_capture(fabricated_result, CASES["D"]))
+
+    def test_case_d_native_capture_rejects_unbarriered_question_forced_followup_and_false_completion(self) -> None:
+        unbarriered = copy.deepcopy(NATIVE_D_DOC)
+        unbarriered["QUESTION_BARRIER"]["DISPLAYED_AFTER_ALL_CHILDREN_TERMINAL_AND_CONSUMED"] = False
+        self.assertIn("NATIVE_D_QUESTION_BARRIER_MISMATCH", validate_native_case_d_capture(unbarriered, CASES["D"]))
+        forced_followup = copy.deepcopy(NATIVE_D_DOC)
+        forced_followup["ARGUS_DIAGNOSTIC"]["CONSULTATION_COUNT"] = 2
+        self.assertIn("NATIVE_D_DIAGNOSTIC_AND_OUTCOME_STATUS_MISMATCH", validate_native_case_d_capture(forced_followup, CASES["D"]))
+        false_completion = copy.deepcopy(NATIVE_D_DOC)
+        false_completion["COMPLETION_GATE"]["PENDING_CHILD_COUNT"] = 1
+        self.assertIn("NATIVE_D_COMPLETION_GATE_MISMATCH", validate_native_case_d_capture(false_completion, CASES["D"]))
+        wrong_status = copy.deepcopy(NATIVE_D_DOC)
+        wrong_status["ROOT_EXECUTION_OUTCOME"] = "NEEDS_USER_INPUT"
+        self.assertIn("NATIVE_D_EXECUTION_AND_SEMANTIC_OUTCOME_CONFLATED", validate_native_case_d_capture(wrong_status, CASES["D"]))
+        invented_cause = copy.deepcopy(NATIVE_D_DOC)
+        invented_cause["RESULT_FIDELITY"]["FUNCTIONAL_VIOLATION_ESTABLISHED"] = True
+        self.assertIn("NATIVE_D_RESULT_FIDELITY_MISMATCH", validate_native_case_d_capture(invented_cause, CASES["D"]))
+
+    def test_case_d_tool_delivery_session_execution_and_diagnostic_statuses_are_distinct(self) -> None:
+        returns = [event for event in NATIVE_D_DOC["EVENTS"] if event["KIND"] == "ROOT_SUBAGENT_RESULT_RETURNED"]
+        self.assertEqual(["completed"] * 3, [event["TOOL_STATE"] for event in returns])
+        self.assertEqual(["succeeded"] * 3, [event["CHILD_EXECUTION_OUTCOME"] for event in returns])
+        self.assertEqual([None, None, "INCONCLUSIVE"], [event["RETURN_STATUS"] for event in returns])
+        self.assertEqual([], validate_native_case_d_capture(NATIVE_D_DOC, CASES["D"]))
+
+        mislabeled_argus = copy.deepcopy(NATIVE_D_DOC)
+        mislabeled_argus["EVENTS"][8]["RETURN_STATUS"] = "SUCCESS"
+        errors = validate_native_case_d_capture(mislabeled_argus, CASES["D"])
+        self.assertIn("NATIVE_D_LITERAL_RETURN_STATUS_OR_TOOL_STATE_MISMATCH:D-ARGUS", errors)
+        self.assertIn("NATIVE_D_DIAGNOSTIC_AND_OUTCOME_STATUS_MISMATCH", errors)
+
+        fabricated_nox_status = copy.deepcopy(NATIVE_D_DOC)
+        fabricated_nox_status["EVENTS"][2]["RETURN_STATUS"] = "SUCCESS"
+        self.assertIn(
+            "NATIVE_D_LITERAL_RETURN_STATUS_OR_TOOL_STATE_MISMATCH:D-NOX",
+            validate_native_case_d_capture(fabricated_nox_status, CASES["D"]),
+        )
+        fabricated_veyra_status = copy.deepcopy(NATIVE_D_DOC)
+        fabricated_veyra_status["EVENTS"][5]["RETURN_STATUS"] = "SUCCESS"
+        self.assertIn(
+            "NATIVE_D_LITERAL_RETURN_STATUS_OR_TOOL_STATE_MISMATCH:D-VEYRA",
+            validate_native_case_d_capture(fabricated_veyra_status, CASES["D"]),
+        )
+
+        execution_as_resolution = copy.deepcopy(NATIVE_D_DOC)
+        execution_as_resolution["FINAL_OUTCOME"] = "succeeded"
+        execution_as_resolution["EVENTS"][9]["SEMANTIC_FINAL_OUTCOME"] = "succeeded"
+        self.assertIn(
+            "NATIVE_D_EXECUTION_AND_SEMANTIC_OUTCOME_CONFLATED",
+            validate_native_case_d_capture(execution_as_resolution, CASES["D"]),
+        )
+
+    def test_case_d_followup_coverage_cannot_be_promoted_or_moved_into_pending_cases(self) -> None:
+        promoted = copy.deepcopy(BASELINE_DOC)
+        promoted["argus_same_session_followup_runtime_coverage"]["status"] = "PASS"
+        self.assertIn(
+            "ARGUS_FOLLOWUP_RUNTIME_COVERAGE_PROMOTED_OR_CONFLATED",
+            validate_phase11_d_reconciliation(promoted, CASES_DOC, NATIVE_D_DOC),
+        )
+        relabeled_pending = copy.deepcopy(BASELINE_DOC)
+        relabeled_pending["live_qualification"]["pending_labels"].insert(0, "HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT")
+        self.assertIn(
+            "CURRENT_PHASE11_PENDING_STATE_MISMATCH",
+            validate_phase11_d_reconciliation(relabeled_pending, CASES_DOC, NATIVE_D_DOC),
+        )
+        false_completion = copy.deepcopy(BASELINE_DOC)
+        false_completion["phase11_d_reconciliation"]["result_consumption"]["pending_children"] = 1
+        self.assertIn(
+            "CASE_D_RECONCILIATION_FACT_MISMATCH:result_consumption",
+            validate_phase11_d_reconciliation(false_completion, CASES_DOC, NATIVE_D_DOC),
+        )
+
+
 class MutationTests(unittest.TestCase):
     def test_b2_isolation_failure_cannot_be_promoted_to_full_acceptance(self) -> None:
         lost_isolation = copy.deepcopy(BASELINE_DOC)
@@ -782,6 +897,7 @@ class MutationTests(unittest.TestCase):
         self.assertIn(f"ACTION_CHILD_SESSION_ROLE_MISMATCH:kovan:{nox_ref}", failures(mutant))
 
     def test_argus_and_thales_followup_reuses_same_session_and_new_evidence(self) -> None:
+        self.assertEqual(set(), failures(changed("D")))
         for trace_id, role in (("D", "argus"), ("G", "thales")):
             with self.subTest(role=role):
                 trace = changed(trace_id)
@@ -806,6 +922,20 @@ class MutationTests(unittest.TestCase):
         new_fact = next(event for event in duplicate_fact["EVENTS"] if event.get("KIND") == "EVIDENCE_PRODUCED")
         new_fact["DISTINGUISHING_FACT"] = old_fact
         self.assertIn("FOLLOWUP_EVIDENCE_NOT_MATERIALLY_NEW:thales", failures(duplicate_fact))
+        unchanged_argus_evidence = changed("D")
+        consultations = [event for event in unchanged_argus_evidence["EVENTS"] if event.get("KIND") == "CONSULT" and event.get("ACTOR_ROLE") == "argus"]
+        consultations[0]["EVIDENCE_IDS"] = ["SYN-E1"]
+        consultations[1]["EVIDENCE_IDS"] = ["SYN-E1"]
+        self.assertIn("FOLLOWUP_REUSES_PRIOR_EVIDENCE:argus", failures(unchanged_argus_evidence))
+
+        evidence_request_without_followup = changed("D")
+        followup = next(
+            event for event in evidence_request_without_followup["EVENTS"]
+            if event.get("KIND") == "CONSULT" and event.get("ACTOR_ROLE") == "argus" and event.get("CONSULTATION_NUMBER") == 2
+        )
+        evidence_request_without_followup["EVENTS"].remove(followup)
+        evidence_request_without_followup["CONSULTATION_COUNTS"]["argus"] = 1
+        self.assertIn("EVIDENCE_REQUEST_NOT_FOLLOWED_UP_IN_SAME_SESSION:argus", failures(evidence_request_without_followup))
         out_of_order = changed("D")
         events = out_of_order["EVENTS"]
         delivery = next(event for event in events if event.get("KIND") == "EVIDENCE_DELIVERED")

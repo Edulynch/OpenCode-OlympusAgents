@@ -8,10 +8,11 @@ only that bounded policy text is present. The task owner separately reported
 recovered guided outcomes and a reconciled B2 runtime observation (recorded
 below and in `baseline.json`). Separately, verified native B3 exports/history
 and CLI results are captured in `case-b3.native-trace.json`; verified native
-Case C exports/history are captured in `case-c.native-trace.json`. B3 qualifies
-isolated Case B acceptance, and C qualifies isolated Case C acceptance with
-Argus correctly inactive. Neither native invocation-level capture is inserted
-into the synthetic trace corpus or reconstructed as a synthetic lifecycle.
+Case C exports/history are captured in `case-c.native-trace.json`; and native
+Case D invocation history is captured in `case-d.native-trace.json`. B3, C, and
+D qualify their bounded acceptance outcomes. None of these native
+invocation-level captures is inserted into the synthetic trace corpus or
+reconstructed as a synthetic lifecycle.
 
 ## Automatic local commands
 
@@ -26,8 +27,9 @@ uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-on
 ```
 
 The first command validates the versioned case matrix, synthetic event semantics,
-completion/evidence claims, separate B1/B2/B3/C reconciliations, the bounded B3
-and C native invocation captures, and presence-only gate markers. It reports
+completion/evidence claims, separate B1/B2/B3/C/D reconciliations, the bounded
+B3, C, and D native invocation captures, and presence-only gate markers. It
+reports
 `PHASE11_ARTIFACTS: PASS` when those artifacts are sound while overall
 qualification remains `PHASE11_QUALIFICATION: PARTIAL` until the remaining
 isolated fresh-root evidence is accepted. The second command
@@ -115,16 +117,49 @@ recorded separately and is not projected into the literal root terminal facts.
 Argus's invocation and unique-session counts are explicitly zero, alongside the
 other recorded forbidden-role controls. Efficiency `LEAN` is qualification
 judgment, not measured performance. The B3 report's earlier historical pending
-labels still include C; the current pending set is D, E, F, G, H, and K.
+labels still include C; the C snapshot's pending set included D, E, F, G, H,
+and K. Later D evidence supersedes that snapshot for current qualification state.
+
+## Case D native capture and follow-up coverage boundary
+
+`case-d.native-trace.json` records the supplied fresh-root native history as
+invocation-level evidence. The observed session family is Kael -> Nox -> Veyra
+-> Argus: Nox verified isolation only, Veyra gathered bounded evidence, and
+Argus made one terminal diagnosis consultation using that already-collected
+evidence. The product route is Kael -> Veyra -> Argus. The synthetic default D
+trace remains the distinct valid iterative path where Argus requests evidence
+and follows up in the same session; that request-triggered path retains all
+same-session, new-evidence, delivery, consumption, and progress checks.
+
+All three native tool deliveries are `completed`, and all child-session
+execution outcomes are `succeeded`. The literal Nox and Veyra return statuses
+were not supplied and remain `null`; Argus's literal `RETURN_STATUS` is
+`INCONCLUSIVE`, matching `ARGUS_DIAGNOSTIC.STATUS` rather than being normalized
+to `SUCCESS`. No functional violation or repair is established. Root execution
+metadata is `succeeded`, while semantic `FINAL_OUTCOME` is `NEEDS_USER_INPUT`.
+After all children were terminal and the root reported their results consumed,
+Kael posed one bounded binary question. The question remains unresolved; this
+reconciliation neither asks it again nor replays or repairs the case. Unknown
+parent identity, result IDs, per-result consumption timing, and other
+unsupported measures remain null. `LEAN` is a qualification judgment, not
+latency.
+
+Case D follow-up is `NOT_REQUIRED`, because Argus did not make an evidence
+request. Separately,
+`ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED` means this native D
+run did not demonstrate runtime follow-up. An optional genuine
+evidence-requesting scenario remains open for final coverage review; this
+coverage note is not a Case D blocker or an implicit pass.
 
 ## Remaining fresh-root work remains user action
 
 Use a separate clean disposable project copy and a **new, verified Kael root for
-each pending case**. Only D, E, F, G, H, and K below remain pending fresh-root
-actions; isolated B3 and C are accepted. A, I, J, and L prompt references/history are
-retained below but are not new rerun requests. Do not reuse a guided/current
-session as a fresh root. Confirm the effective root agent, child parentage and
-actual roles from native session evidence before accepting a case. Scope each live edit to the disposable
+each pending case**. Only E, F, G, H, and K below remain pending fresh-root
+actions; isolated B3 and C and bounded native D are accepted. A, I, J, and L
+prompt references/history are retained below but are not new rerun requests. Do
+not reuse a guided/current session as a fresh root. Confirm the effective root
+agent, child parentage and actual roles from native session evidence before
+accepting a case. Scope each live edit to the disposable
 qualification fixture; retain the original project untouched. Stop rather than
 retry if an execution result is unknown. The prompts below are starting points,
 not pre-recorded results. For a fresh native observation, use the canonical top
@@ -154,13 +189,13 @@ synthetic per-session lifecycle.
   `fixtures/obvious/cart.py`; then run its unit test. The fixture is currently
   intentionally wrong, so do not treat its pre-fix failure as a qualification
   failure.”
-- `HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT` — “Read only the ambiguous fixture
-  evidence. `subtotal=100`, `shipping=10`, and an observed total of 110 may mean
-  either the input already includes shipping or the domain calculation adds it
-  twice. Ask for the smallest bounded discriminating evidence and continue in
-  the same Argus session. The supplied fixture has no discriminator; if none is
-  found, do not pick a cause and ask the smallest binary user question. Do not
-  repair the fixture.”
+- `ACCEPTED PHASE11_CASE_D_FRESH_ROOT` — native evidence is in
+  `case-d.native-trace.json`; no rerun or renewed question is requested. Veyra's
+  precollected bounded evidence was supplied to one Argus consultation. Argus
+  correctly stopped `INCONCLUSIVE` / `CAUSE_UNCONFIRMED`; the root asked one
+  bounded binary question after child completion. No functional violation or
+  repair is established. Runtime same-session follow-up remains
+  `NOT_EXERCISED` separately from Case D acceptance.
 - `HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT` — “Classify this bounded hypothetical
   defect: a MEMBER can delete another user's account although the stated
   contract is ADMIN-only. Explain the security boundary and safe validation;
@@ -365,9 +400,11 @@ are marker-presence checks only.
 ## Current gate
 
 The A–L matrix, unchanged synthetic trace corpus, expanded mutation coverage,
-and isolated B3/C native captures are present. Case B1 remains a fixture defect
+and B3/C/D native captures are present. Case B1 remains a fixture defect
 with Question Barrier PASS; B2 runtime behavior remains PASS but
-isolation/acceptance remains PARTIAL; B3 and C fresh-root native acceptance are
-PASS. Fresh-root evidence remains pending for D, E, F, G, H, and K. A/I/J/L observations remain guided/history-only,
+isolation/acceptance remains PARTIAL; B3, C, and D fresh-root native acceptance
+are PASS. Fresh-root evidence remains pending for E, F, G, H, and K. D did not
+exercise Argus follow-up runtime coverage, which remains a separate open review
+item. A/I/J/L observations remain guided/history-only,
 with no rerun requested. The overall phase is **IN VALIDATION / PARTIAL**, not
 SHIPPED.

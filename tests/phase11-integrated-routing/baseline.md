@@ -432,9 +432,86 @@ from routing acceptance.
   gated non-security functional diagnosis. No internal model rationale or
   defective security classification is claimed; no Core correction was made.
 
-E remains an unresolved acceptance item alongside F, G, H, and K; overall Phase
-11 remains **IN VALIDATION / PARTIAL**, not SHIPPED. The observed failure is not
-an instruction or authorization to rerun E. A-D acceptance and the separate
+At the E1 snapshot, E remained an unresolved acceptance item alongside F, G, H,
+and K. That pending state is historical: the later E2 fresh-root reconciliation
+below closes current Case E acceptance without changing E1's observed routing
+failure. Overall Phase 11 remains **IN VALIDATION / PARTIAL**, not SHIPPED. The
+E1 failure is not an instruction or authorization to rerun that root. A-D
+acceptance and the separate
 `ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED` status remain
 unchanged. The rules above were also read at starting HEAD
 `314a6bc529e0d5e17d1662e3765734b7cc80cd86` using read-only `git show`.
+
+## Case E2 fresh-root native reconciliation — `PH11-E2-CLOSURE`
+
+E2 is the later, distinct fresh-root attempt that closes current Case E
+acceptance. The exact completed root and direct Talos child were read through
+public, read-only OpenCode V2 metadata, export, message-list, and direct-child
+GETs. The root direct-child listing required two pages and contained exactly one
+child, Talos; the root and child message lists each required two pages and their
+second cursor-only pages were empty. The API metadata directory strings matched
+the supplied disposable-path context; exact paths were omitted from the
+projection, and no disposable-worktree filesystem was read.
+
+- Root Kael `ses_ef7eb1d45ffet0gMtEEUam8R4U` is parentless, succeeded, and is
+  titled “Diagnosing MEMBER account-deletion authorization boundary.” Its
+  original prompt records starting HEAD
+  `3e5b2af2c15f9ef2775be3c3f5667edd4db0bdde`.
+- The sole direct child is Talos
+  `ses_ef7ea7bf7ffe4U23sL7M1mi60p`, parented to that root, succeeded, and titled
+  “Diagnose account deletion authorization.” The root export contains exactly
+  one completed `subagent` call, ID `call_FzRbkaOiUp41wcA0DcJfrrPw`; its
+  observed Talos input, child metadata, and direct-child listing join to that
+  child and the exact task label `PHASE11_CASE_E2_FRESH_ROOT`. The child export
+  contains no tool-call records.
+- The reasoning-redacted projections are
+  `case-e2.root-session.export.json` and
+  `case-e2.talos-session.export.json`; the bounded native record is
+  `case-e2.native-trace.json`. Two root reasoning blocks were removed, the child
+  had zero reasoning blocks, the retained prompt/terminal text matches the
+  exports, no secret-pattern matches required redaction, and raw exports were
+  not persisted.
+- The observed product route is Kael -> Talos, matching the E security-bug
+  expectation. Talos confirmed the established MEMBER/ADMIN account-deletion
+  authorization defect; server-side authorization using trusted identity/role
+  information must precede deletion side effects. The enforcement failure is
+  established, but the implementation mechanism is unknown. No tools, tests,
+  repository access, exploit, or file changes were reported by the child.
+- The root terminal reports the required child work terminal and consumed,
+  `EXPLOIT_ATTEMPTED: NO`, `FILES_CHANGED: NONE`, and no work remaining. It does
+  not contain a literal E2 `PASS`; E2 acceptance is a reconciliation judgment
+  from the observed route, diagnosis, safety limits, and aggregate completion
+  statement. Result IDs, per-invocation consumption timing, session-lifetime
+  exact-once, concurrency, and timing remain `null`; native permission UI and
+  decision are `NOT_OBSERVABLE`.
+- E2 behavior, security classification, safety, role purity, Talos activation,
+  negative Argus control, routing, result fidelity, completion ownership, and
+  fresh-root-native acceptance are PASS. E1 remains
+  `NATIVE_EXECUTED_ROUTING_FAIL` with expected Kael -> Talos and observed Kael
+  only; its source trace and projection remain unchanged and its failed history
+  is preserved.
+
+The latest live Phase 11 snapshot therefore removes E from current pending work;
+only F, G, H, and K remain pending fresh-root actions. Phase 11 remains
+**IN VALIDATION / PARTIAL**, not SHIPPED. A is PASS guided/recovered, B/C/D/E2
+are accepted `FRESH_ROOT_NATIVE`, I is PARTIAL guided, J is PASS
+guided/recovered, and L's recovered negative automatic-Aegis control is PASS.
+`ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE` remains
+`NOT_EXERCISED`; E2 did not demonstrate same-session follow-up behavior.
+
+Closure validation from the canonical repository passed:
+
+- `uv run --python 3.11 python tests/phase11-integrated-routing/qualify.py` —
+  exit 0; `PHASE11_ARTIFACTS: PASS`, overall `PARTIAL`.
+- `uv run --python 3.11 python -m unittest discover -s tests/phase11-integrated-routing -p "test_*.py" -v` —
+  62 tests, all passing, including E2 child/parent, route, result, and E1-history
+  mutations.
+- `uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-only` —
+  PASS; all 29 managed-output hashes and mtimes were unchanged.
+- `uv run --python 3.11 python scripts/render_harnesses.py check --harness all` —
+  PASS, read-only, 29 managed outputs.
+- `git diff --check` — PASS; only line-ending warnings were emitted.
+
+The E2 native/reconciliation validator adds material semantic checks and should
+receive independent Nox or Vera review before adoption; this writer did not
+perform or delegate that review. Kael decides whether to request the review.

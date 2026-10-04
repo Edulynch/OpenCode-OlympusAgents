@@ -243,8 +243,14 @@ CASE_C_TERMINAL_FACTS = {
     "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
     "ANY_WORK_REMAINING": "NO",
 }
-CURRENT_PHASE11_PENDING_LABELS = [
+CASE_E1_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
+]
+CURRENT_PHASE11_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
@@ -347,9 +353,6 @@ CASE_E_USER_MESSAGE_ID = "msg_107a404e4001UY2IIX9U53JNmM"
 CASE_E_EXPECTED_ROUTE = ["kael", "talos"]
 CASE_E_ACTUAL_ROUTE = ["kael"]
 CASE_E_NATIVE_RESULT = "NATIVE_EXECUTED_ROUTING_FAIL"
-CASE_E_FRESH_ROOT_STATE = (
-    "B3_PASS; C_PASS; D_PASS; E_NATIVE_EXECUTED_ROUTING_FAIL (acceptance pending); F,G,H,K_PENDING"
-)
 CASE_E_CLASSIFICATIONS = {
     "CASE_E_BEHAVIOR": "PASS",
     "CASE_E_SECURITY_CLASSIFICATION": "PASS",
@@ -363,6 +366,41 @@ CASE_E_CLASSIFICATIONS = {
     "CASE_E_FRESH_ROOT_NATIVE_ACCEPTANCE": "FAIL",
 }
 CASE_E_ROLE_COUNTS = {role: 0 for role in ALL_INVOCABLE_ROLES}
+CASE_E1_FRESH_ROOT_STATE = (
+    "B3_PASS; C_PASS; D_PASS; E_NATIVE_EXECUTED_ROUTING_FAIL (acceptance pending); F,G,H,K_PENDING"
+)
+CASE_E2_LABEL = "PHASE11_CASE_E2_FRESH_ROOT"
+CASE_E2_SCENARIO = "E2_AFTER_ROUTING_FIX"
+CASE_E2_ROOT_SESSION_ID = "ses_ef7eb1d45ffet0gMtEEUam8R4U"
+CASE_E2_CHILD_SESSION_ID = "ses_ef7ea7bf7ffe4U23sL7M1mi60p"
+CASE_E2_ROOT_STARTING_HEAD = "3e5b2af2c15f9ef2775be3c3f5667edd4db0bdde"
+CASE_E2_ROOT_TERMINAL_MESSAGE_ID = "msg_10815cfae001A2M4kLRGYUKmim"
+CASE_E2_ROOT_OUTCOME_MESSAGE_ID = "msg_108160f11001WJh7C5F2Af7Fjq"
+CASE_E2_ROOT_USER_MESSAGE_ID = "msg_10814e2c0001tCz9PXoRCTrZlr"
+CASE_E2_ROOT_TOOL_MESSAGE_ID = "msg_10814e44b0013BwVGjWAtJ5bI0"
+CASE_E2_ROOT_TOOL_CALL_ID = "call_FzRbkaOiUp41wcA0DcJfrrPw"
+CASE_E2_CHILD_TERMINAL_MESSAGE_ID = "msg_108158539001dmAoz2pmGe7UbG"
+CASE_E2_CHILD_OUTCOME_MESSAGE_ID = "msg_10815cec9001nEiTyrQRxUINQM"
+CASE_E2_CHILD_USER_MESSAGE_ID = "msg_108158527002QGsXxMzV3Uxnmr"
+CASE_E2_EXPECTED_ROUTE = ["kael", "talos"]
+CASE_E2_NATIVE_RESULT = "NATIVE_EXECUTED_ROUTING_PASS"
+CASE_E2_CURRENT_PHASE_STATE = (
+    "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F,G,H,K_PENDING"
+)
+CASE_E2_ROLE_COUNTS = {role: 0 for role in ALL_INVOCABLE_ROLES}
+CASE_E2_ROLE_COUNTS["talos"] = 1
+CASE_E2_CLASSIFICATIONS = {
+    "CASE_E2_BEHAVIOR": "PASS",
+    "CASE_E2_SECURITY_CLASSIFICATION": "PASS",
+    "CASE_E2_SAFETY": "PASS",
+    "CASE_E2_ROLE_PURITY": "PASS",
+    "CASE_E2_TALOS_ACTIVATION": "PASS",
+    "CASE_E2_NEGATIVE_ARGUS_CONTROL": "PASS",
+    "CASE_E2_ROUTING": "PASS",
+    "CASE_E2_RESULT_FIDELITY": "PASS",
+    "CASE_E2_COMPLETION_OWNERSHIP": "PASS",
+    "CASE_E2_FRESH_ROOT_NATIVE": "PASS",
+}
 CASE_E_TERMINAL_FACTS = {
     "WORKTREE_ISOLATION": "SUPPLIED_VERIFIED",
     "SECURITY_CLASSIFICATION": "CONFIRMED_SECURITY_DEFECT under the supplied established behavior: authorization bypass. Unauthorized deletion violates account integrity and availability, making this materially security-specific rather than merely incorrect functional behavior.",
@@ -1812,7 +1850,7 @@ def validate_phase11_b3_reconciliation(
     current = baseline.get("live_qualification", {})
     if not isinstance(current, dict) or (
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
-            or current.get("fresh_root_native") != CASE_E_FRESH_ROOT_STATE
+            or current.get("fresh_root_native") != CASE_E2_CURRENT_PHASE_STATE
         or current.get("native_results_claimed") is not True
     ):
         errors.append("CURRENT_PHASE11_PENDING_STATE_MISMATCH")
@@ -2395,7 +2433,7 @@ def validate_phase11_c_reconciliation(
     current = baseline.get("live_qualification", {})
     if not isinstance(current, dict) or (
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
-        or current.get("fresh_root_native") != CASE_E_FRESH_ROOT_STATE
+        or current.get("fresh_root_native") != CASE_E2_CURRENT_PHASE_STATE
         or current.get("native_results_claimed") is not True
     ):
         errors.append("CURRENT_PHASE11_PENDING_STATE_MISMATCH")
@@ -2746,7 +2784,7 @@ def validate_phase11_d_reconciliation(
         errors.append("CASE_D_CLASSIFICATION_OR_ACCEPTANCE_MISMATCH")
     if report.get("phase11_status") != "PARTIAL":
         errors.append("CASE_D_PHASE_STATUS_MUST_REMAIN_PARTIAL")
-    if report.get("pending_fresh_root_labels") != CURRENT_PHASE11_PENDING_LABELS:
+    if report.get("pending_fresh_root_labels") != CASE_E1_PENDING_LABELS:
         errors.append("CASE_D_CURRENT_PENDING_LABELS_MISMATCH")
     if report.get("expected_product_route") != CASE_D_EXPECTED_ROUTE or report.get("observed_unique_child_session_launch_order") != CASE_D_ACTUAL_ROUTE:
         errors.append("CASE_D_ROUTE_RECONCILIATION_MISMATCH")
@@ -2844,7 +2882,7 @@ def validate_phase11_d_reconciliation(
     current = baseline.get("live_qualification", {})
     if not isinstance(current, dict) or (
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
-        or current.get("fresh_root_native") != CASE_E_FRESH_ROOT_STATE
+        or current.get("fresh_root_native") != CASE_E2_CURRENT_PHASE_STATE
         or current.get("native_results_claimed") is not True
         or current.get("overall_status") != "PARTIAL"
     ):
@@ -3166,7 +3204,7 @@ def validate_phase11_e_reconciliation(
         or report.get("core_policy_modified") is not False
     ):
         errors.append("CASE_E_ROUTING_FAILURE_PROMOTED_OR_REPLAYED")
-    if report.get("pending_fresh_root_labels") != CURRENT_PHASE11_PENDING_LABELS:
+    if report.get("pending_fresh_root_labels") != CASE_E1_PENDING_LABELS:
         errors.append("CASE_E_PENDING_LABELS_MISMATCH")
     if report.get("argus_same_session_followup_runtime_coverage") != "NOT_EXERCISED":
         errors.append("CASE_E_ARGUS_FOLLOWUP_COVERAGE_PROMOTED")
@@ -3174,7 +3212,7 @@ def validate_phase11_e_reconciliation(
     current = baseline.get("live_qualification", {})
     if not isinstance(current, dict) or (
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
-        or current.get("fresh_root_native") != CASE_E_FRESH_ROOT_STATE
+        or current.get("fresh_root_native") != CASE_E2_CURRENT_PHASE_STATE
         or current.get("native_results_claimed") is not True
         or current.get("overall_status") != "PARTIAL"
     ):
@@ -3200,6 +3238,700 @@ def validate_phase11_e_reconciliation(
     return errors
 
 
+def _export_message(export: dict[str, Any], message_id: str) -> dict[str, Any] | None:
+    messages = export.get("messages", [])
+    if not isinstance(messages, list):
+        return None
+    found = [message for message in messages if isinstance(message, dict) and message.get("id") == message_id]
+    return found[0] if len(found) == 1 else None
+
+
+def _export_text(export: dict[str, Any], message_id: str) -> str:
+    message = _export_message(export, message_id)
+    if message is None:
+        return ""
+    return "\n".join(
+        part.get("text", "")
+        for part in message.get("content", [])
+        if isinstance(part, dict) and part.get("type") == "text" and isinstance(part.get("text"), str)
+    )
+
+
+def _export_content_types(export: dict[str, Any]) -> list[str]:
+    types: list[str] = []
+    for message in export.get("messages", []):
+        if isinstance(message, dict) and message.get("type") == "assistant":
+            types.extend(
+                str(part.get("type"))
+                for part in message.get("content", [])
+                if isinstance(part, dict)
+            )
+    return types
+
+
+def validate_native_case_e2_capture(
+    trace: dict[str, Any],
+    case: dict[str, Any],
+    root_export: dict[str, Any],
+    child_export: dict[str, Any],
+) -> list[str]:
+    """Validate E2's observed Talos route while retaining E1 as failed history."""
+    errors: list[str] = []
+    case = case if isinstance(case, dict) else {}
+    root_export = root_export if isinstance(root_export, dict) else {}
+    child_export = child_export if isinstance(child_export, dict) else {}
+    expected_routes = case.get("expected_routes", {})
+    matrix_route = expected_routes.get(CASE_E2_SCENARIO) if isinstance(expected_routes, dict) else None
+
+    if (
+        case.get("id") != "E"
+        or case.get("request_class") != "SECURITY_BUG"
+        or matrix_route != CASE_E2_EXPECTED_ROUTE
+        or trace.get("CASE_ID") != "E"
+        or trace.get("ATTEMPT_ID") != "E2"
+        or trace.get("SCENARIO") != CASE_E2_SCENARIO
+        or trace.get("REQUEST_CLASS") != "SECURITY_BUG"
+        or trace.get("EVIDENCE_CLASS") != "FRESH_ROOT_NATIVE"
+    ):
+        errors.append("NATIVE_E2_IDENTITY_OR_EXPECTATION_MISMATCH")
+
+    if (
+        trace.get("ROOT_SESSION_ID") != CASE_E2_ROOT_SESSION_ID
+        or trace.get("ROOT_DIRECTORY_METADATA_MATCH") is not True
+        or trace.get("ROOT_AGENT") != "kael"
+        or trace.get("ROOT_PARENT_SESSION_ID") is not None
+        or trace.get("ROOT_PARENT_SESSION_ID_OBSERVATION") != "EXPLICIT_NULL"
+        or trace.get("ROOT_TITLE") != "Diagnosing MEMBER account-deletion authorization boundary"
+        or trace.get("ROOT_EXECUTION_OUTCOME") != "succeeded"
+        or trace.get("ROOT_TERMINAL_MESSAGE_ID") != CASE_E2_ROOT_TERMINAL_MESSAGE_ID
+        or trace.get("ROOT_OUTCOME_MESSAGE_ID") != CASE_E2_ROOT_OUTCOME_MESSAGE_ID
+        or trace.get("ROOT_USER_MESSAGE_ID") != CASE_E2_ROOT_USER_MESSAGE_ID
+        or trace.get("ROOT_TOOL_CALL_MESSAGE_ID") != CASE_E2_ROOT_TOOL_MESSAGE_ID
+        or trace.get("ROOT_STARTING_HEAD") != CASE_E2_ROOT_STARTING_HEAD
+    ):
+        errors.append("NATIVE_E2_ROOT_IDENTITY_OR_OUTCOME_MISMATCH")
+
+    isolation = trace.get("ROOT_ISOLATION", {})
+    if (
+        isolation.get("WORKTREE_ISOLATION") != "SUPPLIED_VERIFIED"
+        or isolation.get("LOCATION_MATCHED_SUPPLIED_DISPOSABLE_PATH") is not True
+        or isolation.get("STARTING_HEAD_SOURCE") != "Original root user prompt"
+        or isolation.get("SEPARATE_DISPOSABLE_WORKTREE") is not None
+        or isolation.get("FILESYSTEM_AUDIT_PERFORMED") is not False
+    ):
+        errors.append("NATIVE_E2_ISOLATION_SOURCE_OR_SCOPE_MISMATCH")
+
+    provenance = trace.get("EVIDENCE_PROVENANCE", {})
+    if (
+        provenance.get("CLASS") != "FRESH_ROOT_NATIVE"
+        or provenance.get("NATIVE_ROOT_SESSION_ID") != CASE_E2_ROOT_SESSION_ID
+        or provenance.get("NATIVE_CHILD_SESSION_IDS") != [CASE_E2_CHILD_SESSION_ID]
+        or provenance.get("ORDER_BASIS") != "observed"
+        or provenance.get("FRESH_ROOT_CONFIRMED") is not True
+    ):
+        errors.append("NATIVE_E2_PROVENANCE_OR_FRESH_ROOT_MISMATCH")
+
+    root_session = root_export.get("session", {})
+    root_meta_query = root_export.get("session_metadata_query", {})
+    root_export_query = root_export.get("export_query", {})
+    root_projection = root_export.get("projection_and_redaction", {})
+    root_messages_query = root_export.get("message_list_query", {})
+    if (
+        root_export.get("evidence_class") != "FRESH_ROOT_NATIVE"
+        or root_meta_query.get("method") != "GET"
+        or root_meta_query.get("path") != f"/api/session/{CASE_E2_ROOT_SESSION_ID}"
+        or root_meta_query.get("result") != "SUCCESS"
+        or root_export_query.get("method") != "GET"
+        or root_export_query.get("path") != f"/api/experimental/session/{CASE_E2_ROOT_SESSION_ID}/export?sanitize=false"
+        or root_export_query.get("result") != "SUCCESS"
+        or root_session.get("id") != CASE_E2_ROOT_SESSION_ID
+        or root_session.get("agent") != "kael"
+        or root_session.get("parent_id") is not None
+        or root_session.get("parent_id_observation") != "EXPLICIT_NULL"
+        or root_session.get("directory_observation") != "MATCHED_SUPPLIED_DISPOSABLE_PATH; exact metadata path omitted from this projection"
+        or root_session.get("title") != "Diagnosing MEMBER account-deletion authorization boundary"
+        or root_session.get("execution_outcome") != "succeeded"
+    ):
+        errors.append("NATIVE_E2_ROOT_EXPORT_METADATA_MISMATCH")
+    if (
+        root_messages_query.get("method") != "GET"
+        or root_messages_query.get("path") != f"/api/session/{CASE_E2_ROOT_SESSION_ID}/message?limit=100&order=asc"
+        or root_messages_query.get("result") != "SUCCESS"
+        or root_messages_query.get("pages") != 2
+        or root_messages_query.get("cursor_next") is not None
+        or root_messages_query.get("message_count") != 4
+        or root_messages_query.get("message_ids") != [
+            CASE_E2_ROOT_USER_MESSAGE_ID,
+            CASE_E2_ROOT_TOOL_MESSAGE_ID,
+            CASE_E2_ROOT_TERMINAL_MESSAGE_ID,
+            CASE_E2_ROOT_OUTCOME_MESSAGE_ID,
+        ]
+        or root_messages_query.get("message_types") != ["user", "assistant", "assistant", "idle"]
+    ):
+        errors.append("NATIVE_E2_ROOT_MESSAGE_API_RECONCILIATION_MISMATCH")
+    if (
+        root_projection.get("raw_export_persisted") is not False
+        or root_projection.get("reasoning_blocks_removed") != 2
+        or root_projection.get("secret_values_redacted") != 0
+        or root_projection.get("unrecognized_content_blocks_omitted") != 0
+        or any(re.search(r"(?i)reason|thought|analysis", kind) for kind in _export_content_types(root_export))
+    ):
+        errors.append("NATIVE_E2_ROOT_EXPORT_PROJECTION_OR_REASONING_REDACTION_MISMATCH")
+
+    root_messages = root_export.get("messages", [])
+    if [message.get("type") for message in root_messages if isinstance(message, dict)] != [
+        "user", "assistant", "assistant", "idle"
+    ]:
+        errors.append("NATIVE_E2_ROOT_MESSAGE_SEQUENCE_MISMATCH")
+    root_user = _export_message(root_export, CASE_E2_ROOT_USER_MESSAGE_ID) or {}
+    root_prompt = root_user.get("text", "") if isinstance(root_user.get("text"), str) else ""
+    root_terminal_text = _export_text(root_export, CASE_E2_ROOT_TERMINAL_MESSAGE_ID)
+    if (
+        CASE_E2_LABEL not in root_prompt
+        or CASE_E2_ROOT_STARTING_HEAD not in root_prompt
+        or "MEMBER" not in root_prompt
+        or "ADMIN" not in root_prompt
+        or "Use the smallest sufficient route" not in root_prompt
+        or "PHASE11_CASE_E2_FRESH_ROOT" not in root_prompt
+    ):
+        errors.append("NATIVE_E2_ORIGINAL_ROOT_PROMPT_OR_LABEL_NOT_PRESERVED")
+    required_root_phrases = (
+        "SECURITY_CLASSIFICATION:\nCONFIRMED_SECURITY_DEFECT",
+        "VIOLATED_BOUNDARY:\nServer-side authorization for account deletion",
+        "FIX_DIRECTION:\nRequire authenticated ADMIN authorization from trusted identity/role information",
+        "SAFE_VALIDATION:\nFuture non-destructive tests using a mocked deletion service",
+        "These tests were not run.",
+        "EXPLOIT_ATTEMPTED:\nNO",
+        "FILES_CHANGED:\nNONE",
+        "UNRESOLVED_WORK:\nNONE for this diagnosis",
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED:\nYES",
+        "ANY_WORK_REMAINING:\nNO",
+    )
+    if not root_terminal_text or any(phrase not in root_terminal_text for phrase in required_root_phrases):
+        errors.append("NATIVE_E2_ROOT_TERMINAL_FACTS_NOT_PRESERVED")
+    if root_export.get("terminal_message_id") != CASE_E2_ROOT_TERMINAL_MESSAGE_ID or (
+        root_export.get("terminal_outcome_record", {}).get("message_id") != CASE_E2_ROOT_OUTCOME_MESSAGE_ID
+        or root_export.get("terminal_outcome_record", {}).get("outcome") != "succeeded"
+    ):
+        errors.append("NATIVE_E2_ROOT_TERMINAL_OUTCOME_MESSAGE_MISMATCH")
+
+    expected_tool_call = {
+        "id": CASE_E2_ROOT_TOOL_CALL_ID,
+        "name": "subagent",
+        "state": "completed",
+        "agent": "talos",
+        "task_label": CASE_E2_LABEL,
+        "child_session_id": CASE_E2_CHILD_SESSION_ID,
+        "result_id": None,
+    }
+    if root_export.get("tool_call_records") != [expected_tool_call]:
+        errors.append("NATIVE_E2_ROOT_TOOL_CALL_OR_CHILD_JOIN_MISMATCH")
+    tool_message = _export_message(root_export, CASE_E2_ROOT_TOOL_MESSAGE_ID) or {}
+    tool_parts = [
+        part for part in tool_message.get("content", [])
+        if isinstance(part, dict) and part.get("type") == "tool"
+    ]
+    if len(tool_parts) != 1 or any(
+        tool_parts[0].get(key) != value
+        for key, value in {
+            "id": CASE_E2_ROOT_TOOL_CALL_ID,
+            "name": "subagent",
+            "state": "completed",
+            "agent": "talos",
+            "task_label": CASE_E2_LABEL,
+            "child_session_id": CASE_E2_CHILD_SESSION_ID,
+        }.items()
+    ):
+        errors.append("NATIVE_E2_ROOT_TOOL_MESSAGE_STUB_MISMATCH")
+
+    child_session = child_export.get("session", {})
+    child_meta_query = child_export.get("session_metadata_query", {})
+    child_export_query = child_export.get("export_query", {})
+    child_projection = child_export.get("projection_and_redaction", {})
+    child_messages_query = child_export.get("message_list_query", {})
+    if (
+        child_export.get("evidence_class") != "FRESH_ROOT_NATIVE"
+        or child_meta_query.get("method") != "GET"
+        or child_meta_query.get("path") != f"/api/session/{CASE_E2_CHILD_SESSION_ID}"
+        or child_meta_query.get("result") != "SUCCESS"
+        or child_export_query.get("method") != "GET"
+        or child_export_query.get("path") != f"/api/experimental/session/{CASE_E2_CHILD_SESSION_ID}/export?sanitize=false"
+        or child_export_query.get("result") != "SUCCESS"
+        or child_session.get("id") != CASE_E2_CHILD_SESSION_ID
+        or child_session.get("agent") != "talos"
+        or child_session.get("parent_id") != CASE_E2_ROOT_SESSION_ID
+        or child_session.get("parent_id_observation") != "EXPLICIT_ID"
+        or child_session.get("directory_observation") != "MATCHED_SUPPLIED_DISPOSABLE_PATH; exact metadata path omitted from this projection"
+        or child_session.get("title") != "Diagnose account deletion authorization"
+        or child_session.get("execution_outcome") != "succeeded"
+    ):
+        errors.append("NATIVE_E2_CHILD_EXPORT_PARENT_OR_METADATA_MISMATCH")
+    if (
+        child_messages_query.get("method") != "GET"
+        or child_messages_query.get("path") != f"/api/session/{CASE_E2_CHILD_SESSION_ID}/message?limit=100&order=asc"
+        or child_messages_query.get("result") != "SUCCESS"
+        or child_messages_query.get("pages") != 2
+        or child_messages_query.get("cursor_next") is not None
+        or child_messages_query.get("message_count") != 3
+        or child_messages_query.get("message_ids") != [
+            CASE_E2_CHILD_USER_MESSAGE_ID,
+            CASE_E2_CHILD_TERMINAL_MESSAGE_ID,
+            CASE_E2_CHILD_OUTCOME_MESSAGE_ID,
+        ]
+        or child_messages_query.get("message_types") != ["user", "assistant", "idle"]
+    ):
+        errors.append("NATIVE_E2_CHILD_MESSAGE_API_RECONCILIATION_MISMATCH")
+    if (
+        child_projection.get("raw_export_persisted") is not False
+        or child_projection.get("reasoning_blocks_removed") != 0
+        or child_projection.get("secret_values_redacted") != 0
+        or child_projection.get("unrecognized_content_blocks_omitted") != 0
+        or any(re.search(r"(?i)reason|thought|analysis", kind) for kind in _export_content_types(child_export))
+        or child_export.get("tool_call_records") != []
+    ):
+        errors.append("NATIVE_E2_CHILD_EXPORT_PROJECTION_OR_TOOL_BOUNDARY_MISMATCH")
+    child_messages = child_export.get("messages", [])
+    if [message.get("type") for message in child_messages if isinstance(message, dict)] != ["user", "assistant", "idle"]:
+        errors.append("NATIVE_E2_CHILD_MESSAGE_SEQUENCE_MISMATCH")
+    child_user = _export_message(child_export, CASE_E2_CHILD_USER_MESSAGE_ID) or {}
+    child_prompt = child_user.get("text", "") if isinstance(child_user.get("text"), str) else ""
+    child_terminal_text = _export_text(child_export, CASE_E2_CHILD_TERMINAL_MESSAGE_ID)
+    required_child_phrases = (
+        "TASK_ID: PHASE11_CASE_E2_FRESH_ROOT",
+        "ROLE: talos",
+        "STATUS: SECURITY_DIAGNOSIS",
+        "CLASSIFICATION: SECURITY_BUG — CONFIRMED_SECURITY_DEFECT",
+        "SECURITY_BOUNDARY: ADMIN-only authorization for account deletion",
+        "CAUSE: Authorization enforcement fails for the established case. The implementation mechanism is unconfirmed",
+        "FIX_DIRECTION: Enforce authenticated ADMIN authorization server-side, using trusted identity and role information",
+        "Future non-destructive tests using a mocked deletion service",
+        "EXECUTION: No tools, exploits, tests, repository access, or file mutations attempted.",
+        "COMPLETION: Security diagnosis complete.",
+    )
+    if (
+        CASE_E2_LABEL not in child_prompt
+        or CASE_E2_ROOT_STARTING_HEAD not in child_prompt
+        or any(phrase not in child_terminal_text for phrase in required_child_phrases[2:])
+    ):
+        errors.append("NATIVE_E2_TALOS_DIAGNOSIS_OR_SOURCE_UNCERTAINTY_MISMATCH")
+    if child_export.get("terminal_message_id") != CASE_E2_CHILD_TERMINAL_MESSAGE_ID or (
+        child_export.get("terminal_outcome_record", {}).get("message_id") != CASE_E2_CHILD_OUTCOME_MESSAGE_ID
+        or child_export.get("terminal_outcome_record", {}).get("outcome") != "succeeded"
+    ):
+        errors.append("NATIVE_E2_CHILD_TERMINAL_OUTCOME_MESSAGE_MISMATCH")
+
+    direct_query = root_export.get("direct_child_query", {})
+    direct_response = direct_query.get("response", {})
+    expected_direct_child = {
+        "id": CASE_E2_CHILD_SESSION_ID,
+        "agent": "talos",
+        "parent_id": CASE_E2_ROOT_SESSION_ID,
+        "title": "Diagnose account deletion authorization",
+        "outcome": "succeeded",
+        "directory_matches_supplied_disposable_path": True,
+    }
+    if (
+        direct_query.get("method") != "GET"
+        or direct_query.get("path") != f"/api/session?parentID={CASE_E2_ROOT_SESSION_ID}&limit=100"
+        or direct_query.get("result") != "SUCCESS"
+        or direct_response.get("parent_id") != CASE_E2_ROOT_SESSION_ID
+        or direct_response.get("count") != 1
+        or direct_response.get("children") != [expected_direct_child]
+        or direct_response.get("cursor_next") is not None
+        or direct_response.get("pages") != 2
+    ):
+        errors.append("NATIVE_E2_DIRECT_CHILD_QUERY_OR_PARENT_JOIN_MISMATCH")
+
+    api = trace.get("API_EVIDENCE", {})
+    api_child_query = api.get("DIRECT_CHILD_QUERY", {})
+    if (
+        api_child_query.get("PATH") != f"/api/session?parentID={CASE_E2_ROOT_SESSION_ID}&limit=100"
+        or api_child_query.get("RESULT") != "SUCCESS"
+        or api_child_query.get("PARENT_SESSION_ID") != CASE_E2_ROOT_SESSION_ID
+        or api_child_query.get("CHILD_COUNT") != 1
+        or api_child_query.get("CURSOR_NEXT") is not None
+        or api_child_query.get("PAGES") != 2
+        or api.get("ROOT_TOOL_CALL_RECORDS") != [{
+            "CALL_ID": CASE_E2_ROOT_TOOL_CALL_ID,
+            "NAME": "subagent",
+            "STATE": "completed",
+            "AGENT": "talos",
+            "TASK_LABEL": CASE_E2_LABEL,
+            "CHILD_SESSION_ID": CASE_E2_CHILD_SESSION_ID,
+            "RESULT_ID": None,
+        }]
+        or api.get("ROOT_TOOL_CALL_RECORD_COUNT") != 1
+        or api.get("CHILD_TOOL_CALL_RECORDS") != []
+    ):
+        errors.append("NATIVE_E2_API_TOOL_OR_CHILD_OBSERVATION_MISMATCH")
+
+    children = trace.get("CHILD_SESSIONS", [])
+    if not isinstance(children, list) or len(children) != 1:
+        errors.append("NATIVE_E2_CHILD_SESSION_SET_MISMATCH")
+        children = []
+    expected_child = {
+        "TRACE_REF": "E2-TALOS",
+        "NATIVE_SESSION_ID": CASE_E2_CHILD_SESSION_ID,
+        "AGENT": "talos",
+        "PARENT_AGENT": "kael",
+        "PARENT_SESSION_ID": CASE_E2_ROOT_SESSION_ID,
+        "LAUNCH_ORDER": 1,
+        "INVOCATION_COUNT": 1,
+        "EXECUTION_STATE": "SUCCEEDED",
+        "FINAL_OUTCOME": "succeeded",
+        "RESULT_ID": None,
+        "TITLE": "Diagnose account deletion authorization",
+        "PURPOSE": "Bounded security diagnosis using the established authorization facts; no repository discovery or execution.",
+        "PARENT_MESSAGE_ID": CASE_E2_ROOT_TOOL_MESSAGE_ID,
+        "INVOCATION_TOOL_CALL_ID": CASE_E2_ROOT_TOOL_CALL_ID,
+        "TOOL_STATE": "completed",
+        "TOOL_TASK_LABEL": CASE_E2_LABEL,
+        "TERMINAL_MESSAGE_ID": CASE_E2_CHILD_TERMINAL_MESSAGE_ID,
+        "OUTCOME_MESSAGE_ID": CASE_E2_CHILD_OUTCOME_MESSAGE_ID,
+    }
+    if children != [expected_child]:
+        errors.append("NATIVE_E2_CHILD_SESSION_PARENT_ROLE_OR_RESULT_JOIN_MISMATCH")
+    child_roles = [child.get("AGENT") for child in children]
+    derived_route = ["kael", *child_roles]
+    if (
+        trace.get("EXPECTED_ROUTE") != CASE_E2_EXPECTED_ROUTE
+        or matrix_route != CASE_E2_EXPECTED_ROUTE
+        or trace.get("ACTUAL_ROUTE") != derived_route
+        or derived_route != CASE_E2_EXPECTED_ROUTE
+        or trace.get("ROUTE_RECONCILIATION", {}).get("EXPECTED_PRODUCT_ROUTE") != CASE_E2_EXPECTED_ROUTE
+        or trace.get("ROUTE_RECONCILIATION", {}).get("OBSERVED_UNIQUE_CHILD_SESSION_LAUNCH_ORDER") != CASE_E2_EXPECTED_ROUTE
+        or trace.get("ROUTE_RECONCILIATION", {}).get("CLASSIFICATION") != CASE_E2_NATIVE_RESULT
+    ):
+        errors.append("NATIVE_E2_ROUTE_OR_EXPECTATION_MISMATCH")
+    if (
+        trace.get("CONSULTATION_COUNTS") != CASE_E2_ROLE_COUNTS
+        or trace.get("UNIQUE_CHILD_SESSION_COUNTS") != CASE_E2_ROLE_COUNTS
+        or trace.get("ROOT_SUBAGENT_CALL_INVOCATION_COUNTS") != {"talos": 1}
+    ):
+        errors.append("NATIVE_E2_SPECIALIST_OR_INVOCATION_COUNTS_MISMATCH")
+    negative = trace.get("NEGATIVE_CONTROLS", {})
+    argus = negative.get("argus", {})
+    if (
+        argus.get("INVOCATIONS") != 0
+        or argus.get("UNIQUE_CHILD_SESSIONS") != 0
+        or argus.get("STATUS") != "PASS"
+        or trace.get("CONSULTATION_COUNTS", {}).get("argus") != 0
+        or any(trace.get("CONSULTATION_COUNTS", {}).get(role) != 0 for role in ("kovan", "orin", "atlas", "thales", "helios", "aegis"))
+    ):
+        errors.append("NATIVE_E2_NEGATIVE_ARGUS_OR_FORBIDDEN_ROLE_CONTROL_MISMATCH")
+
+    role_purity = trace.get("ROLE_PURITY", {})
+    if (
+        role_purity.get("STATUS") != "PASS"
+        or role_purity.get("ROOT_AGENT") != "kael"
+        or role_purity.get("ALL_CHILDREN_DIRECT") is not True
+        or role_purity.get("NESTED_DELEGATION_OBSERVED") is not False
+        or role_purity.get("REVIEWER_EDITS_OBSERVED") is not False
+        or role_purity.get("ROOT_SOURCE_WRITES_OBSERVED") is not False
+        or role_purity.get("EXPLOIT_ATTEMPTED") != "NO"
+        or role_purity.get("VIOLATIONS") != []
+    ):
+        errors.append("NATIVE_E2_ROLE_PURITY_OR_SAFETY_MISMATCH")
+
+    if trace.get("CLASSIFICATIONS") != CASE_E2_CLASSIFICATIONS:
+        errors.append("NATIVE_E2_CLASSIFICATION_STATUS_MISMATCH")
+    result = trace.get("RESULT_FIDELITY", {})
+    if (
+        result.get("EXPECTED_PRODUCT_ROUTE") != CASE_E2_EXPECTED_ROUTE
+        or result.get("OBSERVED_PRODUCT_ROUTE") != CASE_E2_EXPECTED_ROUTE
+        or result.get("ROUTE_MATCHES") is not True
+        or result.get("SECURITY_BEHAVIOR_MATCHES") is not True
+        or result.get("ROOT_EXECUTION_OUTCOME") != "succeeded"
+        or result.get("CASE_ACCEPTANCE") != "PASS"
+        or "not an explicit literal PASS" not in result.get("CASE_ACCEPTANCE_BASIS", "")
+    ):
+        errors.append("NATIVE_E2_RESULT_FIDELITY_OR_EXECUTION_ACCEPTANCE_MISMATCH")
+    if (
+        trace.get("COMPLETION_GATE", {}).get("PENDING_CHILD_COUNT") != 0
+        or trace.get("COMPLETION_GATE", {}).get("UNCONSUMED_RESULT_COUNT") != 0
+        or trace.get("COMPLETION_GATE", {}).get("UNKNOWN_EXECUTION_COUNT") != 0
+        or trace.get("COMPLETION_GATE", {}).get("REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED") is not True
+        or trace.get("COMPLETION_GATE", {}).get("PER_INVOCATION_RESULT_IDS") is not None
+        or trace.get("COMPLETION_GATE", {}).get("PER_INVOCATION_CONSUMPTION_TIMING") is not None
+        or trace.get("COMPLETION_GATE", {}).get("SESSION_LIFETIME_EXACT_ONCE") is not None
+    ):
+        errors.append("NATIVE_E2_COMPLETION_OR_RESULT_ID_OVERCLAIM")
+    consumption = trace.get("RESULT_CONSUMPTION", {})
+    if (
+        consumption.get("ROOT_AGGREGATE_STATEMENT") != "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED: YES"
+        or consumption.get("PENDING_CHILDREN") != 0
+        or consumption.get("UNCONSUMED_RESULTS") != 0
+        or consumption.get("UNKNOWN_EXECUTIONS") != 0
+        or consumption.get("RESULT_IDS") is not None
+        or consumption.get("PER_INVOCATION_CONSUMPTION_TIMING") is not None
+        or consumption.get("SESSION_LIFETIME_EXACT_ONCE") is not None
+    ):
+        errors.append("NATIVE_E2_RESULT_CONSUMPTION_RECONCILIATION_MISMATCH")
+    unknowns = trace.get("UNKNOWN_METRICS", {})
+    if (
+        unknowns.get("MAX_SIMULTANEOUS_CHILDREN") is not None
+        or unknowns.get("PER_INVOCATION_RESULT_IDS") is not None
+        or unknowns.get("PER_INVOCATION_CONSUMPTION_TIMING") is not None
+        or unknowns.get("SESSION_LIFETIME_EXACT_ONCE") is not None
+        or unknowns.get("TIMING_METRICS") is not None
+        or unknowns.get("NATIVE_PERMISSION_UI") != "NOT_OBSERVABLE"
+        or unknowns.get("NATIVE_PERMISSION_DECISION") != "NOT_OBSERVABLE"
+        or unknowns.get("WORKTREE_FILESYSTEM_AUDIT") != "NOT_PERFORMED"
+        or trace.get("MAX_SIMULTANEOUS_CHILDREN") is not None
+        or trace.get("OBSERVED_SEQUENCE", {}).get("MAX_SIMULTANEOUS_CHILDREN") is not None
+        or trace.get("OBSERVED_SEQUENCE", {}).get("TIMING_METRICS") is not None
+    ):
+        errors.append("NATIVE_E2_UNKNOWN_OR_UNOBSERVED_METRIC_OVERCLAIM")
+    if trace.get("EFFICIENCY", {}).get("CLASSIFICATION") != "LEAN" or trace.get("EFFICIENCY", {}).get("BASIS") != (
+        "One required direct Talos consultation; no latency, throughput, or concurrency claim."
+    ):
+        errors.append("NATIVE_E2_EFFICIENCY_BASIS_MISMATCH")
+
+    history = trace.get("E1_HISTORICAL_ATTEMPT", {})
+    if (
+        history.get("LABEL") != "PHASE11_CASE_E_FRESH_ROOT"
+        or history.get("ROOT_SESSION_ID") != CASE_E_ROOT_SESSION_ID
+        or history.get("RESULT") != CASE_E_NATIVE_RESULT
+        or history.get("EXPECTED_ROUTE") != CASE_E_EXPECTED_ROUTE
+        or history.get("ACTUAL_ROUTE") != CASE_E_ACTUAL_ROUTE
+        or history.get("ACCEPTANCE_STATUS") != "FAIL"
+        or history.get("ARTIFACTS_PRESERVED") is not True
+    ):
+        errors.append("NATIVE_E2_E1_FAILED_HISTORY_REWRITTEN_OR_MISJOINED")
+    if (
+        trace.get("CASE_RESULT") != CASE_E2_NATIVE_RESULT
+        or trace.get("CASE_ACCEPTANCE") != "PASS"
+        or trace.get("CASE_RERUN_PERFORMED_BY_RECONCILIATION") is not False
+        or trace.get("CORE_POLICY_MODIFIED") is not False
+        or trace.get("FINAL_OUTCOME") != "SUCCEEDED"
+        or trace.get("USER_QUESTION_COUNT") != 0
+    ):
+        errors.append("NATIVE_E2_ACCEPTANCE_OR_PROHIBITED_ACTION_CLAIM_MISMATCH")
+    return errors
+
+
+def validate_phase11_e2_reconciliation(
+    baseline: dict[str, Any],
+    cases_doc: dict[str, Any],
+    trace: dict[str, Any],
+    root_export: dict[str, Any],
+    child_export: dict[str, Any],
+) -> list[str]:
+    """Bind E2 native evidence to latest Phase 11 state without rewriting E1."""
+    cases = {
+        case.get("id"): case
+        for case in cases_doc.get("cases", [])
+        if isinstance(case, dict)
+    }
+    errors = validate_native_case_e2_capture(trace, cases.get("E", {}), root_export, child_export)
+    report = baseline.get("phase11_e2_reconciliation")
+    if not isinstance(report, dict):
+        return errors + ["CASE_E2_RECONCILIATION_MISSING"]
+    if (
+        report.get("task_id") != "PH11-E2-CLOSURE"
+        or report.get("label") != CASE_E2_LABEL
+        or report.get("attempt") != "E2"
+        or report.get("evidence_artifact") != "tests/phase11-integrated-routing/case-e2.native-trace.json"
+        or report.get("root_export_artifact") != "tests/phase11-integrated-routing/case-e2.root-session.export.json"
+        or report.get("child_export_artifact") != "tests/phase11-integrated-routing/case-e2.talos-session.export.json"
+        or report.get("evidence_class") != "FRESH_ROOT_NATIVE"
+    ):
+        errors.append("CASE_E2_EVIDENCE_LINK_OR_LABEL_MISMATCH")
+    if (
+        report.get("root_session_id") != CASE_E2_ROOT_SESSION_ID
+        or report.get("root_directory_metadata_match") is not True
+        or report.get("root_directory_path_persisted") is not False
+        or report.get("root_agent") != "kael"
+        or report.get("root_parent_session_id") is not None
+        or report.get("root_parent_session_id_observation") != "EXPLICIT_NULL"
+        or report.get("root_title") != "Diagnosing MEMBER account-deletion authorization boundary"
+        or report.get("root_terminal_outcome") != "succeeded"
+        or report.get("root_terminal_message_id") != CASE_E2_ROOT_TERMINAL_MESSAGE_ID
+        or report.get("root_outcome_message_id") != CASE_E2_ROOT_OUTCOME_MESSAGE_ID
+        or report.get("root_user_message_id") != CASE_E2_ROOT_USER_MESSAGE_ID
+        or report.get("root_starting_head") != CASE_E2_ROOT_STARTING_HEAD
+    ):
+        errors.append("CASE_E2_BASELINE_ROOT_RECONCILIATION_MISMATCH")
+    expected_report_tool = {
+        "id": CASE_E2_ROOT_TOOL_CALL_ID,
+        "name": "subagent",
+        "state": "completed",
+        "agent": "talos",
+        "task_label": CASE_E2_LABEL,
+        "child_session_id": CASE_E2_CHILD_SESSION_ID,
+        "result_id": None,
+    }
+    if (
+        report.get("root_tool_call") != expected_report_tool
+        or report.get("child_sessions") != [{
+            "role": "talos",
+            "session_id": CASE_E2_CHILD_SESSION_ID,
+            "parent_session_id": CASE_E2_ROOT_SESSION_ID,
+            "title": "Diagnose account deletion authorization",
+            "outcome": "succeeded",
+            "invocation_count": 1,
+            "tool_state": "completed",
+            "tool_call_id": CASE_E2_ROOT_TOOL_CALL_ID,
+            "terminal_message_id": CASE_E2_CHILD_TERMINAL_MESSAGE_ID,
+            "result_id": None,
+        }]
+        or report.get("expected_product_route") != CASE_E2_EXPECTED_ROUTE
+        or report.get("observed_product_route") != CASE_E2_EXPECTED_ROUTE
+        or report.get("direct_child_count") != 1
+        or report.get("root_tool_call_record_count") != 1
+        or report.get("consultation_counts") != CASE_E2_ROLE_COUNTS
+        or report.get("unique_child_session_counts") != CASE_E2_ROLE_COUNTS
+    ):
+        errors.append("CASE_E2_BASELINE_ROUTE_CHILD_OR_COUNTS_MISMATCH")
+    if report.get("classifications") != CASE_E2_CLASSIFICATIONS:
+        errors.append("CASE_E2_BASELINE_CLASSIFICATIONS_MISMATCH")
+    if report.get("terminal_facts") != trace.get("OBSERVED_TERMINAL_SNAPSHOT", {}).get("FACTS"):
+        errors.append("CASE_E2_BASELINE_TERMINAL_FACTS_MISMATCH")
+    expected_consumption = {
+        "root_aggregate_statement": "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED: YES",
+        "pending_children": 0,
+        "unconsumed_results": 0,
+        "unknown_executions": 0,
+        "result_ids": None,
+        "per_invocation_consumption_timing": None,
+        "session_lifetime_exact_once": None,
+    }
+    if report.get("result_consumption") != expected_consumption:
+        errors.append("CASE_E2_BASELINE_RESULT_CONSUMPTION_MISMATCH")
+    expected_isolation = {
+        "status": "SUPPLIED_VERIFIED",
+        "starting_head": CASE_E2_ROOT_STARTING_HEAD,
+        "starting_head_source": "Original root user prompt",
+        "directory_metadata_match": True,
+        "directory_path_persisted": False,
+        "separate_disposable_worktree": None,
+        "filesystem_audit_performed": False,
+    }
+    if report.get("isolation") != expected_isolation:
+        errors.append("CASE_E2_BASELINE_ISOLATION_SCOPE_MISMATCH")
+    if (
+        report.get("mechanism_uncertainty") != "Authorization enforcement failure is confirmed for the established case; the specific implementation mechanism is unconfirmed."
+        or report.get("acceptance_status") != "PASS"
+        or report.get("case_result") != CASE_E2_NATIVE_RESULT
+        or report.get("phase11_status") != "PARTIAL"
+        or report.get("case_rerun_performed_by_reconciliation") is not False
+        or report.get("core_policy_modified") is not False
+        or report.get("efficiency") != "LEAN"
+    ):
+        errors.append("CASE_E2_ACCEPTANCE_PHASE_OR_UNCERTAINTY_MISMATCH")
+    expected_validation = {
+        "phase11_qualifier": {
+            "command": "uv run --python 3.11 python tests/phase11-integrated-routing/qualify.py",
+            "exit_code": 0,
+            "result": "PHASE11_ARTIFACTS: PASS; PHASE11_QUALIFICATION: PARTIAL",
+        },
+        "phase11_unittest": {
+            "command": 'uv run --python 3.11 python -m unittest discover -s tests/phase11-integrated-routing -p "test_*.py" -v',
+            "exit_code": 0,
+            "test_count": 62,
+            "result": "PASS",
+        },
+        "harness_core_safe_root": {
+            "command": "uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-only",
+            "exit_code": 0,
+            "result": "PASS",
+            "managed_output_count_before": 29,
+            "managed_output_count_after": 29,
+            "hash_mtime_unchanged": True,
+        },
+        "renderer_check": {
+            "command": "uv run --python 3.11 python scripts/render_harnesses.py check --harness all",
+            "exit_code": 0,
+            "result": "PASS (all; 29 managed output(s); read-only)",
+        },
+        "git_diff_check": {
+            "command": "git diff --check",
+            "exit_code": 0,
+            "result": "PASS",
+            "line_ending_warnings_only": True,
+        },
+    }
+    if report.get("validation") != expected_validation:
+        errors.append("CASE_E2_VALIDATION_RECORD_MISMATCH")
+    if report.get("pending_fresh_root_labels") != CURRENT_PHASE11_PENDING_LABELS:
+        errors.append("CASE_E2_PENDING_LABELS_MISMATCH")
+    if report.get("argus_same_session_followup_runtime_coverage") != "NOT_EXERCISED":
+        errors.append("CASE_E2_ARGUS_FOLLOWUP_COVERAGE_PROMOTED")
+
+    e1 = baseline.get("phase11_e_reconciliation", {})
+    e1_history = report.get("e1_historical_attempt", {})
+    if (
+        e1.get("root_session_id") != CASE_E_ROOT_SESSION_ID
+        or e1.get("acceptance_status") != "FAIL"
+        or e1.get("case_result") != CASE_E_NATIVE_RESULT
+        or e1.get("expected_product_route") != CASE_E_EXPECTED_ROUTE
+        or e1.get("observed_product_route") != CASE_E_ACTUAL_ROUTE
+        or e1_history.get("label") != "PHASE11_CASE_E_FRESH_ROOT"
+        or e1_history.get("root_session_id") != CASE_E_ROOT_SESSION_ID
+        or e1_history.get("acceptance_status") != "FAIL"
+        or e1_history.get("case_result") != CASE_E_NATIVE_RESULT
+        or e1_history.get("expected_product_route") != CASE_E_EXPECTED_ROUTE
+        or e1_history.get("observed_product_route") != CASE_E_ACTUAL_ROUTE
+        or e1_history.get("native_artifacts_unchanged") is not True
+    ):
+        errors.append("CASE_E2_E1_FAILED_HISTORICAL_ATTEMPT_NOT_PRESERVED")
+
+    current = baseline.get("live_qualification", {})
+    if not isinstance(current, dict) or (
+        current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
+        or current.get("fresh_root_native") != CASE_E2_CURRENT_PHASE_STATE
+        or current.get("native_results_claimed") is not True
+        or current.get("overall_status") != "PARTIAL"
+        or "PH11-E2-CLOSURE" not in current.get("current_pending_state_source", "")
+    ):
+        errors.append("CURRENT_PHASE11_E2_PENDING_STATE_MISMATCH")
+    if baseline.get("argus_same_session_followup_runtime_coverage") != CASE_D_PENDING_FOLLOWUP_COVERAGE:
+        errors.append("ARGUS_FOLLOWUP_RUNTIME_COVERAGE_PROMOTED_OR_CONFLATED")
+
+    actions = [
+        action for action in cases_doc.get("fresh_root_actions", [])
+        if isinstance(action, dict) and action.get("case_id") == "E"
+    ]
+    e1_actions = [action for action in actions if action.get("label") == "PHASE11_CASE_E_FRESH_ROOT"]
+    e2_actions = [action for action in actions if action.get("label") == CASE_E2_LABEL]
+    expected_e1_action = {
+        "scenario": "default",
+        "status": CASE_E_NATIVE_RESULT,
+        "evidence_class": "FRESH_ROOT_NATIVE",
+        "evidence_artifact": "case-e.native-trace.json",
+        "acceptance_status": "FAIL",
+        "pending_resolution": True,
+    }
+    expected_e2_action = {
+        "scenario": CASE_E2_SCENARIO,
+        "status": "PASS",
+        "evidence_class": "FRESH_ROOT_NATIVE",
+        "evidence_artifact": "case-e2.native-trace.json",
+        "acceptance_status": "PASS",
+        "pending_resolution": False,
+        "attempt": "E2",
+        "supersedes_latest_acceptance": "E1",
+    }
+    if len(e1_actions) != 1 or any(e1_actions[0].get(key) != value for key, value in expected_e1_action.items()):
+        errors.append("CASE_E1_MATRIX_HISTORY_REWRITTEN_OR_MISLINKED")
+    if len(e2_actions) != 1 or any(e2_actions[0].get(key) != value for key, value in expected_e2_action.items()):
+        errors.append("CASE_E2_MATRIX_STATUS_OR_EVIDENCE_LINK_MISMATCH")
+    recovered = baseline.get("recovered_user_observations", {}).get("case_observations", {})
+    recovered_expected = {
+        "A": {"reported_status": "PASS", "reported_mode": "GUIDED_CURRENT_SESSION"},
+        "I": {"reported_status": "PARTIAL", "reported_mode": "GUIDED_CURRENT_SESSION"},
+        "J": {"reported_status": "PASS", "reported_mode": "GUIDED_CURRENT_SESSION"},
+        "L_negative_automatic_aegis_control": {"reported_status": "PASS"},
+    }
+    if any(
+        not isinstance(recovered.get(case_id), dict)
+        or any(recovered[case_id].get(key) != value for key, value in expected.items())
+        for case_id, expected in recovered_expected.items()
+    ):
+        errors.append("CASE_E2_RECOVERED_A_I_J_L_HISTORY_PROMOTED_OR_CHANGED")
+    return errors
+
+
 def main() -> int:
     failures, documents = validate_corpus()
     static_failures = run_static_baseline_checks()
@@ -3209,6 +3941,9 @@ def main() -> int:
     native_d = load_json(HERE / "case-d.native-trace.json")
     native_e = load_json(HERE / "case-e.native-trace.json")
     case_e_export = load_json(HERE / "case-e.root-session.export.json")
+    native_e2 = load_json(HERE / "case-e2.native-trace.json")
+    case_e2_root_export = load_json(HERE / "case-e2.root-session.export.json")
+    case_e2_child_export = load_json(HERE / "case-e2.talos-session.export.json")
     reconciliation_failures = validate_phase11_b3_reconciliation(
         baseline, documents["cases"], native_b3
     )
@@ -3220,6 +3955,13 @@ def main() -> int:
     )
     case_e_failures = validate_phase11_e_reconciliation(
         baseline, documents["cases"], native_e, case_e_export
+    )
+    case_e2_failures = validate_phase11_e2_reconciliation(
+        baseline,
+        documents["cases"],
+        native_e2,
+        case_e2_root_export,
+        case_e2_child_export,
     )
     for label in ("ARGUS_GATE_MARKER", "TALOS_GATE_MARKER", "ATLAS_GATE_MARKER", "HELIOS_GATE_MARKER", "THALES_GATE_MARKER", "ROOT_OWNER_MARKER", "NO_NESTED_CHILD_MARKER", "CORE_CHILD_CEILING_MARKER"):
         if label in static_failures:
@@ -3236,8 +3978,10 @@ def main() -> int:
     if not case_d_failures:
         print("D-NATIVE: PASS (FRESH_ROOT_NATIVE; one terminal Argus diagnosis; unresolved cause correctly stops for one bounded user question)")
     if not case_e_failures:
-        print("E-NATIVE: EXPECTED_OBSERVED_FAILURE (native reconciliation PASS; product route Kael-only versus required Kael -> Talos remains FAIL)")
-    pending_fresh_root_cases = {"E", "F", "G", "H", "K"}
+        print("E1-NATIVE: HISTORICAL_FAILURE_PRESERVED (original product route Kael-only versus required Kael -> Talos remains FAIL)")
+    if not case_e2_failures:
+        print("E2-NATIVE: PASS (FRESH_ROOT_NATIVE; direct Talos child and route reconciled; E1 failure retained as history)")
+    pending_fresh_root_cases = {"F", "G", "H", "K"}
     pending_labels: list[str] = []
     for action in documents["cases"].get("fresh_root_actions", []):
         case_id = action.get("case_id")
@@ -3248,8 +3992,15 @@ def main() -> int:
                 print(f"PENDING_ACCEPTANCE {label} (observed routing failure; no Case E rerun requested)")
             else:
                 print(f"HUMAN_ACTION_REQUIRED {label}")
-    if failures or reconciliation_failures or case_c_failures or case_d_failures or case_e_failures:
-        for failure in [*failures, *reconciliation_failures, *case_c_failures, *case_d_failures, *case_e_failures]:
+    if failures or reconciliation_failures or case_c_failures or case_d_failures or case_e_failures or case_e2_failures:
+        for failure in [
+            *failures,
+            *reconciliation_failures,
+            *case_c_failures,
+            *case_d_failures,
+            *case_e_failures,
+            *case_e2_failures,
+        ]:
             print(f"FAIL: {failure}")
         print("PHASE11_QUALIFICATION: FAIL (artifact validation only)")
         return 1
@@ -3258,10 +4009,10 @@ def main() -> int:
             print(f"FAIL: STATIC_{label}")
         print("PHASE11_QUALIFICATION: FAIL (bounded policy marker check)")
         return 1
-    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, B3/C/D native captures, and Case E's expected observed routing failure are internally reconciled; validation does not authenticate source exports)")
+    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, B3/C/D, E1 historical failure, and E2 native acceptance are internally reconciled; validation does not authenticate source exports)")
     print("ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED (separate optional evidence-requesting scenario remains open for final coverage review; not a Case D blocker)")
-    print("PENDING_CASES: " + ", ".join(pending_labels) + "; E has a captured Talos-routing failure and is pending resolution, not rerun; A/I/J/L recovered reports remain guided/history only.")
-    print("PHASE11_QUALIFICATION: PARTIAL (B3, C, and D accepted; E observed routing failure; E/F/G/H/K acceptance remains pending)")
+    print("PENDING_CASES: " + ", ".join(pending_labels) + "; E2 closes current Case E acceptance while E1's observed routing failure remains historical; A/I/J/L recovered reports remain guided/history only.")
+    print("PHASE11_QUALIFICATION: PARTIAL (B3, C, D, and E2 accepted; E1 failure retained as history; F/G/H/K acceptance remains pending)")
     return 0
 
 

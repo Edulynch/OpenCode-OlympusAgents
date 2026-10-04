@@ -20,10 +20,12 @@ from qualify import (
     validate_native_case_c_capture,
     validate_native_case_d_capture,
     validate_native_case_e_capture,
+    validate_native_case_e2_capture,
     validate_native_invocation_capture,
     validate_phase11_c_reconciliation,
     validate_phase11_d_reconciliation,
     validate_phase11_e_reconciliation,
+    validate_phase11_e2_reconciliation,
     validate_phase11_b3_reconciliation,
     validate_trace,
 )
@@ -39,6 +41,9 @@ NATIVE_C_DOC = load_json(HERE / "case-c.native-trace.json")
 NATIVE_D_DOC = load_json(HERE / "case-d.native-trace.json")
 NATIVE_E_DOC = load_json(HERE / "case-e.native-trace.json")
 NATIVE_E_EXPORT_DOC = load_json(HERE / "case-e.root-session.export.json")
+NATIVE_E2_DOC = load_json(HERE / "case-e2.native-trace.json")
+NATIVE_E2_ROOT_EXPORT_DOC = load_json(HERE / "case-e2.root-session.export.json")
+NATIVE_E2_CHILD_EXPORT_DOC = load_json(HERE / "case-e2.talos-session.export.json")
 CASES = {case["id"]: case for case in CASES_DOC["cases"]}
 TRACES = {trace["TRACE_ID"]: trace for trace in TRACES_DOC["traces"]}
 
@@ -668,6 +673,15 @@ class NativeCaseEMutationTests(unittest.TestCase):
                 "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
                 "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
             ],
+            BASELINE_DOC["phase11_e_reconciliation"]["pending_fresh_root_labels"],
+        )
+        self.assertEqual(
+            [
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
+            ],
             BASELINE_DOC["live_qualification"]["pending_labels"],
         )
         self.assertEqual("NOT_EXERCISED", BASELINE_DOC["argus_same_session_followup_runtime_coverage"]["status"])
@@ -714,14 +728,14 @@ class NativeCaseEMutationTests(unittest.TestCase):
         self.assertIn("NATIVE_E_FABRICATED_TALOS_ACTIVATION", errors)
         self.assertIn("NATIVE_E_ACTUAL_ROUTE_OR_FABRICATED_CHILD_MISMATCH", errors)
 
-    def test_case_e_pending_label_and_talos_expectation_cannot_be_weakened(self) -> None:
-        removed = copy.deepcopy(BASELINE_DOC)
-        removed["live_qualification"]["pending_labels"].remove(
-            "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT"
+    def test_case_e1_history_label_is_retained_but_not_current_pending(self) -> None:
+        stale_current = copy.deepcopy(BASELINE_DOC)
+        stale_current["live_qualification"]["pending_labels"].insert(
+            0, "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT"
         )
         self.assertIn(
             "CURRENT_PHASE11_PENDING_STATE_MISMATCH",
-            validate_phase11_e_reconciliation(removed, CASES_DOC, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC),
+            validate_phase11_e_reconciliation(stale_current, CASES_DOC, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC),
         )
 
         weakened = copy.deepcopy(CASES_DOC)
@@ -750,6 +764,140 @@ class NativeCaseEMutationTests(unittest.TestCase):
         self.assertIn(
             "CURRENT_PHASE11_PENDING_STATE_MISMATCH",
             validate_phase11_e_reconciliation(shipped, CASES_DOC, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC),
+        )
+
+
+class NativeCaseE2MutationTests(unittest.TestCase):
+    def test_case_e2_reconciles_the_native_talos_route_and_keeps_e1_history(self) -> None:
+        self.assertEqual(
+            [],
+            validate_native_case_e2_capture(
+                NATIVE_E2_DOC, CASES["E"], NATIVE_E2_ROOT_EXPORT_DOC, NATIVE_E2_CHILD_EXPORT_DOC
+            ),
+        )
+        self.assertEqual(
+            [],
+            validate_phase11_e2_reconciliation(
+                BASELINE_DOC,
+                CASES_DOC,
+                NATIVE_E2_DOC,
+                NATIVE_E2_ROOT_EXPORT_DOC,
+                NATIVE_E2_CHILD_EXPORT_DOC,
+            ),
+        )
+        self.assertEqual(["kael", "talos"], NATIVE_E2_DOC["ACTUAL_ROUTE"])
+        self.assertEqual("NATIVE_EXECUTED_ROUTING_PASS", NATIVE_E2_DOC["CASE_RESULT"])
+        self.assertEqual("FAIL", NATIVE_E_DOC["CASE_ACCEPTANCE"])
+        self.assertEqual("NATIVE_EXECUTED_ROUTING_FAIL", NATIVE_E_DOC["CASE_RESULT"])
+        self.assertEqual(2, NATIVE_E2_ROOT_EXPORT_DOC["projection_and_redaction"]["reasoning_blocks_removed"])
+        self.assertEqual(0, NATIVE_E2_CHILD_EXPORT_DOC["projection_and_redaction"]["reasoning_blocks_removed"])
+        self.assertFalse(NATIVE_E2_ROOT_EXPORT_DOC["projection_and_redaction"]["raw_export_persisted"])
+        self.assertFalse(NATIVE_E2_CHILD_EXPORT_DOC["projection_and_redaction"]["raw_export_persisted"])
+        self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
+        self.assertEqual(
+            [
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
+            ],
+            BASELINE_DOC["live_qualification"]["pending_labels"],
+        )
+        self.assertEqual(
+            "NOT_EXERCISED",
+            BASELINE_DOC["argus_same_session_followup_runtime_coverage"]["status"],
+        )
+
+    def test_case_e2_rejects_child_parent_and_route_mutations(self) -> None:
+        wrong_child = copy.deepcopy(NATIVE_E2_DOC)
+        wrong_child["CHILD_SESSIONS"][0]["NATIVE_SESSION_ID"] = "ses_forgedtalos"
+        self.assertIn(
+            "NATIVE_E2_CHILD_SESSION_PARENT_ROLE_OR_RESULT_JOIN_MISMATCH",
+            validate_native_case_e2_capture(
+                wrong_child, CASES["E"], NATIVE_E2_ROOT_EXPORT_DOC, NATIVE_E2_CHILD_EXPORT_DOC
+            ),
+        )
+
+        wrong_parent = copy.deepcopy(NATIVE_E2_DOC)
+        wrong_parent["CHILD_SESSIONS"][0]["PARENT_SESSION_ID"] = "ses_wrongparent"
+        self.assertIn(
+            "NATIVE_E2_CHILD_SESSION_PARENT_ROLE_OR_RESULT_JOIN_MISMATCH",
+            validate_native_case_e2_capture(
+                wrong_parent, CASES["E"], NATIVE_E2_ROOT_EXPORT_DOC, NATIVE_E2_CHILD_EXPORT_DOC
+            ),
+        )
+
+        wrong_export_parent = copy.deepcopy(NATIVE_E2_CHILD_EXPORT_DOC)
+        wrong_export_parent["session"]["parent_id"] = "ses_wrongparent"
+        self.assertIn(
+            "NATIVE_E2_CHILD_EXPORT_PARENT_OR_METADATA_MISMATCH",
+            validate_native_case_e2_capture(
+                NATIVE_E2_DOC, CASES["E"], NATIVE_E2_ROOT_EXPORT_DOC, wrong_export_parent
+            ),
+        )
+
+        wrong_route = copy.deepcopy(NATIVE_E2_DOC)
+        wrong_route["ACTUAL_ROUTE"] = ["kael"]
+        self.assertIn(
+            "NATIVE_E2_ROUTE_OR_EXPECTATION_MISMATCH",
+            validate_native_case_e2_capture(
+                wrong_route, CASES["E"], NATIVE_E2_ROOT_EXPORT_DOC, NATIVE_E2_CHILD_EXPORT_DOC
+            ),
+        )
+
+    def test_case_e2_rejects_fabricated_results_and_e1_history_promotion(self) -> None:
+        fabricated_result = copy.deepcopy(NATIVE_E2_DOC)
+        fabricated_result["CHILD_SESSIONS"][0]["RESULT_ID"] = "result-invented"
+        self.assertIn(
+            "NATIVE_E2_CHILD_SESSION_PARENT_ROLE_OR_RESULT_JOIN_MISMATCH",
+            validate_native_case_e2_capture(
+                fabricated_result, CASES["E"], NATIVE_E2_ROOT_EXPORT_DOC, NATIVE_E2_CHILD_EXPORT_DOC
+            ),
+        )
+
+        overclaimed_consumption = copy.deepcopy(NATIVE_E2_DOC)
+        overclaimed_consumption["RESULT_CONSUMPTION"]["RESULT_IDS"] = ["result-invented"]
+        self.assertIn(
+            "NATIVE_E2_RESULT_CONSUMPTION_RECONCILIATION_MISMATCH",
+            validate_native_case_e2_capture(
+                overclaimed_consumption, CASES["E"], NATIVE_E2_ROOT_EXPORT_DOC, NATIVE_E2_CHILD_EXPORT_DOC
+            ),
+        )
+
+        promoted_e1 = copy.deepcopy(NATIVE_E2_DOC)
+        promoted_e1["E1_HISTORICAL_ATTEMPT"]["ACCEPTANCE_STATUS"] = "PASS"
+        self.assertIn(
+            "NATIVE_E2_E1_FAILED_HISTORY_REWRITTEN_OR_MISJOINED",
+            validate_native_case_e2_capture(
+                promoted_e1, CASES["E"], NATIVE_E2_ROOT_EXPORT_DOC, NATIVE_E2_CHILD_EXPORT_DOC
+            ),
+        )
+
+    def test_case_e2_reconciliation_cannot_promote_e1_or_ship_phase11(self) -> None:
+        promoted_e1 = copy.deepcopy(BASELINE_DOC)
+        promoted_e1["phase11_e_reconciliation"]["acceptance_status"] = "PASS"
+        self.assertIn(
+            "CASE_E2_E1_FAILED_HISTORICAL_ATTEMPT_NOT_PRESERVED",
+            validate_phase11_e2_reconciliation(
+                promoted_e1,
+                CASES_DOC,
+                NATIVE_E2_DOC,
+                NATIVE_E2_ROOT_EXPORT_DOC,
+                NATIVE_E2_CHILD_EXPORT_DOC,
+            ),
+        )
+
+        shipped = copy.deepcopy(BASELINE_DOC)
+        shipped["live_qualification"]["overall_status"] = "SHIPPED"
+        self.assertIn(
+            "CURRENT_PHASE11_E2_PENDING_STATE_MISMATCH",
+            validate_phase11_e2_reconciliation(
+                shipped,
+                CASES_DOC,
+                NATIVE_E2_DOC,
+                NATIVE_E2_ROOT_EXPORT_DOC,
+                NATIVE_E2_CHILD_EXPORT_DOC,
+            ),
         )
 
 

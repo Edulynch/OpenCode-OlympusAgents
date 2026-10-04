@@ -103,6 +103,10 @@
         "default": [
           "kael",
           "talos"
+        ],
+        "E2_AFTER_ROUTING_FIX": [
+          "kael",
+          "talos"
         ]
       }
     },
@@ -282,6 +286,18 @@
       "evidence_artifact": "case-e.native-trace.json",
       "acceptance_status": "FAIL",
       "pending_resolution": true
+    },
+    {
+      "case_id": "E",
+      "scenario": "E2_AFTER_ROUTING_FIX",
+      "label": "PHASE11_CASE_E2_FRESH_ROOT",
+      "status": "PASS",
+      "evidence_class": "FRESH_ROOT_NATIVE",
+      "evidence_artifact": "case-e2.native-trace.json",
+      "acceptance_status": "PASS",
+      "pending_resolution": false,
+      "attempt": "E2",
+      "supersedes_latest_acceptance": "E1"
     },
     {
       "case_id": "F",

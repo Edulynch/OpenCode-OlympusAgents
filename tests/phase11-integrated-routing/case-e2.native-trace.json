@@ -1,0 +1,320 @@
+{
+  "TRACE_ID": "E2-NATIVE",
+  "ATTEMPT_ID": "E2",
+  "CASE_ID": "E",
+  "SCENARIO": "E2_AFTER_ROUTING_FIX",
+  "REQUEST_CLASS": "SECURITY_BUG",
+  "EVIDENCE_CLASS": "FRESH_ROOT_NATIVE",
+  "EVIDENCE_PROVENANCE": {
+    "CLASS": "FRESH_ROOT_NATIVE",
+    "NATIVE_ROOT_SESSION_ID": "ses_ef7eb1d45ffet0gMtEEUam8R4U",
+    "NATIVE_CHILD_SESSION_IDS": ["ses_ef7ea7bf7ffe4U23sL7M1mi60p"],
+    "ORDER_BASIS": "observed",
+    "FRESH_ROOT_CONFIRMED": true
+  },
+  "ROOT_SESSION_ID": "ses_ef7eb1d45ffet0gMtEEUam8R4U",
+  "ROOT_DIRECTORY_METADATA_MATCH": true,
+  "ROOT_AGENT": "kael",
+  "ROOT_PARENT_SESSION_ID": null,
+  "ROOT_PARENT_SESSION_ID_OBSERVATION": "EXPLICIT_NULL",
+  "ROOT_TITLE": "Diagnosing MEMBER account-deletion authorization boundary",
+  "ROOT_EXECUTION_OUTCOME": "succeeded",
+  "ROOT_TERMINAL_MESSAGE_ID": "msg_10815cfae001A2M4kLRGYUKmim",
+  "ROOT_OUTCOME_MESSAGE_ID": "msg_108160f11001WJh7C5F2Af7Fjq",
+  "ROOT_USER_MESSAGE_ID": "msg_10814e2c0001tCz9PXoRCTrZlr",
+  "ROOT_TOOL_CALL_MESSAGE_ID": "msg_10814e44b0013BwVGjWAtJ5bI0",
+  "ROOT_STARTING_HEAD": "3e5b2af2c15f9ef2775be3c3f5667edd4db0bdde",
+  "ROOT_ISOLATION": {
+    "WORKTREE_ISOLATION": "SUPPLIED_VERIFIED",
+    "VERIFIED_DIRECTORY_SOURCE": "Public session metadata API; exact path omitted from projection",
+    "LOCATION_MATCHED_SUPPLIED_DISPOSABLE_PATH": true,
+    "STARTING_HEAD_SOURCE": "Original root user prompt",
+    "SEPARATE_DISPOSABLE_WORKTREE": null,
+    "FILESYSTEM_AUDIT_PERFORMED": false
+  },
+  "API_EVIDENCE": {
+    "SOURCE": "OpenCode V2 public read-only API",
+    "ROOT_METADATA_GET": {
+      "PATH": "/api/session/ses_ef7eb1d45ffet0gMtEEUam8R4U",
+      "RESULT": "SUCCESS"
+    },
+    "ROOT_EXPORT_GET": {
+      "PATH": "/api/experimental/session/ses_ef7eb1d45ffet0gMtEEUam8R4U/export?sanitize=false",
+      "RESULT": "SUCCESS",
+      "PROJECTION_ARTIFACT": "case-e2.root-session.export.json",
+      "REASONING_BLOCKS_REMOVED": 2,
+      "SECRET_VALUES_REDACTED": 0,
+      "RAW_EXPORT_PERSISTED": false
+    },
+    "ROOT_MESSAGES_GET": {
+      "PATH": "/api/session/ses_ef7eb1d45ffet0gMtEEUam8R4U/message?limit=100&order=asc",
+      "RESULT": "SUCCESS",
+      "MESSAGE_COUNT": 4,
+      "PAGES": 2,
+      "CURSOR_NEXT": null,
+      "MESSAGE_IDS_MATCH_EXPORT": true
+    },
+    "CHILD_METADATA_GET": {
+      "PATH": "/api/session/ses_ef7ea7bf7ffe4U23sL7M1mi60p",
+      "RESULT": "SUCCESS"
+    },
+    "CHILD_EXPORT_GET": {
+      "PATH": "/api/experimental/session/ses_ef7ea7bf7ffe4U23sL7M1mi60p/export?sanitize=false",
+      "RESULT": "SUCCESS",
+      "PROJECTION_ARTIFACT": "case-e2.talos-session.export.json",
+      "REASONING_BLOCKS_REMOVED": 0,
+      "SECRET_VALUES_REDACTED": 0,
+      "RAW_EXPORT_PERSISTED": false
+    },
+    "CHILD_MESSAGES_GET": {
+      "PATH": "/api/session/ses_ef7ea7bf7ffe4U23sL7M1mi60p/message?limit=100&order=asc",
+      "RESULT": "SUCCESS",
+      "MESSAGE_COUNT": 3,
+      "PAGES": 2,
+      "CURSOR_NEXT": null,
+      "MESSAGE_IDS_MATCH_EXPORT": true
+    },
+    "DIRECT_CHILD_QUERY": {
+      "PATH": "/api/session?parentID=ses_ef7eb1d45ffet0gMtEEUam8R4U&limit=100",
+      "RESULT": "SUCCESS",
+      "PARENT_SESSION_ID": "ses_ef7eb1d45ffet0gMtEEUam8R4U",
+      "CHILD_COUNT": 1,
+      "CHILDREN": [
+        {
+          "SESSION_ID": "ses_ef7ea7bf7ffe4U23sL7M1mi60p",
+          "AGENT": "talos",
+          "PARENT_SESSION_ID": "ses_ef7eb1d45ffet0gMtEEUam8R4U",
+          "TITLE": "Diagnose account deletion authorization",
+          "OUTCOME": "succeeded"
+        }
+      ],
+      "CURSOR_NEXT": null,
+      "PAGES": 2
+    },
+    "ROOT_TOOL_CALL_RECORDS": [
+      {
+        "CALL_ID": "call_FzRbkaOiUp41wcA0DcJfrrPw",
+        "NAME": "subagent",
+        "STATE": "completed",
+        "AGENT": "talos",
+        "TASK_LABEL": "PHASE11_CASE_E2_FRESH_ROOT",
+        "CHILD_SESSION_ID": "ses_ef7ea7bf7ffe4U23sL7M1mi60p",
+        "RESULT_ID": null
+      }
+    ],
+    "ROOT_TOOL_CALL_RECORD_COUNT": 1,
+    "CHILD_TOOL_CALL_RECORDS": [],
+    "TOOL_OBSERVATION_LIMIT": "The root export shows one completed Talos subagent call joined to the sole listed direct child. The Talos export has no tool-call records. No private history, child-subtree listing, worktree filesystem, or runtime database was inspected."
+  },
+  "EXPECTED_ROUTE": ["kael", "talos"],
+  "ACTUAL_ROUTE": ["kael", "talos"],
+  "ROUTE_RECONCILIATION": {
+    "EXPECTED_PRODUCT_ROUTE": ["kael", "talos"],
+    "OBSERVED_UNIQUE_CHILD_SESSION_LAUNCH_ORDER": ["kael", "talos"],
+    "CLASSIFICATION": "NATIVE_EXECUTED_ROUTING_PASS",
+    "BASIS": "The root export contains one completed subagent call naming Talos, its observed call metadata names the listed child session, the root direct-child query returns exactly that Talos session, and the child's metadata/export join its parent to this root."
+  },
+  "CHILD_SESSIONS": [
+    {
+      "TRACE_REF": "E2-TALOS",
+      "NATIVE_SESSION_ID": "ses_ef7ea7bf7ffe4U23sL7M1mi60p",
+      "AGENT": "talos",
+      "PARENT_AGENT": "kael",
+      "PARENT_SESSION_ID": "ses_ef7eb1d45ffet0gMtEEUam8R4U",
+      "LAUNCH_ORDER": 1,
+      "INVOCATION_COUNT": 1,
+      "EXECUTION_STATE": "SUCCEEDED",
+      "FINAL_OUTCOME": "succeeded",
+      "RESULT_ID": null,
+      "TITLE": "Diagnose account deletion authorization",
+      "PURPOSE": "Bounded security diagnosis using the established authorization facts; no repository discovery or execution.",
+      "PARENT_MESSAGE_ID": "msg_10814e44b0013BwVGjWAtJ5bI0",
+      "INVOCATION_TOOL_CALL_ID": "call_FzRbkaOiUp41wcA0DcJfrrPw",
+      "TOOL_STATE": "completed",
+      "TOOL_TASK_LABEL": "PHASE11_CASE_E2_FRESH_ROOT",
+      "TERMINAL_MESSAGE_ID": "msg_108158539001dmAoz2pmGe7UbG",
+      "OUTCOME_MESSAGE_ID": "msg_10815cec9001nEiTyrQRxUINQM"
+    }
+  ],
+  "CONSULTATION_COUNTS": {
+    "kael": 0,
+    "veyra": 0,
+    "orin": 0,
+    "kovan": 0,
+    "nox": 0,
+    "vera": 0,
+    "atlas": 0,
+    "argus": 0,
+    "talos": 1,
+    "thales": 0,
+    "helios": 0,
+    "aegis": 0
+  },
+  "UNIQUE_CHILD_SESSION_COUNTS": {
+    "kael": 0,
+    "veyra": 0,
+    "orin": 0,
+    "kovan": 0,
+    "nox": 0,
+    "vera": 0,
+    "atlas": 0,
+    "argus": 0,
+    "talos": 1,
+    "thales": 0,
+    "helios": 0,
+    "aegis": 0
+  },
+  "ROOT_SUBAGENT_CALL_INVOCATION_COUNTS": {"talos": 1},
+  "MAX_SIMULTANEOUS_CHILDREN": null,
+  "NEGATIVE_CONTROLS": {
+    "argus": {
+      "INVOCATIONS": 0,
+      "UNIQUE_CHILD_SESSIONS": 0,
+      "STATUS": "PASS",
+      "BASIS": "No Argus call or direct child appears in the root export or complete root direct-child listing."
+    },
+    "kovan": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "orin": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "atlas": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "thales": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "helios": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "aegis": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0}
+  },
+  "ROLE_PURITY": {
+    "STATUS": "PASS",
+    "ROOT_AGENT": "kael",
+    "ALL_CHILDREN_DIRECT": true,
+    "NESTED_DELEGATION_OBSERVED": false,
+    "NESTED_DELEGATION_BASIS": "No tool-call record appears in the Talos export; no Talos child-session-list query was made.",
+    "REVIEWER_EDITS_OBSERVED": false,
+    "ROOT_SOURCE_WRITES_OBSERVED": false,
+    "EXPLOIT_ATTEMPTED": "NO",
+    "VIOLATIONS": []
+  },
+  "OBSERVED_TERMINAL_SNAPSHOT": {
+    "SOURCE": "OBSERVED_NATIVE_ROOT_TERMINAL_MESSAGE",
+    "ROOT_SESSION_ID": "ses_ef7eb1d45ffet0gMtEEUam8R4U",
+    "MESSAGE_ID": "msg_10815cfae001A2M4kLRGYUKmim",
+    "FACTS": {
+      "SECURITY_CLASSIFICATION": "CONFIRMED_SECURITY_DEFECT — authorization bypass. The established MEMBER behavior violates the ADMIN-only contract; the code-level cause is unconfirmed.",
+      "VIOLATED_BOUNDARY": "Server-side authorization for account deletion: non-admin callers must not delete accounts.",
+      "FIX_DIRECTION": "Require authenticated ADMIN authorization from trusted identity/role information before any deletion side effects, across applicable account-deletion entry points. Deny all other callers without side effects.",
+      "SAFE_VALIDATION": "Future non-destructive tests using a mocked deletion service:\n- ADMIN: allowed under the established contract.\n- MEMBER deleting self or another account: denied.\n- Other non-admin roles and unauthenticated callers: denied.\n- Target substitution or caller-supplied role claims cannot bypass authorization.\n- Every applicable deletion entry point enforces the same rules.\n- Denied requests never invoke deletion or produce deletion side effects.",
+      "TESTS_RUN": "NONE — the root states these tests were not run.",
+      "EXPLOIT_ATTEMPTED": "NO",
+      "FILES_CHANGED": "NONE",
+      "UNRESOLVED_WORK": "NONE for this diagnosis. Implementation and future validation were intentionally not performed.",
+      "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+      "ANY_WORK_REMAINING": "NO"
+    }
+  },
+  "TALOS_TERMINAL_SNAPSHOT": {
+    "SOURCE": "OBSERVED_NATIVE_CHILD_TERMINAL_MESSAGE",
+    "CHILD_SESSION_ID": "ses_ef7ea7bf7ffe4U23sL7M1mi60p",
+    "MESSAGE_ID": "msg_108158539001dmAoz2pmGe7UbG",
+    "STATUS": "SECURITY_DIAGNOSIS",
+    "CLASSIFICATION": "SECURITY_BUG — CONFIRMED_SECURITY_DEFECT",
+    "OBSERVED": "A MEMBER can delete another user’s account.",
+    "EXPECTED": "Only ADMIN may delete accounts.",
+    "CAUSE": "Authorization enforcement fails for the established case. The implementation mechanism is unconfirmed; no source-level cause was supplied.",
+    "FIX_DIRECTION": "Enforce authenticated ADMIN authorization server-side, using trusted identity and role information, before any deletion effects. Reject unauthenticated and non-admin callers without side effects. Apply this enforcement to applicable alternate entry points for the same deletion operation.",
+    "SAFE_VALIDATION": "Future non-destructive tests using a mocked deletion service or isolated synthetic fixtures; the child explicitly states these were not run.",
+    "EXECUTION": "No tools, exploits, tests, repository access, or file mutations attempted.",
+    "COMPLETION": "Security diagnosis complete. Implementation, future validation, and independent review remain; no remediation or validation success is claimed."
+  },
+  "SECURITY_ASSESSMENT": {
+    "CLASSIFICATION": "CONFIRMED_SECURITY_DEFECT",
+    "OBSERVED_BEHAVIOR": "A user with role MEMBER can delete another user's account.",
+    "EXPECTED_INVARIANT": "Only an authenticated, authorized ADMIN may delete an account; non-ADMIN requests are denied without deletion side effects.",
+    "VIOLATED_BOUNDARY": "MEMBER crosses the server-enforced ADMIN-only privilege boundary for another user's account deletion.",
+    "CAUSE": "Authorization enforcement failure is confirmed for the established behavior; the implementation mechanism is unknown.",
+    "FIX_DIRECTION": "Enforce authenticated ADMIN authorization server-side using trusted identity/role information before deletion effects.",
+    "SAFE_VALIDATION": "Future non-destructive tests with synthetic identities and mocked deletion; MEMBER self/other, other non-admin, and unauthenticated denied without service calls; authorized ADMIN allowed; target substitution and applicable entry points covered.",
+    "VALIDATION_PERFORMED": false,
+    "EXPLOIT_ATTEMPTED": "NO",
+    "FILES_CHANGED": "NONE"
+  },
+  "CLASSIFICATIONS": {
+    "CASE_E2_BEHAVIOR": "PASS",
+    "CASE_E2_SECURITY_CLASSIFICATION": "PASS",
+    "CASE_E2_SAFETY": "PASS",
+    "CASE_E2_ROLE_PURITY": "PASS",
+    "CASE_E2_TALOS_ACTIVATION": "PASS",
+    "CASE_E2_NEGATIVE_ARGUS_CONTROL": "PASS",
+    "CASE_E2_ROUTING": "PASS",
+    "CASE_E2_RESULT_FIDELITY": "PASS",
+    "CASE_E2_COMPLETION_OWNERSHIP": "PASS",
+    "CASE_E2_FRESH_ROOT_NATIVE": "PASS"
+  },
+  "RESULT_FIDELITY": {
+    "EXPECTED_PRODUCT_ROUTE": ["kael", "talos"],
+    "OBSERVED_PRODUCT_ROUTE": ["kael", "talos"],
+    "ROUTE_MATCHES": true,
+    "SECURITY_BEHAVIOR_MATCHES": true,
+    "ROOT_EXECUTION_OUTCOME": "succeeded",
+    "CASE_ACCEPTANCE": "PASS",
+    "CASE_ACCEPTANCE_BASIS": "Reconciliation judgment from the direct Talos call/parent join, correct diagnosis, safety limits, and root aggregate completion statement; not an explicit literal PASS field in the root terminal text."
+  },
+  "COMPLETION_GATE": {
+    "PENDING_CHILD_COUNT": 0,
+    "UNCONSUMED_RESULT_COUNT": 0,
+    "UNKNOWN_EXECUTION_COUNT": 0,
+    "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": true,
+    "AGGREGATE_STATEMENT_SOURCE_MESSAGE_ID": "msg_10815cfae001A2M4kLRGYUKmim",
+    "PER_INVOCATION_RESULT_IDS": null,
+    "PER_INVOCATION_CONSUMPTION_TIMING": null,
+    "SESSION_LIFETIME_EXACT_ONCE": null
+  },
+  "RESULT_CONSUMPTION": {
+    "ROOT_AGGREGATE_STATEMENT": "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED: YES",
+    "PENDING_CHILDREN": 0,
+    "UNCONSUMED_RESULTS": 0,
+    "UNKNOWN_EXECUTIONS": 0,
+    "RESULT_IDS": null,
+    "PER_INVOCATION_CONSUMPTION_TIMING": null,
+    "SESSION_LIFETIME_EXACT_ONCE": null
+  },
+  "OBSERVED_SEQUENCE": {
+    "ORDER_BASIS": "observed",
+    "ROOT_SUBAGENT_CALL_MESSAGE_ID": "msg_10814e44b0013BwVGjWAtJ5bI0",
+    "ROOT_SUBAGENT_CALL_ID": "call_FzRbkaOiUp41wcA0DcJfrrPw",
+    "CHILD_TERMINAL_MESSAGE_ID": "msg_108158539001dmAoz2pmGe7UbG",
+    "CHILD_OUTCOME_MESSAGE_ID": "msg_10815cec9001nEiTyrQRxUINQM",
+    "ROOT_TERMINAL_MESSAGE_ID": "msg_10815cfae001A2M4kLRGYUKmim",
+    "ROOT_OUTCOME_MESSAGE_ID": "msg_108160f11001WJh7C5F2Af7Fjq",
+    "CHILD_LAUNCH_ORDER": 1,
+    "MAX_SIMULTANEOUS_CHILDREN": null,
+    "TIMING_METRICS": null
+  },
+  "EFFICIENCY": {
+    "CLASSIFICATION": "LEAN",
+    "BASIS": "One required direct Talos consultation; no latency, throughput, or concurrency claim."
+  },
+  "USER_QUESTION_COUNT": 0,
+  "FINAL_OUTCOME": "SUCCEEDED",
+  "ROUTING_RESULT": "NATIVE_EXECUTED_ROUTING_PASS",
+  "CASE_RESULT": "NATIVE_EXECUTED_ROUTING_PASS",
+  "CASE_ACCEPTANCE": "PASS",
+  "CASE_RERUN_PERFORMED_BY_RECONCILIATION": false,
+  "CORE_POLICY_MODIFIED": false,
+  "E1_HISTORICAL_ATTEMPT": {
+    "LABEL": "PHASE11_CASE_E_FRESH_ROOT",
+    "ROOT_SESSION_ID": "ses_ef85bfb20ffeJDAs5WvP6mQNiP",
+    "RESULT": "NATIVE_EXECUTED_ROUTING_FAIL",
+    "EXPECTED_ROUTE": ["kael", "talos"],
+    "ACTUAL_ROUTE": ["kael"],
+    "ACCEPTANCE_STATUS": "FAIL",
+    "ARTIFACTS_PRESERVED": true
+  },
+  "UNKNOWN_METRICS": {
+    "MAX_SIMULTANEOUS_CHILDREN": null,
+    "PER_INVOCATION_RESULT_IDS": null,
+    "PER_INVOCATION_CONSUMPTION_TIMING": null,
+    "SESSION_LIFETIME_EXACT_ONCE": null,
+    "TIMING_METRICS": null,
+    "NATIVE_PERMISSION_UI": "NOT_OBSERVABLE",
+    "NATIVE_PERMISSION_DECISION": "NOT_OBSERVABLE",
+    "WORKTREE_FILESYSTEM_AUDIT": "NOT_PERFORMED"
+  },
+  "NOTES": "E2 is a distinct fresh-root attempt and supplies the passing current E acceptance. E1 remains an immutable failed historical attempt. No fix implementation, security test execution, exploit, Case E replay, or repository/worktree filesystem audit is claimed; Argus same-session follow-up runtime coverage remains NOT_EXERCISED."
+}

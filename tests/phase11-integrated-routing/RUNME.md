@@ -10,12 +10,14 @@ below and in `baseline.json`). Separately, verified native B3 exports/history
 and CLI results are captured in `case-b3.native-trace.json`; verified native
 Case C exports/history are captured in `case-c.native-trace.json`; native
 Case D invocation history is captured in `case-d.native-trace.json`; and the
-original Case E root export and observed routing failure are captured in
-`case-e.root-session.export.json` and `case-e.native-trace.json`. B3, C, and D
-qualify their bounded acceptance outcomes; E is a valid reconciliation of an
-observed product routing failure, not a Case E pass. None of these native
-invocation-level captures is inserted into the synthetic trace corpus or
-reconstructed as a synthetic lifecycle.
+original Case E1 failure and the later E2 root/child exports are captured in
+`case-e.native-trace.json`, `case-e.root-session.export.json`,
+`case-e2.native-trace.json`, `case-e2.root-session.export.json`, and
+`case-e2.talos-session.export.json`. B3, C, D, and E2 qualify their bounded
+acceptance outcomes; E1 remains an observed historical routing failure and is
+not rewritten as a pass. None of these native invocation-level captures is
+inserted into the synthetic trace corpus or reconstructed as a synthetic
+lifecycle.
 
 ## Automatic local commands
 
@@ -30,9 +32,10 @@ uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-on
 ```
 
 The first command validates the versioned case matrix, synthetic event semantics,
-completion/evidence claims, separate B1/B2/B3/C/D/E reconciliations, the bounded
-B3, C, and D native invocation captures, the Case E original-root export
-projection and expected observed-failure record, and presence-only gate markers. It
+completion/evidence claims, separate B1/B2/B3/C/D/E1/E2 reconciliations, the
+bounded B3, C, and D native invocation captures, the original E1 failed-root
+projection, the E2 root/child export projections and accepted Talos route, and
+presence-only gate markers. It
 reports
 `PHASE11_ARTIFACTS: PASS` when those artifacts are sound while overall
 qualification remains `PHASE11_QUALIFICATION: PARTIAL` until remaining
@@ -155,7 +158,7 @@ run did not demonstrate runtime follow-up. An optional genuine
 evidence-requesting scenario remains open for final coverage review; this
 coverage note is not a Case D blocker or an implicit pass.
 
-## Case E native capture — observed routing failure, no rerun
+## Case E1 native capture — historical routing failure, no rerun
 
 `case-e.root-session.export.json` is a projection of the exact original public
 OpenCode V2 export. It preserves the original user prompt, non-reasoning
@@ -178,16 +181,63 @@ qualification artifact validator passes only the evidence reconciliation; it
 does not turn this product route into a pass. See
 `docs/DEFECT-PHASE11-CASE-E-ROUTING.md` for the bounded rule-gap record.
 
-E remains a pending acceptance/resolution item. Its observed failure is not an
-instruction to rerun it. Phase 11 remains PARTIAL; Cases A-D are unchanged, and
-Argus same-session follow-up runtime coverage remains `NOT_EXERCISED`.
+E1 remains an immutable failed historical attempt; the evidence does not
+authorize replay or rewrite of that root. E2 below is the later, separate
+fresh-root acceptance that closes current Case E. Phase 11 remains PARTIAL;
+Cases A-D are unchanged, and Argus same-session follow-up runtime coverage
+remains `NOT_EXERCISED`.
+
+## Case E2 native capture — current Case E acceptance
+
+`case-e2.root-session.export.json` and `case-e2.talos-session.export.json` are
+reasoning-redacted projections of the completed E2 root and its direct Talos
+child. The original exports were read in memory through the public OpenCode V2
+read-only API; two root reasoning blocks were removed, the child export had no
+reasoning blocks, no secret-pattern matches required redaction, and raw exports
+were not persisted. Exact directory metadata paths are not retained, and no
+disposable-worktree filesystem, private runtime, or other session was accessed.
+The root and child metadata match the supplied disposable-path context; the root
+has an explicitly null parent and succeeded, while the Talos child has the root
+as parent and also succeeded.
+
+- Root Kael session `ses_ef7eb1d45ffet0gMtEEUam8R4U` is titled “Diagnosing MEMBER
+  account-deletion authorization boundary”; its prompt records starting HEAD
+  `3e5b2af2c15f9ef2775be3c3f5667edd4db0bdde`.
+- The complete two-page root direct-child listing contains exactly Talos
+  `ses_ef7ea7bf7ffe4U23sL7M1mi60p`, titled “Diagnose account deletion
+  authorization,” with the root as parent and outcome `succeeded`. The root
+  export has exactly one completed `subagent` call, ID
+  `call_FzRbkaOiUp41wcA0DcJfrrPw`, whose observed Talos input and child-session
+  metadata join to that same child and task label
+  `PHASE11_CASE_E2_FRESH_ROOT`. The child export has no tool-call records.
+- The observed product route is Kael -> Talos, matching the Case E security-bug
+  matrix. Talos confirmed the established MEMBER/ADMIN authorization defect and
+  advised enforcing trusted authenticated ADMIN authorization before deletion
+  side effects. Its implementation mechanism remains unknown. No tools, tests,
+  repository inspection, exploit, or file mutation were attempted by Talos.
+- The root terminal states that the diagnosis is complete, all required child
+  work is terminal and consumed, and no work remains. It does not contain a
+  literal E2 `PASS`; Case E2 acceptance is a reconciliation judgment from the
+  observed route, diagnosis, safety limits, and root completion statement.
+  Result IDs, per-invocation consumption timing, session-lifetime exact-once,
+  concurrency, and timing metrics remain `null`; native permission UI/decision
+  were not observable.
+- E2 behavior, security classification, safety, role purity, Talos activation,
+  negative Argus control, routing, result fidelity, completion ownership, and
+  fresh-root-native acceptance are PASS. E1 remains
+  `NATIVE_EXECUTED_ROUTING_FAIL` with actual route Kael only; E2 does not rewrite
+  or replace that historical fact. E2 closes current Case E acceptance.
+
+Phase 11 remains **IN VALIDATION / PARTIAL**, not SHIPPED. Current pending
+fresh-root work is F, G, H, and K. `ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE`
+remains `NOT_EXERCISED`; E2 did not exercise that separate runtime behavior.
 
 ## Remaining fresh-root work remains user action
 
 Use a separate clean disposable project copy and a **new, verified Kael root for
-each still-unrun case**. F, G, H, and K below remain pending fresh-root actions;
-E has completed but failed routing and remains pending resolution without a
-rerun. Isolated B3 and C and bounded native D are accepted. A, I, J, and L
+each still-unrun case**. F, G, H, and K below remain pending fresh-root actions.
+E2 is accepted; E1's routing failure remains immutable history. Isolated B3 and
+C and bounded native D are also accepted. A, I, J, and L
 prompt references/history are retained below but are not new rerun requests. Do
 not reuse a guided/current session as a fresh root. Confirm the effective root
 agent, child parentage and actual roles from native session evidence before
@@ -228,16 +278,24 @@ synthetic per-session lifecycle.
   bounded binary question after child completion. No functional violation or
   repair is established. Runtime same-session follow-up remains
   `NOT_EXERCISED` separately from Case D acceptance.
-- `NATIVE_EXECUTED_ROUTING_FAIL PHASE11_CASE_E_FRESH_ROOT` — completed native
+- `HISTORICAL_FAILURE PHASE11_CASE_E_FRESH_ROOT` — completed native
   evidence is in `case-e.native-trace.json` and the reasoning-redacted original
   export projection is in `case-e.root-session.export.json`. The original root
   succeeded and supplied correct behavior/security/safety findings, but observed
   no child session; expected Kael -> Talos, actual Kael only. This is a product
-  routing failure and pending resolution, **not** a pass or instruction to
-  rerun. Original prompt excerpt, retained for evidence only: “Classify this
+  routing failure retained for history, not a current acceptance result or an
+  instruction to rerun. E2 below separately closes current Case E acceptance.
+  Original prompt excerpt, retained for evidence only: “Classify this
   bounded hypothetical defect: a MEMBER can delete another user's account
   although the stated contract is ADMIN-only. Explain the security boundary and
   safe validation; do not attempt an exploit, edit, or broad audit.”
+- `ACCEPTED PHASE11_CASE_E2_FRESH_ROOT` — completed native evidence is in
+  `case-e2.native-trace.json`; reasoning-redacted root and Talos projections are
+  in `case-e2.root-session.export.json` and `case-e2.talos-session.export.json`.
+  The observed route is Kael -> Talos, with one succeeded direct child joined to
+  one completed root subagent call. E2 closes the latest Case E acceptance while
+  preserving E1's `NATIVE_EXECUTED_ROUTING_FAIL` history. No diagnosis replay,
+  exploit, tests, or code-level mechanism claim is made.
 - `HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT` — “The test command is unavailable
   because the local runner is not installed. Suggest the cheapest bounded
   containment or usage correction; do not classify this as a product bug or
@@ -400,9 +458,9 @@ sessions only, not the Case A/I/J/L native roots. Preserve them if available.
   useful context, but not independent fresh-root evidence.
 - `FRESH_ROOT_NATIVE`: observed native evidence from a separately verified Kael
   root, with actual root identity and any observed child/tool records and order.
-  B3, C, and D are accepted; E has a captured native routing failure; F, G, H,
-  and K remain unrun. B2's routing observation is valid context but failed
-  isolation. The recovered A/I/J/L
+  B3, C, D, and E2 are accepted; E1's captured native routing failure remains
+  historical; F, G, H, and K remain unrun. B2's routing observation is valid
+  context but failed isolation. The recovered A/I/J/L
   observations remain guided/user-reported references and are not fresh-root
   evidence.
 
@@ -439,12 +497,12 @@ are marker-presence checks only.
 ## Current gate
 
 The A–L matrix, unchanged synthetic trace corpus, expanded mutation coverage,
-and B3/C/D/E native records are present. Case B1 remains a fixture defect
+and B3/C/D/E1/E2 native records are present. Case B1 remains a fixture defect
 with Question Barrier PASS; B2 runtime behavior remains PASS but
-isolation/acceptance remains PARTIAL; B3, C, and D fresh-root native acceptance
-are PASS. E behavior/security/safety and negative Argus control pass, but Talos
-activation/routing fails; E remains pending resolution without a rerun. F, G, H,
-and K remain fresh-root work. D did not exercise Argus follow-up runtime
+isolation/acceptance remains PARTIAL; B3, C, D, and E2 fresh-root native
+acceptance are PASS. E1 remains a historical Talos-routing failure, while E2
+closes current Case E acceptance. F, G, H, and K remain fresh-root work. D did
+not exercise Argus follow-up runtime
 coverage, which remains a separate open review item. A/I/J/L observations
 remain guided/history-only, with no rerun requested. The overall phase is **IN
 VALIDATION / PARTIAL**, not SHIPPED.

@@ -9,12 +9,15 @@ from pathlib import Path
 from qualify import (
     CASE_B2_CHILD_SESSION_IDS,
     CASE_B2_ROOT_SESSION_ID,
+    CASE_C_NOX_SESSION_ID,
     EIGHT_SPECIALISTS,
     HARD_BUDGET,
     load_json,
     run_static_baseline_checks,
     validate_case_b_reconciliation,
+    validate_native_case_c_capture,
     validate_native_invocation_capture,
+    validate_phase11_c_reconciliation,
     validate_phase11_b3_reconciliation,
     validate_trace,
 )
@@ -26,6 +29,7 @@ CASES_DOC = load_json(HERE / "cases.json")
 TRACES_DOC = load_json(HERE / "traces.json")
 BASELINE_DOC = load_json(HERE / "baseline.json")
 NATIVE_B3_DOC = load_json(HERE / "case-b3.native-trace.json")
+NATIVE_C_DOC = load_json(HERE / "case-c.native-trace.json")
 CASES = {case["id"]: case for case in CASES_DOC["cases"]}
 TRACES = {trace["TRACE_ID"]: trace for trace in TRACES_DOC["traces"]}
 
@@ -126,6 +130,43 @@ class CorpusTests(unittest.TestCase):
         self.assertEqual(3, len(trace["SESSION_RECONCILIATION"]["kovan"]["REPORTED_CHANGED_PATHS"]))
         self.assertEqual("PARTIAL", BASELINE_DOC["phase11_b3_reconciliation"]["phase11_status"])
         self.assertEqual("PASS", CASES_DOC["fresh_root_actions"][1]["status"])
+
+    def test_case_c_native_capture_preserves_isolation_and_product_routes_separately(self) -> None:
+        trace = NATIVE_C_DOC
+        self.assertEqual([], validate_native_case_c_capture(trace, CASES["C"]))
+        self.assertEqual([], validate_phase11_c_reconciliation(BASELINE_DOC, CASES_DOC, trace))
+        self.assertNotIn("C-NATIVE", TRACES)
+        self.assertTrue(all(item["EVIDENCE_CLASS"] == "SYNTHETIC_TRACE" for item in TRACES.values()))
+        self.assertEqual(["kael", "kovan"], trace["EXPECTED_ROUTE"])
+        self.assertEqual(["kael", "nox", "kovan"], trace["ACTUAL_ROUTE"])
+        self.assertEqual(0, trace["NEGATIVE_CONTROLS"]["argus"]["INVOCATIONS"])
+        self.assertEqual(0, trace["NEGATIVE_CONTROLS"]["veyra"]["INVOCATIONS"])
+        self.assertEqual(0, trace["NEGATIVE_CONTROLS"]["vera"]["INVOCATIONS"])
+        self.assertEqual("PASS", trace["ROUTING_RESULT_DETAIL"]["NEGATIVE_ARGUS_CONTROL"])
+        self.assertEqual(1, trace["MAX_SIMULTANEOUS_CHILDREN"])
+        self.assertEqual("LEAN", trace["OPERATIONAL_PROXIES"]["EFFICIENCY_CLASSIFICATION"])
+        self.assertIsNone(trace["COMPLETION_GATE"]["SESSION_LIFETIME_EXACT_ONCE"])
+        self.assertIsNone(trace["EVENTS"][0]["CALL_CREATED_AT_EPOCH_MS"])
+        for fact in (
+            "EXPLICIT_OPTIMIZATION_INTENT",
+            "EXPLICIT_PLANNING_INTENT",
+            "SECURITY_BOUNDARY",
+            "OPERATIONAL_TOOLING_FAILURE",
+            "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS",
+            "THIRD_PARTY_BUG",
+            "FAST_PROFILE_REQUESTED",
+            "MAINTENANCE_ENTRY_EXPLICIT",
+        ):
+            self.assertIsNone(trace["GATE_FACTS"][fact])
+        self.assertTrue(all(event["ORDER_BASIS"] == "observed" for event in trace["CHILD_TOOL_EVENTS"]))
+        self.assertNotIn("CASE_C_FRESH_ROOT_NATIVE", trace["OBSERVED_TERMINAL_SNAPSHOT"]["FACTS"])
+        self.assertNotIn("git diff --check", trace["OBSERVED_TERMINAL_SNAPSHOT"]["FACTS"].values())
+        self.assertEqual("PARTIAL", BASELINE_DOC["phase11_c_reconciliation"]["phase11_status"])
+        self.assertEqual("PASS", CASES_DOC["fresh_root_actions"][2]["status"])
+        self.assertEqual(
+            "HUMAN_ACTION_REQUIRED PHASE11_CASE_C_FRESH_ROOT",
+            BASELINE_DOC["phase11_b3_reconciliation"]["pending_fresh_root_labels"][0],
+        )
 
 
 class NativeCaptureMutationTests(unittest.TestCase):
@@ -323,6 +364,152 @@ class NativeCaptureMutationTests(unittest.TestCase):
         self.assertIn(
             "CURRENT_PHASE11_PENDING_STATE_MISMATCH",
             validate_phase11_b3_reconciliation(stale_pending, CASES_DOC, NATIVE_B3_DOC),
+        )
+
+
+class NativeCaseCMutationTests(unittest.TestCase):
+    def test_case_c_authoritative_nox_identity_rejects_truncated_form(self) -> None:
+        authoritative_id = "ses_efa05f4dfffe9s0gk5VEbkVRA9"
+        self.assertEqual(authoritative_id, CASE_C_NOX_SESSION_ID)
+        self.assertEqual(authoritative_id, NATIVE_C_DOC["CHILD_SESSIONS"][0]["NATIVE_SESSION_ID"])
+        self.assertEqual(authoritative_id, NATIVE_C_DOC["EVIDENCE_PROVENANCE"]["NATIVE_CHILD_SESSION_IDS"][0])
+
+        truncated_id = authoritative_id[:-1]
+        self.assertEqual("ses_efa05f4dfffe9s0gk5VEbkVRA", truncated_id)
+        truncated = copy.deepcopy(NATIVE_C_DOC)
+        truncated["ROOT_ISOLATION"]["INITIAL_NOX_SESSION_ID"] = truncated_id
+        truncated["CHILD_SESSIONS"][0]["NATIVE_SESSION_ID"] = truncated_id
+        truncated["EVIDENCE_PROVENANCE"]["NATIVE_CHILD_SESSION_IDS"][0] = truncated_id
+        for event in truncated["EVENTS"][:2]:
+            event["NATIVE_SESSION_ID"] = truncated_id
+        errors = validate_native_case_c_capture(truncated, CASES["C"])
+        self.assertIn("NATIVE_C_CHILD_SESSION_ID_MISMATCH:C-NOX", errors)
+        self.assertIn("NATIVE_C_PROVENANCE_MISMATCH", errors)
+
+    def test_case_c_native_capture_binds_child_parent_role_and_identity(self) -> None:
+        wrong_parent = copy.deepcopy(NATIVE_C_DOC)
+        wrong_parent["CHILD_SESSIONS"][0]["PARENT_SESSION_ID"] = "ses_wrongparent"
+        self.assertIn(
+            "NATIVE_C_CHILD_PARENT_MISMATCH:C-NOX",
+            validate_native_case_c_capture(wrong_parent, CASES["C"]),
+        )
+
+        wrong_role = copy.deepcopy(NATIVE_C_DOC)
+        wrong_role["CHILD_SESSIONS"][0]["AGENT"] = "kovan"
+        self.assertIn(
+            "NATIVE_C_CHILD_ROLE_OR_ORDER_MISMATCH:C-NOX",
+            validate_native_case_c_capture(wrong_role, CASES["C"]),
+        )
+
+        wrong_child_id = copy.deepcopy(NATIVE_C_DOC)
+        wrong_child_id["CHILD_SESSIONS"][1]["NATIVE_SESSION_ID"] = "ses_wrongkovan"
+        self.assertIn(
+            "NATIVE_C_CHILD_SESSION_ID_MISMATCH:C-KOVAN",
+            validate_native_case_c_capture(wrong_child_id, CASES["C"]),
+        )
+
+        wrong_event_join = copy.deepcopy(NATIVE_C_DOC)
+        wrong_event_join["EVENTS"][3]["NATIVE_SESSION_ID"] = "ses_wrongkovan"
+        self.assertIn(
+            "NATIVE_C_INVOCATION_IDENTITY_OR_PARENT_MISMATCH:4",
+            validate_native_case_c_capture(wrong_event_join, CASES["C"]),
+        )
+
+    def test_case_c_native_capture_requires_observed_invocation_order(self) -> None:
+        duplicate_order = copy.deepcopy(NATIVE_C_DOC)
+        duplicate_order["EVENTS"][2]["ORDER"] = 2
+        self.assertIn(
+            "NATIVE_C_EVENT_ORDER_NOT_STRICTLY_INCREASING",
+            validate_native_case_c_capture(duplicate_order, CASES["C"]),
+        )
+
+        relabelled_order = copy.deepcopy(NATIVE_C_DOC)
+        relabelled_order["EVENTS"][2]["ORDER_BASIS"] = "synthetic"
+        self.assertIn(
+            "NATIVE_C_EVENT_ORDER_BASIS_MISMATCH",
+            validate_native_case_c_capture(relabelled_order, CASES["C"]),
+        )
+
+    def test_case_c_argus_nonactivation_is_first_class_evidence(self) -> None:
+        activated = copy.deepcopy(NATIVE_C_DOC)
+        activated["CONSULTATION_COUNTS"]["argus"] = 1
+        activated["NEGATIVE_CONTROLS"]["argus"] = {"INVOCATIONS": 1, "UNIQUE_CHILD_SESSIONS": 1}
+        errors = validate_native_case_c_capture(activated, CASES["C"])
+        self.assertIn("NATIVE_C_ARGUS_NEGATIVE_CONTROL_ACTIVATED", errors)
+
+        false_obvious_gate = copy.deepcopy(NATIVE_C_DOC)
+        false_obvious_gate["GATE_FACTS"]["OBVIOUS_FUNCTIONAL_CAUSE"] = False
+        self.assertIn(
+            "NATIVE_C_OBVIOUS_CAUSE_GATE_MISMATCH",
+            validate_native_case_c_capture(false_obvious_gate, CASES["C"]),
+        )
+
+        fabricated_intent = copy.deepcopy(NATIVE_C_DOC)
+        fabricated_intent["GATE_FACTS"]["EXPLICIT_OPTIMIZATION_INTENT"] = False
+        self.assertIn(
+            "NATIVE_C_GATE_FACTS_MISMATCH",
+            validate_native_case_c_capture(fabricated_intent, CASES["C"]),
+        )
+
+    def test_case_c_child_tool_events_require_observed_order_basis(self) -> None:
+        missing_order_basis = copy.deepcopy(NATIVE_C_DOC)
+        missing_order_basis["CHILD_TOOL_EVENTS"][1].pop("ORDER_BASIS")
+        self.assertIn(
+            "NATIVE_C_CHILD_TOOL_EVIDENCE_MISMATCH",
+            validate_native_case_c_capture(missing_order_basis, CASES["C"]),
+        )
+
+    def test_case_c_false_completion_and_terminal_mismatch_are_rejected(self) -> None:
+        false_completion = copy.deepcopy(NATIVE_C_DOC)
+        false_completion["EVENTS"][-1]["UNCONSUMED_RESULT_COUNT"] = 1
+        errors = validate_native_case_c_capture(false_completion, CASES["C"])
+        self.assertIn("NATIVE_C_FINAL_COMPLETION_FACTS_MISMATCH", errors)
+
+        wrong_terminal_snapshot = copy.deepcopy(NATIVE_C_DOC)
+        wrong_terminal_snapshot["OBSERVED_TERMINAL_SNAPSHOT"]["FACTS"]["ANY_WORK_REMAINING"] = "YES"
+        self.assertIn(
+            "NATIVE_C_TERMINAL_SNAPSHOT_MISMATCH",
+            validate_native_case_c_capture(wrong_terminal_snapshot, CASES["C"]),
+        )
+
+        wrong_child_terminal = copy.deepcopy(NATIVE_C_DOC)
+        wrong_child_terminal["EVENTS"][3]["RETURN_STATUS"] = "FAILED"
+        self.assertIn(
+            "NATIVE_C_INVOCATION_TERMINAL_MISMATCH:4",
+            validate_native_case_c_capture(wrong_child_terminal, CASES["C"]),
+        )
+
+        wrong_root_terminal = copy.deepcopy(NATIVE_C_DOC)
+        wrong_root_terminal["ROOT_TERMINAL_OUTCOME"] = "failed"
+        self.assertIn(
+            "NATIVE_C_ROOT_TERMINAL_MISMATCH",
+            validate_native_case_c_capture(wrong_root_terminal, CASES["C"]),
+        )
+
+    def test_case_c_status_promotion_keeps_b3_history_and_current_pending_distinct(self) -> None:
+        stale_current = copy.deepcopy(BASELINE_DOC)
+        stale_current["live_qualification"]["pending_labels"].insert(
+            0, "HUMAN_ACTION_REQUIRED PHASE11_CASE_C_FRESH_ROOT"
+        )
+        self.assertIn(
+            "CURRENT_PHASE11_PENDING_STATE_MISMATCH",
+            validate_phase11_c_reconciliation(stale_current, CASES_DOC, NATIVE_C_DOC),
+        )
+
+        rewritten_b3_history = copy.deepcopy(BASELINE_DOC)
+        rewritten_b3_history["phase11_b3_reconciliation"]["pending_fresh_root_labels"].remove(
+            "HUMAN_ACTION_REQUIRED PHASE11_CASE_C_FRESH_ROOT"
+        )
+        self.assertIn(
+            "CASE_B3_PENDING_LABELS_MISMATCH",
+            validate_phase11_b3_reconciliation(rewritten_b3_history, CASES_DOC, NATIVE_B3_DOC),
+        )
+
+        shipped = copy.deepcopy(BASELINE_DOC)
+        shipped["phase11_c_reconciliation"]["phase11_status"] = "SHIPPED"
+        self.assertIn(
+            "CASE_C_PHASE_STATUS_MUST_REMAIN_PARTIAL",
+            validate_phase11_c_reconciliation(shipped, CASES_DOC, NATIVE_C_DOC),
         )
 
 

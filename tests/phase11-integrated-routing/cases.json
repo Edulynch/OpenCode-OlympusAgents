@@ -264,7 +264,10 @@
     {
       "case_id": "C",
       "scenario": "default",
-      "label": "PHASE11_CASE_C_FRESH_ROOT"
+      "label": "PHASE11_CASE_C_FRESH_ROOT",
+      "status": "PASS",
+      "evidence_class": "FRESH_ROOT_NATIVE",
+      "evidence_artifact": "case-c.native-trace.json"
     },
     {
       "case_id": "D",

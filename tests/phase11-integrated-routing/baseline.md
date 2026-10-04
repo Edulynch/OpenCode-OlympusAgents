@@ -64,8 +64,9 @@ qualification-case roots. No recovery rerun was performed.
 
 The current scoped trace corpus remains synthetic. At the time of this recovery
 report, fresh-root native qualification remained pending for B, C, D, E, F, G,
-H, and K. The later isolated B3 native result is recorded separately below;
-only C, D, E, F, G, H, and K remain pending now. A, I, J, and L prompts are
+H, and K. The later isolated B3 native result is recorded separately below; at
+that B3 snapshot only C, D, E, F, G, H, and K were still listed as pending.
+A, I, J, and L prompts are
 retained as reference/history; no rerun is requested for the recovered A/I/J/L
 observations or I/J negative controls.
 
@@ -218,7 +219,8 @@ case.
   `ACCEPTABLE` as a qualification judgment, not a latency measurement. B3 is
   accepted; B1 remains `FIXTURE_DEFECT` with Question Barrier PASS; B2 runtime
   remains PASS while B2 isolation/acceptance remains PARTIAL. Overall Phase 11
-  remains PARTIAL, with C, D, E, F, G, H, and K pending. A/I/J/L recovered
+  remains PARTIAL; the B3 snapshot listed C, D, E, F, G, H, and K as pending.
+  A/I/J/L recovered
   observations remain guided/history-only.
 
 The native event list is invocation-level plus the final root completion
@@ -227,6 +229,81 @@ basis is `observed`, with ordinal labels rather than timestamps. The bounded
 native validator is separate from `validate_trace`; it preserves missing result
 IDs and aggregate consumption uncertainty. The synthetic `traces.json` and its
 adversarial lifecycle expectations are unchanged.
+
+## Isolated Case C native reconciliation — `P11-C-corpus`
+
+The supplied Nox-verified native history is captured separately in
+`case-c.native-trace.json` as `FRESH_ROOT_NATIVE`. The original evidence
+collector Nox used native read-only OpenCode V2 APIs; this corpus writer did not
+call those APIs, access the Case C worktree, rerun the case, or convert it into
+the synthetic trace corpus.
+
+- Root Kael `ses_efa068637ffeq7qrjCSJFLykc5`, parent `null`, terminal
+  `succeeded`; the root directory was
+  `C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-c`. The initial
+  read-only Nox isolation verification confirmed that this copy was registered
+  separately from the canonical repository at HEAD
+  `8e77742ade517d4d903e0c8aa09cd037a44aa3da`. The historical isolation Git
+  check exit code is unavailable; no worktree-creation claim is made.
+- Two unique direct child sessions, both terminal `succeeded`, were observed in
+  launch order: Nox `ses_efa05f4dfffe9s0gk5VEbkVRA9` for one read-only isolation
+  verification, then Kovan `ses_efa03f35dffeSFO8Kg4CoukMfF` for one localized
+  obvious-defect correction. Both used the Case C directory and had the exact
+  Case C root as parent. Nox's result returned at epoch-ms `1791101704676`;
+  Kovan's invocation was created at epoch-ms `1791101738171`, after Nox
+  completed. This supports maximum direct-child concurrency `1`; the timestamps
+  are retained only at those observed event points, not expanded into durations.
+- The product route is `Kael -> Kovan`. The actual unique-session family is
+  `Kael -> Nox -> Kovan`. The Nox session was an isolation prerequisite, not
+  product diagnosis; the observed route is kept distinct rather than reordered
+  to match the expected product route.
+- Kovan changed only
+  `tests/phase11-integrated-routing/fixtures/obvious/cart.py`, replacing
+  subtraction with multiplication per the documented cart contract. Its
+  recorded single-function validation command passed with exit 0 under
+  `UV_NO_SYNC=1`, `UV_NO_PROJECT=1`, `UV_PYTHON_DOWNLOADS=never`, and
+  `PYTHONDONTWRITEBYTECODE=1`. Kovan's separate `git diff --check` also passed
+  with exit 0. The root terminal records the validation command/result and
+  changed path, but does not literally include the separate diff-check result
+  or the `CASE_C_FRESH_ROOT_NATIVE` classification.
+- The evidence classifies an obvious functional cause (`true`), a nontrivial
+  functional cause (`false`), and a complex feature (`false`). The complete
+  original prompt was not supplied, so unrelated intent and issue-domain gate
+  facts remain `null` rather than being inferred from non-activation.
+- The child patch, test, and diff-check records carry `ORDER_BASIS: observed`.
+  They have no invented ordinal indices or timestamps and do not assert an
+  interleaving with the root-level invocation events.
+- The literal root terminal message
+  `msg_105fd3baa001OouobBeNyh4Nup` reports worktree isolation PASS, starting
+  HEAD `8e77742ade517d4d903e0c8aa09cd037a44aa3da`, the one changed path, the
+  validation command and `PASS — exit 0`, the four environment values, no
+  unresolved work, all required child sessions terminal and consumed, and no
+  remaining work. Case acceptance, route classification, Argus control, and
+  efficiency are qualification judgments, not extra literal root fields.
+- Argus invocation and unique-session counts are both zero. The eight required
+  negative controls (Veyra, Orin, Atlas, Argus, Talos, Thales, Helios, and
+  Aegis) are zero; the additional Vera zero-control is also recorded.
+  Nox is active for isolation and is therefore not counted as a forbidden-role
+  negative control. Role purity passed: direct children only,
+  no nested delegation, no reviewer edits, and no root source writes. The native
+  tool ledger is Kael: 2 subagent, 4 read, 1 glob; Nox: 7 shell; Kovan: 2 read,
+  4 shell, 1 patch.
+- Two distinct root invocation returns are present once; the final root
+  statement supports zero pending, unconsumed, or unknown child results. Native
+  result IDs, per-invocation consumption timing, session-lifetime exact-once,
+  retry count, wall-clock/runtime duration, and native permission UI/decision
+  remain unknown or not observable. No result IDs or consumption events are
+  inferred. The complete root history had zero user questions.
+- `CASE_C_FRESH_ROOT_NATIVE`, isolation, routing, negative Argus control, role
+  purity, result fidelity, and completion ownership are PASS. Efficiency is
+  `LEAN` as a qualification judgment, not a measured latency/throughput result.
+  Case C is accepted; B1 remains `FIXTURE_DEFECT` with Question Barrier PASS;
+  B2 runtime remains PASS while isolation/acceptance remains PARTIAL; B3 remains
+  PASS. The B3 capture's historical pending labels still include C as of its
+  earlier snapshot. Current pending fresh-root work is D, E, F, G, H, and K.
+  A guided/recovered PASS, I guided PARTIAL, J guided/recovered PASS, and L's
+  recovered negative automatic-Aegis PASS remain history-only, not fresh-root
+  evidence. Overall Phase 11 remains **IN VALIDATION / PARTIAL**, not SHIPPED.
 
 ## Reconciliation-task repository preflight
 

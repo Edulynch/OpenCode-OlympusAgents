@@ -256,7 +256,10 @@
     {
       "case_id": "B",
       "scenario": "default",
-      "label": "PHASE11_CASE_B_FRESH_ROOT_3"
+      "label": "PHASE11_CASE_B_FRESH_ROOT_3",
+      "status": "PASS",
+      "evidence_class": "FRESH_ROOT_NATIVE",
+      "evidence_artifact": "case-b3.native-trace.json"
     },
     {
       "case_id": "C",

@@ -62,8 +62,8 @@
   },
   "live_qualification": {
     "guided_current_session": "NOT_CAPTURED",
-    "fresh_root_native": "NOT_CAPTURED",
-    "native_results_claimed": false,
+    "fresh_root_native": "B3_PASS; C,D,E,F,G,H,K_PENDING",
+    "native_results_claimed": true,
     "pending_labels_at_baseline_capture": [
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_A",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_B",
@@ -79,7 +79,6 @@
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_L"
     ],
     "pending_labels": [
-      "HUMAN_ACTION_REQUIRED PHASE11_CASE_B_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_C_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
@@ -96,7 +95,7 @@
       "REFERENCE_ONLY PHASE11_CASE_J_NEGATIVE_CONTROL",
       "REFERENCE_ONLY PHASE11_CASE_L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERY"
     ],
-    "current_pending_state_source": "P11-SAFE-VALIDATION-20261003 task-owner direction; original baseline labels preserved separately"
+    "current_pending_state_source": "P11-B3-corpus verified native evidence; original baseline and prior recovery labels preserved separately"
   },
   "recovered_user_observations": {
     "task_id": "P11-FIX-20261003",
@@ -383,5 +382,193 @@
       "new_verified_kael_root": true,
       "runtime_run_performed_in_this_task": false
     }
+  },
+  "phase11_b3_reconciliation": {
+    "task_id": "P11-B3-corpus",
+    "source": "Verified native OpenCode API exports/history and CLI result facts reconciled by Nox and supplied in the current task; the corpus reconciliation did not re-export, access the B3 worktree, or rerun the case.",
+    "label": "PHASE11_CASE_B_FRESH_ROOT_3",
+    "evidence_artifact": "tests/phase11-integrated-routing/case-b3.native-trace.json",
+    "evidence_class": "FRESH_ROOT_NATIVE",
+    "root_session_id": "ses_efce702a8ffeKcoRaBYMFH9lxa",
+    "root_directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-b3",
+    "root_agent": "kael",
+    "root_parent_session_id": null,
+    "root_terminal_outcome": "succeeded",
+    "root_terminal_message_id": "msg_1048ed1e5001AE9cC6bTYFgV3z",
+    "isolation": {
+      "worktree_isolation": "PASS",
+      "separate_disposable_copy": true,
+      "initial_nox_session_id": "ses_efce6a350ffeLULhF1Hf7l39qJ",
+      "verified_directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-b3",
+      "initial_head": "ded1f69cbeadf5d21cb9b6b31d5df10123b57990",
+      "verified_head": "ded1f69cbeadf5d21cb9b6b31d5df10123b57990",
+      "verification_only": true,
+      "worktree_creation_claimed": false
+    },
+    "observed_terminal_snapshot": {
+      "source": "OBSERVED_NATIVE_ROOT_TERMINAL_MESSAGE",
+      "root_session_id": "ses_efce702a8ffeKcoRaBYMFH9lxa",
+      "message_id": "msg_1048ed1e5001AE9cC6bTYFgV3z",
+      "facts": {
+        "WORKTREE_ISOLATION": "PASS",
+        "PYTHON_RUNTIME": "Python 3.11.17 installed through uv",
+        "TEST_COMMAND": "uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing/fixtures/feature -p \"test_*.py\" -v",
+        "TEST_RESULT": "PASS",
+        "TEST_COUNT": 13,
+        "CONTRACT_COVERAGE": "PASS",
+        "SOURCE_INTEGRITY_AFTER_TEST": "PASS",
+        "NOX": "PASS",
+        "VERA": "ACCEPT",
+        "UNRESOLVED_WORK": "NONE",
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+        "CASE_B_FRESH_ROOT_3": "PASS",
+        "NOTHING_RUNNING": true
+      }
+    },
+    "expected_semantic_route": "Kael -> Veyra -> Kovan -> Nox -> Vera",
+    "observed_unique_child_session_launch_order": "Kael -> Nox -> Veyra -> Kovan -> Vera",
+    "route_difference": "JUSTIFIED_PREREQUISITE: initial Nox worktree-isolation prerequisite preceded the semantic feature workflow; the same Nox session later validated the implementation.",
+    "child_sessions": [
+      {
+        "role": "nox",
+        "session_id": "ses_efce6a350ffeLULhF1Hf7l39qJ",
+        "launch_order": 1,
+        "invocation_count": 3
+      },
+      {
+        "role": "veyra",
+        "session_id": "ses_efce5cd8bffexU0SIHi67Y39zP",
+        "launch_order": 2,
+        "invocation_count": 1
+      },
+      {
+        "role": "kovan",
+        "session_id": "ses_efce3ffadffekeRXxYxKkSWsxs",
+        "launch_order": 3,
+        "invocation_count": 1
+      },
+      {
+        "role": "vera",
+        "session_id": "ses_efcde45cdffe6X5eJbStlshoYu",
+        "launch_order": 4,
+        "invocation_count": 2
+      }
+    ],
+    "root_subagent_call_invocation_counts": {
+      "nox": 3,
+      "veyra": 1,
+      "kovan": 1,
+      "vera": 2
+    },
+    "invocation_returns_observed_once": 7,
+    "result_ids": null,
+    "result_consumption": {
+      "final_root_statement": "All required unique child sessions terminal and consumed.",
+      "pending_children": 0,
+      "unconsumed_results": 0,
+      "unknown_executions": 0,
+      "session_lifetime_exact_once": null,
+      "per_invocation_consumption_timing": null
+    },
+    "user_question_count": 0,
+    "classifications": {
+      "CASE_B_FRESH_ROOT_3": "PASS",
+      "CASE_B_FRESH_ROOT_ACCEPTANCE": "PASS",
+      "ISOLATION": "PASS",
+      "ROUTING": "PASS",
+      "ROLE_PURITY": "PASS",
+      "NEGATIVE_CONTROLS": "PASS",
+      "COMPLETION_OWNERSHIP": "PASS",
+      "RESULT_FIDELITY": "PASS",
+      "EFFICIENCY": "ACCEPTABLE"
+    },
+    "role_purity": {
+      "direct_children_only": true,
+      "nested_delegation": false,
+      "reviewer_edits": false,
+      "root_source_writes": false,
+      "negative_role_invocations": {
+        "orin": 0,
+        "atlas": 0,
+        "argus": 0,
+        "talos": 0,
+        "thales": 0,
+        "helios": 0,
+        "aegis": 0
+      }
+    },
+    "same_original_session_reconciliation": {
+      "kovan": {
+        "session_id": "ses_efce3ffadffekeRXxYxKkSWsxs",
+        "invocation_count": 1,
+        "implementation_result": "PARTIAL_RUNTIME_UNAVAILABLE",
+        "final_session_outcome": "succeeded",
+        "reported_changed_paths": [
+          "tests/phase11-integrated-routing/fixtures/feature/domain.py",
+          "tests/phase11-integrated-routing/fixtures/feature/presentation.py",
+          "tests/phase11-integrated-routing/fixtures/feature/test_scaffold.py"
+        ],
+        "same_original_session": true,
+        "blind_retry": false
+      },
+      "vera": {
+        "session_id": "ses_efcde45cdffe6X5eJbStlshoYu",
+        "invocation_count": 2,
+        "review_result": "SUCCESS",
+        "followup_result": "SUCCESS",
+        "tests_verified_by_review": false,
+        "same_original_session": true,
+        "review_findings": [],
+        "followup_edits": 0
+      },
+      "nox": {
+        "session_id": "ses_efce6a350ffeLULhF1Hf7l39qJ",
+        "invocation_count": 3,
+        "initial_isolation": "PASS",
+        "verified_directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-b3",
+        "verified_head": "ded1f69cbeadf5d21cb9b6b31d5df10123b57990",
+        "initial_validation": "BLOCKED",
+        "final_validation": "PASS",
+        "same_original_session": true,
+        "tests_passed": 13
+      }
+    },
+    "runtime_validation": {
+      "python": "3.11.17",
+      "python_installation_source": "uv",
+      "command": "uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing/fixtures/feature -p \"test_*.py\" -v",
+      "result": "PASS",
+      "tests_passed": 13,
+      "contract_coverage": "PASS",
+      "source_integrity_after_test": "PASS",
+      "historical_runtime_exit_code": null,
+      "nox": "PASS",
+      "vera": "ACCEPT",
+      "nothing_remained_running": true,
+      "unresolved_work": "NONE"
+    },
+    "unknowns": {
+      "timestamps": null,
+      "result_ids": null,
+      "maximum_simultaneous_children": null,
+      "session_lifetime_exact_once": null,
+      "operational_measurements": null,
+      "native_permission_ui": "NOT_OBSERVABLE",
+      "native_permission_decision": "NOT_OBSERVABLE"
+    },
+    "same_original_session_result_reconciliation": "Kovan remained one original session with an implementation PARTIAL return and succeeded terminal; Vera's review and source-review follow-up came from the same original session, with no replacement or edits.",
+    "efficiency_basis": "ACCEPTABLE is a qualification judgment, not measured latency or throughput.",
+    "runtime_rerun_performed_by_reconciliation": false,
+    "acceptance_status": "PASS",
+    "phase11_status": "PARTIAL",
+    "pending_fresh_root_labels": [
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_C_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
+    ]
   }
 }

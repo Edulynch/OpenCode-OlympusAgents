@@ -5,10 +5,11 @@ checked-in A–L traces are `SYNTHETIC_TRACE`; their local `SYN-*` references an
 ordered events are authored examples, not OpenCode root/child session IDs,
 timestamps, guided runs, or proof of model behavior. Static marker checks mean
 only that bounded policy text is present. The task owner separately reported
-recovered guided outcomes and a reconciled Case B runtime observation (recorded
-below and in `baseline.json`); no native event-by-event per-case trace is
-reconstructed here, and the B2 observation does not qualify isolated Case B
-acceptance.
+recovered guided outcomes and a reconciled B2 runtime observation (recorded
+below and in `baseline.json`). Separately, verified native B3 exports/history
+and CLI results are captured in `case-b3.native-trace.json`; B3 qualifies
+isolated Case B acceptance. That native invocation-level capture is not inserted
+into the synthetic trace corpus or reconstructed as a synthetic lifecycle.
 
 ## Automatic local commands
 
@@ -22,12 +23,12 @@ uv run --python 3.11 python -m unittest discover -s tests/phase11-integrated-rou
 uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-only
 ```
 
-The first command validates the versioned case matrix, event semantics,
-completion/evidence claims, the separately recorded B reconciliation, and
-presence-only gate markers. It reports `PHASE11_ARTIFACTS: PASS` when those
-artifacts are sound while overall qualification remains
-`PHASE11_QUALIFICATION: PARTIAL` until the required isolated fresh-root evidence
-is accepted. The second command
+The first command validates the versioned case matrix, synthetic event semantics,
+completion/evidence claims, separate B1/B2/B3 reconciliations, the bounded B3
+native invocation capture, and presence-only gate markers. It reports
+`PHASE11_ARTIFACTS: PASS` when those artifacts are sound while overall
+qualification remains `PHASE11_QUALIFICATION: PARTIAL` until the remaining
+isolated fresh-root evidence is accepted. The second command
 applies mutations to valid authored traces and requires the prohibited variants
 to fail. The third command currently runs only the feature fixture's green
 pre-feature compatibility tests. The future feature work must add acceptance
@@ -51,23 +52,61 @@ checks do not implement or qualify the discount feature. Fixture readiness (a
 linked contract plus a coherent, passing scaffold) is not a `FRESH_ROOT_NATIVE`
 observation and cannot produce a Case B fresh-root PASS.
 
+## B3 native capture and validation boundary
+
+`case-b3.native-trace.json` records `PHASE11_CASE_B_FRESH_ROOT_3` as
+`FRESH_ROOT_NATIVE`. Its events are the seven distinct observed root subagent
+call results plus the final root completion statement. Each event has an
+`ORDER_BASIS` of `observed`; order integers are ordinal labels, never timestamps.
+The four direct child sessions are unique; Nox's three and Vera's two root-call
+results remain invocation counts, not extra child activations. Native call IDs
+join the invocations, but `RESULT_ID`, timestamps, and maximum concurrency stay
+`null` where not observed. The final root statement supports zero pending,
+unconsumed, and unknown child results, while per-invocation consumption timing
+and session-lifetime exact-once remain unknown. No consumption event is placed
+after a later action to imply a timestamp.
+Unobserved, unrelated gate facts remain `null` rather than being inferred from
+the absence of an invocation.
+
+The native record uses the canonical top-level evidence fields but has a bounded
+invocation-level validator. The synthetic `validate_trace` lifecycle requires
+one start/terminal/consumption sequence per child session and synthetic result
+IDs; applying it to B3 would conflate repeated calls on resumed Nox/Vera
+sessions and invent missing result IDs. Native validation instead checks the
+fixed observed root/child joins, call identities and statuses, direct parents,
+observed ordering, route reconciliation, aggregate completion, and preserved
+unknowns. These consistency checks do not independently authenticate source
+exports. Synthetic `traces.json` and its adversarial lifecycle checks are
+unchanged.
+
+The semantic feature route remains Kael -> Veyra -> Kovan -> Nox -> Vera. The
+observed unique-session launch order is Kael -> Nox -> Veyra -> Kovan -> Vera
+because initial Nox worktree isolation was a justified prerequisite. Nox later
+resumed that same session for validation. The Veyra contract preceded Kovan
+implementation; Kovan preceded Nox validation and Vera review. Vera's review
+and source-review follow-up also came from the same original session. Efficiency
+`ACCEPTABLE` is a qualification judgment, not measured latency.
+
 ## Remaining fresh-root work remains user action
 
 Use a separate clean disposable project copy and a **new, verified Kael root for
-each pending case**. Only isolated B3, C, D, E, F, G, H, and K below are pending
-fresh-root actions. A, I, J, and L prompt references/history are retained below but are not
-new rerun requests. Do not reuse a guided/current session as a fresh root. Confirm the
-effective root agent, child parentage and actual roles from native session
-evidence before accepting a case. Scope each live edit to the disposable
+each pending case**. Only C, D, E, F, G, H, and K below remain pending fresh-root
+actions; isolated B3 is accepted. A, I, J, and L prompt references/history are
+retained below but are not new rerun requests. Do not reuse a guided/current
+session as a fresh root. Confirm the effective root agent, child parentage and
+actual roles from native session evidence before accepting a case. Scope each live edit to the disposable
 qualification fixture; retain the original project untouched. Stop rather than
 retry if an execution result is unknown. The prompts below are starting points,
-not pre-recorded results. Capture the complete trace schema in
-`native-trace.template.json`, preserving unknown values as `null` (never zero).
+not pre-recorded results. For a fresh native observation, use the canonical top
+fields from `native-trace.template.json` and preserve unknown values as `null`
+(never zero); capture invocation-level native facts without fabricating the
+synthetic per-session lifecycle.
 
 - `REFERENCE_ONLY PHASE11_CASE_A_GUIDED_RECOVERY` — prior prompt reference: “In a disposable copy, change only
   `fixtures/simple/message.txt` to `Hello Phase 11 ready`. Keep this to one
   scoped edit and verify the exact requested text.”
-- `HUMAN_ACTION_REQUIRED PHASE11_CASE_B_FRESH_ROOT_3` — “In a **clean separate
+- `ACCEPTED PHASE11_CASE_B_FRESH_ROOT_3` — completed native evidence is in
+  `case-b3.native-trace.json`; no rerun is requested. Original prompt: “In a **clean separate
   disposable project copy** and a new verified Kael root (not the canonical
   qualification repository), read
   `tests/phase11-integrated-routing/fixtures/feature/contract.md` and
@@ -183,10 +222,58 @@ The current canonical checkout was separately inspected and remains a clean
 pre-feature scaffold: tracked `domain.py`, `presentation.py`, and
 `test_scaffold.py`; no `test_feature.py`; all four scaffold checks pass. This
 current-tree check is distinct from the B2 report of that session's edits; no
-feature delta or explanation for the differing snapshots is inferred, and the
-fixture was not changed here. Case B remains PARTIAL until user-controlled
-`PHASE11_CASE_B_FRESH_ROOT_3` runs in a clean separate disposable copy under a
-new verified Kael root.
+feature delta or explanation for the differing snapshots is inferred, and this
+corpus task did not change the fixture. B2 remains `PARTIAL` because isolation
+failed; later isolated B3 independently passed and does not rewrite B2's result.
+
+## Isolated B3 native result
+
+The verified root is Kael `ses_efce702a8ffeKcoRaBYMFH9lxa`, outcome
+`succeeded`; root and Nox's isolation-verified directory both resolve to
+`C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-b3`. Nox verified
+isolation and HEAD `ded1f69cbeadf5d21cb9b6b31d5df10123b57990`; the evidence
+claims verification only and does not claim worktree creation. Unique direct
+child sessions were
+Nox `ses_efce6a350ffeLULhF1Hf7l39qJ`, Veyra
+`ses_efce5cd8bffexU0SIHi67Y39zP`, Kovan
+`ses_efce3ffadffekeRXxYxKkSWsxs`, and Vera
+`ses_efcde45cdffe6X5eJbStlshoYu`; all terminated succeeded under that root.
+
+Seven distinct root subagent call results were observed: Nox isolation PASS;
+Veyra contract SUCCESS; Kovan implementation PARTIAL while the runtime was
+unavailable; same-session Nox validation BLOCKED because Python aliases were
+unavailable and zero tests ran; Vera review SUCCESS with no material defects
+and tests unverified; same-original-session Vera source review SUCCESS with no
+edits; and same-session Nox installed-Python validation SUCCESS (Python
+3.11.17, 13 tests passed). The final root reported source integrity and
+contract coverage PASS, Vera ACCEPT, no unresolved work, and all required child
+results terminal and consumed. Historical runtime exit code, result IDs,
+timestamps, concurrency, and session-lifetime exact-once remain unknown. No B3
+rerun was performed by corpus reconciliation.
+
+The observed terminal snapshot is tied to root message
+`msg_1048ed1e5001AE9cC6bTYFgV3z`: `WORKTREE_ISOLATION PASS`; Python 3.11.17
+installed through uv; `TEST_RESULT PASS`; `TEST_COUNT 13`; contract coverage and
+source integrity PASS; Nox PASS; Vera ACCEPT;
+unresolved work NONE; required children terminal and consumed YES;
+`CASE_B_FRESH_ROOT_3 PASS`; nothing running. The validator binds these observed
+terminal facts to isolation, runtime, route classification, and completion
+records, while keeping expected outcome provenance separate from native export
+provenance.
+
+The recorded `TEST_COMMAND` is:
+
+```text
+uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing/fixtures/feature -p "test_*.py" -v
+```
+
+The semantic workflow route is Kael -> Veyra -> Kovan -> Nox -> Vera. The
+observed unique child-session launch order is Kael -> Nox -> Veyra -> Kovan ->
+Vera because Nox isolation was a justified prerequisite; the route is not
+reordered to conceal that fact. B3 classifications are `CASE_B_FRESH_ROOT_3`,
+isolation, routing, role purity, negative controls, completion ownership, and
+result fidelity PASS; efficiency is ACCEPTABLE as judgment, not a measurement.
+Case B acceptance is PASS while Phase 11 remains PARTIAL.
 
 The task owner reported these preserved recovery outcomes: Case A `PASS`
 (`GUIDED_CURRENT_SESSION`); Case I `PARTIAL` guided, with the useful baseline
@@ -209,10 +296,10 @@ sessions only, not the Case A/I/J/L native roots. Preserve them if available.
   useful context, but not independent fresh-root evidence.
 - `FRESH_ROOT_NATIVE`: observed native evidence from a separately created,
   verified Kael root with actual child/session IDs and captured event ordering.
-  This is required for the currently pending isolated B3, C, D, E, F, G, H,
-  and K cases. B2's routing observation is valid context but failed isolation.
-  The recovered A/I/J/L observations remain guided/user-reported references and
-  are not fresh-root evidence.
+  B3 now passes this bar; C, D, E, F, G, H, and K remain pending. B2's routing
+  observation is valid context but failed isolation. The recovered A/I/J/L
+  observations remain guided/user-reported references and are not fresh-root
+  evidence.
 
 Record the required uppercase labels exactly: `CASE_ID`, `REQUEST_CLASS`,
 `EXPECTED_ROUTE`, `ACTUAL_ROUTE`, `CHILD_SESSIONS`, `CONSULTATION_COUNTS`,
@@ -231,9 +318,12 @@ session IDs only when actually observed. Event order must say `observed` or
 Record unknown metrics as `null`, not `0`. A final answer must not include
 chain-of-thought.
 
-For each case, reconcile all known work: every completed child terminates and
-its actual result ID is consumed exactly once before completion. Unknown
-execution means `COMPLETION_UNCONFIRMED` and no retry. Kael owns bounded
+For synthetic cases, reconcile each completed child's terminal and actual
+result-ID consumption exactly once. For native invocation-level captures,
+record the observed aggregate child-completion statement without inventing a
+per-invocation result ID or consumption time; leave session-lifetime exact-once
+unknown unless directly established. Unknown execution means
+`COMPLETION_UNCONFIRMED` and no retry. Kael owns bounded
 questions; reconcile work before asking, record `QUESTION_RESOLVED` before
 dependent work, and do not start that work before the answer. Reasoner evidence
 follow-up must be same-session, materially new, produced after its request,
@@ -243,10 +333,10 @@ are marker-presence checks only.
 
 ## Current gate
 
-The A–L matrix and synthetic/mutation suite are present. Static artifact
-validation can PASS while overall qualification remains PARTIAL. Case B2 has a
-valid user-supplied routing observation but failed fresh-root isolation, so
-Case B acceptance awaits isolated B3. Fresh-root evidence remains pending for
-Case B3, C, D, E, F, G, H, and K; A, I, J, and L are retained as
-reference/history, with no rerun requested. The phase is **IN VALIDATION /
-PARTIAL**, not SHIPPED.
+The A–L matrix, unchanged synthetic/mutation suite, and isolated B3 native
+capture are present. Case B1 remains a fixture defect with Question Barrier
+PASS; B2 runtime behavior remains PASS but isolation/acceptance remains PARTIAL;
+B3 fresh-root native acceptance is PASS. Fresh-root evidence remains pending
+for C, D, E, F, G, H, and K. A/I/J/L observations remain guided/history-only,
+with no rerun requested. The overall phase is **IN VALIDATION / PARTIAL**, not
+SHIPPED.

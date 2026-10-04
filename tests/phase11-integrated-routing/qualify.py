@@ -94,6 +94,61 @@ CASE_B2_CLASSIFICATIONS = {
     "CASE_B2_FRESH_ROOT_ACCEPTANCE": "PARTIAL",
 }
 CASE_B2_ACTUAL_ROUTE = "Kael -> Veyra -> Kovan -> Nox / Vera"
+CASE_B3_ROOT_SESSION_ID = "ses_efce702a8ffeKcoRaBYMFH9lxa"
+CASE_B3_ROOT_DIRECTORY = "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-b3"
+CASE_B3_INITIAL_HEAD = "ded1f69cbeadf5d21cb9b6b31d5df10123b57990"
+CASE_B3_TERMINAL_MESSAGE_ID = "msg_1048ed1e5001AE9cC6bTYFgV3z"
+CASE_B3_TEST_COMMAND = 'uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing/fixtures/feature -p "test_*.py" -v'
+CASE_B3_TERMINAL_FACTS = {
+    "WORKTREE_ISOLATION": "PASS",
+    "PYTHON_RUNTIME": "Python 3.11.17 installed through uv",
+    "TEST_COMMAND": CASE_B3_TEST_COMMAND,
+    "TEST_RESULT": "PASS",
+    "TEST_COUNT": 13,
+    "CONTRACT_COVERAGE": "PASS",
+    "SOURCE_INTEGRITY_AFTER_TEST": "PASS",
+    "NOX": "PASS",
+    "VERA": "ACCEPT",
+    "UNRESOLVED_WORK": "NONE",
+    "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+    "CASE_B_FRESH_ROOT_3": "PASS",
+    "NOTHING_RUNNING": True,
+}
+CASE_B3_CHILD_SESSIONS = [
+    ("B3-NOX", "nox", "ses_efce6a350ffeLULhF1Hf7l39qJ"),
+    ("B3-VEYRA", "veyra", "ses_efce5cd8bffexU0SIHi67Y39zP"),
+    ("B3-KOVAN", "kovan", "ses_efce3ffadffekeRXxYxKkSWsxs"),
+    ("B3-VERA", "vera", "ses_efcde45cdffe6X5eJbStlshoYu"),
+]
+CASE_B3_EXPECTED_ROUTE = ["kael", "veyra", "kovan", "nox", "vera"]
+CASE_B3_ACTUAL_ROUTE = ["kael", "nox", "veyra", "kovan", "vera"]
+CASE_B3_CALLS = [
+    ("B3-NOX", "nox", "call_qwMZACNrVqLA8tmmFCM1eB3W", "msg_10318ff58001ub8abxr5egfLqd", "SUCCESS"),
+    ("B3-VEYRA", "veyra", "call_d4KKM4JToyp1bXQ1A3JppG0S", "msg_10319ecd7001TayRkYYC0CnjsM", "SUCCESS"),
+    ("B3-KOVAN", "kovan", "call_Rpz7XK5m7owERqLA8JN6740C", "msg_1031b866a001mmZqvYl8apLVzl", "PARTIAL"),
+    ("B3-NOX", "nox", "call_C62D1Hr0MpWpEiuKaNaCLssa", "msg_1031f1121001ieqq1bWvW7evXn", "BLOCKED"),
+    ("B3-VERA", "vera", "call_xaodFghlKSlXFOPDEgeFdK1J", "msg_103215e85001aLOM4b6TTSc3MA", "SUCCESS"),
+    ("B3-VERA", "vera", "call_E8YeCiitk1nrTb1c88EJqpTE", "msg_10322808c0015hGifrTywcYcvB", "SUCCESS"),
+    ("B3-NOX", "nox", "call_P7Muj3TbvUxytRrajoipAwpd", "msg_10489ca38001WfLqB678rW4Xjl", "SUCCESS"),
+]
+CASE_B3_DEPENDENCY_EDGES = {
+    ("B3-CALL-1", "B3-CALL-2"),
+    ("B3-CALL-2", "B3-CALL-3"),
+    ("B3-CALL-3", "B3-CALL-4"),
+    ("B3-CALL-3", "B3-CALL-5"),
+    ("B3-CALL-5", "B3-CALL-6"),
+    ("B3-CALL-4", "B3-CALL-7"),
+    ("B3-CALL-3", "B3-CALL-7"),
+}
+CASE_B3_PENDING_LABELS = [
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_C_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
+]
 
 
 def load_json(path: Path) -> Any:
@@ -1047,10 +1102,562 @@ def validate_case_b_reconciliation(baseline: dict[str, Any]) -> list[str]:
     return errors
 
 
+def validate_native_invocation_capture(trace: dict[str, Any], case: dict[str, Any]) -> list[str]:
+    """Validate the bounded native invocation capture without synthetic lifecycle assumptions."""
+    errors: list[str] = []
+    add = errors.append
+    missing = [field for field in REQUIRED_TRACE_FIELDS if field not in trace]
+    if missing:
+        return ["NATIVE_MISSING_REQUIRED_FIELDS:" + ",".join(missing)]
+
+    if trace.get("TRACE_ID") != "B3-NATIVE":
+        add("NATIVE_TRACE_ID_MISMATCH")
+    if trace.get("CASE_ID") != "B" or case.get("id") != "B":
+        add("NATIVE_CASE_ID_MISMATCH")
+    if trace.get("REQUEST_CLASS") != case.get("request_class") or trace.get("REQUEST_CLASS") != "COMPLEX_FEATURE":
+        add("NATIVE_REQUEST_CLASS_MISMATCH")
+    if trace.get("EVIDENCE_CLASS") != "FRESH_ROOT_NATIVE":
+        add("NATIVE_EVIDENCE_CLASS_MISMATCH")
+    if trace.get("SCENARIO") != "default" or case.get("expected_routes", {}).get("default") != CASE_B3_EXPECTED_ROUTE:
+        add("NATIVE_SCENARIO_OR_MATRIX_ROUTE_MISMATCH")
+    if trace.get("EXPECTED_ROUTE") != CASE_B3_EXPECTED_ROUTE:
+        add("NATIVE_EXPECTED_ROUTE_MISMATCH")
+    if trace.get("ROUTE_MODE") != "KAEL_ROOT":
+        add("NATIVE_ROUTE_MODE_MISMATCH")
+    if trace.get("ROOT_SESSION_ID") != CASE_B3_ROOT_SESSION_ID:
+        add("NATIVE_ROOT_SESSION_ID_MISMATCH")
+    if trace.get("ROOT_AGENT") != "kael" or trace.get("ROOT_PARENT_SESSION_ID") is not None:
+        add("NATIVE_ROOT_IDENTITY_MISMATCH")
+    if trace.get("ROOT_TERMINAL_OUTCOME") != "succeeded" or trace.get("FINAL_OUTCOME") != "succeeded":
+        add("NATIVE_ROOT_TERMINAL_OUTCOME_MISMATCH")
+    if trace.get("ROOT_TERMINAL_MESSAGE_ID") != CASE_B3_TERMINAL_MESSAGE_ID:
+        add("NATIVE_ROOT_TERMINAL_MESSAGE_ID_MISMATCH")
+    isolation = trace.get("ROOT_ISOLATION", {})
+    if (
+        not isinstance(isolation, dict)
+        or isolation.get("STATUS") != "PASS"
+        or isolation.get("SEPARATE_DISPOSABLE_WORKTREE") is not True
+        or isolation.get("INITIAL_NOX_SESSION_ID") != CASE_B3_CHILD_SESSIONS[0][2]
+        or trace.get("ROOT_DIRECTORY") != CASE_B3_ROOT_DIRECTORY
+        or isolation.get("VERIFIED_DIRECTORY") != CASE_B3_ROOT_DIRECTORY
+        or isolation.get("INITIAL_HEAD") != CASE_B3_INITIAL_HEAD
+        or isolation.get("VERIFIED_HEAD") != CASE_B3_INITIAL_HEAD
+        or isolation.get("VERIFICATION_ONLY") is not True
+        or isolation.get("WORKTREE_CREATION_CLAIMED") is not False
+    ):
+        add("NATIVE_FRESH_ROOT_ISOLATION_MISMATCH")
+    expected_runtime_validation = {
+        "PYTHON_VERSION": "3.11.17",
+        "PYTHON_INSTALLATION_SOURCE": "uv",
+        "COMMAND": CASE_B3_TEST_COMMAND,
+        "RESULT": "PASS",
+        "TESTS_PASSED": 13,
+        "CONTRACT_COVERAGE": "PASS",
+        "SOURCE_INTEGRITY_AFTER_TEST": "PASS",
+        "NOX": "PASS",
+        "VERA": "ACCEPT",
+        "UNRESOLVED_WORK": "NONE",
+        "NOTHING_REMAINED_RUNNING": True,
+        "HISTORICAL_RUNTIME_EXIT_CODE": None,
+    }
+    if trace.get("RUNTIME_VALIDATION") != expected_runtime_validation:
+        add("NATIVE_RUNTIME_VALIDATION_FACTS_MISMATCH")
+    expected_session_reconciliation = {
+        "kovan": {
+            "NATIVE_SESSION_ID": CASE_B3_CHILD_SESSIONS[2][2],
+            "INVOCATION_COUNT": 1,
+            "IMPLEMENTATION_RETURN": "PARTIAL_RUNTIME_UNAVAILABLE",
+            "FINAL_SESSION_OUTCOME": "succeeded",
+            "REPORTED_CHANGED_PATHS": [
+                "tests/phase11-integrated-routing/fixtures/feature/domain.py",
+                "tests/phase11-integrated-routing/fixtures/feature/presentation.py",
+                "tests/phase11-integrated-routing/fixtures/feature/test_scaffold.py",
+            ],
+            "SAME_ORIGINAL_SESSION": True,
+            "BLIND_RETRY": False,
+        },
+        "vera": {
+            "NATIVE_SESSION_ID": CASE_B3_CHILD_SESSIONS[3][2],
+            "INVOCATION_COUNT": 2,
+            "REVIEW_RETURN": "SUCCESS",
+            "REVIEW_FINDINGS": [],
+            "TESTS_VERIFIED_BY_REVIEW": False,
+            "FOLLOWUP_RETURN": "SUCCESS",
+            "FOLLOWUP_SCOPE": "source review",
+            "FOLLOWUP_EDITS": 0,
+            "SAME_ORIGINAL_SESSION": True,
+        },
+        "nox": {
+            "NATIVE_SESSION_ID": CASE_B3_CHILD_SESSIONS[0][2],
+            "INVOCATION_COUNT": 3,
+            "INITIAL_ISOLATION": "PASS",
+            "VERIFIED_DIRECTORY": CASE_B3_ROOT_DIRECTORY,
+            "VERIFIED_HEAD": CASE_B3_INITIAL_HEAD,
+            "INITIAL_VALIDATION": "BLOCKED",
+            "FINAL_VALIDATION": "PASS",
+            "TESTS_PASSED": 13,
+            "SAME_ORIGINAL_SESSION": True,
+        },
+    }
+    if trace.get("SESSION_RECONCILIATION") != expected_session_reconciliation:
+        add("NATIVE_SAME_SESSION_RECONCILIATION_MISMATCH")
+
+    provenance = trace.get("EVIDENCE_PROVENANCE", {})
+    expected_child_ids = [session_id for _, _, session_id in CASE_B3_CHILD_SESSIONS]
+    if not isinstance(provenance, dict):
+        provenance = {}
+    if provenance.get("CLASS") != "FRESH_ROOT_NATIVE":
+        add("NATIVE_PROVENANCE_CLASS_MISMATCH")
+    if provenance.get("NATIVE_ROOT_SESSION_ID") != CASE_B3_ROOT_SESSION_ID:
+        add("NATIVE_ROOT_PROVENANCE_MISMATCH")
+    if provenance.get("NATIVE_ROOT_DIRECTORY") != CASE_B3_ROOT_DIRECTORY:
+        add("NATIVE_ROOT_DIRECTORY_PROVENANCE_MISMATCH")
+    if provenance.get("NATIVE_CHILD_SESSION_IDS") != expected_child_ids:
+        add("NATIVE_CHILD_PROVENANCE_MISMATCH")
+    if provenance.get("ORDER_BASIS") != "observed":
+        add("NATIVE_ORDER_PROVENANCE_MISMATCH")
+    if provenance.get("FRESH_ROOT_CONFIRMED") is not True or provenance.get("USER_REPORTED") is not False:
+        add("NATIVE_FRESH_ROOT_PROVENANCE_UNCONFIRMED")
+    if provenance.get("OBSERVED_AT") is not None:
+        add("NATIVE_UNOBSERVED_TIMESTAMP_MUST_REMAIN_NULL")
+    if provenance.get("NATIVE_PERMISSION_UI") != "NOT_OBSERVABLE" or provenance.get("NATIVE_PERMISSION_DECISION") != "NOT_OBSERVABLE":
+        add("NATIVE_PERMISSION_OBSERVABILITY_MISMATCH")
+
+    children = trace.get("CHILD_SESSIONS")
+    if not isinstance(children, list):
+        return errors + ["NATIVE_CHILD_SESSIONS_NOT_LIST"]
+    if len(children) != len(CASE_B3_CHILD_SESSIONS):
+        add("NATIVE_UNIQUE_CHILD_SESSION_COUNT_MISMATCH")
+    refs: list[str] = []
+    session_ids: list[str] = []
+    expected_invocation_counts = {"B3-NOX": 3, "B3-VEYRA": 1, "B3-KOVAN": 1, "B3-VERA": 2}
+    for index, (ref, role, session_id) in enumerate(CASE_B3_CHILD_SESSIONS):
+        child = children[index] if index < len(children) and isinstance(children[index], dict) else {}
+        if child.get("TRACE_REF") != ref or child.get("AGENT") != role:
+            add(f"NATIVE_CHILD_ROLE_OR_ORDER_MISMATCH:{ref}")
+        if child.get("NATIVE_SESSION_ID") != session_id or not NATIVE_SESSION_ID.fullmatch(str(child.get("NATIVE_SESSION_ID", ""))):
+            add(f"NATIVE_CHILD_SESSION_ID_MISMATCH:{ref}")
+        if child.get("PARENT_AGENT") != "kael" or child.get("PARENT_SESSION_ID") != CASE_B3_ROOT_SESSION_ID:
+            add(f"NATIVE_CHILD_PARENT_MISMATCH:{ref}")
+        if child.get("LAUNCH_ORDER") != index + 1:
+            add(f"NATIVE_CHILD_LAUNCH_ORDER_MISMATCH:{ref}")
+        if child.get("INVOCATION_COUNT") != expected_invocation_counts[ref]:
+            add(f"NATIVE_CHILD_INVOCATION_COUNT_MISMATCH:{ref}")
+        if child.get("EXECUTION_STATE") != "SUCCEEDED" or child.get("FINAL_OUTCOME") != "succeeded":
+            add(f"NATIVE_CHILD_TERMINAL_OUTCOME_MISMATCH:{ref}")
+        if child.get("RESULT_ID") is not None:
+            add(f"NATIVE_UNOBSERVED_CHILD_RESULT_ID_MUST_REMAIN_NULL:{ref}")
+        refs.append(str(child.get("TRACE_REF")))
+        session_ids.append(str(child.get("NATIVE_SESSION_ID")))
+    if len(refs) != len(set(refs)) or len(session_ids) != len(set(session_ids)) or CASE_B3_ROOT_SESSION_ID in session_ids:
+        add("NATIVE_CHILD_SESSION_IDENTITIES_NOT_UNIQUE")
+
+    events = trace.get("EVENTS")
+    if not isinstance(events, list):
+        return errors + ["NATIVE_EVENTS_NOT_LIST"]
+    if len(events) != len(CASE_B3_CALLS) + 1:
+        add("NATIVE_INVOCATION_EVENT_COUNT_MISMATCH")
+    orders = [event.get("ORDER") if isinstance(event, dict) else None for event in events]
+    if orders != list(range(1, len(events) + 1)):
+        add("NATIVE_EVENT_ORDER_NOT_STRICTLY_INCREASING")
+    if any(not isinstance(event, dict) or event.get("ORDER_BASIS") != "observed" for event in events):
+        add("NATIVE_EVENT_ORDER_BASIS_MISMATCH")
+
+    observed_call_ids: list[str] = []
+    observed_call_counts = {role: 0 for role in ALL_INVOCABLE_ROLES}
+    for index, (ref, role, call_id, message_id, status) in enumerate(CASE_B3_CALLS):
+        event = events[index] if index < len(events) and isinstance(events[index], dict) else {}
+        expected_session = next((sid for child_ref, _, sid in CASE_B3_CHILD_SESSIONS if child_ref == ref), None)
+        if event.get("EVENT_ID") != f"B3-CALL-{index + 1}" or event.get("KIND") != "ROOT_SUBAGENT_RESULT_RETURNED":
+            add(f"NATIVE_INVOCATION_EVENT_KIND_OR_ID_MISMATCH:{index + 1}")
+        if event.get("ACTOR_ROLE") != "kael" or event.get("TOOL") != "subagent":
+            add(f"NATIVE_INVOCATION_CALLER_MISMATCH:{index + 1}")
+        if (
+            event.get("CHILD_REF") != ref
+            or event.get("SESSION_REF") != ref
+            or event.get("NATIVE_SESSION_ID") != expected_session
+            or event.get("AGENT") != role
+        ):
+            add(f"NATIVE_INVOCATION_SESSION_OR_ROLE_JOIN_MISMATCH:{index + 1}")
+        if event.get("TOOL_CALL_ID") != call_id or event.get("OBSERVED_MESSAGE_ID") != message_id:
+            add(f"NATIVE_INVOCATION_ID_MISMATCH:{index + 1}")
+        if event.get("RETURN_STATUS") != status:
+            add(f"NATIVE_INVOCATION_RESULT_MISMATCH:{index + 1}")
+        if not isinstance(event.get("RETURN_SUMMARY"), str) or not event.get("RETURN_SUMMARY", "").strip():
+            add(f"NATIVE_INVOCATION_SUMMARY_MISSING:{index + 1}")
+        if index == 0 and (
+            event.get("RETURN_SUMMARY") != "Verified worktree isolation directory and initial HEAD; no worktree-creation claim."
+            or event.get("VERIFIED_DIRECTORY") != CASE_B3_ROOT_DIRECTORY
+            or event.get("VERIFIED_HEAD") != CASE_B3_INITIAL_HEAD
+            or event.get("VERIFICATION_SCOPE") != "DIRECTORY_AND_HEAD"
+            or event.get("WORKTREE_CREATION_CLAIMED") is not False
+        ):
+            add("NATIVE_ISOLATION_EVENT_NOT_VERIFICATION_ONLY")
+        if index == 2 and event.get("REPORTED_CHANGED_PATHS") != expected_session_reconciliation["kovan"]["REPORTED_CHANGED_PATHS"]:
+            add("NATIVE_KOVAN_CHANGED_PATHS_MISMATCH")
+        if event.get("RESULT_ID") is not None:
+            add(f"NATIVE_UNOBSERVED_RESULT_ID_MUST_REMAIN_NULL:{index + 1}")
+        observed_call_ids.append(str(event.get("TOOL_CALL_ID")))
+        if role in observed_call_counts:
+            observed_call_counts[role] += 1
+    if len(observed_call_ids) != len(set(observed_call_ids)):
+        add("NATIVE_TOOL_CALL_IDS_NOT_UNIQUE")
+
+    final_event = events[-1] if events and isinstance(events[-1], dict) else {}
+    if (
+        final_event.get("EVENT_ID") != "B3-ROOT-FINAL"
+        or final_event.get("KIND") != "ROOT_FINAL_COMPLETION"
+        or final_event.get("ACTOR_ROLE") != "kael"
+        or final_event.get("ROOT_SESSION_ID") != CASE_B3_ROOT_SESSION_ID
+        or final_event.get("MESSAGE_ID") != trace.get("ROOT_TERMINAL_MESSAGE_ID")
+        or final_event.get("VALUE") != "succeeded"
+    ):
+        add("NATIVE_FINAL_COMPLETION_EVENT_MISMATCH")
+    if final_event.get("RESULT_ID") is not None:
+        add("NATIVE_UNOBSERVED_FINAL_RESULT_ID_MUST_REMAIN_NULL")
+
+    snapshot = trace.get("OBSERVED_TERMINAL_SNAPSHOT", {})
+    if not isinstance(snapshot, dict) or (
+        snapshot.get("OBSERVATION") != "OBSERVED_NATIVE_ROOT_TERMINAL_MESSAGE"
+        or snapshot.get("ROOT_SESSION_ID") != CASE_B3_ROOT_SESSION_ID
+        or snapshot.get("MESSAGE_ID") != CASE_B3_TERMINAL_MESSAGE_ID
+        or snapshot.get("FACTS") != CASE_B3_TERMINAL_FACTS
+        or final_event.get("TERMINAL_FACTS") != snapshot.get("FACTS")
+    ):
+        add("NATIVE_TERMINAL_SNAPSHOT_MISMATCH")
+    snapshot_facts = snapshot.get("FACTS", {}) if isinstance(snapshot, dict) else {}
+    runtime = trace.get("RUNTIME_VALIDATION", {})
+    routing_detail = trace.get("ROUTING_RESULT_DETAIL", {})
+    derived_terminal_facts = {
+        "WORKTREE_ISOLATION": isolation.get("STATUS") if isinstance(isolation, dict) else None,
+        "PYTHON_RUNTIME": (
+            f"Python {runtime.get('PYTHON_VERSION')} installed through {runtime.get('PYTHON_INSTALLATION_SOURCE')}"
+            if isinstance(runtime, dict) else None
+        ),
+        "TEST_COMMAND": runtime.get("COMMAND") if isinstance(runtime, dict) else None,
+        "TEST_RESULT": runtime.get("RESULT") if isinstance(runtime, dict) else None,
+        "TEST_COUNT": runtime.get("TESTS_PASSED") if isinstance(runtime, dict) else None,
+        "CONTRACT_COVERAGE": runtime.get("CONTRACT_COVERAGE") if isinstance(runtime, dict) else None,
+        "SOURCE_INTEGRITY_AFTER_TEST": runtime.get("SOURCE_INTEGRITY_AFTER_TEST") if isinstance(runtime, dict) else None,
+        "NOX": runtime.get("NOX") if isinstance(runtime, dict) else None,
+        "VERA": runtime.get("VERA") if isinstance(runtime, dict) else None,
+        "UNRESOLVED_WORK": runtime.get("UNRESOLVED_WORK") if isinstance(runtime, dict) else None,
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": (
+            "YES" if final_event.get("REQUIRED_CHILD_SESSIONS_TERMINAL_AND_CONSUMED") is True else "NO"
+        ),
+        "CASE_B_FRESH_ROOT_3": routing_detail.get("CASE_B_FRESH_ROOT_3") if isinstance(routing_detail, dict) else None,
+        "NOTHING_RUNNING": runtime.get("NOTHING_REMAINED_RUNNING") if isinstance(runtime, dict) else None,
+    }
+    if snapshot_facts != derived_terminal_facts:
+        add("NATIVE_TERMINAL_FACTS_DO_NOT_MATCH_VALIDATION_RECORDS")
+
+    observed_unique_counts = {role: 0 for role in ALL_INVOCABLE_ROLES}
+    for child in children:
+        role = child.get("AGENT")
+        if role in observed_unique_counts:
+            observed_unique_counts[role] += 1
+    if trace.get("CONSULTATION_COUNTS") != observed_call_counts:
+        add("NATIVE_INVOCATION_COUNTS_MISMATCH")
+    if trace.get("UNIQUE_CHILD_SESSION_COUNTS") != observed_unique_counts:
+        add("NATIVE_UNIQUE_CHILD_COUNTS_MISMATCH")
+    if trace.get("CONSULTATION_COUNT_BASIS") != "Counts of distinct completed root subagent invocation results by target role; not unique child sessions and not inferred reasoner consultation events.":
+        add("NATIVE_INVOCATION_COUNT_BASIS_MISMATCH")
+    if trace.get("MAX_SIMULTANEOUS_CHILDREN") is not None:
+        add("NATIVE_UNKNOWN_CONCURRENCY_MUST_REMAIN_NULL")
+
+    negative = trace.get("NEGATIVE_CONTROLS", {})
+    negative_roles = ("orin", "atlas", "argus", "talos", "thales", "helios", "aegis")
+    for role in negative_roles:
+        actual = negative.get(role, {}) if isinstance(negative, dict) else {}
+        if actual != {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0}:
+            add(f"NATIVE_NEGATIVE_CONTROL_MISMATCH:{role}")
+
+    purity = trace.get("ROLE_PURITY", {})
+    expected_tool_classes = {
+        "kael": ["subagent", "read"],
+        "nox": ["shell", "glob", "read"],
+        "veyra": ["glob", "read"],
+        "kovan": ["read", "shell", "patch"],
+        "vera": ["glob", "read"],
+    }
+    if not isinstance(purity, dict) or (
+        purity.get("STATUS") != "PASS"
+        or purity.get("ROOT_AGENT") != "kael"
+        or purity.get("ALL_CHILDREN_DIRECT") is not True
+        or purity.get("NESTED_DELEGATION_OBSERVED") is not False
+        or purity.get("REVIEWER_EDITS_OBSERVED") is not False
+        or purity.get("ROOT_SOURCE_WRITES_OBSERVED") is not False
+        or purity.get("VIOLATIONS") != []
+        or purity.get("TOOL_CLASSES_BY_ROLE") != expected_tool_classes
+    ):
+        add("NATIVE_ROLE_PURITY_EVIDENCE_MISMATCH")
+
+    route = ["kael", *(child.get("AGENT") for child in children)]
+    if trace.get("ACTUAL_ROUTE") != route or trace.get("ACTUAL_ROUTE") != CASE_B3_ACTUAL_ROUTE:
+        add("NATIVE_ACTUAL_ROUTE_DOES_NOT_MATCH_UNIQUE_SESSION_LAUNCH_ORDER")
+    route_reconciliation = trace.get("ROUTE_RECONCILIATION", {})
+    if not isinstance(route_reconciliation, dict) or (
+        route_reconciliation.get("EXPECTED_SEMANTIC_ROUTE") != CASE_B3_EXPECTED_ROUTE
+        or route_reconciliation.get("OBSERVED_UNIQUE_CHILD_SESSION_LAUNCH_ORDER") != CASE_B3_ACTUAL_ROUTE
+        or route_reconciliation.get("CLASSIFICATION") != "JUSTIFIED_PREREQUISITE"
+        or "initial Nox worktree-isolation prerequisite" not in route_reconciliation.get("JUSTIFICATION", "")
+    ):
+        add("NATIVE_ROUTE_DIFFERENCE_NOT_JUSTIFIED")
+
+    event_orders = {event.get("EVENT_ID"): event.get("ORDER") for event in events if isinstance(event, dict)}
+    dependency_edges = trace.get("DEPENDENCY_ORDER")
+    if not isinstance(dependency_edges, list):
+        dependency_edges = []
+    observed_edges = {(edge.get("BEFORE"), edge.get("AFTER")) for edge in dependency_edges if isinstance(edge, dict)}
+    if observed_edges != CASE_B3_DEPENDENCY_EDGES or len(dependency_edges) != len(CASE_B3_DEPENDENCY_EDGES):
+        add("NATIVE_DEPENDENCY_EDGES_MISMATCH")
+    for edge in dependency_edges:
+        if not isinstance(edge, dict):
+            add("NATIVE_DEPENDENCY_EDGE_MALFORMED")
+            continue
+        before = event_orders.get(edge.get("BEFORE"))
+        after = event_orders.get(edge.get("AFTER"))
+        if before is None or after is None or before >= after or not edge.get("RELATION"):
+            add("NATIVE_DEPENDENCY_ORDER_NOT_OBSERVED")
+
+    result = trace.get("RESULT_FIDELITY", {})
+    if not isinstance(result, dict) or (
+        result.get("EXPECTED_RESULT") != "succeeded"
+        or result.get("EXPECTED_RESULT_SOURCE") != "task acceptance context"
+        or result.get("OBSERVED_RESULT") != "succeeded"
+        or result.get("OBSERVED_RESULT_SOURCE") != "native root terminal metadata"
+        or result.get("MATCHES") is not True
+        or result.get("UNKNOWN") is not False
+        or result.get("OBSERVED_TERMINAL_MESSAGE_ID") != CASE_B3_TERMINAL_MESSAGE_ID
+        or result.get("OBSERVED_TERMINAL_FACTS_MATCH") is not True
+    ):
+        add("NATIVE_RESULT_FIDELITY_MISMATCH")
+    completion = trace.get("COMPLETION_GATE", {})
+    required_completion = {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "EXACT_ONCE": None,
+        "QUESTION_BARRIER_SATISFIED": True,
+        "ROOT_COMPLETION_STATEMENT_OBSERVED": True,
+        "REQUIRED_CHILD_SESSIONS_TERMINAL_AND_CONSUMED": True,
+        "SEVEN_DISTINCT_TOOL_CALL_RETURNS_OBSERVED_ONCE": True,
+        "SESSION_LIFETIME_EXACT_ONCE": None,
+        "CONSUMPTION_TIMING": None,
+    }
+    if not isinstance(completion, dict) or any(completion.get(key) != value for key, value in required_completion.items()):
+        add("NATIVE_COMPLETION_GATE_MISMATCH")
+    if (
+        final_event.get("PENDING_CHILD_COUNT") != 0
+        or final_event.get("UNCONSUMED_RESULT_COUNT") != 0
+        or final_event.get("UNKNOWN_EXECUTION_COUNT") != 0
+        or final_event.get("REQUIRED_CHILD_SESSIONS_TERMINAL_AND_CONSUMED") is not True
+    ):
+        add("NATIVE_FINAL_COMPLETION_FACTS_MISMATCH")
+    if trace.get("USER_QUESTION_COUNT") != 0:
+        add("NATIVE_USER_QUESTION_COUNT_MISMATCH")
+
+    gate_facts = trace.get("GATE_FACTS", {})
+    expected_gate_facts = {
+        "EXPLICIT_OPTIMIZATION_INTENT": False,
+        "EXPLICIT_PLANNING_INTENT": False,
+        "COMPLEX_FEATURE": True,
+        "OBVIOUS_FUNCTIONAL_CAUSE": None,
+        "NONTRIVIAL_FUNCTIONAL_CAUSE": None,
+        "SECURITY_BOUNDARY": None,
+        "OPERATIONAL_TOOLING_FAILURE": None,
+        "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": None,
+        "THIRD_PARTY_BUG": None,
+        "FAST_PROFILE_REQUESTED": False,
+        "NORMAL_PROFILE_REQUESTED": None,
+        "MAINTENANCE_ENTRY_EXPLICIT": False,
+    }
+    if gate_facts != expected_gate_facts:
+        add("NATIVE_GATE_FACTS_MISMATCH")
+
+    proxies = trace.get("OPERATIONAL_PROXIES", {})
+    if not isinstance(proxies, dict) or (
+        proxies.get("MAX_SIMULTANEOUS_CHILDREN") is not None
+        or proxies.get("ACTUAL_COUNTED_CONCURRENCY") is not None
+        or proxies.get("WALL_CLOCK_MS") is not None
+        or proxies.get("MEASURED") is not False
+        or proxies.get("EFFICIENCY_CLASSIFICATION") != "ACCEPTABLE"
+    ):
+        add("NATIVE_OPERATIONAL_PROXIES_MISMATCH")
+    if trace.get("NATIVE_CAPTURE_MODEL") != "Invocation-level root subagent call results joined to unique direct child session records; intentionally not the synthetic one-lifecycle-per-session event model.":
+        add("NATIVE_CAPTURE_MODEL_UNDOCUMENTED")
+    if not isinstance(trace.get("NOTES"), str) or not trace.get("NOTES", "").strip():
+        add("NATIVE_NOTES_MISSING")
+    return errors
+
+
+def validate_phase11_b3_reconciliation(
+    baseline: dict[str, Any], cases_doc: dict[str, Any], trace: dict[str, Any]
+) -> list[str]:
+    """Reconcile B3 while preserving prior B1/B2 and guided-report classifications."""
+    errors = validate_case_b_reconciliation(baseline)
+    case_b = next((case for case in cases_doc.get("cases", []) if case.get("id") == "B"), {})
+    errors.extend(validate_native_invocation_capture(trace, case_b))
+    report = baseline.get("phase11_b3_reconciliation")
+    if not isinstance(report, dict):
+        return errors + ["CASE_B3_RECONCILIATION_MISSING"]
+
+    expected_classifications = {
+        "CASE_B_FRESH_ROOT_3": "PASS",
+        "CASE_B_FRESH_ROOT_ACCEPTANCE": "PASS",
+        "ISOLATION": "PASS",
+        "ROUTING": "PASS",
+        "ROLE_PURITY": "PASS",
+        "NEGATIVE_CONTROLS": "PASS",
+        "COMPLETION_OWNERSHIP": "PASS",
+        "RESULT_FIDELITY": "PASS",
+        "EFFICIENCY": "ACCEPTABLE",
+    }
+    if report.get("label") != "PHASE11_CASE_B_FRESH_ROOT_3":
+        errors.append("CASE_B3_LABEL_MISMATCH")
+    if report.get("evidence_artifact") != "tests/phase11-integrated-routing/case-b3.native-trace.json":
+        errors.append("CASE_B3_EVIDENCE_ARTIFACT_LINK_MISMATCH")
+    if report.get("root_session_id") != CASE_B3_ROOT_SESSION_ID or report.get("root_terminal_outcome") != "succeeded":
+        errors.append("CASE_B3_ROOT_RECONCILIATION_MISMATCH")
+    if report.get("root_directory") != CASE_B3_ROOT_DIRECTORY:
+        errors.append("CASE_B3_ROOT_DIRECTORY_MISMATCH")
+    if report.get("classifications") != expected_classifications:
+        errors.append("CASE_B3_CLASSIFICATION_MISMATCH")
+    isolation = report.get("isolation", {})
+    if not isinstance(isolation, dict) or (
+        isolation.get("worktree_isolation") != "PASS"
+        or isolation.get("separate_disposable_copy") is not True
+        or isolation.get("verified_directory") != CASE_B3_ROOT_DIRECTORY
+        or isolation.get("initial_head") != CASE_B3_INITIAL_HEAD
+        or isolation.get("verified_head") != CASE_B3_INITIAL_HEAD
+        or isolation.get("verification_only") is not True
+        or isolation.get("worktree_creation_claimed") is not False
+    ):
+        errors.append("CASE_B3_ISOLATION_RECONCILIATION_MISMATCH")
+    expected_baseline_snapshot = {
+        "source": "OBSERVED_NATIVE_ROOT_TERMINAL_MESSAGE",
+        "root_session_id": CASE_B3_ROOT_SESSION_ID,
+        "message_id": CASE_B3_TERMINAL_MESSAGE_ID,
+        "facts": CASE_B3_TERMINAL_FACTS,
+    }
+    if report.get("observed_terminal_snapshot") != expected_baseline_snapshot:
+        errors.append("CASE_B3_BASELINE_TERMINAL_SNAPSHOT_MISMATCH")
+    if report.get("child_sessions") != [
+        {"role": role, "session_id": session_id, "launch_order": index + 1, "invocation_count": count}
+        for index, ((_, role, session_id), count) in enumerate(zip(CASE_B3_CHILD_SESSIONS, (3, 1, 1, 2)))
+    ]:
+        errors.append("CASE_B3_CHILD_SESSION_RECONCILIATION_MISMATCH")
+    if report.get("phase11_status") != "PARTIAL" or report.get("acceptance_status") != "PASS":
+        errors.append("CASE_B3_PHASE_OR_ACCEPTANCE_STATUS_MISMATCH")
+    if report.get("pending_fresh_root_labels") != CASE_B3_PENDING_LABELS:
+        errors.append("CASE_B3_PENDING_LABELS_MISMATCH")
+    if report.get("runtime_rerun_performed_by_reconciliation") is not False:
+        errors.append("CASE_B3_RECONCILIATION_MUST_NOT_RERUN_CASE")
+    expected_reported_paths = [
+        "tests/phase11-integrated-routing/fixtures/feature/domain.py",
+        "tests/phase11-integrated-routing/fixtures/feature/presentation.py",
+        "tests/phase11-integrated-routing/fixtures/feature/test_scaffold.py",
+    ]
+    expected_runtime_summary = {
+        "python": "3.11.17",
+        "python_installation_source": "uv",
+        "command": CASE_B3_TEST_COMMAND,
+        "result": "PASS",
+        "tests_passed": 13,
+        "contract_coverage": "PASS",
+        "source_integrity_after_test": "PASS",
+        "historical_runtime_exit_code": None,
+        "nox": "PASS",
+        "vera": "ACCEPT",
+        "nothing_remained_running": True,
+        "unresolved_work": "NONE",
+    }
+    if report.get("runtime_validation") != expected_runtime_summary:
+        errors.append("CASE_B3_RUNTIME_VALIDATION_RECONCILIATION_MISMATCH")
+
+    current = baseline.get("live_qualification", {})
+    if not isinstance(current, dict) or (
+        current.get("pending_labels") != CASE_B3_PENDING_LABELS
+        or current.get("fresh_root_native") != "B3_PASS; C,D,E,F,G,H,K_PENDING"
+        or current.get("native_results_claimed") is not True
+    ):
+        errors.append("CURRENT_PHASE11_PENDING_STATE_MISMATCH")
+
+    action_rows = [
+        action for action in cases_doc.get("fresh_root_actions", [])
+        if action.get("case_id") == "B" and action.get("label") == "PHASE11_CASE_B_FRESH_ROOT_3"
+    ]
+    if len(action_rows) != 1 or any(
+        action_rows[0].get(key) != value
+        for key, value in {
+            "status": "PASS",
+            "evidence_class": "FRESH_ROOT_NATIVE",
+            "evidence_artifact": "case-b3.native-trace.json",
+        }.items()
+    ):
+        errors.append("CASE_B3_MATRIX_EVIDENCE_LINK_MISMATCH")
+
+    reconciliation = report.get("same_original_session_reconciliation", {})
+    expected_sessions = {
+        "kovan": {
+            "session_id": CASE_B3_CHILD_SESSIONS[2][2],
+            "invocation_count": 1,
+            "implementation_result": "PARTIAL_RUNTIME_UNAVAILABLE",
+            "final_session_outcome": "succeeded",
+            "reported_changed_paths": expected_reported_paths,
+            "same_original_session": True,
+            "blind_retry": False,
+        },
+        "vera": {
+            "session_id": CASE_B3_CHILD_SESSIONS[3][2],
+            "invocation_count": 2,
+            "review_result": "SUCCESS",
+            "followup_result": "SUCCESS",
+            "tests_verified_by_review": False,
+            "same_original_session": True,
+            "review_findings": [],
+            "followup_edits": 0,
+        },
+        "nox": {
+            "session_id": CASE_B3_CHILD_SESSIONS[0][2],
+            "invocation_count": 3,
+            "initial_isolation": "PASS",
+            "verified_directory": CASE_B3_ROOT_DIRECTORY,
+            "verified_head": CASE_B3_INITIAL_HEAD,
+            "initial_validation": "BLOCKED",
+            "final_validation": "PASS",
+            "same_original_session": True,
+            "tests_passed": 13,
+        },
+    }
+    if reconciliation != expected_sessions:
+        errors.append("CASE_B3_SAME_SESSION_RECONCILIATION_MISMATCH")
+
+    # The earlier recovery observations remain guided/user-reported, not native B3 evidence.
+    recovered = baseline.get("recovered_user_observations", {}).get("case_observations", {})
+    expected_recovered = {
+        "A": ("PASS", "GUIDED_CURRENT_SESSION"),
+        "I": ("PARTIAL", "GUIDED_CURRENT_SESSION"),
+        "J": ("PASS", "GUIDED_CURRENT_SESSION"),
+        "L_negative_automatic_aegis_control": ("PASS", None),
+    }
+    for case_id, (status, mode) in expected_recovered.items():
+        observation = recovered.get(case_id, {})
+        if observation.get("reported_status") != status or observation.get("reported_mode") != mode:
+            errors.append(f"RECOVERED_HISTORY_PROMOTED_OR_CHANGED:{case_id}")
+        if observation.get("native_trace_in_scoped_corpus") is not False:
+            errors.append(f"RECOVERED_HISTORY_NATIVE_TRACE_OVERCLAIM:{case_id}")
+    return errors
+
+
 def main() -> int:
     failures, documents = validate_corpus()
     static_failures = run_static_baseline_checks()
-    reconciliation_failures = validate_case_b_reconciliation(load_json(HERE / "baseline.json"))
+    baseline = load_json(HERE / "baseline.json")
+    native_b3 = load_json(HERE / "case-b3.native-trace.json")
+    reconciliation_failures = validate_phase11_b3_reconciliation(
+        baseline, documents["cases"], native_b3
+    )
     for label in ("ARGUS_GATE_MARKER", "TALOS_GATE_MARKER", "ATLAS_GATE_MARKER", "HELIOS_GATE_MARKER", "THALES_GATE_MARKER", "ROOT_OWNER_MARKER", "NO_NESTED_CHILD_MARKER", "CORE_CHILD_CEILING_MARKER"):
         if label in static_failures:
             print(f"STATIC_{label}: FAIL")
@@ -1059,7 +1666,9 @@ def main() -> int:
     for trace in documents["traces"]["traces"]:
         if not any(failure.startswith(f"{trace.get('TRACE_ID')}: ") for failure in failures):
             print(f"{trace.get('TRACE_ID')}: PASS ({trace.get('EVIDENCE_CLASS')})")
-    pending_fresh_root_cases = {"B", "C", "D", "E", "F", "G", "H", "K"}
+    if not reconciliation_failures:
+        print("B3-NATIVE: PASS (FRESH_ROOT_NATIVE; invocation-level capture; not inserted into synthetic traces)")
+    pending_fresh_root_cases = {"C", "D", "E", "F", "G", "H", "K"}
     pending_labels: list[str] = []
     for action in documents["cases"].get("fresh_root_actions", []):
         case_id = action.get("case_id")
@@ -1077,9 +1686,9 @@ def main() -> int:
             print(f"FAIL: STATIC_{label}")
         print("PHASE11_QUALIFICATION: FAIL (bounded policy marker check)")
         return 1
-    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts and reconciled report record are internally valid; report data is not reconstructed native event evidence)")
-    print("MISSING_LIVE_CASES: " + ", ".join(pending_labels) + "; A/I/J/L recovered reports remain reference-only, with no native result inferred from synthetic traces.")
-    print("PHASE11_QUALIFICATION: PARTIAL (artifacts PASS; Case B acceptance awaits isolated B3, and other listed fresh-root cases remain pending)")
+    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, isolated B3 native invocation capture, and historical reconciliations are internally valid; validation does not authenticate source exports)")
+    print("MISSING_LIVE_CASES: " + ", ".join(pending_labels) + "; A/I/J/L recovered reports remain guided/history only, with no native result inferred from synthetic traces.")
+    print("PHASE11_QUALIFICATION: PARTIAL (B3 accepted; C/D/E/F/G/H/K fresh-root cases remain pending)")
     return 0
 
 

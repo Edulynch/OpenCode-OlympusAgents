@@ -1,0 +1,565 @@
+{
+  "TRACE_ID": "B3-NATIVE",
+  "SCENARIO": "default",
+  "CASE_ID": "B",
+  "REQUEST_CLASS": "COMPLEX_FEATURE",
+  "EVIDENCE_CLASS": "FRESH_ROOT_NATIVE",
+  "ROOT_SESSION_ID": "ses_efce702a8ffeKcoRaBYMFH9lxa",
+  "ROOT_DIRECTORY": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-b3",
+  "ROOT_AGENT": "kael",
+  "ROOT_PARENT_SESSION_ID": null,
+  "ROOT_TITLE": "Case B cart member-discount implementation and verification",
+  "ROOT_TERMINAL_OUTCOME": "succeeded",
+  "ROOT_TERMINAL_MESSAGE_ID": "msg_1048ed1e5001AE9cC6bTYFgV3z",
+  "ROOT_ISOLATION": {
+    "STATUS": "PASS",
+    "SEPARATE_DISPOSABLE_WORKTREE": true,
+    "INITIAL_NOX_SESSION_ID": "ses_efce6a350ffeLULhF1Hf7l39qJ",
+    "VERIFIED_DIRECTORY": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-b3",
+    "INITIAL_HEAD": "ded1f69cbeadf5d21cb9b6b31d5df10123b57990",
+    "VERIFIED_HEAD": "ded1f69cbeadf5d21cb9b6b31d5df10123b57990",
+    "VERIFICATION_ONLY": true,
+    "WORKTREE_CREATION_CLAIMED": false
+  },
+  "RUNTIME_VALIDATION": {
+    "PYTHON_VERSION": "3.11.17",
+    "PYTHON_INSTALLATION_SOURCE": "uv",
+    "COMMAND": "uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing/fixtures/feature -p \"test_*.py\" -v",
+    "RESULT": "PASS",
+    "TESTS_PASSED": 13,
+    "CONTRACT_COVERAGE": "PASS",
+    "SOURCE_INTEGRITY_AFTER_TEST": "PASS",
+    "NOX": "PASS",
+    "VERA": "ACCEPT",
+    "UNRESOLVED_WORK": "NONE",
+    "NOTHING_REMAINED_RUNNING": true,
+    "HISTORICAL_RUNTIME_EXIT_CODE": null
+  },
+  "SESSION_RECONCILIATION": {
+    "kovan": {
+      "NATIVE_SESSION_ID": "ses_efce3ffadffekeRXxYxKkSWsxs",
+      "INVOCATION_COUNT": 1,
+      "IMPLEMENTATION_RETURN": "PARTIAL_RUNTIME_UNAVAILABLE",
+      "FINAL_SESSION_OUTCOME": "succeeded",
+      "REPORTED_CHANGED_PATHS": [
+        "tests/phase11-integrated-routing/fixtures/feature/domain.py",
+        "tests/phase11-integrated-routing/fixtures/feature/presentation.py",
+        "tests/phase11-integrated-routing/fixtures/feature/test_scaffold.py"
+      ],
+      "SAME_ORIGINAL_SESSION": true,
+      "BLIND_RETRY": false
+    },
+    "vera": {
+      "NATIVE_SESSION_ID": "ses_efcde45cdffe6X5eJbStlshoYu",
+      "INVOCATION_COUNT": 2,
+      "REVIEW_RETURN": "SUCCESS",
+      "REVIEW_FINDINGS": [],
+      "TESTS_VERIFIED_BY_REVIEW": false,
+      "FOLLOWUP_RETURN": "SUCCESS",
+      "FOLLOWUP_SCOPE": "source review",
+      "FOLLOWUP_EDITS": 0,
+      "SAME_ORIGINAL_SESSION": true
+    },
+    "nox": {
+      "NATIVE_SESSION_ID": "ses_efce6a350ffeLULhF1Hf7l39qJ",
+      "INVOCATION_COUNT": 3,
+      "INITIAL_ISOLATION": "PASS",
+      "VERIFIED_DIRECTORY": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-b3",
+      "VERIFIED_HEAD": "ded1f69cbeadf5d21cb9b6b31d5df10123b57990",
+      "INITIAL_VALIDATION": "BLOCKED",
+      "FINAL_VALIDATION": "PASS",
+      "TESTS_PASSED": 13,
+      "SAME_ORIGINAL_SESSION": true
+    }
+  },
+  "ROUTE_MODE": "KAEL_ROOT",
+  "EXPECTED_ROUTE": [
+    "kael",
+    "veyra",
+    "kovan",
+    "nox",
+    "vera"
+  ],
+  "ACTUAL_ROUTE": [
+    "kael",
+    "nox",
+    "veyra",
+    "kovan",
+    "vera"
+  ],
+  "ROUTE_RECONCILIATION": {
+    "EXPECTED_SEMANTIC_ROUTE": [
+      "kael",
+      "veyra",
+      "kovan",
+      "nox",
+      "vera"
+    ],
+    "OBSERVED_UNIQUE_CHILD_SESSION_LAUNCH_ORDER": [
+      "kael",
+      "nox",
+      "veyra",
+      "kovan",
+      "vera"
+    ],
+    "CLASSIFICATION": "JUSTIFIED_PREREQUISITE",
+    "JUSTIFICATION": "The initial Nox worktree-isolation prerequisite ran before the feature workflow. Veyra contract -> Kovan implementation -> same Nox validation -> Vera review remains the semantic feature workflow; Nox validation later resumed in the same session."
+  },
+  "CHILD_SESSIONS": [
+    {
+      "TRACE_REF": "B3-NOX",
+      "NATIVE_SESSION_ID": "ses_efce6a350ffeLULhF1Hf7l39qJ",
+      "AGENT": "nox",
+      "PARENT_AGENT": "kael",
+      "PARENT_SESSION_ID": "ses_efce702a8ffeKcoRaBYMFH9lxa",
+      "LAUNCH_ORDER": 1,
+      "INVOCATION_COUNT": 3,
+      "EXECUTION_STATE": "SUCCEEDED",
+      "FINAL_OUTCOME": "succeeded",
+      "RESULT_ID": null
+    },
+    {
+      "TRACE_REF": "B3-VEYRA",
+      "NATIVE_SESSION_ID": "ses_efce5cd8bffexU0SIHi67Y39zP",
+      "AGENT": "veyra",
+      "PARENT_AGENT": "kael",
+      "PARENT_SESSION_ID": "ses_efce702a8ffeKcoRaBYMFH9lxa",
+      "LAUNCH_ORDER": 2,
+      "INVOCATION_COUNT": 1,
+      "EXECUTION_STATE": "SUCCEEDED",
+      "FINAL_OUTCOME": "succeeded",
+      "RESULT_ID": null
+    },
+    {
+      "TRACE_REF": "B3-KOVAN",
+      "NATIVE_SESSION_ID": "ses_efce3ffadffekeRXxYxKkSWsxs",
+      "AGENT": "kovan",
+      "PARENT_AGENT": "kael",
+      "PARENT_SESSION_ID": "ses_efce702a8ffeKcoRaBYMFH9lxa",
+      "LAUNCH_ORDER": 3,
+      "INVOCATION_COUNT": 1,
+      "EXECUTION_STATE": "SUCCEEDED",
+      "FINAL_OUTCOME": "succeeded",
+      "RESULT_ID": null
+    },
+    {
+      "TRACE_REF": "B3-VERA",
+      "NATIVE_SESSION_ID": "ses_efcde45cdffe6X5eJbStlshoYu",
+      "AGENT": "vera",
+      "PARENT_AGENT": "kael",
+      "PARENT_SESSION_ID": "ses_efce702a8ffeKcoRaBYMFH9lxa",
+      "LAUNCH_ORDER": 4,
+      "INVOCATION_COUNT": 2,
+      "EXECUTION_STATE": "SUCCEEDED",
+      "FINAL_OUTCOME": "succeeded",
+      "RESULT_ID": null
+    }
+  ],
+  "CONSULTATION_COUNTS": {
+    "kael": 0,
+    "veyra": 1,
+    "orin": 0,
+    "kovan": 1,
+    "nox": 3,
+    "vera": 2,
+    "atlas": 0,
+    "argus": 0,
+    "talos": 0,
+    "thales": 0,
+    "helios": 0,
+    "aegis": 0
+  },
+  "CONSULTATION_COUNT_BASIS": "Counts of distinct completed root subagent invocation results by target role; not unique child sessions and not inferred reasoner consultation events.",
+  "UNIQUE_CHILD_SESSION_COUNTS": {
+    "kael": 0,
+    "veyra": 1,
+    "orin": 0,
+    "kovan": 1,
+    "nox": 1,
+    "vera": 1,
+    "atlas": 0,
+    "argus": 0,
+    "talos": 0,
+    "thales": 0,
+    "helios": 0,
+    "aegis": 0
+  },
+  "MAX_SIMULTANEOUS_CHILDREN": null,
+  "NEGATIVE_CONTROLS": {
+    "orin": {
+      "INVOCATIONS": 0,
+      "UNIQUE_CHILD_SESSIONS": 0
+    },
+    "atlas": {
+      "INVOCATIONS": 0,
+      "UNIQUE_CHILD_SESSIONS": 0
+    },
+    "argus": {
+      "INVOCATIONS": 0,
+      "UNIQUE_CHILD_SESSIONS": 0
+    },
+    "talos": {
+      "INVOCATIONS": 0,
+      "UNIQUE_CHILD_SESSIONS": 0
+    },
+    "thales": {
+      "INVOCATIONS": 0,
+      "UNIQUE_CHILD_SESSIONS": 0
+    },
+    "helios": {
+      "INVOCATIONS": 0,
+      "UNIQUE_CHILD_SESSIONS": 0
+    },
+    "aegis": {
+      "INVOCATIONS": 0,
+      "UNIQUE_CHILD_SESSIONS": 0
+    },
+    "BASIS": "No invocation or unique child activation for these roles was observed in the native exports/history."
+  },
+  "ROLE_PURITY": {
+    "STATUS": "PASS",
+    "ROOT_AGENT": "kael",
+    "ALL_CHILDREN_DIRECT": true,
+    "NESTED_DELEGATION_OBSERVED": false,
+    "REVIEWER_EDITS_OBSERVED": false,
+    "ROOT_SOURCE_WRITES_OBSERVED": false,
+    "VIOLATIONS": [],
+    "TOOL_CLASSES_BY_ROLE": {
+      "kael": [
+        "subagent",
+        "read"
+      ],
+      "nox": [
+        "shell",
+        "glob",
+        "read"
+      ],
+      "veyra": [
+        "glob",
+        "read"
+      ],
+      "kovan": [
+        "read",
+        "shell",
+        "patch"
+      ],
+      "vera": [
+        "glob",
+        "read"
+      ]
+    }
+  },
+  "DEPENDENCY_ORDER": [
+    {
+      "BEFORE": "B3-CALL-1",
+      "AFTER": "B3-CALL-2",
+      "RELATION": "initial isolation prerequisite before Veyra contract"
+    },
+    {
+      "BEFORE": "B3-CALL-2",
+      "AFTER": "B3-CALL-3",
+      "RELATION": "contract before implementation"
+    },
+    {
+      "BEFORE": "B3-CALL-3",
+      "AFTER": "B3-CALL-4",
+      "RELATION": "implementation before initial Nox validation attempt"
+    },
+    {
+      "BEFORE": "B3-CALL-3",
+      "AFTER": "B3-CALL-5",
+      "RELATION": "implementation before Vera review"
+    },
+    {
+      "BEFORE": "B3-CALL-5",
+      "AFTER": "B3-CALL-6",
+      "RELATION": "Vera follow-up in the same original session"
+    },
+    {
+      "BEFORE": "B3-CALL-4",
+      "AFTER": "B3-CALL-7",
+      "RELATION": "blocked Nox validation precedes successful same-session validation"
+    },
+    {
+      "BEFORE": "B3-CALL-3",
+      "AFTER": "B3-CALL-7",
+      "RELATION": "implementation before final Nox validation"
+    }
+  ],
+  "RESULT_FIDELITY": {
+    "EXPECTED_RESULT": "succeeded",
+    "EXPECTED_RESULT_SOURCE": "task acceptance context",
+    "OBSERVED_RESULT": "succeeded",
+    "OBSERVED_RESULT_SOURCE": "native root terminal metadata",
+    "MATCHES": true,
+    "UNKNOWN": false,
+    "OBSERVED_TERMINAL_MESSAGE_ID": "msg_1048ed1e5001AE9cC6bTYFgV3z",
+    "OBSERVED_TERMINAL_FACTS_MATCH": true,
+    "COMPARISON_BASIS": "Expected terminal class from task context is distinguished from the exported root outcome and observed terminal snapshot."
+  },
+  "COMPLETION_GATE": {
+    "PENDING_CHILD_COUNT": 0,
+    "UNCONSUMED_RESULT_COUNT": 0,
+    "UNKNOWN_EXECUTION_COUNT": 0,
+    "EXACT_ONCE": null,
+    "QUESTION_BARRIER_SATISFIED": true,
+    "ROOT_COMPLETION_STATEMENT_OBSERVED": true,
+    "REQUIRED_CHILD_SESSIONS_TERMINAL_AND_CONSUMED": true,
+    "SEVEN_DISTINCT_TOOL_CALL_RETURNS_OBSERVED_ONCE": true,
+    "SESSION_LIFETIME_EXACT_ONCE": null,
+    "CONSUMPTION_TIMING": null,
+    "CONSUMPTION_SCOPE_NOTE": "The final root statement reports all required unique child sessions terminal and consumed. Each of the seven distinct tool-call returns is present once in the evidence. Per-invocation result consumption timestamps and session-lifetime exact-once are not independently established."
+  },
+  "USER_QUESTION_COUNT": 0,
+  "USER_QUESTION_COUNT_BASIS": "No question or ask-user calls in the complete root history.",
+  "FINAL_OUTCOME": "succeeded",
+  "ROUTING_RESULT": "CASE_B_FRESH_ROOT_3_PASS; actual unique-session launch order includes the justified initial Nox isolation prerequisite.",
+  "NOTES": "Native invocation-level capture, not a synthetic lifecycle trace. Root ses_efce702a8ffeKcoRaBYMFH9lxa (Kael, parent null) succeeded. Nox isolation passed at ded1f69cbeadf5d21cb9b6b31d5df10123b57990. Veyra supplied the complete calculation/presentation contract without ambiguity. Kovan returned PARTIAL because the runtime was unavailable; the same Nox session first found Python aliases unavailable and zero tests ran, then the same Nox session used installed Python 3.11.17 and passed 13 tests. Vera's review succeeded with no material defects and tests unverified; her source-review follow-up was in the same original session with no edits. Final validation reported contract coverage, source integrity, Nox PASS, Vera ACCEPT, no unresolved work, and all required children terminal and consumed. The earlier historical runtime exit code remains unknown. No timestamps or result IDs are inferred.",
+  "EVENTS": [
+    {
+      "ORDER": 1,
+      "ORDER_BASIS": "observed",
+      "EVENT_ID": "B3-CALL-1",
+      "KIND": "ROOT_SUBAGENT_RESULT_RETURNED",
+      "ACTOR_ROLE": "kael",
+      "CHILD_REF": "B3-NOX",
+      "SESSION_REF": "B3-NOX",
+      "NATIVE_SESSION_ID": "ses_efce6a350ffeLULhF1Hf7l39qJ",
+      "AGENT": "nox",
+      "TOOL": "subagent",
+      "TOOL_CALL_ID": "call_qwMZACNrVqLA8tmmFCM1eB3W",
+      "OBSERVED_MESSAGE_ID": "msg_10318ff58001ub8abxr5egfLqd",
+      "RESULT_ID": null,
+      "RETURN_STATUS": "SUCCESS",
+      "RETURN_SUMMARY": "Verified worktree isolation directory and initial HEAD; no worktree-creation claim.",
+      "VERIFIED_DIRECTORY": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-b3",
+      "VERIFIED_HEAD": "ded1f69cbeadf5d21cb9b6b31d5df10123b57990",
+      "VERIFICATION_SCOPE": "DIRECTORY_AND_HEAD",
+      "WORKTREE_CREATION_CLAIMED": false,
+      "NEXT_ROOT_ACTION": "Launch Veyra."
+    },
+    {
+      "ORDER": 2,
+      "ORDER_BASIS": "observed",
+      "EVENT_ID": "B3-CALL-2",
+      "KIND": "ROOT_SUBAGENT_RESULT_RETURNED",
+      "ACTOR_ROLE": "kael",
+      "CHILD_REF": "B3-VEYRA",
+      "SESSION_REF": "B3-VEYRA",
+      "NATIVE_SESSION_ID": "ses_efce5cd8bffexU0SIHi67Y39zP",
+      "AGENT": "veyra",
+      "TOOL": "subagent",
+      "TOOL_CALL_ID": "call_d4KKM4JToyp1bXQ1A3JppG0S",
+      "OBSERVED_MESSAGE_ID": "msg_10319ecd7001TayRkYYC0CnjsM",
+      "RESULT_ID": null,
+      "RETURN_STATUS": "SUCCESS",
+      "RETURN_SUMMARY": "Complete calculation and presentation contract; no material ambiguity.",
+      "NEXT_ROOT_ACTION": "Parent read call_fzgB3ONDTDDvzQyimfQr5r3O, then launch Kovan."
+    },
+    {
+      "ORDER": 3,
+      "ORDER_BASIS": "observed",
+      "EVENT_ID": "B3-CALL-3",
+      "KIND": "ROOT_SUBAGENT_RESULT_RETURNED",
+      "ACTOR_ROLE": "kael",
+      "CHILD_REF": "B3-KOVAN",
+      "SESSION_REF": "B3-KOVAN",
+      "NATIVE_SESSION_ID": "ses_efce3ffadffekeRXxYxKkSWsxs",
+      "AGENT": "kovan",
+      "TOOL": "subagent",
+      "TOOL_CALL_ID": "call_Rpz7XK5m7owERqLA8JN6740C",
+      "OBSERVED_MESSAGE_ID": "msg_1031b866a001mmZqvYl8apLVzl",
+      "RESULT_ID": null,
+      "RETURN_STATUS": "PARTIAL",
+      "RETURN_SUMMARY": "Implementation completed in the isolated fixture; runtime unavailable at that point.",
+      "REPORTED_CHANGED_PATHS": [
+        "tests/phase11-integrated-routing/fixtures/feature/domain.py",
+        "tests/phase11-integrated-routing/fixtures/feature/presentation.py",
+        "tests/phase11-integrated-routing/fixtures/feature/test_scaffold.py"
+      ],
+      "NEXT_ROOT_ACTION": "Parent read call_la78xDqx5FHLN1ixyL47W40T, then invoke Nox validation."
+    },
+    {
+      "ORDER": 4,
+      "ORDER_BASIS": "observed",
+      "EVENT_ID": "B3-CALL-4",
+      "KIND": "ROOT_SUBAGENT_RESULT_RETURNED",
+      "ACTOR_ROLE": "kael",
+      "CHILD_REF": "B3-NOX",
+      "SESSION_REF": "B3-NOX",
+      "NATIVE_SESSION_ID": "ses_efce6a350ffeLULhF1Hf7l39qJ",
+      "AGENT": "nox",
+      "TOOL": "subagent",
+      "TOOL_CALL_ID": "call_C62D1Hr0MpWpEiuKaNaCLssa",
+      "OBSERVED_MESSAGE_ID": "msg_1031f1121001ieqq1bWvW7evXn",
+      "RESULT_ID": null,
+      "RETURN_STATUS": "BLOCKED",
+      "RETURN_SUMMARY": "Python aliases were unavailable; zero tests ran.",
+      "HISTORICAL_EXIT_CODE": null,
+      "NEXT_ROOT_ACTION": "Launch Vera review."
+    },
+    {
+      "ORDER": 5,
+      "ORDER_BASIS": "observed",
+      "EVENT_ID": "B3-CALL-5",
+      "KIND": "ROOT_SUBAGENT_RESULT_RETURNED",
+      "ACTOR_ROLE": "kael",
+      "CHILD_REF": "B3-VERA",
+      "SESSION_REF": "B3-VERA",
+      "NATIVE_SESSION_ID": "ses_efcde45cdffe6X5eJbStlshoYu",
+      "AGENT": "vera",
+      "TOOL": "subagent",
+      "TOOL_CALL_ID": "call_xaodFghlKSlXFOPDEgeFdK1J",
+      "OBSERVED_MESSAGE_ID": "msg_103215e85001aLOM4b6TTSc3MA",
+      "RESULT_ID": null,
+      "RETURN_STATUS": "SUCCESS",
+      "RETURN_SUMMARY": "Review succeeded with no material defects; tests unverified.",
+      "NEXT_ROOT_ACTION": "Resume same original Vera session for a source-review follow-up."
+    },
+    {
+      "ORDER": 6,
+      "ORDER_BASIS": "observed",
+      "EVENT_ID": "B3-CALL-6",
+      "KIND": "ROOT_SUBAGENT_RESULT_RETURNED",
+      "ACTOR_ROLE": "kael",
+      "CHILD_REF": "B3-VERA",
+      "SESSION_REF": "B3-VERA",
+      "NATIVE_SESSION_ID": "ses_efcde45cdffe6X5eJbStlshoYu",
+      "AGENT": "vera",
+      "TOOL": "subagent",
+      "TOOL_CALL_ID": "call_E8YeCiitk1nrTb1c88EJqpTE",
+      "OBSERVED_MESSAGE_ID": "msg_10322808c0015hGifrTywcYcvB",
+      "RESULT_ID": null,
+      "RETURN_STATUS": "SUCCESS",
+      "RETURN_SUMMARY": "Same-session source review succeeded with no edits.",
+      "NEXT_ROOT_ACTION": "Root emitted an initial PARTIAL runtime-blocked summary; no Vera replacement session was created."
+    },
+    {
+      "ORDER": 7,
+      "ORDER_BASIS": "observed",
+      "EVENT_ID": "B3-CALL-7",
+      "KIND": "ROOT_SUBAGENT_RESULT_RETURNED",
+      "ACTOR_ROLE": "kael",
+      "CHILD_REF": "B3-NOX",
+      "SESSION_REF": "B3-NOX",
+      "NATIVE_SESSION_ID": "ses_efce6a350ffeLULhF1Hf7l39qJ",
+      "AGENT": "nox",
+      "TOOL": "subagent",
+      "TOOL_CALL_ID": "call_P7Muj3TbvUxytRrajoipAwpd",
+      "OBSERVED_MESSAGE_ID": "msg_10489ca38001WfLqB678rW4Xjl",
+      "RESULT_ID": null,
+      "RETURN_STATUS": "SUCCESS",
+      "RETURN_SUMMARY": "uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing/fixtures/feature -p \"test_*.py\" -v; Python 3.11.17; 13 passed; contract coverage and source integrity passed.",
+      "NEXT_ROOT_ACTION": "Root emitted final succeeded outcome in msg_1048ed1e5001AE9cC6bTYFgV3z."
+    },
+    {
+      "ORDER": 8,
+      "ORDER_BASIS": "observed",
+      "EVENT_ID": "B3-ROOT-FINAL",
+      "KIND": "ROOT_FINAL_COMPLETION",
+      "ACTOR_ROLE": "kael",
+      "ROOT_SESSION_ID": "ses_efce702a8ffeKcoRaBYMFH9lxa",
+      "MESSAGE_ID": "msg_1048ed1e5001AE9cC6bTYFgV3z",
+      "RESULT_ID": null,
+      "VALUE": "succeeded",
+      "PENDING_CHILD_COUNT": 0,
+      "UNCONSUMED_RESULT_COUNT": 0,
+      "UNKNOWN_EXECUTION_COUNT": 0,
+      "REQUIRED_CHILD_SESSIONS_TERMINAL_AND_CONSUMED": true,
+      "TERMINAL_FACTS": {
+        "WORKTREE_ISOLATION": "PASS",
+        "PYTHON_RUNTIME": "Python 3.11.17 installed through uv",
+        "TEST_COMMAND": "uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing/fixtures/feature -p \"test_*.py\" -v",
+        "TEST_RESULT": "PASS",
+        "TEST_COUNT": 13,
+        "CONTRACT_COVERAGE": "PASS",
+        "SOURCE_INTEGRITY_AFTER_TEST": "PASS",
+        "NOX": "PASS",
+        "VERA": "ACCEPT",
+        "UNRESOLVED_WORK": "NONE",
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+        "CASE_B_FRESH_ROOT_3": "PASS",
+        "NOTHING_RUNNING": true
+      }
+    }
+  ],
+  "OBSERVED_TERMINAL_SNAPSHOT": {
+    "OBSERVATION": "OBSERVED_NATIVE_ROOT_TERMINAL_MESSAGE",
+    "ROOT_SESSION_ID": "ses_efce702a8ffeKcoRaBYMFH9lxa",
+    "MESSAGE_ID": "msg_1048ed1e5001AE9cC6bTYFgV3z",
+    "FACTS": {
+      "WORKTREE_ISOLATION": "PASS",
+      "PYTHON_RUNTIME": "Python 3.11.17 installed through uv",
+      "TEST_COMMAND": "uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing/fixtures/feature -p \"test_*.py\" -v",
+      "TEST_RESULT": "PASS",
+      "TEST_COUNT": 13,
+      "CONTRACT_COVERAGE": "PASS",
+      "SOURCE_INTEGRITY_AFTER_TEST": "PASS",
+      "NOX": "PASS",
+      "VERA": "ACCEPT",
+      "UNRESOLVED_WORK": "NONE",
+      "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+      "CASE_B_FRESH_ROOT_3": "PASS",
+      "NOTHING_RUNNING": true
+    }
+  },
+  "DEPENDENCY_ORDER_BASIS": "Observed ordering of root invocation results; order integers are ordinal labels, not timestamps. No result-consumption event is reconstructed.",
+  "USER_QUESTION_COUNT_BASIS_DETAIL": "Full root history contained no question or ask-user call.",
+  "ROUTING_RESULT_DETAIL": {
+    "CASE_B_FRESH_ROOT_3": "PASS",
+    "ISOLATION": "PASS",
+    "ROUTING": "PASS",
+    "ROLE_PURITY": "PASS",
+    "NEGATIVE_CONTROLS": "PASS",
+    "COMPLETION_OWNERSHIP": "PASS",
+    "RESULT_FIDELITY": "PASS",
+    "EFFICIENCY": "ACCEPTABLE"
+  },
+  "GATE_FACTS": {
+    "EXPLICIT_OPTIMIZATION_INTENT": false,
+    "EXPLICIT_PLANNING_INTENT": false,
+    "COMPLEX_FEATURE": true,
+    "OBVIOUS_FUNCTIONAL_CAUSE": null,
+    "NONTRIVIAL_FUNCTIONAL_CAUSE": null,
+    "SECURITY_BOUNDARY": null,
+    "OPERATIONAL_TOOLING_FAILURE": null,
+    "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": null,
+    "THIRD_PARTY_BUG": null,
+    "FAST_PROFILE_REQUESTED": false,
+    "NORMAL_PROFILE_REQUESTED": null,
+    "MAINTENANCE_ENTRY_EXPLICIT": false
+  },
+  "OPERATIONAL_PROXIES": {
+    "PROFILE": null,
+    "USEFUL_INDEPENDENT_WRITER_COUNT": null,
+    "ACTUAL_COUNTED_CONCURRENCY": null,
+    "RETRY_COUNT": null,
+    "WRITER_PATHS_UNIQUE": null,
+    "APPROVAL_REQUIRED": null,
+    "APPROVAL_GRANTED": null,
+    "IMPLEMENTATION_AFTER_APPROVAL": null,
+    "WALL_CLOCK_MS": null,
+    "MEASURED": false,
+    "EFFICIENCY_CLASSIFICATION": "ACCEPTABLE",
+    "EFFICIENCY_CLASSIFICATION_BASIS": "Qualification judgment; not a measured latency or throughput result."
+  },
+  "NATIVE_CAPTURE_MODEL": "Invocation-level root subagent call results joined to unique direct child session records; intentionally not the synthetic one-lifecycle-per-session event model.",
+  "EVIDENCE_PROVENANCE": {
+    "CLASS": "FRESH_ROOT_NATIVE",
+    "SOURCE": "Verified OpenCode API exports/history and CLI output reconciled by Nox and supplied as task evidence; this corpus writer did not re-export or rerun the case.",
+    "NATIVE_ROOT_SESSION_ID": "ses_efce702a8ffeKcoRaBYMFH9lxa",
+    "NATIVE_ROOT_DIRECTORY": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-b3",
+    "NATIVE_CHILD_SESSION_IDS": [
+      "ses_efce6a350ffeLULhF1Hf7l39qJ",
+      "ses_efce5cd8bffexU0SIHi67Y39zP",
+      "ses_efce3ffadffekeRXxYxKkSWsxs",
+      "ses_efcde45cdffe6X5eJbStlshoYu"
+    ],
+    "ORDER_BASIS": "observed",
+    "OBSERVED_AT": null,
+    "USER_REPORTED": false,
+    "FRESH_ROOT_CONFIRMED": true,
+    "NATIVE_PERMISSION_UI": "NOT_OBSERVABLE",
+    "NATIVE_PERMISSION_DECISION": "NOT_OBSERVABLE"
+  }
+}

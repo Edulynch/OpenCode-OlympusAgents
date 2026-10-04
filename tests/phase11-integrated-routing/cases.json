@@ -276,7 +276,12 @@
     {
       "case_id": "E",
       "scenario": "default",
-      "label": "PHASE11_CASE_E_FRESH_ROOT"
+      "label": "PHASE11_CASE_E_FRESH_ROOT",
+      "status": "NATIVE_EXECUTED_ROUTING_FAIL",
+      "evidence_class": "FRESH_ROOT_NATIVE",
+      "evidence_artifact": "case-e.native-trace.json",
+      "acceptance_status": "FAIL",
+      "pending_resolution": true
     },
     {
       "case_id": "F",

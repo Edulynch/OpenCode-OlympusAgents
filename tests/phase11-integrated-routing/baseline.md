@@ -381,3 +381,60 @@ worktree/session, call native APIs, replay the case, or repair a fixture.
   passed with 29 managed outputs unchanged; and `git diff --check` passed. These
   are corpus/validator checks, not a Case D replay or native-export
   authentication.
+
+## Case E native reconciliation — `P11-E-RECON-RECORD`
+
+The original completed Case E root was reconciled through public read-only
+OpenCode V2 API GETs. Its native export and metadata identify Kael session
+`ses_ef85bfb20ffeJDAs5WvP6mQNiP`, title “Authorization defect classification
+for account deletion,” directory
+`C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-e`, and execution
+outcome `succeeded`. Parent identity was not exposed. The `sanitize=false`
+export was captured in memory only; the checked-in
+`case-e.root-session.export.json` is a projection retaining the original user
+prompt and visible assistant terminal text, message IDs/times and outcome. One
+reasoning block was removed, no secret values required redaction, and the raw
+export was not persisted. The root export had zero observable tool-call records.
+The separate direct-child query returned an empty list and no next-page cursor;
+no specialist activation is inferred or invented. No private runtime, Case E
+worktree filesystem, or other session was accessed, and no case rerun/replay was
+performed.
+
+The original prompt identifies an established hypothetical authorization
+failure: a `MEMBER` can delete another user's account despite the `ADMIN`-only
+contract, requests the smallest sufficient security-specific route, and
+explicitly forbids exploit execution, destructive action, edits, or broad audit.
+The terminal answer classifies `CONFIRMED_SECURITY_DEFECT`, identifies the
+server-enforced ADMIN-only boundary, states the invariant that non-ADMIN access
+is denied without deletion side effects, and proposes synthetic identities
+with mocked deletion operations. It reports `EXPLOIT_ATTEMPTED: NO`,
+`FILES_CHANGED: NONE`, `UNRESOLVED_WORK: NONE`, required children terminal and
+consumed, and no work remaining. These behavioral and safety facts are distinct
+from routing acceptance.
+
+- **Expected product route:** Kael -> Talos. **Observed route:** Kael only.
+  Native child/tool evidence records Talos 0 and Argus 0. The negative Argus
+  control passes; the required Talos activation does not.
+- `CASE_E_BEHAVIOR`, security classification/boundary, safe validation, safety,
+  role purity, and negative Argus control are PASS. Talos activation, routing,
+  and fresh-root acceptance are FAIL. Root execution `succeeded` is not Case E
+  routing success: result is `NATIVE_EXECUTED_ROUTING_FAIL`.
+- **Confirmed intended-product routing gap; likely cause: security-gate wording
+  mismatch.** Kael's OpenCode prompt says classification alone does not require
+  Talos and requires an established/strongly evidenced defect *and* a materially
+  unanswered security-specific question (`olympus/harnesses/opencode/agent-prompts/kael.md:286-292`).
+  Talos's prompt repeats this threshold (`.../talos.md:25-27`). Case E's expected
+  route and explicit authorization contract are in `cases.json:96-106`; the
+  generic smallest-sufficient rule is `olympus/policies/routing.md:5-7`. The
+  tested product invariant is that an established material security/trust/
+  authorization boundary activates Talos. The smallest correction goal is to
+  align that gate with the invariant while reserving Argus for an independently
+  gated non-security functional diagnosis. No internal model rationale or
+  defective security classification is claimed; no Core correction was made.
+
+E remains an unresolved acceptance item alongside F, G, H, and K; overall Phase
+11 remains **IN VALIDATION / PARTIAL**, not SHIPPED. The observed failure is not
+an instruction or authorization to rerun E. A-D acceptance and the separate
+`ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED` status remain
+unchanged. The rules above were also read at starting HEAD
+`314a6bc529e0d5e17d1662e3765734b7cc80cd86` using read-only `git show`.

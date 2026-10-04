@@ -8,9 +8,12 @@ only that bounded policy text is present. The task owner separately reported
 recovered guided outcomes and a reconciled B2 runtime observation (recorded
 below and in `baseline.json`). Separately, verified native B3 exports/history
 and CLI results are captured in `case-b3.native-trace.json`; verified native
-Case C exports/history are captured in `case-c.native-trace.json`; and native
-Case D invocation history is captured in `case-d.native-trace.json`. B3, C, and
-D qualify their bounded acceptance outcomes. None of these native
+Case C exports/history are captured in `case-c.native-trace.json`; native
+Case D invocation history is captured in `case-d.native-trace.json`; and the
+original Case E root export and observed routing failure are captured in
+`case-e.root-session.export.json` and `case-e.native-trace.json`. B3, C, and D
+qualify their bounded acceptance outcomes; E is a valid reconciliation of an
+observed product routing failure, not a Case E pass. None of these native
 invocation-level captures is inserted into the synthetic trace corpus or
 reconstructed as a synthetic lifecycle.
 
@@ -27,12 +30,13 @@ uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-on
 ```
 
 The first command validates the versioned case matrix, synthetic event semantics,
-completion/evidence claims, separate B1/B2/B3/C/D reconciliations, the bounded
-B3, C, and D native invocation captures, and presence-only gate markers. It
+completion/evidence claims, separate B1/B2/B3/C/D/E reconciliations, the bounded
+B3, C, and D native invocation captures, the Case E original-root export
+projection and expected observed-failure record, and presence-only gate markers. It
 reports
 `PHASE11_ARTIFACTS: PASS` when those artifacts are sound while overall
-qualification remains `PHASE11_QUALIFICATION: PARTIAL` until the remaining
-isolated fresh-root evidence is accepted. The second command
+qualification remains `PHASE11_QUALIFICATION: PARTIAL` until remaining
+acceptance items are resolved. The second command
 applies mutations to valid authored traces and bounded native captures, and
 requires the prohibited variants to fail. The third command currently runs only the feature fixture's green
 pre-feature compatibility tests. The future feature work must add acceptance
@@ -151,11 +155,39 @@ run did not demonstrate runtime follow-up. An optional genuine
 evidence-requesting scenario remains open for final coverage review; this
 coverage note is not a Case D blocker or an implicit pass.
 
+## Case E native capture — observed routing failure, no rerun
+
+`case-e.root-session.export.json` is a projection of the exact original public
+OpenCode V2 export. It preserves the original user prompt, non-reasoning
+assistant terminal text, message identities/timing, and root outcome. The export
+was captured in memory with `sanitize=false`; all reasoning blocks were removed
+before writing, secrets were checked/redacted, and raw export/provider state was
+not persisted. The direct-child API query returned an empty list with no next
+cursor; the exported messages contained no tool-call records. No other session,
+private runtime, or worktree filesystem was accessed.
+
+The root execution outcome is `succeeded`, but the observed product route is
+Kael only instead of the Case E matrix's Kael -> Talos. The root answer correctly
+classifies the established MEMBER/account-deletion behavior as
+`CONFIRMED_SECURITY_DEFECT`, identifies the server-enforced ADMIN-only boundary,
+states the non-ADMIN-denied-without-deletion invariant, and proposes safe
+synthetic identities with mocked deletion operations. It reports no exploit and
+no file changes. Behavior/security/safety/role purity and negative Argus control
+are PASS; Talos activation, routing, and fresh-root acceptance are FAIL. The
+qualification artifact validator passes only the evidence reconciliation; it
+does not turn this product route into a pass. See
+`docs/DEFECT-PHASE11-CASE-E-ROUTING.md` for the bounded rule-gap record.
+
+E remains a pending acceptance/resolution item. Its observed failure is not an
+instruction to rerun it. Phase 11 remains PARTIAL; Cases A-D are unchanged, and
+Argus same-session follow-up runtime coverage remains `NOT_EXERCISED`.
+
 ## Remaining fresh-root work remains user action
 
 Use a separate clean disposable project copy and a **new, verified Kael root for
-each pending case**. Only E, F, G, H, and K below remain pending fresh-root
-actions; isolated B3 and C and bounded native D are accepted. A, I, J, and L
+each still-unrun case**. F, G, H, and K below remain pending fresh-root actions;
+E has completed but failed routing and remains pending resolution without a
+rerun. Isolated B3 and C and bounded native D are accepted. A, I, J, and L
 prompt references/history are retained below but are not new rerun requests. Do
 not reuse a guided/current session as a fresh root. Confirm the effective root
 agent, child parentage and actual roles from native session evidence before
@@ -196,10 +228,16 @@ synthetic per-session lifecycle.
   bounded binary question after child completion. No functional violation or
   repair is established. Runtime same-session follow-up remains
   `NOT_EXERCISED` separately from Case D acceptance.
-- `HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT` — “Classify this bounded hypothetical
-  defect: a MEMBER can delete another user's account although the stated
-  contract is ADMIN-only. Explain the security boundary and safe validation;
-  do not attempt an exploit, edit, or broad audit.”
+- `NATIVE_EXECUTED_ROUTING_FAIL PHASE11_CASE_E_FRESH_ROOT` — completed native
+  evidence is in `case-e.native-trace.json` and the reasoning-redacted original
+  export projection is in `case-e.root-session.export.json`. The original root
+  succeeded and supplied correct behavior/security/safety findings, but observed
+  no child session; expected Kael -> Talos, actual Kael only. This is a product
+  routing failure and pending resolution, **not** a pass or instruction to
+  rerun. Original prompt excerpt, retained for evidence only: “Classify this
+  bounded hypothetical defect: a MEMBER can delete another user's account
+  although the stated contract is ADMIN-only. Explain the security boundary and
+  safe validation; do not attempt an exploit, edit, or broad audit.”
 - `HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT` — “The test command is unavailable
   because the local runner is not installed. Suggest the cheapest bounded
   containment or usage correction; do not classify this as a product bug or
@@ -360,10 +398,11 @@ sessions only, not the Case A/I/J/L native roots. Preserve them if available.
   never satisfies a live or fresh-root requirement.
 - `GUIDED_CURRENT_SESSION`: native evidence captured in a guided/current root;
   useful context, but not independent fresh-root evidence.
-- `FRESH_ROOT_NATIVE`: observed native evidence from a separately created,
-  verified Kael root with actual child/session IDs and captured event ordering.
-  B3 and C now pass this bar; D, E, F, G, H, and K remain pending. B2's routing
-  observation is valid context but failed isolation. The recovered A/I/J/L
+- `FRESH_ROOT_NATIVE`: observed native evidence from a separately verified Kael
+  root, with actual root identity and any observed child/tool records and order.
+  B3, C, and D are accepted; E has a captured native routing failure; F, G, H,
+  and K remain unrun. B2's routing observation is valid context but failed
+  isolation. The recovered A/I/J/L
   observations remain guided/user-reported references and are not fresh-root
   evidence.
 
@@ -400,11 +439,12 @@ are marker-presence checks only.
 ## Current gate
 
 The A–L matrix, unchanged synthetic trace corpus, expanded mutation coverage,
-and B3/C/D native captures are present. Case B1 remains a fixture defect
+and B3/C/D/E native records are present. Case B1 remains a fixture defect
 with Question Barrier PASS; B2 runtime behavior remains PASS but
 isolation/acceptance remains PARTIAL; B3, C, and D fresh-root native acceptance
-are PASS. Fresh-root evidence remains pending for E, F, G, H, and K. D did not
-exercise Argus follow-up runtime coverage, which remains a separate open review
-item. A/I/J/L observations remain guided/history-only,
-with no rerun requested. The overall phase is **IN VALIDATION / PARTIAL**, not
-SHIPPED.
+are PASS. E behavior/security/safety and negative Argus control pass, but Talos
+activation/routing fails; E remains pending resolution without a rerun. F, G, H,
+and K remain fresh-root work. D did not exercise Argus follow-up runtime
+coverage, which remains a separate open review item. A/I/J/L observations
+remain guided/history-only, with no rerun requested. The overall phase is **IN
+VALIDATION / PARTIAL**, not SHIPPED.

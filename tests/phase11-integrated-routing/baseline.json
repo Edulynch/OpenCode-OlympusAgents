@@ -62,7 +62,7 @@
   },
   "live_qualification": {
     "guided_current_session": "NOT_CAPTURED",
-    "fresh_root_native": "B3_PASS; C_PASS; D_PASS; E,F,G,H,K_PENDING",
+    "fresh_root_native": "B3_PASS; C_PASS; D_PASS; E_NATIVE_EXECUTED_ROUTING_FAIL (acceptance pending); F,G,H,K_PENDING",
     "native_results_claimed": true,
     "pending_labels_at_baseline_capture": [
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_A",
@@ -94,7 +94,7 @@
       "REFERENCE_ONLY PHASE11_CASE_L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERY"
     ],
     "overall_status": "PARTIAL",
-    "current_pending_state_source": "P11-D-corpus current native reconciliation; original baseline, prior recovery labels, and B3/C-capture pending labels preserved as historical snapshots"
+    "current_pending_state_source": "P11-E-RECON-RECORD current native reconciliation; E's observed routing failure remains an unresolved pending acceptance item; original baseline, prior recovery labels, and B3/C/D-capture pending labels preserved as historical snapshots"
   },
   "recovered_user_observations": {
     "task_id": "P11-FIX-20261003",
@@ -891,6 +891,114 @@
       "safe_root_hash_mtime_unchanged": true,
       "git_diff_check": "PASS"
     }
+  },
+  "phase11_e_reconciliation": {
+    "task_id": "P11-E-RECON-RECORD",
+    "source": "Exact original root's public read-only OpenCode V2 metadata, sanitized projection of its export, and direct-child query; assistant content has all reasoning blocks removed. The supplied terminal facts are preserved verbatim. No Case E rerun, replay, or worktree filesystem audit was performed.",
+    "label": "PHASE11_CASE_E_FRESH_ROOT",
+    "evidence_artifact": "tests/phase11-integrated-routing/case-e.native-trace.json",
+    "export_artifact": "tests/phase11-integrated-routing/case-e.root-session.export.json",
+    "evidence_class": "FRESH_ROOT_NATIVE",
+    "root_session_id": "ses_ef85bfb20ffeJDAs5WvP6mQNiP",
+    "root_directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-e",
+    "root_agent": "kael",
+    "root_parent_session_id": null,
+    "root_parent_session_id_observation": "NOT_EXPOSED",
+    "root_title": "Authorization defect classification for account deletion",
+    "root_terminal_outcome": "succeeded",
+    "root_terminal_message_id": "msg_107a40611001npv8Iw2mdWMDAA",
+    "root_outcome_message_id": "msg_107a4842f001hhVbJJOjM5TQdC",
+    "root_starting_head": "314a6bc529e0d5e17d1662e3765734b7cc80cd86",
+    "expected_product_route": ["kael", "talos"],
+    "observed_product_route": ["kael"],
+    "direct_child_count": 0,
+    "root_tool_call_record_count": 0,
+    "consultation_counts": {
+      "kael": 0,
+      "veyra": 0,
+      "orin": 0,
+      "kovan": 0,
+      "nox": 0,
+      "vera": 0,
+      "atlas": 0,
+      "argus": 0,
+      "talos": 0,
+      "thales": 0,
+      "helios": 0,
+      "aegis": 0
+    },
+    "unique_child_session_counts": {
+      "kael": 0,
+      "veyra": 0,
+      "orin": 0,
+      "kovan": 0,
+      "nox": 0,
+      "vera": 0,
+      "atlas": 0,
+      "argus": 0,
+      "talos": 0,
+      "thales": 0,
+      "helios": 0,
+      "aegis": 0
+    },
+    "classifications": {
+      "CASE_E_BEHAVIOR": "PASS",
+      "CASE_E_SECURITY_CLASSIFICATION": "PASS",
+      "CASE_E_SECURITY_BOUNDARY": "PASS",
+      "CASE_E_SAFE_VALIDATION": "PASS",
+      "CASE_E_SAFETY": "PASS",
+      "CASE_E_ROLE_PURITY": "PASS",
+      "CASE_E_NEGATIVE_ARGUS_CONTROL": "PASS",
+      "CASE_E_TALOS_ACTIVATION": "FAIL",
+      "CASE_E_ROUTING": "FAIL",
+      "CASE_E_FRESH_ROOT_NATIVE_ACCEPTANCE": "FAIL"
+    },
+    "terminal_facts": {
+      "WORKTREE_ISOLATION": "SUPPLIED_VERIFIED",
+      "SECURITY_CLASSIFICATION": "CONFIRMED_SECURITY_DEFECT under the supplied established behavior: authorization bypass. Unauthorized deletion violates account integrity and availability, making this materially security-specific rather than merely incorrect functional behavior.",
+      "VIOLATED_BOUNDARY": "A MEMBER crosses the server-enforced privilege boundary protecting ADMIN-only account deletion and acts on another user’s account.",
+      "EXPECTED_INVARIANT": "Account deletion requires an authenticated, authorized ADMIN. MEMBER requests must be denied without deletion side effects, regardless of target account or caller-supplied role claims.",
+      "SAFE_VALIDATION": "For a future fix, use synthetic identities and mocked deletion operations; no real accounts or exploit attempts. Verify:\n- MEMBER deleting another account: denied; deletion operation never invoked.\n- MEMBER deleting their own account: denied under the stated ADMIN-only contract.\n- Changing target identifiers or supplying an ADMIN role claim cannot bypass denial.\n- Anonymous, missing-role, and other non-ADMIN callers: denied.\n- Authenticated ADMIN deleting a valid permitted target: allowed; mocked deletion invoked as expected.\n- Every supported deletion entry point enforces the same invariant.",
+      "EXPLOIT_ATTEMPTED": "NO",
+      "FILES_CHANGED": "NONE",
+      "UNRESOLVED_WORK": "NONE",
+      "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+      "ANY_WORK_REMAINING": "NO"
+    },
+    "isolation": {
+      "status": "SUPPLIED_VERIFIED",
+      "starting_head": "314a6bc529e0d5e17d1662e3765734b7cc80cd86",
+      "separate_disposable_worktree": null,
+      "filesystem_audit_performed": false
+    },
+    "route_cause": {
+      "classification": "CONFIRMED_INTENDED_PRODUCT_ROUTING_GAP",
+      "likely_cause": "SECURITY_GATE_WORDING_MISMATCH",
+      "internal_model_rationale_claimed": false,
+      "security_classification_defect_claimed": false,
+      "bounded_correction_goal": "Clarify that an established material security/trust/authorization boundary activates Talos; Argus remains for an independently gated non-security functional diagnosis.",
+      "evidence_citations": [
+        "olympus/harnesses/opencode/agent-prompts/kael.md:286-292",
+        "olympus/harnesses/opencode/agent-prompts/talos.md:25-27",
+        "olympus/policies/routing.md:5-7",
+        "tests/phase11-integrated-routing/cases.json:96-106",
+        "tests/phase11-integrated-routing/RUNME.md:199-202",
+        "Historical rule text at starting HEAD 314a6bc529e0d5e17d1662e3765734b7cc80cd86"
+      ]
+    },
+    "acceptance_status": "FAIL",
+    "case_result": "NATIVE_EXECUTED_ROUTING_FAIL",
+    "phase11_status": "PARTIAL",
+    "pending_fresh_root_labels": [
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
+    ],
+    "argus_same_session_followup_runtime_coverage": "NOT_EXERCISED",
+    "case_rerun_performed_by_reconciliation": false,
+    "core_policy_modified": false
   },
   "argus_same_session_followup_runtime_coverage": {
     "status": "NOT_EXERCISED",

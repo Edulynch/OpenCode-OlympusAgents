@@ -10,6 +10,8 @@ from qualify import (
     CASE_B2_CHILD_SESSION_IDS,
     CASE_B2_ROOT_SESSION_ID,
     CASE_C_NOX_SESSION_ID,
+    CASE_E_CLASSIFICATIONS,
+    CASE_E_EXPECTED_ROUTE,
     EIGHT_SPECIALISTS,
     HARD_BUDGET,
     load_json,
@@ -17,9 +19,11 @@ from qualify import (
     validate_case_b_reconciliation,
     validate_native_case_c_capture,
     validate_native_case_d_capture,
+    validate_native_case_e_capture,
     validate_native_invocation_capture,
     validate_phase11_c_reconciliation,
     validate_phase11_d_reconciliation,
+    validate_phase11_e_reconciliation,
     validate_phase11_b3_reconciliation,
     validate_trace,
 )
@@ -33,6 +37,8 @@ BASELINE_DOC = load_json(HERE / "baseline.json")
 NATIVE_B3_DOC = load_json(HERE / "case-b3.native-trace.json")
 NATIVE_C_DOC = load_json(HERE / "case-c.native-trace.json")
 NATIVE_D_DOC = load_json(HERE / "case-d.native-trace.json")
+NATIVE_E_DOC = load_json(HERE / "case-e.native-trace.json")
+NATIVE_E_EXPORT_DOC = load_json(HERE / "case-e.root-session.export.json")
 CASES = {case["id"]: case for case in CASES_DOC["cases"]}
 TRACES = {trace["TRACE_ID"]: trace for trace in TRACES_DOC["traces"]}
 
@@ -625,6 +631,125 @@ class NativeCaseDMutationTests(unittest.TestCase):
         self.assertIn(
             "CASE_D_RECONCILIATION_FACT_MISMATCH:result_consumption",
             validate_phase11_d_reconciliation(false_completion, CASES_DOC, NATIVE_D_DOC),
+        )
+
+
+class NativeCaseEMutationTests(unittest.TestCase):
+    def test_case_e_reconciles_original_native_failure_without_promoting_acceptance(self) -> None:
+        self.assertEqual(CASE_E_EXPECTED_ROUTE, ["kael", "talos"])
+        self.assertEqual([], validate_native_case_e_capture(NATIVE_E_DOC, CASES["E"], NATIVE_E_EXPORT_DOC))
+        self.assertEqual(
+            [],
+            validate_phase11_e_reconciliation(
+                BASELINE_DOC, CASES_DOC, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC
+            ),
+        )
+        self.assertEqual("NATIVE_EXECUTED_ROUTING_FAIL", NATIVE_E_DOC["CASE_RESULT"])
+        self.assertEqual(["kael", "talos"], NATIVE_E_DOC["EXPECTED_ROUTE"])
+        self.assertEqual(["kael"], NATIVE_E_DOC["ACTUAL_ROUTE"])
+        self.assertEqual([], NATIVE_E_DOC["CHILD_SESSIONS"])
+        self.assertEqual(0, NATIVE_E_DOC["CONSULTATION_COUNTS"]["talos"])
+        self.assertEqual(0, NATIVE_E_DOC["CONSULTATION_COUNTS"]["argus"])
+        self.assertEqual("PASS", NATIVE_E_DOC["CLASSIFICATIONS"]["CASE_E_NEGATIVE_ARGUS_CONTROL"])
+        self.assertEqual("FAIL", NATIVE_E_DOC["CLASSIFICATIONS"]["CASE_E_TALOS_ACTIVATION"])
+        self.assertEqual("FAIL", NATIVE_E_DOC["CASE_ACCEPTANCE"])
+        self.assertEqual(CASE_E_CLASSIFICATIONS, NATIVE_E_DOC["CLASSIFICATIONS"])
+        self.assertEqual(1, NATIVE_E_EXPORT_DOC["projection_and_redaction"]["reasoning_blocks_removed"])
+        self.assertFalse(NATIVE_E_EXPORT_DOC["projection_and_redaction"]["raw_export_persisted"])
+        self.assertIn("PHASE11_CASE_E_FRESH_ROOT", NATIVE_E_EXPORT_DOC["messages"][0]["text"])
+        self.assertNotIn("[redacted:text:", NATIVE_E_EXPORT_DOC["messages"][0]["text"])
+        self.assertNotIn("reasoning", [part["type"] for part in NATIVE_E_EXPORT_DOC["messages"][1]["content"]])
+        self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
+        self.assertEqual(
+            [
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+                "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
+            ],
+            BASELINE_DOC["live_qualification"]["pending_labels"],
+        )
+        self.assertEqual("NOT_EXERCISED", BASELINE_DOC["argus_same_session_followup_runtime_coverage"]["status"])
+        self.assertEqual("PASS", BASELINE_DOC["phase11_b3_reconciliation"]["acceptance_status"])
+        self.assertEqual("PASS", BASELINE_DOC["phase11_c_reconciliation"]["acceptance_status"])
+        self.assertEqual("PASS", BASELINE_DOC["phase11_d_reconciliation"]["acceptance_status"])
+
+    def test_case_e_failure_cannot_be_promoted_and_missing_record_is_rejected(self) -> None:
+        promoted = copy.deepcopy(BASELINE_DOC)
+        promoted["phase11_e_reconciliation"]["acceptance_status"] = "PASS"
+        promoted["phase11_e_reconciliation"]["case_result"] = "PASS"
+        self.assertIn(
+            "CASE_E_ROUTING_FAILURE_PROMOTED_OR_REPLAYED",
+            validate_phase11_e_reconciliation(promoted, CASES_DOC, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC),
+        )
+
+        promoted_matrix = copy.deepcopy(CASES_DOC)
+        action = next(row for row in promoted_matrix["fresh_root_actions"] if row["case_id"] == "E")
+        action["status"] = "PASS"
+        action["acceptance_status"] = "PASS"
+        self.assertIn(
+            "CASE_E_MATRIX_FAILURE_OR_EVIDENCE_LINK_MISMATCH",
+            validate_phase11_e_reconciliation(BASELINE_DOC, promoted_matrix, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC),
+        )
+
+        missing_report = copy.deepcopy(BASELINE_DOC)
+        missing_report.pop("phase11_e_reconciliation")
+        self.assertIn(
+            "CASE_E_RECONCILIATION_MISSING",
+            validate_phase11_e_reconciliation(missing_report, CASES_DOC, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC),
+        )
+
+    def test_case_e_rejects_fabricated_talos_activation_and_route(self) -> None:
+        fabricated = copy.deepcopy(NATIVE_E_DOC)
+        fabricated["CHILD_SESSIONS"] = [{"AGENT": "talos", "NATIVE_SESSION_ID": "ses_forgedtalos"}]
+        fabricated["ACTUAL_ROUTE"] = ["kael", "talos"]
+        fabricated["CONSULTATION_COUNTS"]["talos"] = 1
+        fabricated["UNIQUE_CHILD_SESSION_COUNTS"]["talos"] = 1
+        fabricated["API_EVIDENCE"]["DIRECT_CHILD_QUERY"]["CHILD_COUNT"] = 1
+        errors = validate_native_case_e_capture(fabricated, CASES["E"], NATIVE_E_EXPORT_DOC)
+        self.assertIn("NATIVE_E_CHILD_SESSION_SET_MISMATCH", errors)
+        self.assertIn("NATIVE_E_SPECIALIST_COUNTS_MISMATCH", errors)
+        self.assertIn("NATIVE_E_UNIQUE_CHILD_COUNTS_MISMATCH", errors)
+        self.assertIn("NATIVE_E_FABRICATED_TALOS_ACTIVATION", errors)
+        self.assertIn("NATIVE_E_ACTUAL_ROUTE_OR_FABRICATED_CHILD_MISMATCH", errors)
+
+    def test_case_e_pending_label_and_talos_expectation_cannot_be_weakened(self) -> None:
+        removed = copy.deepcopy(BASELINE_DOC)
+        removed["live_qualification"]["pending_labels"].remove(
+            "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT"
+        )
+        self.assertIn(
+            "CURRENT_PHASE11_PENDING_STATE_MISMATCH",
+            validate_phase11_e_reconciliation(removed, CASES_DOC, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC),
+        )
+
+        weakened = copy.deepcopy(CASES_DOC)
+        case_e = next(case for case in weakened["cases"] if case["id"] == "E")
+        case_e["expected_routes"]["default"] = ["kael"]
+        errors = validate_phase11_e_reconciliation(BASELINE_DOC, weakened, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC)
+        self.assertIn("NATIVE_E_TALOS_EXPECTATION_WEAKENED", errors)
+
+    def test_case_e_rejects_core_change_or_internal_rationale_overclaim(self) -> None:
+        fixed = copy.deepcopy(NATIVE_E_DOC)
+        fixed["CORE_POLICY_MODIFIED"] = True
+        self.assertIn(
+            "NATIVE_E_FAILURE_PROMOTED_OR_PROHIBITED_ACTION_CLAIMED",
+            validate_native_case_e_capture(fixed, CASES["E"], NATIVE_E_EXPORT_DOC),
+        )
+
+        overclaimed = copy.deepcopy(BASELINE_DOC)
+        overclaimed["phase11_e_reconciliation"]["route_cause"]["internal_model_rationale_claimed"] = True
+        self.assertIn(
+            "CASE_E_ROOT_CAUSE_BOUNDS_OR_CITATIONS_MISMATCH",
+            validate_phase11_e_reconciliation(overclaimed, CASES_DOC, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC),
+        )
+
+        shipped = copy.deepcopy(BASELINE_DOC)
+        shipped["live_qualification"]["overall_status"] = "SHIPPED"
+        self.assertIn(
+            "CURRENT_PHASE11_PENDING_STATE_MISMATCH",
+            validate_phase11_e_reconciliation(shipped, CASES_DOC, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC),
         )
 
 

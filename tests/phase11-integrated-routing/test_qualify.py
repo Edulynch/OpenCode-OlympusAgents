@@ -14,6 +14,8 @@ from qualify import (
     load_json,
     run_static_baseline_checks,
     validate_case_b_reconciliation,
+    validate_native_invocation_capture,
+    validate_phase11_b3_reconciliation,
     validate_trace,
 )
 
@@ -23,6 +25,7 @@ REPO_ROOT = HERE.parents[1]
 CASES_DOC = load_json(HERE / "cases.json")
 TRACES_DOC = load_json(HERE / "traces.json")
 BASELINE_DOC = load_json(HERE / "baseline.json")
+NATIVE_B3_DOC = load_json(HERE / "case-b3.native-trace.json")
 CASES = {case["id"]: case for case in CASES_DOC["cases"]}
 TRACES = {trace["TRACE_ID"]: trace for trace in TRACES_DOC["traces"]}
 
@@ -93,6 +96,234 @@ class CorpusTests(unittest.TestCase):
                 self.assertIsNone(trace["EVIDENCE_PROVENANCE"]["NATIVE_ROOT_SESSION_ID"])
                 self.assertEqual([], trace["EVIDENCE_PROVENANCE"]["NATIVE_CHILD_SESSION_IDS"])
                 self.assertTrue(all(child["NATIVE_SESSION_ID"] is None for child in trace["CHILD_SESSIONS"]))
+
+    def test_b3_native_invocations_are_separate_from_synthetic_session_lifecycle(self) -> None:
+        trace = NATIVE_B3_DOC
+        self.assertEqual([], validate_native_invocation_capture(trace, CASES["B"]))
+        self.assertEqual([], validate_phase11_b3_reconciliation(BASELINE_DOC, CASES_DOC, trace))
+        self.assertNotIn("B3-NATIVE", TRACES)
+        self.assertTrue(all(item["EVIDENCE_CLASS"] == "SYNTHETIC_TRACE" for item in TRACES.values()))
+        self.assertEqual(
+            {"nox": 3, "veyra": 1, "kovan": 1, "vera": 2},
+            {role: count for role, count in trace["CONSULTATION_COUNTS"].items() if count},
+        )
+        self.assertEqual(
+            {"nox": 1, "veyra": 1, "kovan": 1, "vera": 1},
+            {role: count for role, count in trace["UNIQUE_CHILD_SESSION_COUNTS"].items() if count},
+        )
+        self.assertIsNone(trace["COMPLETION_GATE"]["SESSION_LIFETIME_EXACT_ONCE"])
+        self.assertIsNone(trace["MAX_SIMULTANEOUS_CHILDREN"])
+        self.assertIsNone(trace["GATE_FACTS"]["SECURITY_BOUNDARY"])
+        self.assertEqual(13, trace["RUNTIME_VALIDATION"]["TESTS_PASSED"])
+        self.assertEqual(
+            "OBSERVED_NATIVE_ROOT_TERMINAL_MESSAGE",
+            trace["OBSERVED_TERMINAL_SNAPSHOT"]["OBSERVATION"],
+        )
+        self.assertEqual(
+            trace["OBSERVED_TERMINAL_SNAPSHOT"]["FACTS"],
+            trace["EVENTS"][-1]["TERMINAL_FACTS"],
+        )
+        self.assertEqual(3, len(trace["SESSION_RECONCILIATION"]["kovan"]["REPORTED_CHANGED_PATHS"]))
+        self.assertEqual("PARTIAL", BASELINE_DOC["phase11_b3_reconciliation"]["phase11_status"])
+        self.assertEqual("PASS", CASES_DOC["fresh_root_actions"][1]["status"])
+
+
+class NativeCaptureMutationTests(unittest.TestCase):
+    def test_native_isolation_requires_joined_directory_head_and_no_creation_claim(self) -> None:
+        missing_root_directory = copy.deepcopy(NATIVE_B3_DOC)
+        missing_root_directory.pop("ROOT_DIRECTORY")
+        self.assertIn(
+            "NATIVE_FRESH_ROOT_ISOLATION_MISMATCH",
+            validate_native_invocation_capture(missing_root_directory, CASES["B"]),
+        )
+
+        contradictory_directory = copy.deepcopy(NATIVE_B3_DOC)
+        contradictory_directory["ROOT_ISOLATION"]["VERIFIED_DIRECTORY"] = "C:/temp/other-copy"
+        self.assertIn(
+            "NATIVE_FRESH_ROOT_ISOLATION_MISMATCH",
+            validate_native_invocation_capture(contradictory_directory, CASES["B"]),
+        )
+
+        nox_directory_mismatch = copy.deepcopy(NATIVE_B3_DOC)
+        nox_directory_mismatch["SESSION_RECONCILIATION"]["nox"]["VERIFIED_DIRECTORY"] = "C:/temp/other-copy"
+        self.assertIn(
+            "NATIVE_SAME_SESSION_RECONCILIATION_MISMATCH",
+            validate_native_invocation_capture(nox_directory_mismatch, CASES["B"]),
+        )
+
+        fabricated_creation = copy.deepcopy(NATIVE_B3_DOC)
+        event = fabricated_creation["EVENTS"][0]
+        event["RETURN_SUMMARY"] = "Created a new worktree and verified its HEAD."
+        event["WORKTREE_CREATION_CLAIMED"] = True
+        self.assertIn(
+            "NATIVE_ISOLATION_EVENT_NOT_VERIFICATION_ONLY",
+            validate_native_invocation_capture(fabricated_creation, CASES["B"]),
+        )
+
+        baseline_path_conflict = copy.deepcopy(BASELINE_DOC)
+        baseline_path_conflict["phase11_b3_reconciliation"]["root_directory"] = "C:/temp/other-copy"
+        self.assertIn(
+            "CASE_B3_ROOT_DIRECTORY_MISMATCH",
+            validate_phase11_b3_reconciliation(baseline_path_conflict, CASES_DOC, NATIVE_B3_DOC),
+        )
+
+    def test_native_terminal_snapshot_must_match_runtime_isolation_and_completion(self) -> None:
+        wrong_snapshot_test_count = copy.deepcopy(NATIVE_B3_DOC)
+        wrong_snapshot_test_count["OBSERVED_TERMINAL_SNAPSHOT"]["FACTS"]["TEST_COUNT"] = 12
+        self.assertIn(
+            "NATIVE_TERMINAL_SNAPSHOT_MISMATCH",
+            validate_native_invocation_capture(wrong_snapshot_test_count, CASES["B"]),
+        )
+
+        contradictory_runtime = copy.deepcopy(NATIVE_B3_DOC)
+        contradictory_runtime["RUNTIME_VALIDATION"]["SOURCE_INTEGRITY_AFTER_TEST"] = "FAIL"
+        errors = validate_native_invocation_capture(contradictory_runtime, CASES["B"])
+        self.assertIn("NATIVE_RUNTIME_VALIDATION_FACTS_MISMATCH", errors)
+        self.assertIn("NATIVE_TERMINAL_FACTS_DO_NOT_MATCH_VALIDATION_RECORDS", errors)
+
+        contradictory_completion = copy.deepcopy(NATIVE_B3_DOC)
+        contradictory_completion["EVENTS"][-1]["REQUIRED_CHILD_SESSIONS_TERMINAL_AND_CONSUMED"] = False
+        errors = validate_native_invocation_capture(contradictory_completion, CASES["B"])
+        self.assertIn("NATIVE_FINAL_COMPLETION_FACTS_MISMATCH", errors)
+        self.assertIn("NATIVE_TERMINAL_FACTS_DO_NOT_MATCH_VALIDATION_RECORDS", errors)
+
+        conflated_provenance = copy.deepcopy(NATIVE_B3_DOC)
+        conflated_provenance["RESULT_FIDELITY"]["OBSERVED_RESULT_SOURCE"] = "task acceptance context"
+        self.assertIn(
+            "NATIVE_RESULT_FIDELITY_MISMATCH",
+            validate_native_invocation_capture(conflated_provenance, CASES["B"]),
+        )
+
+        baseline_snapshot_mismatch = copy.deepcopy(BASELINE_DOC)
+        baseline_snapshot_mismatch["phase11_b3_reconciliation"]["observed_terminal_snapshot"]["facts"]["TEST_COUNT"] = 12
+        self.assertIn(
+            "CASE_B3_BASELINE_TERMINAL_SNAPSHOT_MISMATCH",
+            validate_phase11_b3_reconciliation(baseline_snapshot_mismatch, CASES_DOC, NATIVE_B3_DOC),
+        )
+
+    def test_native_capture_rejects_wrong_parent_role_and_native_ids(self) -> None:
+        wrong_parent = copy.deepcopy(NATIVE_B3_DOC)
+        wrong_parent["CHILD_SESSIONS"][2]["PARENT_SESSION_ID"] = "ses_wrongparent"
+        self.assertIn(
+            "NATIVE_CHILD_PARENT_MISMATCH:B3-KOVAN",
+            validate_native_invocation_capture(wrong_parent, CASES["B"]),
+        )
+
+        wrong_role = copy.deepcopy(NATIVE_B3_DOC)
+        wrong_role["CHILD_SESSIONS"][1]["AGENT"] = "kovan"
+        self.assertIn(
+            "NATIVE_CHILD_ROLE_OR_ORDER_MISMATCH:B3-VEYRA",
+            validate_native_invocation_capture(wrong_role, CASES["B"]),
+        )
+
+        wrong_child_id = copy.deepcopy(NATIVE_B3_DOC)
+        wrong_child_id["CHILD_SESSIONS"][0]["NATIVE_SESSION_ID"] = "ses_wrongnox"
+        self.assertIn(
+            "NATIVE_CHILD_SESSION_ID_MISMATCH:B3-NOX",
+            validate_native_invocation_capture(wrong_child_id, CASES["B"]),
+        )
+
+        wrong_event_join = copy.deepcopy(NATIVE_B3_DOC)
+        wrong_event_join["EVENTS"][3]["NATIVE_SESSION_ID"] = "ses_wrongnox"
+        self.assertIn(
+            "NATIVE_INVOCATION_SESSION_OR_ROLE_JOIN_MISMATCH:4",
+            validate_native_invocation_capture(wrong_event_join, CASES["B"]),
+        )
+
+        wrong_call = copy.deepcopy(NATIVE_B3_DOC)
+        wrong_call["EVENTS"][4]["TOOL_CALL_ID"] = "call_replacement"
+        self.assertIn(
+            "NATIVE_INVOCATION_ID_MISMATCH:5",
+            validate_native_invocation_capture(wrong_call, CASES["B"]),
+        )
+
+    def test_native_capture_rejects_relabeling_order_or_fabricated_result_ids(self) -> None:
+        relabelled = copy.deepcopy(NATIVE_B3_DOC)
+        relabelled["EVIDENCE_CLASS"] = "SYNTHETIC_TRACE"
+        self.assertIn(
+            "NATIVE_EVIDENCE_CLASS_MISMATCH",
+            validate_native_invocation_capture(relabelled, CASES["B"]),
+        )
+
+        wrong_basis = copy.deepcopy(NATIVE_B3_DOC)
+        wrong_basis["EVENTS"][2]["ORDER_BASIS"] = "synthetic"
+        self.assertIn(
+            "NATIVE_EVENT_ORDER_BASIS_MISMATCH",
+            validate_native_invocation_capture(wrong_basis, CASES["B"]),
+        )
+
+        wrong_order = copy.deepcopy(NATIVE_B3_DOC)
+        wrong_order["EVENTS"][2]["ORDER"] = 2
+        self.assertIn(
+            "NATIVE_EVENT_ORDER_NOT_STRICTLY_INCREASING",
+            validate_native_invocation_capture(wrong_order, CASES["B"]),
+        )
+
+        fabricated_result = copy.deepcopy(NATIVE_B3_DOC)
+        fabricated_result["EVENTS"][0]["RESULT_ID"] = "result-invented"
+        self.assertIn(
+            "NATIVE_UNOBSERVED_RESULT_ID_MUST_REMAIN_NULL:1",
+            validate_native_invocation_capture(fabricated_result, CASES["B"]),
+        )
+
+        fabricated_timestamp = copy.deepcopy(NATIVE_B3_DOC)
+        fabricated_timestamp["EVIDENCE_PROVENANCE"]["OBSERVED_AT"] = "2026-10-03T00:00:00Z"
+        self.assertIn(
+            "NATIVE_UNOBSERVED_TIMESTAMP_MUST_REMAIN_NULL",
+            validate_native_invocation_capture(fabricated_timestamp, CASES["B"]),
+        )
+
+        fabricated_gate = copy.deepcopy(NATIVE_B3_DOC)
+        fabricated_gate["GATE_FACTS"]["SECURITY_BOUNDARY"] = False
+        self.assertIn(
+            "NATIVE_GATE_FACTS_MISMATCH",
+            validate_native_invocation_capture(fabricated_gate, CASES["B"]),
+        )
+
+        overstated_tests = copy.deepcopy(NATIVE_B3_DOC)
+        overstated_tests["RUNTIME_VALIDATION"]["TESTS_PASSED"] = 14
+        self.assertIn(
+            "NATIVE_RUNTIME_VALIDATION_FACTS_MISMATCH",
+            validate_native_invocation_capture(overstated_tests, CASES["B"]),
+        )
+
+    def test_native_capture_rejects_false_completion_or_history_promotion(self) -> None:
+        incomplete = copy.deepcopy(NATIVE_B3_DOC)
+        incomplete["COMPLETION_GATE"]["PENDING_CHILD_COUNT"] = 1
+        self.assertIn(
+            "NATIVE_COMPLETION_GATE_MISMATCH",
+            validate_native_invocation_capture(incomplete, CASES["B"]),
+        )
+
+        overclaimed_exact_once = copy.deepcopy(NATIVE_B3_DOC)
+        overclaimed_exact_once["COMPLETION_GATE"]["SESSION_LIFETIME_EXACT_ONCE"] = True
+        self.assertIn(
+            "NATIVE_COMPLETION_GATE_MISMATCH",
+            validate_native_invocation_capture(overclaimed_exact_once, CASES["B"]),
+        )
+
+        promoted_b2 = copy.deepcopy(BASELINE_DOC)
+        promoted_b2["phase11_b2_reconciliation"]["case_b2"]["acceptance_status"] = "PASS"
+        self.assertIn(
+            "CASE_B2_ACCEPTANCE_MUST_REMAIN_PARTIAL",
+            validate_phase11_b3_reconciliation(promoted_b2, CASES_DOC, NATIVE_B3_DOC),
+        )
+
+        promoted_guided = copy.deepcopy(BASELINE_DOC)
+        promoted_guided["recovered_user_observations"]["case_observations"]["A"]["native_trace_in_scoped_corpus"] = True
+        self.assertIn(
+            "RECOVERED_HISTORY_NATIVE_TRACE_OVERCLAIM:A",
+            validate_phase11_b3_reconciliation(promoted_guided, CASES_DOC, NATIVE_B3_DOC),
+        )
+
+        stale_pending = copy.deepcopy(BASELINE_DOC)
+        stale_pending["live_qualification"]["pending_labels"].insert(
+            0, "HUMAN_ACTION_REQUIRED PHASE11_CASE_B_FRESH_ROOT"
+        )
+        self.assertIn(
+            "CURRENT_PHASE11_PENDING_STATE_MISMATCH",
+            validate_phase11_b3_reconciliation(stale_pending, CASES_DOC, NATIVE_B3_DOC),
+        )
 
 
 class MutationTests(unittest.TestCase):

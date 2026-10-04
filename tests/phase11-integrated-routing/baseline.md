@@ -44,8 +44,8 @@ behavior. The authored A–L files in this scope provide only
 `SYNTHETIC_TRACE` positives and mutation negatives. No guided current-session or
 fresh-root native evidence was captured at this baseline. At that time, A–L
 were marked pending under the original labels. The later recovery report below
-supersedes that label set for the current validation: only B, C, D, E, F, G, H,
-and K remain pending fresh-root actions. Phase 11 remains
+recorded B, C, D, E, F, G, H, and K as pending at that point; the subsequent B3
+reconciliation below supersedes B's pending status. Phase 11 remains
 **IN VALIDATION / PARTIAL**.
 
 ## Later recovery report supplied for P11-FIX-20261003
@@ -62,10 +62,12 @@ qualification-case roots. No recovery rerun was performed.
 - Vera review recovery: `ses_effb08273ffebb6fzuHwVmxilk` — `PARTIAL/RETRY`,
   terminal succeeded.
 
-The current scoped trace corpus remains synthetic, and fresh-root native
-qualification remains pending for B, C, D, E, F, G, H, and K only. A, I, J,
-and L prompts are retained as reference/history; no rerun is requested for the
-recovered A/I/J/L observations or I/J negative controls.
+The current scoped trace corpus remains synthetic. At the time of this recovery
+report, fresh-root native qualification remained pending for B, C, D, E, F, G,
+H, and K. The later isolated B3 native result is recorded separately below;
+only C, D, E, F, G, H, and K remain pending now. A, I, J, and L prompts are
+retained as reference/history; no rerun is requested for the recovered A/I/J/L
+observations or I/J negative controls.
 
 ## Gate C mutation-coverage correction — P11-NOX-COVERAGE-FIX-20261003
 
@@ -156,10 +158,75 @@ write any fixture files.
 The corrected synthetic Case B example expects bounded no-Atlas routing and
 retains only the mandatory implementation-before-tests and
 implementation-before-review edges. Complexity alone is not a Planning Gate
-justification. Static artifact validation may report PASS, but Case B acceptance
-remains PARTIAL until user-controlled `PHASE11_CASE_B_FRESH_ROOT_3` runs in a
-clean separate disposable copy with a new verified Kael root. No B3 run or
-worktree launch was performed.
+justification. B2's recorded acceptance remains PARTIAL; the later isolated B3
+native result below independently qualifies Case B. The corpus reconciliation
+did not rerun B3 or launch/access its worktree.
+
+## Isolated Case B3 native reconciliation — P11-B3-corpus
+
+The verified native evidence supplied with this task is captured in
+`case-b3.native-trace.json` as `FRESH_ROOT_NATIVE`. It came from Nox's read-only
+OpenCode API exports/history and CLI validation results; this corpus writer did
+not re-export data, inspect the B3 worktree, create/resume the root, or rerun the
+case.
+
+- Root Kael `ses_efce702a8ffeKcoRaBYMFH9lxa`, parent `null`, terminal
+  `succeeded`; root directory and Nox's isolation-verified directory both
+  resolve to `C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-b3`.
+  Nox verified isolation and HEAD
+  `ded1f69cbeadf5d21cb9b6b31d5df10123b57990`; the evidence claims verification
+  only and makes no worktree-creation claim.
+- Four unique direct child sessions, all terminal `succeeded`, in observed
+  launch order: Nox `ses_efce6a350ffeLULhF1Hf7l39qJ`; Veyra
+  `ses_efce5cd8bffexU0SIHi67Y39zP`; Kovan
+  `ses_efce3ffadffekeRXxYxKkSWsxs`; Vera
+  `ses_efcde45cdffe6X5eJbStlshoYu`.
+- Seven ordered, distinct completed root subagent call results were observed:
+  Nox isolation `SUCCESS`; Veyra contract `SUCCESS`; Kovan implementation
+  `PARTIAL` (runtime unavailable); same-session Nox validation `BLOCKED`
+  (Python aliases unavailable, zero tests); Vera review `SUCCESS` (no material
+  defects, tests unverified); same-original-session Vera source review
+  `SUCCESS` (no edits); same-session Nox validation `SUCCESS` (Python 3.11.17,
+  13 passed). The final root reported contract coverage and source integrity
+  PASS, Nox PASS, Vera ACCEPT, no unresolved work, and all required child
+  results terminal and consumed.
+- The observed root terminal snapshot at
+  `msg_1048ed1e5001AE9cC6bTYFgV3z` records `WORKTREE_ISOLATION: PASS`,
+  `PYTHON_RUNTIME: Python 3.11.17 installed through uv`, the exact fixture
+  unittest command, `TEST_RESULT: PASS`, `TEST_COUNT: 13`, `CONTRACT_COVERAGE:
+  PASS`, `SOURCE_INTEGRITY_AFTER_TEST: PASS`, `NOX: PASS`, `VERA: ACCEPT`,
+  `UNRESOLVED_WORK: NONE`, `REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED: YES`,
+  `CASE_B_FRESH_ROOT_3: PASS`, and nothing running. `RESULT_FIDELITY` keeps the
+  expected terminal class from task context separate from these observed
+  exported terminal facts.
+- Invocation counts are Nox 3, Veyra 1, Kovan 1, Vera 2; unique child sessions
+  are Nox 1, Veyra 1, Kovan 1, Vera 1. Tool-call IDs join the seven invocation
+  results; they are not `RESULT_ID`s. Each return was observed once; aggregate
+  child completion is supported by the final root statement. Result-consumption
+  timing, session-lifetime exact-once, timestamps, concurrency, and the earlier
+  runtime exit code remain `null`/unknown. No result ID or consumption event is
+  fabricated.
+- Semantic feature route is `Kael -> Veyra -> Kovan -> Nox -> Vera`; observed
+  unique-session launch order is `Kael -> Nox -> Veyra -> Kovan -> Vera` because
+  initial Nox isolation was a justified prerequisite. The route is recorded as
+  observed, not reordered to match expectation. Later Nox validation and Vera
+  follow-up reused their original sessions; Kovan remained the same original
+  session, whose implementation return was PARTIAL while its session terminal
+  outcome was succeeded.
+- `CASE_B_FRESH_ROOT_3`, isolation, routing, role purity, negative controls,
+  completion ownership, and result fidelity are PASS. Efficiency is
+  `ACCEPTABLE` as a qualification judgment, not a latency measurement. B3 is
+  accepted; B1 remains `FIXTURE_DEFECT` with Question Barrier PASS; B2 runtime
+  remains PASS while B2 isolation/acceptance remains PARTIAL. Overall Phase 11
+  remains PARTIAL, with C, D, E, F, G, H, and K pending. A/I/J/L recovered
+  observations remain guided/history-only.
+
+The native event list is invocation-level plus the final root completion
+statement, not a one-lifecycle-per-child synthetic trace. Every event's order
+basis is `observed`, with ordinal labels rather than timestamps. The bounded
+native validator is separate from `validate_trace`; it preserves missing result
+IDs and aggregate consumption uncertainty. The synthetic `traces.json` and its
+adversarial lifecycle expectations are unchanged.
 
 ## Reconciliation-task repository preflight
 

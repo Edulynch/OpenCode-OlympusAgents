@@ -16,6 +16,11 @@ from qualify import (
     CASE_F_COLLECTOR_SESSION_ID,
     CASE_F_EXPECTED_ROUTE,
     CASE_F_ROOT_SESSION_ID,
+    CASE_G_CLASSIFICATIONS,
+    CASE_G_EXPECTED_ROUTE,
+    CASE_G_ROOT_SESSION_ID,
+    CASE_G_THALES_SESSION_ID,
+    CASE_G_VEYRA_SESSION_ID,
     EIGHT_SPECIALISTS,
     HARD_BUDGET,
     load_json,
@@ -26,12 +31,14 @@ from qualify import (
     validate_native_case_e_capture,
     validate_native_case_e2_capture,
     validate_native_case_f_capture,
+    validate_native_case_g_capture,
     validate_native_invocation_capture,
     validate_phase11_c_reconciliation,
     validate_phase11_d_reconciliation,
     validate_phase11_e_reconciliation,
     validate_phase11_e2_reconciliation,
     validate_phase11_f_reconciliation,
+    validate_phase11_g_reconciliation,
     validate_phase11_b3_reconciliation,
     validate_trace,
 )
@@ -52,6 +59,10 @@ NATIVE_E2_ROOT_EXPORT_DOC = load_json(HERE / "case-e2.root-session.export.json")
 NATIVE_E2_CHILD_EXPORT_DOC = load_json(HERE / "case-e2.talos-session.export.json")
 NATIVE_F_DOC = load_json(HERE / "case-f.native-trace.json")
 NATIVE_F_EXPORT_DOC = load_json(HERE / "case-f.root-session.export.json")
+NATIVE_G_DOC = load_json(HERE / "case-g.native-trace.json")
+NATIVE_G_ROOT_EXPORT_DOC = load_json(HERE / "case-g.root.session-export.json")
+NATIVE_G_VEYRA_EXPORT_DOC = load_json(HERE / "case-g.veyra.session-export.json")
+NATIVE_G_THALES_EXPORT_DOC = load_json(HERE / "case-g.thales.session-export.json")
 CASES = {case["id"]: case for case in CASES_DOC["cases"]}
 TRACES = {trace["TRACE_ID"]: trace for trace in TRACES_DOC["traces"]}
 
@@ -685,7 +696,6 @@ class NativeCaseEMutationTests(unittest.TestCase):
         )
         self.assertEqual(
             [
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
                 "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
                 "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
             ],
@@ -803,7 +813,6 @@ class NativeCaseE2MutationTests(unittest.TestCase):
         self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
         self.assertEqual(
             [
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
                 "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
                 "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
             ],
@@ -935,7 +944,6 @@ class NativeCaseFMutationTests(unittest.TestCase):
         self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
         self.assertEqual(
             [
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
                 "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
                 "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
             ],
@@ -1098,6 +1106,261 @@ class NativeCaseFMutationTests(unittest.TestCase):
         self.assertIn(
             "CASE_F_E1_FAILED_HISTORY_OR_E2_ACCEPTANCE_REWRITTEN",
             validate_phase11_f_reconciliation(rewritten_e1, CASES_DOC, NATIVE_F_DOC, NATIVE_F_EXPORT_DOC),
+        )
+
+
+class NativeCaseGMutationTests(unittest.TestCase):
+    def test_case_g_reconciles_native_route_and_conditional_followup_without_runtime_claims(self) -> None:
+        self.assertEqual(CASE_G_ROOT_SESSION_ID, NATIVE_G_DOC["ROOT_SESSION_ID"])
+        self.assertEqual(CASE_G_EXPECTED_ROUTE, ["kael", "veyra", "thales"])
+        self.assertEqual(CASE_G_EXPECTED_ROUTE, NATIVE_G_DOC["ACTUAL_ROUTE"])
+        self.assertEqual(
+            [CASE_G_VEYRA_SESSION_ID, CASE_G_THALES_SESSION_ID],
+            [child["NATIVE_SESSION_ID"] for child in NATIVE_G_DOC["CHILD_SESSIONS"]],
+        )
+        self.assertEqual(0, NATIVE_G_DOC["CONSULTATION_COUNTS"]["nox"])
+        self.assertEqual(1, NATIVE_G_DOC["CONSULTATION_COUNTS"]["thales"])
+        self.assertTrue(all(call["EXECUTED"] is False for call in NATIVE_G_DOC["API_EVIDENCE"]["ROOT_TOOL_CALL_RECORDS"]))
+        self.assertTrue(all(call["TOOL_STATE"] == "completed" for call in NATIVE_G_DOC["API_EVIDENCE"]["ROOT_TOOL_CALL_RECORDS"]))
+        self.assertIn("do not interpret it as proof of non-execution", NATIVE_G_DOC["API_EVIDENCE"]["TOOL_EXECUTED_FLAG_CAVEAT"])
+        self.assertEqual("NOT_REQUIRED", NATIVE_G_DOC["THALES_FOLLOWUP"]["FOLLOWUP_STATUS"])
+        self.assertEqual("NOT_EXERCISED", NATIVE_G_DOC["THALES_FOLLOWUP"]["SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE"])
+        self.assertFalse(NATIVE_G_DOC["RESULT_FIDELITY"]["RUNTIME_FLAKINESS_REPRODUCED"])
+        self.assertEqual("UNCONFIRMED", NATIVE_G_DOC["RESULT_FIDELITY"]["SUPPORTED_CAUSE"])
+        self.assertEqual("PASS", NATIVE_G_DOC["CASE_ACCEPTANCE"])
+        self.assertEqual(CASE_G_CLASSIFICATIONS, NATIVE_G_DOC["CLASSIFICATIONS"])
+        self.assertEqual(
+            [],
+            validate_native_case_g_capture(
+                NATIVE_G_DOC,
+                CASES["G"],
+                NATIVE_G_ROOT_EXPORT_DOC,
+                NATIVE_G_VEYRA_EXPORT_DOC,
+                NATIVE_G_THALES_EXPORT_DOC,
+            ),
+        )
+        self.assertEqual(
+            [],
+            validate_phase11_g_reconciliation(
+                BASELINE_DOC,
+                CASES_DOC,
+                NATIVE_G_DOC,
+                NATIVE_G_ROOT_EXPORT_DOC,
+                NATIVE_G_VEYRA_EXPORT_DOC,
+                NATIVE_G_THALES_EXPORT_DOC,
+            ),
+        )
+        self.assertEqual(
+            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT", "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
+            BASELINE_DOC["live_qualification"]["pending_labels"],
+        )
+        for prior in ("phase11_b3_reconciliation", "phase11_c_reconciliation", "phase11_d_reconciliation", "phase11_e_reconciliation", "phase11_e2_reconciliation", "phase11_f_reconciliation"):
+            self.assertIn("HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT", BASELINE_DOC[prior]["pending_fresh_root_labels"])
+
+        missing_change_log = copy.deepcopy(BASELINE_DOC)
+        missing_change_log["phase11_g_reconciliation"]["reconciliation_files_changed"] = []
+        self.assertIn(
+            "CASE_G_BASELINE_RECONCILIATION_MISMATCH:reconciliation_files_changed",
+            validate_phase11_g_reconciliation(
+                missing_change_log, CASES_DOC, NATIVE_G_DOC, NATIVE_G_ROOT_EXPORT_DOC,
+                NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC,
+            ),
+        )
+
+    def test_case_g_synthetic_iterative_example_is_preserved_and_still_validated(self) -> None:
+        synthetic = TRACES["G"]
+        self.assertEqual(["kael", "nox", "thales", "veyra"], synthetic["ACTUAL_ROUTE"])
+        self.assertEqual(2, synthetic["CONSULTATION_COUNTS"]["thales"])
+        self.assertEqual(2, len([event for event in synthetic["EVENTS"] if event.get("KIND") == "CONSULT" and event.get("ACTOR_ROLE") == "thales"]))
+        self.assertEqual([], validate_trace(synthetic, CASES["G"]))
+        self.assertNotIn("mandatory_dependency_edges", CASES["G"])
+        self.assertEqual(2, len(CASES["G"]["synthetic_illustrative_dependency_edges"]))
+        self.assertEqual(["kael", "nox", "thales", "veyra"], CASES["G"]["expected_routes"]["default"])
+
+    def test_case_g_rejects_invented_cause_reruns_or_changed_terminal_join(self) -> None:
+        invented_cause = copy.deepcopy(NATIVE_G_DOC)
+        invented_cause["RESULT_FIDELITY"]["SUPPORTED_CAUSE"] = "NETWORK_TIMEOUT"
+        self.assertIn(
+            "NATIVE_G_CHILD_DIAGNOSTIC_OR_ROOT_TERMINAL_CAUSE_FIDELITY_MISMATCH",
+            validate_native_case_g_capture(
+                invented_cause, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+            ),
+        )
+
+        rerun_claim = copy.deepcopy(NATIVE_G_ROOT_EXPORT_DOC)
+        terminal = next(item for item in rerun_claim["messages"] if item["id"] == NATIVE_G_DOC["ROOT_TERMINAL_MESSAGE_ID"])
+        terminal["content"][0]["text"] = terminal["content"][0]["text"].replace("RANDOM_RERUNS: 0", "RANDOM_RERUNS: 3")
+        terminal["text"] = terminal["content"][0]["text"]
+        errors = validate_native_case_g_capture(
+            NATIVE_G_DOC, CASES["G"], rerun_claim, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+        )
+        self.assertIn("NATIVE_G_CHILD_DIAGNOSTIC_OR_ROOT_TERMINAL_CAUSE_FIDELITY_MISMATCH", errors)
+
+        wrong_terminal_id = copy.deepcopy(NATIVE_G_DOC)
+        wrong_terminal_id["CHILD_SESSIONS"][1]["TERMINAL_MESSAGE_ID"] = "msg_fabricated"
+        self.assertIn(
+            "NATIVE_G_CHILD_PARENT_ROLE_OUTCOME_OR_ROUTE_JOIN_MISMATCH",
+            validate_native_case_g_capture(
+                wrong_terminal_id, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+            ),
+        )
+
+        wrong_parent = copy.deepcopy(NATIVE_G_VEYRA_EXPORT_DOC)
+        wrong_parent["session"]["parent_id"] = "ses_fabricated_parent"
+        self.assertIn(
+            "NATIVE_G_CHILD_EXPORT_METADATA_OR_MESSAGE_JOIN_MISMATCH",
+            validate_native_case_g_capture(
+                NATIVE_G_DOC, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC, wrong_parent, NATIVE_G_THALES_EXPORT_DOC
+            ),
+        )
+
+    def test_case_g_rejects_missing_gate_and_wrong_measurement_or_source_ownership(self) -> None:
+        missing_gate = copy.deepcopy(NATIVE_G_ROOT_EXPORT_DOC)
+        user = next(item for item in missing_gate["messages"] if item["type"] == "user")
+        user["text"] = user["text"].replace("STAGE 1:", "STAGE ONE:")
+        self.assertIn(
+            "NATIVE_G_ORIGINAL_PROMPT_SCOPE_OR_NO_RERUN_GATE_MISMATCH",
+            validate_native_case_g_capture(
+                NATIVE_G_DOC, CASES["G"], missing_gate, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+            ),
+        )
+
+        wrong_source_owner = copy.deepcopy(NATIVE_G_DOC)
+        wrong_source_owner["EVIDENCE_OWNERSHIP"]["SOURCE_EVIDENCE_ROLE"] = "nox"
+        self.assertIn(
+            "NATIVE_G_EVIDENCE_ROLE_OWNERSHIP_OR_ROLE_PURITY_MISMATCH",
+            validate_native_case_g_capture(
+                wrong_source_owner, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+            ),
+        )
+
+        fabricated_measurement = copy.deepcopy(NATIVE_G_DOC)
+        fabricated_measurement["EVIDENCE_OWNERSHIP"]["ACTUAL_MEASUREMENT_PERFORMED"] = True
+        fabricated_measurement["CONSULTATION_COUNTS"]["nox"] = 1
+        self.assertIn(
+            "NATIVE_G_EVIDENCE_ROLE_OWNERSHIP_OR_ROLE_PURITY_MISMATCH",
+            validate_native_case_g_capture(
+                fabricated_measurement, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+            ),
+        )
+
+        altered_child_prompt = copy.deepcopy(NATIVE_G_VEYRA_EXPORT_DOC)
+        child_prompt = next(item for item in altered_child_prompt["messages"] if item["type"] == "user")
+        child_prompt["text"] = child_prompt["text"].replace("ordered result sequence", "exact ordered outcomes")
+        self.assertIn(
+            "NATIVE_G_USER_PROMPT_PROJECTION_HASH_MISMATCH",
+            validate_native_case_g_capture(
+                NATIVE_G_DOC, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC, altered_child_prompt, NATIVE_G_THALES_EXPORT_DOC
+            ),
+        )
+
+    def test_case_g_rejects_followup_claims_not_supported_by_current_terminal(self) -> None:
+        required = copy.deepcopy(NATIVE_G_DOC)
+        required["THALES_FOLLOWUP"]["MATERIALLY_NEW_EVIDENCE_NEEDED"] = True
+        errors = validate_native_case_g_capture(
+            required, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+        )
+        self.assertIn("NATIVE_G_THALES_FOLLOWUP_CLAIMS_NOT_SUPPORTED_BY_OBSERVED_EXPORT", errors)
+
+        requested = copy.deepcopy(NATIVE_G_DOC)
+        requested["THALES_FOLLOWUP"]["EVIDENCE_REQUEST_MADE"] = True
+        errors = validate_native_case_g_capture(
+            requested, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+        )
+        self.assertIn("NATIVE_G_THALES_FOLLOWUP_CLAIMS_NOT_SUPPORTED_BY_OBSERVED_EXPORT", errors)
+
+        forged_followup = copy.deepcopy(NATIVE_G_DOC)
+        forged_followup["THALES_FOLLOWUP"].update(
+            {
+                "CONSULTATION_COUNT": 2,
+                "EVIDENCE_REQUEST_MADE": True,
+                "MATERIALLY_NEW_EVIDENCE_NEEDED": True,
+                "FOLLOWUP_STATUS": "SAME_SESSION_FOLLOWUP_REQUIRED",
+                "FOLLOWUP_CONSULTATION_COUNT": 1,
+                "FOLLOWUP_SESSION_ID": CASE_G_THALES_SESSION_ID,
+            }
+        )
+        self.assertIn(
+            "NATIVE_G_THALES_FOLLOWUP_CLAIMS_NOT_SUPPORTED_BY_OBSERVED_EXPORT",
+            validate_native_case_g_capture(
+                forged_followup, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+            ),
+        )
+
+        missing_observed_basis = copy.deepcopy(NATIVE_G_THALES_EXPORT_DOC)
+        terminal = next(item for item in missing_observed_basis["messages"] if item["type"] == "assistant")
+        terminal["text"] = terminal["text"].replace("not materially necessary", "required")
+        terminal["content"][0]["text"] = terminal["content"][0]["text"].replace("not materially necessary", "required")
+        self.assertIn(
+            "NATIVE_G_THALES_FOLLOWUP_CLAIMS_NOT_SUPPORTED_BY_OBSERVED_EXPORT",
+            validate_native_case_g_capture(
+                NATIVE_G_DOC, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC, NATIVE_G_VEYRA_EXPORT_DOC, missing_observed_basis
+            ),
+        )
+
+    def test_case_g_rejects_fabricated_result_ids_or_route_reordering(self) -> None:
+        fabricated_result = copy.deepcopy(NATIVE_G_ROOT_EXPORT_DOC)
+        fabricated_result["tool_call_records"][0]["result_id"] = "result-fabricated"
+        self.assertIn(
+            "NATIVE_G_ROOT_TOOL_CALL_ORDER_OR_RESULT_ID_MISMATCH",
+            validate_native_case_g_capture(
+                NATIVE_G_DOC, CASES["G"], fabricated_result, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+            ),
+        )
+
+        reversed_calls = copy.deepcopy(NATIVE_G_ROOT_EXPORT_DOC)
+        reversed_calls["tool_call_records"].reverse()
+        self.assertIn(
+            "NATIVE_G_ROOT_TOOL_CALL_ORDER_OR_RESULT_ID_MISMATCH",
+            validate_native_case_g_capture(
+                NATIVE_G_DOC, CASES["G"], reversed_calls, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+            ),
+        )
+
+        invented_time = copy.deepcopy(NATIVE_G_ROOT_EXPORT_DOC)
+        terminal = next(item for item in invented_time["messages"] if item["id"] == NATIVE_G_DOC["ROOT_TERMINAL_MESSAGE_ID"])
+        terminal["time"]["completed"] += 1
+        self.assertIn(
+            "NATIVE_G_ROOT_EXPORT_MESSAGE_ORDER_OR_TERMINAL_JOIN_MISMATCH",
+            validate_native_case_g_capture(
+                NATIVE_G_DOC, CASES["G"], invented_time, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+            ),
+        )
+
+        changed_execution_flag = copy.deepcopy(NATIVE_G_ROOT_EXPORT_DOC)
+        changed_execution_flag["tool_call_records"][0]["executed"] = True
+        self.assertIn(
+            "NATIVE_G_ROOT_TOOL_CALL_ORDER_OR_RESULT_ID_MISMATCH",
+            validate_native_case_g_capture(
+                NATIVE_G_DOC, CASES["G"], changed_execution_flag, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+            ),
+        )
+
+    def test_case_g_rejects_incomplete_aggregate_completion_or_fabricated_result_id(self) -> None:
+        for field, value in (
+            ("PENDING_CHILD_COUNT", 1),
+            ("REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED", False),
+            ("RESULT_IDS", ["result-fabricated"]),
+        ):
+            with self.subTest(field=field):
+                incomplete = copy.deepcopy(NATIVE_G_DOC)
+                incomplete["COMPLETION_GATE"][field] = value
+                self.assertIn(
+                    "NATIVE_G_COMPLETION_RERUN_FILE_CHANGE_OR_ACCEPTANCE_STATUS_MISMATCH",
+                    validate_native_case_g_capture(
+                        incomplete, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC, NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC
+                    ),
+                )
+
+        misleading_reconciliation = copy.deepcopy(NATIVE_G_DOC)
+        misleading_reconciliation["RECONCILIATION_FILES_CHANGED"] = []
+        misleading_reconciliation["NOTES"] = "No worktree access or source change occurred."
+        self.assertIn(
+            "NATIVE_G_COMPLETION_RERUN_FILE_CHANGE_OR_ACCEPTANCE_STATUS_MISMATCH",
+            validate_native_case_g_capture(
+                misleading_reconciliation, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC,
+                NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC,
+            ),
         )
 
 

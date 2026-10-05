@@ -7,6 +7,7 @@ router, runtime observer, installer check, or proof of model behavior.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -251,6 +252,10 @@ CASE_E1_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
 ]
 CURRENT_PHASE11_PENDING_LABELS = [
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
+]
+CASE_F_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
@@ -262,7 +267,7 @@ CASE_E2_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
 ]
 CURRENT_PHASE11_FRESH_ROOT_STATE = (
-    "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F_PASS; G,H,K_PENDING"
+    "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F_PASS; G_PASS; H,K_PENDING"
 )
 CASE_D_ROOT_SESSION_ID = "ses_ef8c726b7ffeqWgvWlpg0NcU1Q"
 CASE_D_ROOT_DIRECTORY = "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-d"
@@ -444,6 +449,122 @@ CASE_F_TERMINAL_FACTS = {
     "UNRESOLVED_WORK": "NONE",
     "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
     "ANY_WORK_REMAINING": "NO",
+}
+CASE_G_LABEL = "PHASE11_CASE_G_FRESH_ROOT"
+CASE_G_ROOT_SESSION_ID = "ses_ef3d4954bffeHMU8o3nWFjf6EP"
+CASE_G_ROOT_DIRECTORY = "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-g"
+CASE_G_ROOT_WINDOWS_DIRECTORY = CASE_G_ROOT_DIRECTORY.replace("/", "\\")
+CASE_G_ROOT_HEAD = "e3636c062a3a6db3ccebd4fbdff69acf1173bf99"
+CASE_G_ROOT_TITLE = "Read-only diagnosis of intermittent observations fixture"
+CASE_G_ROOT_USER_MESSAGE_ID = "msg_10c2b6ab9001ZLjHXX0JfQoQrs"
+CASE_G_ROOT_USER_PROMPT_SHA256 = "77FDF180ED0D90BF0FD23742AB86BB747A08BB4399701DB4809DD275AC85E7D8"
+CASE_G_ROOT_VEYRA_MESSAGE_ID = "msg_10c2b6be5001vwuEXvTOo0xskF"
+CASE_G_ROOT_THALES_MESSAGE_ID = "msg_10c2bfeea001cM0D5Y3nfgAUkF"
+CASE_G_ROOT_TERMINAL_MESSAGE_ID = "msg_10c2d05be0012Dg2Rpzb6aUNMy"
+CASE_G_ROOT_IDLE_MESSAGE_ID = "msg_10c2d2b57001xBqfhbbMBm1iCA"
+CASE_G_VEYRA_SESSION_ID = "ses_ef3d436eeffefhfC3CHLrYorMG"
+CASE_G_VEYRA_USER_MESSAGE_ID = "msg_10c2bca51001OrJjv1qXjt5JQh"
+CASE_G_VEYRA_USER_PROMPT_SHA256 = "EFC50834DD77AFB8AAE98EECD8205EBBEF275AD580EF4B7237BCE273FB8FE65B"
+CASE_G_VEYRA_READ_MESSAGE_ID = "msg_10c2bca7d001Np34ZVxAqQT5Lm"
+CASE_G_VEYRA_READ_CALL_ID = "call_axU3cxBfC0QRwZ90jk9yLNlV"
+CASE_G_VEYRA_TERMINAL_MESSAGE_ID = "msg_10c2bdbb1001nrByoALlwcHbCp"
+CASE_G_VEYRA_IDLE_MESSAGE_ID = "msg_10c2bfdc6001016ETthcuT1PqF"
+CASE_G_THALES_SESSION_ID = "ses_ef3d386abffeVKv396Rg46d5Ls"
+CASE_G_THALES_USER_MESSAGE_ID = "msg_10c2c7a84001qJjkJ997lidz9p"
+CASE_G_THALES_USER_PROMPT_SHA256 = "621EC9D060B355F0F3D4DB7A94D60B1E8598B3A08CB68A23F71BD1AD6D7808C4"
+CASE_G_THALES_TERMINAL_MESSAGE_ID = "msg_10c2c7aaf001QnQ9OkAut43aHF"
+CASE_G_THALES_IDLE_MESSAGE_ID = "msg_10c2d04e1001lMSjeE0QmvFAdd"
+CASE_G_VEYRA_ROOT_CALL_ID = "call_tr3IllNvxfWefARWraSij01y"
+CASE_G_THALES_ROOT_CALL_ID = "call_FFOFQnncfDZDt201HQks5Gkt"
+CASE_G_EXPECTED_ROUTE = ["kael", "veyra", "thales"]
+CASE_G_EXPECTED_FOLLOWUP = {
+    "CONSULTATION_COUNT": 1,
+    "EVIDENCE_REQUEST_MADE": False,
+    "MATERIALLY_NEW_EVIDENCE_NEEDED": False,
+    "FOLLOWUP_STATUS": "NOT_REQUIRED",
+    "FOLLOWUP_CONSULTATION_COUNT": 0,
+    "FOLLOWUP_SESSION_ID": None,
+    "SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE": "NOT_EXERCISED",
+    "BASIS": "Thales reports that additional metadata is not materially necessary and recommends stopping; no follow-up request or second consultation appears in the exports.",
+}
+CASE_G_RECONCILIATION_FILES_CHANGED = [
+    "tests/phase11-integrated-routing/RUNME.md",
+    "tests/phase11-integrated-routing/baseline.json",
+    "tests/phase11-integrated-routing/baseline.md",
+    "tests/phase11-integrated-routing/case-g.native-trace.json",
+    "tests/phase11-integrated-routing/case-g.root.session-export.json",
+    "tests/phase11-integrated-routing/case-g.thales.session-export.json",
+    "tests/phase11-integrated-routing/case-g.veyra.session-export.json",
+    "tests/phase11-integrated-routing/cases.json",
+    "tests/phase11-integrated-routing/qualify.py",
+    "tests/phase11-integrated-routing/test_qualify.py",
+]
+CASE_G_RECONCILIATION_NOTES = (
+    "The fixed PASS/TIMEOUT/PASS sequence comes from a synthetic fixture and establishes recorded inconsistency only. "
+    "Veyra's original bounded fixture read supplied source evidence before Thales; Nox remains the owner of any actual "
+    "runtime measurement but performed none here. Thales reports that additional metadata is not materially necessary, "
+    "so one consultation and no follow-up are supported; if material new evidence is requested in a future case, collect "
+    "and consume it before continuing the same Thales session. Synthetic trace G remains a separate illustrative iterative "
+    "example. The original root terminal reports FILES_CHANGED: NONE. This reconciliation performed no Case G rerun or "
+    "runtime reproduction and did not access the disposable worktree; it changed only the scoped Phase 11 paths listed "
+    "in RECONCILIATION_FILES_CHANGED."
+)
+CASE_G_BASELINE_SOURCE = (
+    "Corrected, schema-guided projection of the exact completed public OpenCode V2 metadata and export responses, "
+    "bound to the task-supplied Nox verification and root completion facts. The original Veyra fixture read is "
+    "preserved as original-run work; this reconciliation performed no Case G rerun or runtime replay and did not "
+    "access the disposable worktree."
+)
+CASE_G_ROOT_TERMINAL_FACTS = {
+    "WORKTREE_ISOLATION": "SUPPLIED_VERIFIED",
+    "OBSERVED_SEQUENCE": "Same input `item-7`, quantity `2`: PASS → TIMEOUT → PASS",
+    "ADDITIONAL_DISCRIMINATING_EVIDENCE_USED": "NO",
+    "DIAGNOSIS": "Synthetic records establish same-input outcome inconsistency, not reproduced runtime flakiness or a deterministic root cause.",
+    "CONFIDENCE": "HIGH in recorded inconsistency; causal confidence unestablished",
+    "SUPPORTED_CAUSE": "UNCONFIRMED",
+    "RANDOM_RERUNS": "0",
+    "FILES_CHANGED": "NONE",
+    "UNRESOLVED_WORK": "NONE",
+    "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+    "ANY_WORK_REMAINING": "NO",
+}
+CASE_G_VEYRA_TERMINAL_TEXT = (
+    "STATUS: SUCCESS\n\nSUMMARY:\nINPUT_IDENTITY_VALUE: Same input — id `item-7`, quantity `2`.\n"
+    "OBSERVED_SEQUENCE: ordinal 1 `PASS`; ordinal 2 `TIMEOUT`; ordinal 3 `PASS`.\n\n"
+    "CHANGES: none\nFILES: `tests/phase11-integrated-routing/fixtures/flaky/observations.json` (read only)\n"
+    "TESTS: not run\nACCEPTANCE: Fixed input identity/value and exact ordered outcomes recorded from the fixture.\n"
+    "RISKS: Fixture observations only; no runtime execution facts established.\nBLOCKERS: none\n"
+    "RECOMMENDATION: ACCEPT"
+)
+CASE_G_THALES_TERMINAL_TEXT = (
+    "STATUS: ADVICE\n\nDIAGNOSIS: The supplied records show different outcomes for the same fixed input. "
+    "They establish recorded inconsistency—not reproduced runtime flakiness or a causal diagnosis.\n\n"
+    "EVIDENCE: Input `item-7`, quantity `2`; ordered outcomes `PASS → TIMEOUT → PASS`. Evidence is synthetic; "
+    "this task performed no executions.\n\nALTERNATIVE_HYPOTHESES: Unrecorded contextual differences and synthetic "
+    "fixture construction remain possible explanations; neither is established or favored.\n\n"
+    "MISSING_EVIDENCE: No causal evidence is supplied. Additional metadata is not materially necessary for this "
+    "smallest supported conclusion.\n\nRECOMMENDED_NEXT_ACTION: Stop at recorded outcome inconsistency with cause "
+    "unconfirmed. Do not request another read merely to seek specificity.\n\nRECOMMENDED_ROLE: none\n\n"
+    "EXECUTION_DECISION: STOP\n\nRISKS: Treating identical input as identical execution conditions; mistaking fixture "
+    "records for reproduced behavior; attributing the timeout to an unsupported cause.\n\n"
+    "CONFIDENCE: High in the recorded inconsistency; causal confidence cannot be assessed.\n\n"
+    "SUPPORTED_CAUSE: UNCONFIRMED"
+)
+CASE_G_ROLE_COUNTS = {role: 0 for role in ALL_INVOCABLE_ROLES}
+CASE_G_ROLE_COUNTS["veyra"] = 1
+CASE_G_ROLE_COUNTS["thales"] = 1
+CASE_G_NEGATIVE_ROLES = ("nox", "argus", "talos", "kovan", "orin", "atlas", "helios", "aegis", "vera")
+CASE_G_CLASSIFICATIONS = {
+    "CASE_G_FRESH_ROOT_NATIVE": "PASS",
+    "CASE_G_EVIDENCE_BEFORE_ESCALATION": "PASS",
+    "CASE_G_THALES_DIAGNOSIS": "PASS",
+    "CASE_G_NO_UNNEEDED_FOLLOWUP": "PASS",
+    "CASE_G_NO_RERUN": "PASS",
+    "CASE_G_NO_INVENTED_CAUSE": "PASS",
+    "CASE_G_ROLE_PURITY": "PASS",
+    "CASE_G_RESULT_FIDELITY": "PASS",
+    "CASE_G_COMPLETION_OWNERSHIP": "PASS",
+    "CASE_G_THALES_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE": "NOT_EXERCISED",
 }
 CASE_E_TERMINAL_FACTS = {
     "WORKTREE_ISOLATION": "SUPPLIED_VERIFIED",
@@ -974,7 +1095,10 @@ def validate_trace(trace: dict[str, Any], case: dict[str, Any]) -> list[str]:
                 dependent_start = _one_event(events, "CHILD_START", after_marker)
                 if not prerequisite_result or not dependent_start or prerequisite_result.get("ORDER", 0) >= dependent_start.get("ORDER", 0):
                     add("DEPENDENCY_RESULT_NOT_CONSUMED_BEFORE_DEPENDENT_START")
-    for required in case.get("mandatory_dependency_edges", []):
+    required_dependency_edges = list(case.get("mandatory_dependency_edges", []))
+    if evidence_class == "SYNTHETIC_TRACE":
+        required_dependency_edges.extend(case.get("synthetic_illustrative_dependency_edges", []))
+    for required in required_dependency_edges:
         before_ref = next((child.get("TRACE_REF") for child in children if child.get("WORK_ID") == required.get("before_work_id")), None)
         after_ref = next((child.get("TRACE_REF") for child in children if child.get("WORK_ID") == required.get("after_work_id")), None)
         after_consultation = required.get("after_consultation")
@@ -3301,6 +3425,10 @@ def _export_text(export: dict[str, Any], message_id: str) -> str:
     )
 
 
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest().upper()
+
+
 def _export_content_types(export: dict[str, Any]) -> list[str]:
     types: list[str] = []
     for message in export.get("messages", []):
@@ -4509,7 +4637,7 @@ def validate_phase11_f_reconciliation(
         or report.get("acceptance_status") != "PASS"
         or report.get("case_result") != "NATIVE_EXECUTED_ROUTING_PASS"
         or report.get("phase11_status") != "PARTIAL"
-        or report.get("pending_fresh_root_labels") != CURRENT_PHASE11_PENDING_LABELS
+        or report.get("pending_fresh_root_labels") != CASE_F_PENDING_LABELS
     ):
         errors.append("CASE_F_ACCEPTANCE_PHASE_STATUS_OR_PENDING_LABELS_MISMATCH")
 
@@ -4556,6 +4684,718 @@ def validate_phase11_f_reconciliation(
     return errors
 
 
+def validate_native_case_g_capture(
+    trace: dict[str, Any],
+    case: dict[str, Any],
+    root_export: dict[str, Any],
+    veyra_export: dict[str, Any],
+    thales_export: dict[str, Any],
+) -> list[str]:
+    """Check Case G's native evidence-before-diagnosis route and conditional follow-up."""
+    errors: list[str] = []
+    trace = trace if isinstance(trace, dict) else {}
+    case = case if isinstance(case, dict) else {}
+    root_export = root_export if isinstance(root_export, dict) else {}
+    veyra_export = veyra_export if isinstance(veyra_export, dict) else {}
+    thales_export = thales_export if isinstance(thales_export, dict) else {}
+    add = errors.append
+
+    required_fields = (
+        "CASE_ID", "REQUEST_CLASS", "EVIDENCE_CLASS", "ROOT_SESSION_ID", "EXPECTED_ROUTE",
+        "ACTUAL_ROUTE", "CHILD_SESSIONS", "CONSULTATION_COUNTS", "UNIQUE_CHILD_SESSION_COUNTS",
+        "NEGATIVE_CONTROLS", "ROLE_PURITY", "DEPENDENCY_ORDER", "RESULT_FIDELITY", "API_EVIDENCE",
+        "THALES_FOLLOWUP", "ROOT_TERMINAL_FACTS", "COMPLETION_GATE", "FINAL_OUTCOME",
+        "CASE_ACCEPTANCE", "EVIDENCE_PROVENANCE",
+    )
+    missing = [field for field in required_fields if field not in trace]
+    if missing:
+        add("NATIVE_G_REQUIRED_FIELDS_MISSING:" + ",".join(missing))
+
+    expected_native_acceptance = {
+        "expected_product_route": CASE_G_EXPECTED_ROUTE,
+        "source_evidence_role": "veyra",
+        "actual_measurement_owner": "nox",
+        "actual_measurement_required": False,
+        "thales_second_same_session_consultation": "REQUIRED_ONLY_IF_MATERIALLY_NEW_EVIDENCE_REQUESTED_OR_NEEDED",
+        "followup_runtime_coverage_may_remain": "NOT_EXERCISED",
+    }
+    synthetic_route = ["kael", "nox", "thales", "veyra"]
+    synthetic_edges = [
+        {
+            "before_work_id": "fixed-flaky-observation-capture",
+            "after_work_id": "bounded-uncertainty-diagnosis",
+        },
+        {
+            "before_work_id": "fixed-sequence-source-evidence",
+            "after_consultation": {"role": "thales", "number": 2},
+        },
+    ]
+    if (
+        case.get("id") != "G"
+        or case.get("request_class") != "HARD_FLAKY_DIAGNOSIS"
+        or case.get("expected_routes", {}).get("default") != synthetic_route
+        or case.get("native_acceptance") != expected_native_acceptance
+        or "mandatory_dependency_edges" in case
+        or case.get("synthetic_illustrative_dependency_edges") != synthetic_edges
+        or trace.get("CASE_ID") != "G"
+        or trace.get("REQUEST_CLASS") != "HARD_FLAKY_DIAGNOSIS"
+        or trace.get("EVIDENCE_CLASS") != "FRESH_ROOT_NATIVE"
+        or trace.get("CASE_LABEL") != CASE_G_LABEL
+        or trace.get("EXPECTED_ROUTE") != CASE_G_EXPECTED_ROUTE
+        or trace.get("ACTUAL_ROUTE") != CASE_G_EXPECTED_ROUTE
+    ):
+        add("NATIVE_G_IDENTITY_MATRIX_OR_NATIVE_SEMANTICS_MISMATCH")
+
+    try:
+        fixed_fixture = load_json(HERE / "fixtures/flaky/observations.json")
+    except (OSError, json.JSONDecodeError):
+        fixed_fixture = None
+    if (
+        not isinstance(fixed_fixture, dict)
+        or fixed_fixture.get("kind") != "fixed synthetic contradictory sequence"
+        or fixed_fixture.get("same_input") != {"id": "item-7", "quantity": 2}
+        or fixed_fixture.get("observations")
+        != [
+            {"ordinal": 1, "result": "PASS"},
+            {"ordinal": 2, "result": "TIMEOUT"},
+            {"ordinal": 3, "result": "PASS"},
+        ]
+    ):
+        add("NATIVE_G_STATIC_FIXTURE_INPUT_OR_ORDERED_OBSERVATIONS_MISMATCH")
+
+    route_reconciliation = trace.get("ROUTE_RECONCILIATION", {})
+    if (
+        route_reconciliation.get("SYNTHETIC_TRACE_ROUTE") != ["kael", "nox", "thales", "veyra"]
+        or route_reconciliation.get("EXPECTED_NATIVE_PRODUCT_ROUTE") != CASE_G_EXPECTED_ROUTE
+        or route_reconciliation.get("OBSERVED_NATIVE_PRODUCT_ROUTE") != CASE_G_EXPECTED_ROUTE
+        or route_reconciliation.get("OBSERVED_ROOT_CALL_ORDER") != ["veyra", "thales"]
+        or route_reconciliation.get("CLASSIFICATION") != "PASS"
+    ):
+        add("NATIVE_G_SYNTHETIC_AND_NATIVE_ROUTE_SEPARATION_MISMATCH")
+
+    expected_root_session = {
+        "id": CASE_G_ROOT_SESSION_ID,
+        "agent": "kael",
+        "parent_id": None,
+        "parent_id_observation": "NOT_EXPOSED",
+        "directory": "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-g",
+        "title": CASE_G_ROOT_TITLE,
+        "execution_outcome": "succeeded",
+        "time": {"created": 1791205534628, "updated": 1791205536328, "idle": 1791205649239, "viewed": 1791205649239},
+    }
+    if (
+        trace.get("ROOT_SESSION_ID") != CASE_G_ROOT_SESSION_ID
+        or trace.get("ROOT_DIRECTORY", "").replace("\\", "/") != CASE_G_ROOT_DIRECTORY
+        or trace.get("ROOT_AGENT") != "kael"
+        or trace.get("ROOT_PARENT_SESSION_ID") is not None
+        or trace.get("ROOT_PARENT_SESSION_ID_OBSERVATION") != "NOT_EXPOSED_IN_EXPORT; NULL_SUPPLIED_IN_TASK_CONTEXT"
+        or trace.get("ROOT_TITLE") != CASE_G_ROOT_TITLE
+        or trace.get("ROOT_EXECUTION_OUTCOME") != "succeeded"
+        or trace.get("ROOT_USER_MESSAGE_ID") != CASE_G_ROOT_USER_MESSAGE_ID
+        or trace.get("ROOT_VEYRA_INVOCATION_MESSAGE_ID") != CASE_G_ROOT_VEYRA_MESSAGE_ID
+        or trace.get("ROOT_THALES_INVOCATION_MESSAGE_ID") != CASE_G_ROOT_THALES_MESSAGE_ID
+        or trace.get("ROOT_TERMINAL_MESSAGE_ID") != CASE_G_ROOT_TERMINAL_MESSAGE_ID
+        or trace.get("ROOT_IDLE_MESSAGE_ID") != CASE_G_ROOT_IDLE_MESSAGE_ID
+        or trace.get("ROOT_STARTING_HEAD") != CASE_G_ROOT_HEAD
+        or trace.get("ROOT_STARTING_HEAD_SOURCE") != "Original root user prompt"
+        or trace.get("ROOT_STARTING_HEAD_FILESYSTEM_VERIFIED_BY_RECONCILIATION") is not False
+        or root_export.get("session") != expected_root_session
+    ):
+        add("NATIVE_G_ROOT_METADATA_OR_EXPORT_JOIN_MISMATCH")
+
+    expected_exports = (
+        (
+            root_export, CASE_G_ROOT_SESSION_ID, 5, 3,
+            CASE_G_ROOT_USER_MESSAGE_ID, CASE_G_ROOT_USER_PROMPT_SHA256,
+        ),
+        (
+            veyra_export, CASE_G_VEYRA_SESSION_ID, 4, 2,
+            CASE_G_VEYRA_USER_MESSAGE_ID, CASE_G_VEYRA_USER_PROMPT_SHA256,
+        ),
+        (
+            thales_export, CASE_G_THALES_SESSION_ID, 3, 2,
+            CASE_G_THALES_USER_MESSAGE_ID, CASE_G_THALES_USER_PROMPT_SHA256,
+        ),
+    )
+    for export, session_id, message_count, reasoning_count, prompt_id, prompt_hash in expected_exports:
+        if (
+            export.get("evidence_class") != "FRESH_ROOT_NATIVE"
+            or export.get("source_api") != "OpenCode V2 public read-only API"
+            or export.get("export_schema")
+            != "OpenAPI SessionTransfer.Data: response.data.info plus response.data.messages; assistant public text is in message.content entries with type=text."
+            or export.get("session_metadata_query") != {
+                "method": "GET", "path": f"/api/session/{session_id}", "result": "SUCCESS"
+            }
+            or export.get("export_query") != {
+                "method": "GET",
+                "path": f"/api/experimental/session/{session_id}/export?sanitize=false",
+                "result": "SUCCESS",
+            }
+            or export.get("message_count") != message_count
+            or len(export.get("messages", [])) != message_count
+            or export.get("export_pagination") != "NONE_OBSERVED"
+        ):
+            add("NATIVE_G_EXPORT_SCHEMA_METADATA_OR_LINK_MISMATCH")
+        projection = export.get("projection_and_redaction", {})
+        if (
+            projection.get("reasoning_blocks_removed") != reasoning_count
+            or projection.get("secret_values_redacted") != 0
+            or projection.get("unrecognized_content_blocks_omitted") != 0
+            or projection.get("provider_state_omitted") is not True
+            or projection.get("snapshots_omitted") is not True
+            or projection.get("tool_arguments_and_results_omitted") is not True
+            or projection.get("raw_export_persisted") is not False
+            or export.get("content_availability", {}).get("user_prompt_sha256") != prompt_hash
+            or any(re.search(r"(?i)reason|thought|analysis", kind) for kind in _export_content_types(export))
+        ):
+            add("NATIVE_G_SANITIZATION_OR_PROVIDER_PRIVATE_CONTENT_MISMATCH")
+        projected_prompt = (_export_message(export, prompt_id) or {}).get("text", "")
+        if not isinstance(projected_prompt, str) or _sha256_text(projected_prompt) != prompt_hash:
+            add("NATIVE_G_USER_PROMPT_PROJECTION_HASH_MISMATCH")
+
+    root_messages = root_export.get("messages", [])
+    expected_root_message_ids = [
+        CASE_G_ROOT_USER_MESSAGE_ID,
+        CASE_G_ROOT_VEYRA_MESSAGE_ID,
+        CASE_G_ROOT_THALES_MESSAGE_ID,
+        CASE_G_ROOT_TERMINAL_MESSAGE_ID,
+        CASE_G_ROOT_IDLE_MESSAGE_ID,
+    ]
+    expected_root_message_times = [
+        {"created": 1791205534665},
+        {"created": 1791205535121, "streamed": 1791205558605, "completed": 1791205572299},
+        {"created": 1791205572587, "streamed": 1791205603780, "completed": 1791205639596},
+        {"created": 1791205639798, "streamed": 1791205649032, "completed": 1791205649235},
+        {"created": 1791205649239},
+    ]
+    if (
+        [message.get("id") for message in root_messages if isinstance(message, dict)] != expected_root_message_ids
+        or [message.get("type") for message in root_messages if isinstance(message, dict)]
+        != ["user", "assistant", "assistant", "assistant", "idle"]
+        or [message.get("time") for message in root_messages if isinstance(message, dict)] != expected_root_message_times
+        or root_export.get("terminal_message_id") != CASE_G_ROOT_TERMINAL_MESSAGE_ID
+        or root_export.get("terminal_outcome_record") != {
+            "message_id": CASE_G_ROOT_IDLE_MESSAGE_ID, "type": "idle", "outcome": "succeeded"
+        }
+    ):
+        add("NATIVE_G_ROOT_EXPORT_MESSAGE_ORDER_OR_TERMINAL_JOIN_MISMATCH")
+
+    root_prompt = (_export_message(root_export, CASE_G_ROOT_USER_MESSAGE_ID) or {}).get("text", "")
+    root_prompt_markers = (
+        CASE_G_LABEL,
+        CASE_G_ROOT_HEAD,
+        CASE_G_ROOT_WINDOWS_DIRECTORY,
+        "fixtures/flaky/observations.json",
+        "Do NOT rerun, reproduce, randomize",
+        "STAGE 1",
+        "If the diagnosis remains materially uncertain",
+        "After that evidence is terminal and consumed, continue the SAME existing diagnostic specialist session",
+    )
+    if not isinstance(root_prompt, str) or any(marker not in root_prompt for marker in root_prompt_markers):
+        add("NATIVE_G_ORIGINAL_PROMPT_SCOPE_OR_NO_RERUN_GATE_MISMATCH")
+    veyra_prompt = (_export_message(veyra_export, CASE_G_VEYRA_USER_MESSAGE_ID) or {}).get("text", "")
+    if (
+        "TASK_ID: PHASE11_CASE_G_STAGE1" not in veyra_prompt
+        or "ROLE: veyra" not in veyra_prompt
+        or "ordered result sequence, preserving actual values and order" not in veyra_prompt
+        or "READ_SCOPE: tests/phase11-integrated-routing/fixtures/flaky/observations.json (STAGE 1: fixed input identity/value and ordered observations only)" not in veyra_prompt
+        or "Do not use, report, interpret, or base conclusions on randomized, network, or purpose metadata" not in veyra_prompt
+    ):
+        add("NATIVE_G_VEYRA_STAGE1_SCOPE_OR_SOURCE_OWNERSHIP_MISMATCH")
+
+    root_calls = root_export.get("tool_call_records", [])
+    expected_root_calls = [
+        {
+            "id": CASE_G_VEYRA_ROOT_CALL_ID,
+            "name": "subagent",
+            "executed": False,
+            "state": "completed",
+            "agent": "veyra",
+            "task_label": "PHASE11_CASE_G_STAGE1",
+            "child_session_id": CASE_G_VEYRA_SESSION_ID,
+            "result_id": None,
+        },
+        {
+            "id": CASE_G_THALES_ROOT_CALL_ID,
+            "name": "subagent",
+            "executed": False,
+            "state": "completed",
+            "agent": "thales",
+            "task_label": "PHASE11_CASE_G_DIAGNOSIS",
+            "child_session_id": CASE_G_THALES_SESSION_ID,
+            "result_id": None,
+        },
+    ]
+    trace_calls = trace.get("API_EVIDENCE", {}).get("ROOT_TOOL_CALL_RECORDS")
+    if root_calls != expected_root_calls or trace_calls != [
+        {
+            "ORDER": 1,
+            "PARENT_MESSAGE_ID": CASE_G_ROOT_VEYRA_MESSAGE_ID,
+            "TOOL_CALL_ID": CASE_G_VEYRA_ROOT_CALL_ID,
+            "AGENT": "veyra",
+            "TASK_LABEL": "PHASE11_CASE_G_STAGE1",
+            "CHILD_SESSION_ID": CASE_G_VEYRA_SESSION_ID,
+            "EXECUTED": False,
+            "TOOL_STATE": "completed",
+            "RESULT_ID": None,
+        },
+        {
+            "ORDER": 2,
+            "PARENT_MESSAGE_ID": CASE_G_ROOT_THALES_MESSAGE_ID,
+            "TOOL_CALL_ID": CASE_G_THALES_ROOT_CALL_ID,
+            "AGENT": "thales",
+            "TASK_LABEL": "PHASE11_CASE_G_DIAGNOSIS",
+            "CHILD_SESSION_ID": CASE_G_THALES_SESSION_ID,
+            "EXECUTED": False,
+            "TOOL_STATE": "completed",
+            "RESULT_ID": None,
+        },
+    ]:
+        add("NATIVE_G_ROOT_TOOL_CALL_ORDER_OR_RESULT_ID_MISMATCH")
+    if trace.get("API_EVIDENCE", {}).get("TOOL_EXECUTED_FLAG_CAVEAT") != (
+        "The public exports report executed=false on both root subagent calls and Veyra's read call even though each observed tool state is completed; the linked child session exports succeeded and the root terminal reports child results consumed. Preserve this flag, but do not interpret it as proof of non-execution or as negating completed results."
+    ):
+        add("NATIVE_G_EXECUTED_FLAG_INTERPRETATION_MISMATCH")
+
+    child_sessions = trace.get("CHILD_SESSIONS", [])
+    expected_child_fields = [
+        {
+            "TRACE_REF": "G-VEYRA", "NATIVE_SESSION_ID": CASE_G_VEYRA_SESSION_ID, "AGENT": "veyra",
+            "PARENT_AGENT": "kael", "PARENT_SESSION_ID": CASE_G_ROOT_SESSION_ID, "LAUNCH_ORDER": 1,
+            "INVOCATION_COUNT": 1, "EXECUTION_STATE": "SUCCEEDED", "FINAL_OUTCOME": "succeeded",
+            "RETURN_STATUS": "SUCCESS", "RESULT_ID": None, "PARENT_MESSAGE_ID": CASE_G_ROOT_VEYRA_MESSAGE_ID,
+            "INVOCATION_TOOL_CALL_ID": CASE_G_VEYRA_ROOT_CALL_ID,
+            "TERMINAL_MESSAGE_ID": CASE_G_VEYRA_TERMINAL_MESSAGE_ID, "TERMINAL_RETURN_CONSUMED": True,
+        },
+        {
+            "TRACE_REF": "G-THALES", "NATIVE_SESSION_ID": CASE_G_THALES_SESSION_ID, "AGENT": "thales",
+            "PARENT_AGENT": "kael", "PARENT_SESSION_ID": CASE_G_ROOT_SESSION_ID, "LAUNCH_ORDER": 2,
+            "INVOCATION_COUNT": 1, "EXECUTION_STATE": "SUCCEEDED", "FINAL_OUTCOME": "succeeded",
+            "RETURN_STATUS": "ADVICE", "RESULT_ID": None, "PARENT_MESSAGE_ID": CASE_G_ROOT_THALES_MESSAGE_ID,
+            "INVOCATION_TOOL_CALL_ID": CASE_G_THALES_ROOT_CALL_ID,
+            "TERMINAL_MESSAGE_ID": CASE_G_THALES_TERMINAL_MESSAGE_ID, "TERMINAL_RETURN_CONSUMED": True,
+        },
+    ]
+    if len(child_sessions) != 2 or any(
+        any(child.get(key) != value for key, value in expected.items())
+        for child, expected in zip(child_sessions, expected_child_fields)
+    ):
+        add("NATIVE_G_CHILD_PARENT_ROLE_OUTCOME_OR_ROUTE_JOIN_MISMATCH")
+
+    expected_child_sessions = (
+        (veyra_export, CASE_G_VEYRA_SESSION_ID, "veyra", CASE_G_VEYRA_TERMINAL_MESSAGE_ID,
+         [CASE_G_VEYRA_USER_MESSAGE_ID, CASE_G_VEYRA_READ_MESSAGE_ID, CASE_G_VEYRA_TERMINAL_MESSAGE_ID, CASE_G_VEYRA_IDLE_MESSAGE_ID],
+         ["user", "assistant", "assistant", "idle"],
+         {
+             "id": CASE_G_VEYRA_SESSION_ID, "agent": "veyra", "parent_id": CASE_G_ROOT_SESSION_ID,
+             "parent_id_observation": "EXPLICIT_ID", "directory": "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-g",
+             "title": "Collect fixed observation sequence", "execution_outcome": "succeeded",
+             "time": {"created": 1791205558860, "updated": 1791205558867, "idle": 1791205572038},
+         },
+         [
+             {"created": 1791205558894},
+             {"created": 1791205559154, "streamed": 1791205562977, "completed": 1791205563284},
+             {"created": 1791205563567, "streamed": 1791205571812, "completed": 1791205572026},
+             {"created": 1791205572038},
+         ]),
+        (thales_export, CASE_G_THALES_SESSION_ID, "thales", CASE_G_THALES_TERMINAL_MESSAGE_ID,
+         [CASE_G_THALES_USER_MESSAGE_ID, CASE_G_THALES_TERMINAL_MESSAGE_ID, CASE_G_THALES_IDLE_MESSAGE_ID],
+         ["user", "assistant", "idle"],
+         {
+             "id": CASE_G_THALES_SESSION_ID, "agent": "thales", "parent_id": CASE_G_ROOT_SESSION_ID,
+             "parent_id_observation": "EXPLICIT_ID", "directory": "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-g",
+             "title": "Diagnose contradictory fixed observations", "execution_outcome": "succeeded",
+             "time": {"created": 1791205603966, "updated": 1791205603974, "idle": 1791205639393},
+         },
+         [
+             {"created": 1791205604001},
+             {"created": 1791205604296, "streamed": 1791205639204, "completed": 1791205639385},
+             {"created": 1791205639393},
+         ]),
+    )
+    for export, session_id, role, terminal_id, message_ids, message_types, expected_session, expected_times in expected_child_sessions:
+        session = export.get("session", {})
+        messages = export.get("messages", [])
+        if (
+            session != expected_session
+            or session.get("id") != session_id
+            or session.get("agent") != role
+            or session.get("parent_id") != CASE_G_ROOT_SESSION_ID
+            or session.get("parent_id_observation") != "EXPLICIT_ID"
+            or session.get("directory", "").replace("\\", "/") != CASE_G_ROOT_DIRECTORY
+            or session.get("execution_outcome") != "succeeded"
+            or [message.get("id") for message in messages if isinstance(message, dict)] != message_ids
+            or [message.get("type") for message in messages if isinstance(message, dict)] != message_types
+            or [message.get("time") for message in messages if isinstance(message, dict)] != expected_times
+            or export.get("terminal_message_id") != terminal_id
+            or export.get("terminal_outcome_record", {}).get("outcome") != "succeeded"
+        ):
+            add("NATIVE_G_CHILD_EXPORT_METADATA_OR_MESSAGE_JOIN_MISMATCH")
+
+    veyra_read_stub = {
+        "id": CASE_G_VEYRA_READ_CALL_ID,
+        "name": "read",
+        "executed": False,
+        "state": "completed",
+        "result_id": None,
+    }
+    if veyra_export.get("tool_call_records") != [veyra_read_stub] or thales_export.get("tool_call_records") != []:
+        add("NATIVE_G_CHILD_TOOL_OR_NESTED_DELEGATION_MISMATCH")
+    veyra_read_message = _export_message(veyra_export, CASE_G_VEYRA_READ_MESSAGE_ID) or {}
+    veyra_read_content = veyra_read_message.get("content", [])
+    if (
+        len(veyra_read_content) != 1
+        or veyra_read_content[0].get("id") != CASE_G_VEYRA_READ_CALL_ID
+        or veyra_read_content[0].get("executed") is not False
+        or veyra_read_content[0].get("state") != "completed"
+        or veyra_read_content[0].get("time")
+        != {"created": 1791205562933, "ran": 1791205562956, "completed": 1791205563049}
+    ):
+        add("NATIVE_G_CHILD_READ_TOOL_STATUS_OR_EXECUTED_FLAG_MISMATCH")
+    veyra_call_message = _export_message(root_export, CASE_G_ROOT_VEYRA_MESSAGE_ID) or {}
+    thales_call_message = _export_message(root_export, CASE_G_ROOT_THALES_MESSAGE_ID) or {}
+    veyra_call_content = veyra_call_message.get("content", [])
+    thales_call_content = thales_call_message.get("content", [])
+    if (
+        len(veyra_call_content) != 1
+        or veyra_call_content[0].get("id") != CASE_G_VEYRA_ROOT_CALL_ID
+        or veyra_call_content[0].get("executed") is not False
+        or veyra_call_content[0].get("child_session_id") != CASE_G_VEYRA_SESSION_ID
+        or len(thales_call_content) != 1
+        or thales_call_content[0].get("id") != CASE_G_THALES_ROOT_CALL_ID
+        or thales_call_content[0].get("executed") is not False
+        or thales_call_content[0].get("child_session_id") != CASE_G_THALES_SESSION_ID
+        or veyra_call_content[0].get("time")
+        != {"created": 1791205542474, "ran": 1791205558522, "completed": 1791205572047}
+        or thales_call_content[0].get("time")
+        != {"created": 1791205581434, "ran": 1791205603660, "completed": 1791205639399}
+        or veyra_call_content[0].get("time", {}).get("completed", 0)
+        >= thales_call_message.get("time", {}).get("created", 0)
+    ):
+        add("NATIVE_G_SOURCE_EVIDENCE_ORDER_OR_CHILD_CALL_JOIN_MISMATCH")
+
+    actual_counts = trace.get("CONSULTATION_COUNTS")
+    unique_counts = trace.get("UNIQUE_CHILD_SESSION_COUNTS")
+    if actual_counts != CASE_G_ROLE_COUNTS or unique_counts != CASE_G_ROLE_COUNTS:
+        add("NATIVE_G_CONSULTATION_OR_UNIQUE_SESSION_COUNTS_MISMATCH")
+    negative = trace.get("NEGATIVE_CONTROLS", {})
+    if any(
+        negative.get(role) != {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0}
+        or CASE_G_ROLE_COUNTS.get(role) != 0
+        for role in CASE_G_NEGATIVE_ROLES
+    ):
+        add("NATIVE_G_NEGATIVE_ROLE_CONTROL_ACTIVATED_OR_MISCOUNTED")
+
+    expected_ownership = {
+        "SOURCE_EVIDENCE_ROLE": "veyra",
+        "SOURCE_EVIDENCE_KIND": "read-only fixed fixture observations",
+        "ACTUAL_MEASUREMENT_ROLE": "nox",
+        "ACTUAL_MEASUREMENT_PERFORMED": False,
+        "NOX_INVOCATIONS": 0,
+        "MEASUREMENT_REASON": "No runtime measurement or rerun was authorized or performed; the supplied sequence is synthetic fixture evidence.",
+    }
+    expected_purity = {
+        "STATUS": "PASS",
+        "ROOT_AGENT": "kael",
+        "DIRECT_CHILDREN_ONLY": True,
+        "NO_NESTED_SUBAGENT_DELEGATION": True,
+        "VEYRA_SOURCE_EVIDENCE_OWNER": True,
+        "NOX_ACTUAL_MEASUREMENT_OWNER": True,
+        "NOX_MEASUREMENT_PERFORMED": False,
+        "REVIEWER_EDITS": False,
+        "ROOT_SOURCE_WRITES": False,
+        "ORIGINAL_RUN_FILES_CHANGED": "NONE",
+        "VIOLATIONS": [],
+    }
+    if trace.get("EVIDENCE_OWNERSHIP") != expected_ownership or trace.get("ROLE_PURITY") != expected_purity:
+        add("NATIVE_G_EVIDENCE_ROLE_OWNERSHIP_OR_ROLE_PURITY_MISMATCH")
+
+    expected_edges = [
+        {"BEFORE": "G-VEYRA:RESULT", "AFTER": "G-THALES:CONSULT:1", "ORDER_BASIS": "observed root export order"},
+        {"BEFORE": "G-THALES:RESULT", "AFTER": "G-ROOT:FINALIZE", "ORDER_BASIS": "observed root export order"},
+    ]
+    if trace.get("DEPENDENCY_ORDER") != expected_edges:
+        add("NATIVE_G_EVIDENCE_BEFORE_DIAGNOSIS_OR_TERMINAL_ORDER_MISMATCH")
+    thales_prompt = (_export_message(thales_export, CASE_G_THALES_USER_MESSAGE_ID) or {}).get("text", "")
+    if (
+        "Veyra's terminal Stage 1 result" not in thales_prompt
+        or "item-7, quantity 2" not in thales_prompt
+        or "ordinal 2 TIMEOUT" not in thales_prompt
+        or "TASK_ID: PHASE11_CASE_G_DIAGNOSIS" not in thales_prompt
+        or "ROLE: thales" not in thales_prompt
+        or "Do not conduct any reads yourself" not in thales_prompt
+    ):
+        add("NATIVE_G_THALES_DID_NOT_RECEIVE_VEYRA_EVIDENCE")
+
+    expected_followup = trace.get("THALES_FOLLOWUP", {})
+    thales_terminal_text = _export_text(thales_export, CASE_G_THALES_TERMINAL_MESSAGE_ID)
+    observed_no_followup_markers = (
+        "Additional metadata is not materially necessary for this "
+        "smallest supported conclusion." in thales_terminal_text
+        and "Do not request another read merely to seek specificity." in thales_terminal_text
+        and "EXECUTION_DECISION: STOP" in thales_terminal_text
+    )
+    if (
+        not isinstance(expected_followup, dict)
+        or expected_followup != CASE_G_EXPECTED_FOLLOWUP
+        or not observed_no_followup_markers
+    ):
+        add("NATIVE_G_THALES_FOLLOWUP_CLAIMS_NOT_SUPPORTED_BY_OBSERVED_EXPORT")
+    if (
+        not isinstance(expected_followup, dict)
+        or expected_followup.get("SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE") != "NOT_EXERCISED"
+        or trace.get("ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE") != "NOT_EXERCISED"
+    ):
+        add("NATIVE_G_REASONER_FOLLOWUP_COVERAGE_OVERCLAIM")
+
+    veyra_text = _export_text(veyra_export, CASE_G_VEYRA_TERMINAL_MESSAGE_ID)
+    thales_text = _export_text(thales_export, CASE_G_THALES_TERMINAL_MESSAGE_ID)
+    thales_required_markers = (
+        "not reproduced runtime flakiness or a causal diagnosis",
+        "Additional metadata is not materially necessary",
+        "Do not request another read merely to seek specificity",
+        "SUPPORTED_CAUSE: UNCONFIRMED",
+        "causal confidence cannot be assessed",
+    )
+    result_fidelity = trace.get("RESULT_FIDELITY", {})
+    if (
+        veyra_text != CASE_G_VEYRA_TERMINAL_TEXT
+        or thales_text != CASE_G_THALES_TERMINAL_TEXT
+        or trace.get("ROOT_TERMINAL_FACTS") != CASE_G_ROOT_TERMINAL_FACTS
+        or trace.get("OBSERVED_TERMINAL_SNAPSHOT", {}).get("FACTS") != CASE_G_ROOT_TERMINAL_FACTS
+        or trace.get("OBSERVED_TERMINAL_SNAPSHOT", {}).get("TEXT") != _export_text(root_export, CASE_G_ROOT_TERMINAL_MESSAGE_ID)
+        or any(marker not in thales_text for marker in thales_required_markers)
+        or result_fidelity.get("SAME_INPUT") != {"id": "item-7", "quantity": 2}
+        or result_fidelity.get("OBSERVED_SEQUENCE") != ["PASS", "TIMEOUT", "PASS"]
+        or result_fidelity.get("OBSERVATIONS_ARE_SYNTHETIC_FIXTURE_EVIDENCE") is not True
+        or result_fidelity.get("RUNTIME_FLAKINESS_REPRODUCED") is not False
+        or result_fidelity.get("DIAGNOSIS") != "RECORDED_SAME_INPUT_OUTCOME_INCONSISTENCY"
+        or result_fidelity.get("DETERMINISTIC_CAUSE_ESTABLISHED") is not False
+        or result_fidelity.get("SUPPORTED_CAUSE") != "UNCONFIRMED"
+        or result_fidelity.get("CAUSAL_CONFIDENCE") != "UNESTABLISHED"
+        or result_fidelity.get("ADDITIONAL_DISCRIMINATING_EVIDENCE_USED") is not False
+    ):
+        add("NATIVE_G_CHILD_DIAGNOSTIC_OR_ROOT_TERMINAL_CAUSE_FIDELITY_MISMATCH")
+
+    expected_completion = {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": True,
+        "ROOT_TERMINAL": True,
+        "RESULT_IDS": None,
+        "PER_INVOCATION_CONSUMPTION_TIMING": None,
+        "SESSION_LIFETIME_EXACT_ONCE": None,
+        "AGGREGATE_TERMINAL_SOURCE": "Root terminal says REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED: YES; result IDs and per-invocation consumption timing are not exposed.",
+    }
+    if (
+        trace.get("COMPLETION_GATE") != expected_completion
+        or trace.get("USER_QUESTION_COUNT") != 0
+        or trace.get("FINAL_OUTCOME") != "SUCCEEDED"
+        or trace.get("ROUTING_RESULT") != "PASS"
+        or trace.get("CASE_ACCEPTANCE") != "PASS"
+        or trace.get("CASE_RESULT") != "FRESH_ROOT_NATIVE_ACCEPTANCE_PASS"
+        or trace.get("CASE_RERUN_PERFORMED_BY_RECONCILIATION") is not False
+        or trace.get("RECONCILIATION_FILES_CHANGED") != CASE_G_RECONCILIATION_FILES_CHANGED
+        or trace.get("NOTES") != CASE_G_RECONCILIATION_NOTES
+        or trace.get("EFFICIENCY", {}).get("CLASSIFICATION") != "LEAN"
+        or trace.get("CLASSIFICATIONS") != CASE_G_CLASSIFICATIONS
+    ):
+        add("NATIVE_G_COMPLETION_RERUN_FILE_CHANGE_OR_ACCEPTANCE_STATUS_MISMATCH")
+    expected_unknowns = {
+        "MAX_SIMULTANEOUS_CHILDREN": None,
+        "WALL_CLOCK_MS": None,
+        "RUNTIME_DURATION_MS": None,
+        "RETRY_COUNT": None,
+        "PER_INVOCATION_RESULT_IDS": None,
+        "PER_INVOCATION_CONSUMPTION_TIMING": None,
+        "SESSION_LIFETIME_EXACT_ONCE": None,
+        "NATIVE_PERMISSION_UI": "NOT_OBSERVABLE",
+        "NATIVE_PERMISSION_DECISION": "NOT_OBSERVABLE",
+        "WORKTREE_FILESYSTEM_AUDIT": "NOT_PERFORMED",
+    }
+    if (
+        trace.get("MAX_SIMULTANEOUS_CHILDREN") is not None
+        or trace.get("UNKNOWN_METRICS") != expected_unknowns
+        or trace.get("EFFICIENCY", {}).get("BASIS")
+        != "Qualification judgment for one bounded source consultation, one Thales diagnosis, and no reruns; not a measured latency or throughput result."
+    ):
+        add("NATIVE_G_UNKNOWN_TIMING_CONCURRENCY_PERMISSION_OR_EFFICIENCY_OVERCLAIM")
+
+    provenance = trace.get("EVIDENCE_PROVENANCE", {})
+    if (
+        provenance.get("CLASS") != "FRESH_ROOT_NATIVE"
+        or provenance.get("NATIVE_ROOT_SESSION_ID") != CASE_G_ROOT_SESSION_ID
+        or provenance.get("NATIVE_CHILD_SESSION_IDS") != [CASE_G_VEYRA_SESSION_ID, CASE_G_THALES_SESSION_ID]
+        or provenance.get("FRESH_ROOT_CONFIRMED") is not True
+        or provenance.get("WORKTREE_ISOLATION") != "SUPPLIED_VERIFIED"
+        or provenance.get("CAPTURE_SESSION_IS_ROOT_CHILD") is not False
+        or trace.get("ROOT_ISOLATION", {}).get("WORKTREE_ISOLATION") != "SUPPLIED_VERIFIED"
+        or trace.get("ROOT_ISOLATION", {}).get("SEPARATE_DISPOSABLE_WORKTREE") is not None
+        or trace.get("ROOT_ISOLATION", {}).get("FILESYSTEM_AUDIT_PERFORMED") is not False
+    ):
+        add("NATIVE_G_ISOLATION_OR_PROVENANCE_OVERCLAIM")
+    return errors
+
+
+def validate_phase11_g_reconciliation(
+    baseline: dict[str, Any],
+    cases_doc: dict[str, Any],
+    trace: dict[str, Any],
+    root_export: dict[str, Any],
+    veyra_export: dict[str, Any],
+    thales_export: dict[str, Any],
+) -> list[str]:
+    """Bind G's native capture to the current PARTIAL state without rewriting snapshots."""
+    cases = {
+        case.get("id"): case
+        for case in cases_doc.get("cases", [])
+        if isinstance(case, dict)
+    }
+    errors = validate_native_case_g_capture(
+        trace, cases.get("G", {}), root_export, veyra_export, thales_export
+    )
+    report = baseline.get("phase11_g_reconciliation")
+    if not isinstance(report, dict):
+        return errors + ["CASE_G_RECONCILIATION_MISSING"]
+    expected_thales_followup = {
+        "consultation_count": 1,
+        "evidence_request_made": False,
+        "materially_new_evidence_needed": False,
+        "followup_status": "NOT_REQUIRED",
+        "followup_consultation_count": 0,
+        "followup_session_id": None,
+        "same_session_followup_runtime_coverage": "NOT_EXERCISED",
+        "basis": "Thales reports that additional metadata is not materially necessary and recommends stopping; no follow-up request or second consultation appears in the exports.",
+    }
+    expected_root_calls = [
+        {
+            "order": 1,
+            "parent_message_id": CASE_G_ROOT_VEYRA_MESSAGE_ID,
+            "tool_call_id": CASE_G_VEYRA_ROOT_CALL_ID,
+            "agent": "veyra",
+            "child_session_id": CASE_G_VEYRA_SESSION_ID,
+            "executed": False,
+            "state": "completed",
+            "result_id": None,
+        },
+        {
+            "order": 2,
+            "parent_message_id": CASE_G_ROOT_THALES_MESSAGE_ID,
+            "tool_call_id": CASE_G_THALES_ROOT_CALL_ID,
+            "agent": "thales",
+            "child_session_id": CASE_G_THALES_SESSION_ID,
+            "executed": False,
+            "state": "completed",
+            "result_id": None,
+        },
+    ]
+    expected_report = {
+        "task_id": "P11-G-reconcile-write",
+        "source": CASE_G_BASELINE_SOURCE,
+        "label": CASE_G_LABEL,
+        "evidence_artifact": "tests/phase11-integrated-routing/case-g.native-trace.json",
+        "root_export_artifact": "tests/phase11-integrated-routing/case-g.root.session-export.json",
+        "veyra_export_artifact": "tests/phase11-integrated-routing/case-g.veyra.session-export.json",
+        "thales_export_artifact": "tests/phase11-integrated-routing/case-g.thales.session-export.json",
+        "evidence_class": "FRESH_ROOT_NATIVE",
+        "root_session_id": CASE_G_ROOT_SESSION_ID,
+        "root_directory": CASE_G_ROOT_DIRECTORY,
+        "root_agent": "kael",
+        "root_parent_session_id": None,
+        "root_parent_session_id_observation": "NOT_EXPOSED_IN_EXPORT; NULL_SUPPLIED_IN_TASK_CONTEXT",
+        "root_title": CASE_G_ROOT_TITLE,
+        "root_terminal_outcome": "succeeded",
+        "root_user_message_id": CASE_G_ROOT_USER_MESSAGE_ID,
+        "root_terminal_message_id": CASE_G_ROOT_TERMINAL_MESSAGE_ID,
+        "root_idle_message_id": CASE_G_ROOT_IDLE_MESSAGE_ID,
+        "root_starting_head": CASE_G_ROOT_HEAD,
+        "root_starting_head_source": "Original root user prompt",
+        "root_starting_head_filesystem_verified_by_reconciliation": False,
+        "expected_product_route": CASE_G_EXPECTED_ROUTE,
+        "observed_product_route": CASE_G_EXPECTED_ROUTE,
+        "root_tool_calls": expected_root_calls,
+        "consultation_counts": CASE_G_ROLE_COUNTS,
+        "unique_child_session_counts": CASE_G_ROLE_COUNTS,
+        "nox_actual_measurement_owner": True,
+        "nox_measurements_performed": 0,
+        "thales_followup": expected_thales_followup,
+        "tool_executed_flag_caveat": (
+            "The public exports report executed=false on both root subagent calls and Veyra's read call even though each observed tool state is completed; the linked child session exports succeeded and the root terminal reports child results consumed. Preserve this flag, but do not interpret it as proof of non-execution or as negating completed results."
+        ),
+        "argus_same_session_followup_runtime_coverage": "NOT_EXERCISED",
+        "terminal_facts": CASE_G_ROOT_TERMINAL_FACTS,
+        "acceptance_status": "PASS",
+        "case_result": "FRESH_ROOT_NATIVE_ACCEPTANCE_PASS",
+        "phase11_status": "PARTIAL",
+        "pending_fresh_root_labels": CURRENT_PHASE11_PENDING_LABELS,
+        "case_rerun_performed_by_reconciliation": False,
+        "reconciliation_files_changed": CASE_G_RECONCILIATION_FILES_CHANGED,
+    }
+    for key, expected in expected_report.items():
+        if report.get(key) != expected:
+            errors.append(f"CASE_G_BASELINE_RECONCILIATION_MISMATCH:{key}")
+
+    expected_projection = {
+        "root_reasoning_blocks_removed": 3,
+        "veyra_reasoning_blocks_removed": 2,
+        "thales_reasoning_blocks_removed": 2,
+        "secret_values_redacted": 0,
+        "provider_state_and_snapshots_omitted": True,
+        "tool_arguments_and_results_omitted": True,
+        "raw_exports_persisted": False,
+    }
+    if report.get("projection_and_redaction") != expected_projection:
+        errors.append("CASE_G_BASELINE_PROJECTION_OR_REDACTION_MISMATCH")
+    expected_completion = {
+        "pending_child_count": 0,
+        "unconsumed_result_count": 0,
+        "unknown_execution_count": 0,
+        "required_children_terminal_and_consumed": True,
+        "result_ids": None,
+        "per_invocation_consumption_timing": None,
+        "session_lifetime_exact_once": None,
+    }
+    if report.get("completion_gate") != expected_completion:
+        errors.append("CASE_G_BASELINE_COMPLETION_OR_RESULT_ID_OVERCLAIM")
+    if report.get("classifications") != CASE_G_CLASSIFICATIONS or report.get("efficiency") != "LEAN":
+        errors.append("CASE_G_BASELINE_CLASSIFICATION_OR_EFFICIENCY_MISMATCH")
+
+    current = baseline.get("live_qualification", {})
+    if (
+        current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
+        or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
+        or current.get("overall_status") != "PARTIAL"
+        or "P11-G-reconcile-write" not in current.get("current_pending_state_source", "")
+    ):
+        errors.append("CURRENT_PHASE11_G_PENDING_STATE_MISMATCH")
+    for snapshot_name in (
+        "phase11_b3_reconciliation", "phase11_c_reconciliation", "phase11_d_reconciliation",
+        "phase11_e_reconciliation", "phase11_e2_reconciliation", "phase11_f_reconciliation",
+    ):
+        snapshot = baseline.get(snapshot_name, {})
+        if "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT" not in snapshot.get("pending_fresh_root_labels", []):
+            errors.append(f"CASE_G_HISTORICAL_PENDING_SNAPSHOT_REWRITTEN:{snapshot_name}")
+
+    actions = [
+        action for action in cases_doc.get("fresh_root_actions", [])
+        if isinstance(action, dict) and action.get("case_id") == "G" and action.get("label") == CASE_G_LABEL
+    ]
+    expected_action = {
+        "scenario": "default",
+        "status": "PASS",
+        "evidence_class": "FRESH_ROOT_NATIVE",
+        "evidence_artifact": "case-g.native-trace.json",
+        "acceptance_status": "PASS",
+        "pending_resolution": False,
+    }
+    if len(actions) != 1 or any(actions[0].get(key) != value for key, value in expected_action.items()):
+        errors.append("CASE_G_MATRIX_STATUS_OR_EVIDENCE_LINK_MISMATCH")
+    if baseline.get("argus_same_session_followup_runtime_coverage") != CASE_D_PENDING_FOLLOWUP_COVERAGE:
+        errors.append("CASE_G_ARGUS_FOLLOWUP_RUNTIME_COVERAGE_PROMOTED_OR_CONFLATED")
+    return errors
+
+
 def main() -> int:
     failures, documents = validate_corpus()
     static_failures = run_static_baseline_checks()
@@ -4570,6 +5410,10 @@ def main() -> int:
     case_e2_child_export = load_json(HERE / "case-e2.talos-session.export.json")
     native_f = load_json(HERE / "case-f.native-trace.json")
     case_f_root_export = load_json(HERE / "case-f.root-session.export.json")
+    native_g = load_json(HERE / "case-g.native-trace.json")
+    case_g_root_export = load_json(HERE / "case-g.root.session-export.json")
+    case_g_veyra_export = load_json(HERE / "case-g.veyra.session-export.json")
+    case_g_thales_export = load_json(HERE / "case-g.thales.session-export.json")
     reconciliation_failures = validate_phase11_b3_reconciliation(
         baseline, documents["cases"], native_b3
     )
@@ -4592,6 +5436,14 @@ def main() -> int:
     case_f_failures = validate_phase11_f_reconciliation(
         baseline, documents["cases"], native_f, case_f_root_export
     )
+    case_g_failures = validate_phase11_g_reconciliation(
+        baseline,
+        documents["cases"],
+        native_g,
+        case_g_root_export,
+        case_g_veyra_export,
+        case_g_thales_export,
+    )
     for label in ("ARGUS_GATE_MARKER", "TALOS_GATE_MARKER", "ATLAS_GATE_MARKER", "HELIOS_GATE_MARKER", "THALES_GATE_MARKER", "ROOT_OWNER_MARKER", "NO_NESTED_CHILD_MARKER", "CORE_CHILD_CEILING_MARKER"):
         if label in static_failures:
             print(f"STATIC_{label}: FAIL")
@@ -4612,7 +5464,9 @@ def main() -> int:
         print("E2-NATIVE: PASS (FRESH_ROOT_NATIVE; direct Talos child and route reconciled; E1 failure retained as history)")
     if not case_f_failures:
         print("F-NATIVE: PASS (FRESH_ROOT_NATIVE; Kael-only operational diagnosis; no product/security defect invented)")
-    pending_fresh_root_cases = {"G", "H", "K"}
+    if not case_g_failures:
+        print("G-NATIVE: PASS (FRESH_ROOT_NATIVE; Veyra source evidence precedes one Thales diagnosis; no Nox measurement or unneeded follow-up)")
+    pending_fresh_root_cases = {"H", "K"}
     pending_labels: list[str] = []
     for action in documents["cases"].get("fresh_root_actions", []):
         case_id = action.get("case_id")
@@ -4623,7 +5477,7 @@ def main() -> int:
                 print(f"PENDING_ACCEPTANCE {label} (observed routing failure; no Case E rerun requested)")
             else:
                 print(f"HUMAN_ACTION_REQUIRED {label}")
-    if failures or reconciliation_failures or case_c_failures or case_d_failures or case_e_failures or case_e2_failures or case_f_failures:
+    if failures or reconciliation_failures or case_c_failures or case_d_failures or case_e_failures or case_e2_failures or case_f_failures or case_g_failures:
         for failure in [
             *failures,
             *reconciliation_failures,
@@ -4632,6 +5486,7 @@ def main() -> int:
             *case_e_failures,
             *case_e2_failures,
             *case_f_failures,
+            *case_g_failures,
         ]:
             print(f"FAIL: {failure}")
         print("PHASE11_QUALIFICATION: FAIL (artifact validation only)")
@@ -4641,10 +5496,10 @@ def main() -> int:
             print(f"FAIL: STATIC_{label}")
         print("PHASE11_QUALIFICATION: FAIL (bounded policy marker check)")
         return 1
-    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, B3/C/D/F, E1 historical failure, and E2 native acceptance are internally reconciled; validation does not authenticate source exports)")
+    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, B3/C/D/E2/F/G native reconciliations, and E1 historical failure are internally consistent; validation does not authenticate source exports)")
     print("ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED (separate optional evidence-requesting scenario remains open for final coverage review; not a Case D blocker)")
-    print("PENDING_CASES: " + ", ".join(pending_labels) + "; F is accepted natively, E2 closes current Case E acceptance while E1's observed routing failure remains historical; A/I/J/L recovered reports remain guided/history only.")
-    print("PHASE11_QUALIFICATION: PARTIAL (B3, C, D, E2, and F accepted; E1 failure retained as history; G/H/K acceptance remains pending)")
+    print("PENDING_CASES: " + ", ".join(pending_labels) + "; F and G are accepted natively, E2 closes current Case E acceptance while E1's observed routing failure remains historical; A/I/J/L recovered reports remain guided/history only.")
+    print("PHASE11_QUALIFICATION: PARTIAL (B3, C, D, E2, F, and G accepted; E1 failure retained as history; H/K acceptance remains pending)")
     return 0
 
 

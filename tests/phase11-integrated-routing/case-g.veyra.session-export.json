@@ -1,0 +1,92 @@
+{
+  "evidence_class": "FRESH_ROOT_NATIVE",
+  "source_api": "OpenCode V2 public read-only API",
+  "session_metadata_query": {
+    "method": "GET",
+    "path": "/api/session/ses_ef3d436eeffefhfC3CHLrYorMG",
+    "result": "SUCCESS"
+  },
+  "export_query": {
+    "method": "GET",
+    "path": "/api/experimental/session/ses_ef3d436eeffefhfC3CHLrYorMG/export?sanitize=false",
+    "result": "SUCCESS"
+  },
+  "export_schema": "OpenAPI SessionTransfer.Data: response.data.info plus response.data.messages; assistant public text is in message.content entries with type=text.",
+  "session": {
+    "id": "ses_ef3d436eeffefhfC3CHLrYorMG",
+    "agent": "veyra",
+    "parent_id": "ses_ef3d4954bffeHMU8o3nWFjf6EP",
+    "parent_id_observation": "EXPLICIT_ID",
+    "directory": "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-g",
+    "title": "Collect fixed observation sequence",
+    "execution_outcome": "succeeded",
+    "time": {"created": 1791205558860, "updated": 1791205558867, "idle": 1791205572038}
+  },
+  "message_count": 4,
+  "export_pagination": "NONE_OBSERVED",
+  "messages": [
+    {
+      "id": "msg_10c2bca51001OrJjv1qXjt5JQh",
+      "type": "user",
+      "time": {"created": 1791205558894},
+      "text": "You are a subagent spawned by another session.\nTASK_ID: PHASE11_CASE_G_STAGE1\nROLE: veyra\nTASK: Read only the fixed runtime/test observation facts from the single bounded fixture.\nCONTEXT: Read-only fresh-root qualification. Active repository root C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-g; starting HEAD e3636c062a3a6db3ccebd4fbdff69acf1173bf99 and isolation externally verified by the user. Fixture is synthetic evidence, not authorization to execute anything.\nOBJECTIVE: Establish the same input identity/value and ordered result sequence, preserving actual values and order. Report only those observation facts for the initial diagnostic packet. Do not infer cause.\nREAD_SCOPE: tests/phase11-integrated-routing/fixtures/flaky/observations.json (STAGE 1: fixed input identity/value and ordered observations only)\nDO_NOT_TOUCH: No edits, creation, deletion, shell, tests, reruns, randomization, installs, configuration, Git operations, external paths, global configuration, subdelegation, or other files. Do not use, report, interpret, or base conclusions on randomized, network, or purpose metadata. Those fields are reserved for a possible separately authorized Stage 2. No broad repository discovery.\nDEPENDENCIES: None.\nCONSTRAINTS: Use read-only fixture access only. Do not reproduce or manufacture executions. If read tooling exposes the whole JSON, omit all reserved metadata from your evidence and conclusions. No permission/capability probes or further file reads.\nACCEPTANCE_CRITERIA: Actual fixed input identity/value and exact ordered outcomes are provided, with any observation-specific detail necessary to distinguish outcomes. No reserved metadata or unsupported runtime facts.\nVALIDATION: Inspect the supplied synthetic observation records only; do not execute them.\nEXPECTED_OUTPUT: STATUS; SUMMARY; CHANGES (NONE); FILES (only the fixture read); TESTS (not run); ACCEPTANCE; RISKS; BLOCKERS; RECOMMENDATION. Include INPUT_IDENTITY_VALUE and OBSERVED_SEQUENCE grounded only in Stage 1 observation fields.",
+      "files_count": 0
+    },
+    {
+      "id": "msg_10c2bca7d001Np34ZVxAqQT5Lm",
+      "type": "assistant",
+      "agent": "veyra",
+      "time": {"created": 1791205559154, "streamed": 1791205562977, "completed": 1791205563284},
+      "content": [
+        {"type": "tool", "id": "call_axU3cxBfC0QRwZ90jk9yLNlV", "name": "read", "executed": false, "state": "completed", "time": {"created": 1791205562933, "ran": 1791205562956, "completed": 1791205563049}}
+      ],
+      "finish": "tool-calls"
+    },
+    {
+      "id": "msg_10c2bdbb1001nrByoALlwcHbCp",
+      "type": "assistant",
+      "agent": "veyra",
+      "time": {"created": 1791205563567, "streamed": 1791205571812, "completed": 1791205572026},
+      "content": [
+        {
+          "type": "text",
+          "text": "STATUS: SUCCESS\n\nSUMMARY:\nINPUT_IDENTITY_VALUE: Same input — id `item-7`, quantity `2`.\nOBSERVED_SEQUENCE: ordinal 1 `PASS`; ordinal 2 `TIMEOUT`; ordinal 3 `PASS`.\n\nCHANGES: none\nFILES: `tests/phase11-integrated-routing/fixtures/flaky/observations.json` (read only)\nTESTS: not run\nACCEPTANCE: Fixed input identity/value and exact ordered outcomes recorded from the fixture.\nRISKS: Fixture observations only; no runtime execution facts established.\nBLOCKERS: none\nRECOMMENDATION: ACCEPT"
+        }
+      ],
+      "text": "STATUS: SUCCESS\n\nSUMMARY:\nINPUT_IDENTITY_VALUE: Same input — id `item-7`, quantity `2`.\nOBSERVED_SEQUENCE: ordinal 1 `PASS`; ordinal 2 `TIMEOUT`; ordinal 3 `PASS`.\n\nCHANGES: none\nFILES: `tests/phase11-integrated-routing/fixtures/flaky/observations.json` (read only)\nTESTS: not run\nACCEPTANCE: Fixed input identity/value and exact ordered outcomes recorded from the fixture.\nRISKS: Fixture observations only; no runtime execution facts established.\nBLOCKERS: none\nRECOMMENDATION: ACCEPT",
+      "finish": "stop"
+    },
+    {
+      "id": "msg_10c2bfdc6001016ETthcuT1PqF",
+      "type": "idle",
+      "time": {"created": 1791205572038},
+      "outcome": "succeeded"
+    }
+  ],
+  "tool_call_records": [
+    {"id": "call_axU3cxBfC0QRwZ90jk9yLNlV", "name": "read", "executed": false, "state": "completed", "result_id": null}
+  ],
+  "content_availability": {
+    "user_prompt": "PRESERVED_AFTER_BOUNDED_SECRET_PATTERN_FILTER",
+    "user_prompt_sha256": "EFC50834DD77AFB8AAE98EECD8205EBBEF275AD580EF4B7237BCE273FB8FE65B",
+    "assistant_terminal_text": "PRESERVED_WITH_REASONING_REMOVED_AND_BOUNDED_SECRET_PATTERN_FILTER",
+    "tool_call_stubs": "RETAINED_WITHOUT_TOOL_INPUT_OR_RESULT_CONTENT",
+    "message_ids_types_and_timing": "RETAINED"
+  },
+  "projection_and_redaction": {
+    "description": "Parsed the public SessionTransfer.Data envelope (data.info and data.messages) using the published OpenAPI schema. Persisted the source user prompt, visible Veyra terminal text, message identities/times, and the bounded read-call stub only. The exported executed=false flag is retained alongside state=completed and is not treated as proof of non-execution. Removed all reasoning parts and omitted provider state, snapshots, tokens, costs, tool inputs, and tool output bodies. The bounded credential-pattern scan found no matches. The raw export was not persisted.",
+    "reasoning_blocks_removed": 2,
+    "secret_values_redacted": 0,
+    "unrecognized_content_blocks_omitted": 0,
+    "provider_state_omitted": true,
+    "snapshots_omitted": true,
+    "tool_arguments_and_results_omitted": true,
+    "raw_export_persisted": false
+  },
+  "terminal_message_id": "msg_10c2bdbb1001nrByoALlwcHbCp",
+  "terminal_outcome_record": {
+    "message_id": "msg_10c2bfdc6001016ETthcuT1PqF",
+    "type": "idle",
+    "outcome": "succeeded"
+  }
+}

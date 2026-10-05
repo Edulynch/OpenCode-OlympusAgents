@@ -1,0 +1,128 @@
+{
+  "evidence_class": "FRESH_ROOT_NATIVE",
+  "source_api": "OpenCode V2 public read-only API",
+  "session_metadata_query": {
+    "method": "GET",
+    "path": "/api/session/ses_ef3d4954bffeHMU8o3nWFjf6EP",
+    "result": "SUCCESS"
+  },
+  "export_query": {
+    "method": "GET",
+    "path": "/api/experimental/session/ses_ef3d4954bffeHMU8o3nWFjf6EP/export?sanitize=false",
+    "result": "SUCCESS"
+  },
+  "export_schema": "OpenAPI SessionTransfer.Data: response.data.info plus response.data.messages; assistant public text is in message.content entries with type=text.",
+  "session": {
+    "id": "ses_ef3d4954bffeHMU8o3nWFjf6EP",
+    "agent": "kael",
+    "parent_id": null,
+    "parent_id_observation": "NOT_EXPOSED",
+    "directory": "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-g",
+    "title": "Read-only diagnosis of intermittent observations fixture",
+    "execution_outcome": "succeeded",
+    "time": {
+      "created": 1791205534628,
+      "updated": 1791205536328,
+      "idle": 1791205649239,
+      "viewed": 1791205649239
+    }
+  },
+  "message_count": 5,
+  "export_pagination": "NONE_OBSERVED",
+  "messages": [
+    {
+      "id": "msg_10c2b6ab9001ZLjHXX0JfQoQrs",
+      "type": "user",
+      "time": {"created": 1791205534665},
+      "text": "PHASE11_CASE_G_FRESH_ROOT\n\nThis is an isolated fresh-root runtime qualification for a difficult intermittent diagnosis.\n\nThe repository root and starting HEAD were externally verified immediately before this OpenCode root was started.\n\nRepository root:\n\nC:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-g\n\nStarting HEAD:\n\ne3636c062a3a6db3ccebd4fbdff69acf1173bf99\n\nThe bounded qualification fixture is:\n\ntests/phase11-integrated-routing/fixtures/flaky/observations.json\n\nThis fixture is synthetic evidence. Do NOT rerun, reproduce, randomize, or manufacture additional flaky executions.\n\nThe objective is to diagnose the observed contradiction conservatively and determine the smallest supported conclusion.\n\n==================================================\nSTAGED EVIDENCE\n==================================================\n\nUse staged evidence deliberately.\n\nSTAGE 1:\n\nFirst establish only the fixed runtime/test observation facts from the fixture:\n\n- the same input identity/value;\n- the ordered result sequence.\n\nDo not use the fixture's `randomized`, `network`, or `purpose` metadata in the initial diagnostic packet.\n\nThe initial diagnostic decision must be grounded only in the observed fixed sequence.\n\nDo not broaden into repository discovery.\n\nIf the initial evidence is sufficient for a supported bounded conclusion, stop there.\n\nIf the diagnosis remains materially uncertain and additional evidence is specifically needed to discriminate plausible causes:\n\nSTAGE 2:\n\nAllow one bounded source-evidence read of only the remaining fixture metadata:\n\n- `randomized`;\n- `network`;\n- `purpose`.\n\nNo other files.\n\nAfter that evidence is terminal and consumed, continue the SAME existing diagnostic specialist session if follow-up is required.\n\nDo not restart equivalent diagnosis from zero.\n\nDo not launch a replacement specialist merely because new evidence arrived.\n\n==================================================\nOBSERVED PROBLEM\n==================================================\n\nThe same input has contradictory observations.\n\nThe qualification is intentionally about intermittent/flaky evidence.\n\nDo not infer a deterministic root cause merely from one timeout.\n\nDo not infer randomization or network involvement unless evidence establishes it.\n\nDo not classify correlation as causation.\n\nDo not invent missing runtime facts.\n\n==================================================\nROUTING EXPECTATION\n==================================================\n\nUse the smallest sufficient route under the current Olympus routing policy.\n\nDo not invoke an expensive diagnostic specialist merely because the task says \"flaky\" before bounded evidence establishes the relevant diagnostic gate.\n\nBut once bounded evidence establishes a genuinely intermittent/contradictory technical condition requiring deeper diagnosis, apply the current routing policy normally.\n\nEvidence collection and deep diagnosis are separate responsibilities.\n\nDo not force additional consultations when no materially new evidence exists.\n\nIf materially new discriminating evidence is collected after an initial specialist consultation, preserve continuation of the original diagnostic session rather than creating a fresh equivalent diagnosis.\n\n==================================================\nSCOPE\n==================================================\n\nThis task is read-only.\n\nDo not:\n\n- edit any file;\n- implement a fix;\n- run random retries;\n- rerun the flaky scenario;\n- install anything;\n- modify configuration;\n- broaden into repository-wide investigation;\n- optimize;\n- use FAST;\n- enter `/maintain`;\n- commit, stage, push, merge, tag, or release.\n\nNo repair is authorized.\n\n==================================================\nFINAL RESULT\n==================================================\n\nStop after the smallest supported diagnostic conclusion.\n\nA valid terminal result may remain uncertain.\n\nAt completion report only observable conclusions:\n\nWORKTREE_ISOLATION:\nSUPPLIED_VERIFIED | FAIL\n\nOBSERVED_SEQUENCE:\n...\n\nADDITIONAL_DISCRIMINATING_EVIDENCE_USED:\nYES | NO\n\nDIAGNOSIS:\n...\n\nCONFIDENCE:\n...\n\nSUPPORTED_CAUSE:\n... | UNCONFIRMED\n\nRANDOM_RERUNS:\n0 | ...\n\nFILES_CHANGED:\nNONE | ...\n\nUNRESOLVED_WORK:\nNONE | ...\n\nREQUIRED_CHILDREN_TERMINAL_AND_CONSUMED:\nYES | NO\n\nANY_WORK_REMAINING:\nYES | NO\n\nDo not invent session IDs, consultation counts, concurrency, native permission decisions, tool-result IDs, or other runtime evidence not directly observable. ",
+      "files_count": 0
+    },
+    {
+      "id": "msg_10c2b6be5001vwuEXvTOo0xskF",
+      "type": "assistant",
+      "agent": "kael",
+      "time": {"created": 1791205535121, "streamed": 1791205558605, "completed": 1791205572299},
+      "content": [
+        {
+          "type": "tool",
+          "id": "call_tr3IllNvxfWefARWraSij01y",
+          "name": "subagent",
+          "executed": false,
+          "state": "completed",
+          "agent": "veyra",
+          "task_label": "PHASE11_CASE_G_STAGE1",
+          "child_session_id": "ses_ef3d436eeffefhfC3CHLrYorMG",
+          "time": {"created": 1791205542474, "ran": 1791205558522, "completed": 1791205572047}
+        }
+      ],
+      "finish": "tool-calls"
+    },
+    {
+      "id": "msg_10c2bfeea001cM0D5Y3nfgAUkF",
+      "type": "assistant",
+      "agent": "kael",
+      "time": {"created": 1791205572587, "streamed": 1791205603780, "completed": 1791205639596},
+      "content": [
+        {
+          "type": "tool",
+          "id": "call_FFOFQnncfDZDt201HQks5Gkt",
+          "name": "subagent",
+          "executed": false,
+          "state": "completed",
+          "agent": "thales",
+          "task_label": "PHASE11_CASE_G_DIAGNOSIS",
+          "child_session_id": "ses_ef3d386abffeVKv396Rg46d5Ls",
+          "time": {"created": 1791205581434, "ran": 1791205603660, "completed": 1791205639399}
+        }
+      ],
+      "finish": "tool-calls"
+    },
+    {
+      "id": "msg_10c2d05be0012Dg2Rpzb6aUNMy",
+      "type": "assistant",
+      "agent": "kael",
+      "time": {"created": 1791205639798, "streamed": 1791205649032, "completed": 1791205649235},
+      "content": [
+        {
+          "type": "text",
+          "text": "WORKTREE_ISOLATION: SUPPLIED_VERIFIED\n\nOBSERVED_SEQUENCE: Same input `item-7`, quantity `2`: PASS → TIMEOUT → PASS\n\nADDITIONAL_DISCRIMINATING_EVIDENCE_USED: NO\n\nDIAGNOSIS: Synthetic records establish same-input outcome inconsistency, not reproduced runtime flakiness or a deterministic root cause.\n\nCONFIDENCE: HIGH in recorded inconsistency; causal confidence unestablished\n\nSUPPORTED_CAUSE: UNCONFIRMED\n\nRANDOM_RERUNS: 0\n\nFILES_CHANGED: NONE\n\nUNRESOLVED_WORK: NONE\n\nREQUIRED_CHILDREN_TERMINAL_AND_CONSUMED: YES\n\nANY_WORK_REMAINING: NO"
+        }
+      ],
+      "text": "WORKTREE_ISOLATION: SUPPLIED_VERIFIED\n\nOBSERVED_SEQUENCE: Same input `item-7`, quantity `2`: PASS → TIMEOUT → PASS\n\nADDITIONAL_DISCRIMINATING_EVIDENCE_USED: NO\n\nDIAGNOSIS: Synthetic records establish same-input outcome inconsistency, not reproduced runtime flakiness or a deterministic root cause.\n\nCONFIDENCE: HIGH in recorded inconsistency; causal confidence unestablished\n\nSUPPORTED_CAUSE: UNCONFIRMED\n\nRANDOM_RERUNS: 0\n\nFILES_CHANGED: NONE\n\nUNRESOLVED_WORK: NONE\n\nREQUIRED_CHILDREN_TERMINAL_AND_CONSUMED: YES\n\nANY_WORK_REMAINING: NO",
+      "finish": "stop"
+    },
+    {
+      "id": "msg_10c2d2b57001xBqfhbbMBm1iCA",
+      "type": "idle",
+      "time": {"created": 1791205649239},
+      "outcome": "succeeded"
+    }
+  ],
+  "tool_call_records": [
+    {"id": "call_tr3IllNvxfWefARWraSij01y", "name": "subagent", "executed": false, "state": "completed", "agent": "veyra", "task_label": "PHASE11_CASE_G_STAGE1", "child_session_id": "ses_ef3d436eeffefhfC3CHLrYorMG", "result_id": null},
+    {"id": "call_FFOFQnncfDZDt201HQks5Gkt", "name": "subagent", "executed": false, "state": "completed", "agent": "thales", "task_label": "PHASE11_CASE_G_DIAGNOSIS", "child_session_id": "ses_ef3d386abffeVKv396Rg46d5Ls", "result_id": null}
+  ],
+  "content_availability": {
+    "user_prompt": "PRESERVED_AFTER_BOUNDED_SECRET_PATTERN_FILTER",
+    "user_prompt_sha256": "77FDF180ED0D90BF0FD23742AB86BB747A08BB4399701DB4809DD275AC85E7D8",
+    "assistant_terminal_text": "PRESERVED_WITH_REASONING_REMOVED_AND_BOUNDED_SECRET_PATTERN_FILTER",
+    "tool_call_stubs": "RETAINED_WITHOUT_TOOL_INPUT_OR_RESULT_CONTENT",
+    "message_ids_types_and_timing": "RETAINED"
+  },
+  "projection_and_redaction": {
+    "description": "Parsed the public SessionTransfer.Data envelope (data.info and data.messages) using the published OpenAPI schema. Persisted the source user prompt, visible root terminal text, message identities/times, and bounded subagent-call stubs only. The exported executed=false flag is retained alongside state=completed; it is not interpreted as proof of non-execution or as negating the linked succeeded child sessions and root completion result. Removed all reasoning parts and omitted provider state, snapshots, tokens, costs, tool inputs, and tool output bodies. The bounded credential-pattern scan found no matches. The raw export was not persisted.",
+    "reasoning_blocks_removed": 3,
+    "secret_values_redacted": 0,
+    "unrecognized_content_blocks_omitted": 0,
+    "provider_state_omitted": true,
+    "snapshots_omitted": true,
+    "tool_arguments_and_results_omitted": true,
+    "raw_export_persisted": false
+  },
+  "terminal_message_id": "msg_10c2d05be0012Dg2Rpzb6aUNMy",
+  "terminal_outcome_record": {
+    "message_id": "msg_10c2d2b57001xBqfhbbMBm1iCA",
+    "type": "idle",
+    "outcome": "succeeded"
+  }
+}

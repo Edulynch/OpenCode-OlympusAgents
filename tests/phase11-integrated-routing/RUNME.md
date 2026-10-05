@@ -14,8 +14,11 @@ original Case E1 failure and the later E2 root/child exports are captured in
 `case-e.native-trace.json`, `case-e.root-session.export.json`,
 `case-e2.native-trace.json`, `case-e2.root-session.export.json`, and
 `case-e2.talos-session.export.json`; Case F's native root-only diagnosis is
-captured in `case-f.native-trace.json` and `case-f.root-session.export.json`.
-B3, C, D, E2, and F qualify their bounded
+captured in `case-f.native-trace.json` and `case-f.root-session.export.json`;
+Case G's native record and root/Veyra/Thales projections are in
+`case-g.native-trace.json`, `case-g.root.session-export.json`,
+`case-g.veyra.session-export.json`, and `case-g.thales.session-export.json`.
+B3, C, D, E2, F, and G qualify their bounded
 acceptance outcomes; E1 remains an observed historical routing failure and is
 not rewritten as a pass. None of these native captures is inserted into the
 synthetic trace corpus or reconstructed as a synthetic lifecycle.
@@ -33,11 +36,12 @@ uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-on
 ```
 
 The first command validates the versioned case matrix, synthetic event semantics,
-completion/evidence claims, separate B1/B2/B3/C/D/E1/E2/F reconciliations, the
+completion/evidence claims, separate B1/B2/B3/C/D/E1/E2/F/G reconciliations, the
 bounded B3, C, and D native invocation captures, the original E1 failed-root
-projection, the E2 root/child export projections and accepted Talos route, and
-the F root-only export projection and operational finding, plus presence-only
-gate markers. It reports
+projection, the E2 root/child export projections and accepted Talos route, the
+F root-only export projection and operational finding, and the G root/child
+export joins, static fixture result, evidence-before-diagnosis order, and
+conditional Thales follow-up semantics, plus presence-only gate markers. It reports
 `PHASE11_ARTIFACTS: PASS` when those artifacts are sound while overall
 qualification remains `PHASE11_QUALIFICATION: PARTIAL` until remaining
 acceptance items are resolved. The second command
@@ -270,14 +274,14 @@ Case F behavior, operational classification, no-invented-product/security-bug,
 negative Argus/Talos controls, no-install, role purity, completion ownership,
 routing, and `FRESH_ROOT_NATIVE` acceptance are PASS. `LEAN` is a qualification
 judgment, not measured efficiency. E1 remains a failed historical Case E route;
-E2 remains the separate accepted Case E result. F is no longer pending; only G,
-H, and K remain fresh-root work and Phase 11 stays **IN VALIDATION / PARTIAL**.
+E2 remains the separate accepted Case E result. F and G are no longer pending;
+only H and K remain fresh-root work and Phase 11 stays **IN VALIDATION / PARTIAL**.
 
 ## Remaining fresh-root work remains user action
 
 Use a separate clean disposable project copy and a **new, verified Kael root for
-each still-unrun case**. G, H, and K below remain pending fresh-root actions.
-F, E2, and isolated B3, C, and bounded native D are accepted; E1's routing
+each still-unrun case**. H and K below remain pending fresh-root actions.
+F, G, E2, and isolated B3, C, and bounded native D are accepted; E1's routing
 failure remains immutable history. A, I, J, and L
 prompt references/history are retained below but are not new rerun requests. Do
 not reuse a guided/current session as a fresh root. Confirm the effective root
@@ -347,11 +351,25 @@ synthetic per-session lifecycle.
   changes. Root parentage was `NOT_EXPOSED`; its supplied starting HEAD was not
   independently filesystem-verified during reconciliation. No rerun is
   requested. Phase 11 remains PARTIAL.
-- `HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT` — “The fixed observation sequence in
-  `fixtures/flaky/observations.json` is PASS, TIMEOUT, PASS for the same input.
-  It is deterministic evidence, not random instability. Use bounded diagnosis
-  only if the Diagnostic Gate applies; stop without repeating unchanged
-  evidence.”
+- `ACCEPTED PHASE11_CASE_G_FRESH_ROOT` — native evidence is in
+  `case-g.native-trace.json`; the exact completed root, Veyra, and Thales
+  projections are in the three `case-g.*.session-export.json` files. Veyra's
+  bounded read established the static same-input sequence PASS, TIMEOUT, PASS;
+  it is recorded inconsistency, not reproduced runtime flakiness or cause.
+  The observed order is Kael -> Veyra -> Thales; Nox performed no measurement.
+  Thales found no materially necessary extra evidence, so one consultation and
+  `NOT_REQUIRED` follow-up are correct. If material new evidence is requested,
+  collect and consume it before continuing the same Thales session. That
+  same-session follow-up remains `NOT_EXERCISED` here. The separate synthetic G
+  example retains its iterative route; no Case G rerun is requested. The exports'
+  `executed=false` flag coexists with `state=completed` and succeeded linked
+   sessions; it is not treated as proof of non-execution. Result IDs and
+   per-call consumption timing remain unknown. Veyra's original bounded fixture
+   read is present in its session projection; the reconciliation itself did not
+   access the disposable worktree. Root isolation was task-supplied and was not
+   independently filesystem-audited. The original terminal reports no original
+   run file changes; the ten reconciliation paths are listed in
+   `RECONCILIATION_FILES_CHANGED` in the native trace.
 - `HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT` — “A third-party dependency has a
   confirmed defect. Use the safe resolution ladder (configuration/version,
   wrapper/fallback, reversible workaround) and stop before any upstream patch,
@@ -505,8 +523,8 @@ sessions only, not the Case A/I/J/L native roots. Preserve them if available.
   useful context, but not independent fresh-root evidence.
 - `FRESH_ROOT_NATIVE`: observed native evidence from a separately verified Kael
   root, with actual root identity and any observed child/tool records and order.
-  B3, C, D, E2, and F are accepted; E1's captured native routing failure remains
-  historical; G, H, and K remain unrun. B2's routing observation is valid
+  B3, C, D, E2, F, and G are accepted; E1's captured native routing failure remains
+  historical; H and K remain unrun. B2's routing observation is valid
   context but failed isolation. The recovered A/I/J/L
   observations remain guided/user-reported references and are not fresh-root
   evidence.
@@ -544,11 +562,11 @@ are marker-presence checks only.
 ## Current gate
 
 The A–L matrix, unchanged synthetic trace corpus, expanded mutation coverage,
-and B3/C/D/E1/E2/F native records are present. Case B1 remains a fixture defect
+and B3/C/D/E1/E2/F/G native records are present. Case B1 remains a fixture defect
 with Question Barrier PASS; B2 runtime behavior remains PASS but
-isolation/acceptance remains PARTIAL; B3, C, D, E2, and F fresh-root native
+isolation/acceptance remains PARTIAL; B3, C, D, E2, F, and G fresh-root native
 acceptance are PASS. E1 remains a historical Talos-routing failure, while E2
-closes current Case E acceptance. G, H, and K remain fresh-root work. D did
+closes current Case E acceptance. H and K remain fresh-root work. D did
 not exercise Argus follow-up runtime
 coverage, which remains a separate open review item. A/I/J/L observations
 remain guided/history-only, with no rerun requested. The overall phase is **IN

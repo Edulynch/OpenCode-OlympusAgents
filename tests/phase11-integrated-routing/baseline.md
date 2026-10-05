@@ -560,19 +560,77 @@ not a child of the Case F root and is not part of its route or role counts.
   visible text and observed no secret credentials; no redaction/filter count is
   asserted. Permission UI/decision remain `NOT_OBSERVABLE`.
 
-Case F is accepted as `NATIVE_EXECUTED_ROUTING_PASS`. The current pending fresh-
-root set is G, H, and K. The prior E1 native routing failure remains immutable
-history and E2 remains the accepted Case E attempt. A remains PASS guided/
-recovered; I remains PARTIAL guided; J remains PASS guided/recovered; L's
-negative automatic-Aegis control remains PASS recovered; and
-`ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE` remains `NOT_EXERCISED`. Overall
-Phase 11 remains **IN VALIDATION / PARTIAL**, not SHIPPED.
+Case F is accepted as `NATIVE_EXECUTED_ROUTING_PASS`. Case G is now accepted as
+`FRESH_ROOT_NATIVE`; only H and K remain current fresh-root actions. The prior E1
+native routing failure remains immutable history and E2 remains the accepted
+Case E attempt. A remains PASS guided/recovered; I remains PARTIAL guided; J
+remains PASS guided/recovered; L's negative automatic-Aegis control remains
+PASS recovered; and `ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE` remains
+`NOT_EXERCISED`. Overall Phase 11 remains **IN VALIDATION / PARTIAL**, not
+SHIPPED.
 
-Writer-local checks for this reconciliation passed: the Phase 11 qualifier
-reported artifact validation PASS with qualification PARTIAL; the Phase 11
-unittest suite passed 66 tests; Harness Core safe-root read-only validation
-passed with all 29 managed-output hashes/mtimes unchanged; the all-harness
-renderer check passed read-only for 29 managed outputs; and `git diff --check`
-passed with line-ending warnings only. `PYTHONDONTWRITEBYTECODE=1` and `python -B`
-were used where applicable. These checks did not rerun Case F. Independent Nox
-validation remains the next review step.
+At the time of the earlier Case F reconciliation, its writer-local qualifier,
+66-test Phase 11 suite, Harness Core safe-root check, all-harness renderer
+check, and `git diff --check` passed. Those are historical Case F checks, not
+the current Case G validation results. Independent Nox validation remains a
+separate review step.
+
+## Case G native capture — bounded static-evidence diagnosis
+
+`case-g.native-trace.json` and its three `.session-export.json` projections
+reconcile the exact completed root, Veyra child, and Thales child named in the
+fresh-root evidence. The public OpenAPI schema identifies the export envelope
+as `data.info` plus `data.messages`; assistant public text is carried in
+`message.content` entries of type `text`. The corrected parser read that
+envelope and the exact existing metadata/export endpoints; this reconciliation
+did not rerun or mutate the Case G session, access the disposable worktree, or
+persist a raw export. The original Veyra session's bounded fixture read is
+preserved in its export projection above; the no-access statement here applies
+only to this reconciliation, not the original run. The projections retain the
+original user prompts, visible terminal
+texts, public tool-call identities/timing, and message/outcome records. Seven
+reasoning blocks were removed, the bounded credential-pattern scan found no
+matches, and provider state, snapshots, tool arguments/results, and raw exports
+were omitted.
+
+Both root subagent calls and Veyra's fixture-read call expose `executed: false`
+alongside a `completed` tool state. That flag is preserved but is not treated as
+proof of non-execution or as negating the succeeded child-session exports and
+the root's aggregate completion statement. Per-invocation result IDs and
+consumption timing remain `null`; the root terminal alone reports that all
+required child work was terminal and consumed. The exports do not establish
+maximum concurrency, runtime duration, or permission UI/decision. The root
+parent is not exposed in the export; its null value is retained only as
+task-supplied context. Its starting HEAD and isolation were likewise supplied,
+not independently filesystem-verified by this reconciliation.
+
+The observed product invocation/evidence order is Kael -> Veyra -> Thales, with
+both children directly parented by Kael. Veyra owns the read-only Stage 1 source
+evidence for the static fixture's same `item-7`, quantity `2`, results
+`PASS -> TIMEOUT -> PASS`. The fixture establishes recorded same-input outcome
+inconsistency, not reproduced runtime flakiness or a cause. Nox remains the
+owner of any actual runtime measurement but performed none; no measurement was
+needed for this bounded conclusion. Thales received Veyra's result, made one
+consultation, found no additional metadata materially necessary, and stopped
+with cause unconfirmed. No ceremonial second consultation was required. If
+materially new evidence were requested, the existing same-session
+evidence-collection/consumption-before-Thales-follow-up invariant remains in
+force; that follow-up was `NOT_EXERCISED` here. Argus same-session follow-up
+coverage also remains `NOT_EXERCISED`.
+
+Case G's fresh-root identity, evidence-before-diagnosis order, bounded Thales
+diagnosis, no-unneeded-follow-up decision, no-rerun/no-invented-cause result,
+role purity, fidelity, and aggregate completion are PASS; efficiency is
+`LEAN` as a qualification judgment, not a measured performance result. The
+separate synthetic G trace remains its illustrative iterative example and is
+not imposed as native choreography. The root terminal reports no changes to
+the original run files; this reconciliation changed only the ten scoped paths
+listed in `RECONCILIATION_FILES_CHANGED` in `case-g.native-trace.json` (Phase 11
+evidence, validator, tests, and documentation). Current pending work is H and K;
+Phase 11 remains **IN VALIDATION / PARTIAL**.
+
+Current writer-local checks are recorded in `baseline.json`: the Phase 11
+qualifier reports artifact PASS with qualification PARTIAL; all 73 Phase 11
+unittests pass; and `git diff --check` passes with line-ending warnings only.
+These checks do not execute the Case G fixture or mutate its native sessions.
+Independent Nox validation remains separate.

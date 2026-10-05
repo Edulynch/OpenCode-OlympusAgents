@@ -126,7 +126,7 @@
     {
       "id": "G",
       "request_class": "HARD_FLAKY_DIAGNOSIS",
-      "description": "A fixed contradictory observation sequence supports bounded uncertainty diagnosis, not random reruns.",
+      "description": "The synthetic trace illustrates a bounded iterative uncertainty diagnosis, not a required native choreography. Native acceptance uses Veyra for bounded source evidence before Thales; Nox owns any actual runtime measurement, but a measurement is not required when fixture evidence suffices. A second same-session Thales consultation is conditional on materially new evidence being requested or needed.",
       "trace_ids": [
         "G"
       ],
@@ -138,7 +138,19 @@
           "veyra"
         ]
       },
-      "mandatory_dependency_edges": [
+      "native_acceptance": {
+        "expected_product_route": [
+          "kael",
+          "veyra",
+          "thales"
+        ],
+        "source_evidence_role": "veyra",
+        "actual_measurement_owner": "nox",
+        "actual_measurement_required": false,
+        "thales_second_same_session_consultation": "REQUIRED_ONLY_IF_MATERIALLY_NEW_EVIDENCE_REQUESTED_OR_NEEDED",
+        "followup_runtime_coverage_may_remain": "NOT_EXERCISED"
+      },
+      "synthetic_illustrative_dependency_edges": [
         {
           "before_work_id": "fixed-flaky-observation-capture",
           "after_work_id": "bounded-uncertainty-diagnosis"
@@ -312,7 +324,12 @@
     {
       "case_id": "G",
       "scenario": "default",
-      "label": "PHASE11_CASE_G_FRESH_ROOT"
+      "label": "PHASE11_CASE_G_FRESH_ROOT",
+      "status": "PASS",
+      "evidence_class": "FRESH_ROOT_NATIVE",
+      "evidence_artifact": "case-g.native-trace.json",
+      "acceptance_status": "PASS",
+      "pending_resolution": false
     },
     {
       "case_id": "H",

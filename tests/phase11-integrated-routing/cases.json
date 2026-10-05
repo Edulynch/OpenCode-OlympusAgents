@@ -218,7 +218,7 @@
     {
       "id": "K",
       "request_class": "FAST_VS_NORMAL",
-      "description": "FAST records useful independent writer concurrency up to four; NORMAL is separately observed.",
+      "description": "FAST records four useful independent fixture writers; NORMAL is separately observed and its semantic writer count is not fixed by the two-writer synthetic illustration.",
       "trace_ids": [
         "K_FAST",
         "K_NORMAL"
@@ -233,9 +233,20 @@
         ],
         "normal": [
           "kael",
-          "kovan",
           "kovan"
         ]
+      },
+      "normal_route_semantics": {
+        "minimum_useful_route": [
+          "kael",
+          "kovan"
+        ],
+        "useful_writer_count_range": [
+          1,
+          4
+        ],
+        "exact_count_is_not_semantic_invariant": true,
+        "synthetic_illustration_trace_id": "K_NORMAL"
       }
     },
     {
@@ -364,7 +375,17 @@
     {
       "case_id": "K",
       "scenario": "fast_and_normal_separate_roots",
-      "label": "PHASE11_CASE_K_FRESH_ROOT"
+      "label": "PHASE11_CASE_K_FRESH_ROOT",
+      "status": "PASS",
+      "evidence_class": "FRESH_ROOT_NATIVE",
+      "evidence_artifact": "case-k.native-trace.json",
+      "acceptance_status": "PASS",
+      "pending_resolution": false,
+      "profile_acceptance": {
+        "FAST": "PASS",
+        "NORMAL": "PASS",
+        "FAST_VS_NORMAL": "PASS"
+      }
     },
     {
       "case_id": "L",

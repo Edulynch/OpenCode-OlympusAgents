@@ -1,0 +1,393 @@
+{
+  "CASE_ID": "K",
+  "CASE_LABEL": "PHASE11_CASE_K_FRESH_ROOT",
+  "REQUEST_CLASS": "FAST_VS_NORMAL",
+  "EVIDENCE_CLASS": "FRESH_ROOT_NATIVE",
+  "STARTING_HEAD": "d11f328bb2d398c446914bd47bd8de20f8e2e333",
+  "TARGETS": {
+    "A": "tests/codex/fixtures/parallel/research-a.md",
+    "B": "tests/codex/fixtures/parallel/research-b.md",
+    "C": "tests/codex/fixtures/parallel/research-c.md",
+    "D": "tests/codex/fixtures/parallel/research-d.md"
+  },
+  "MARKERS": {
+    "A": "Phase 11 K marker: A",
+    "B": "Phase 11 K marker: B",
+    "C": "Phase 11 K marker: C",
+    "D": "Phase 11 K marker: D"
+  },
+  "PROFILES": {
+    "FAST": {
+      "PROFILE": "FAST",
+      "TRACE_ID": "K-FAST-NATIVE",
+      "SCENARIO": "fast",
+      "CASE_ID": "K",
+      "CASE_LABEL": "PHASE11_CASE_K_FRESH_ROOT",
+      "REQUEST_CLASS": "FAST_VS_NORMAL",
+      "EVIDENCE_CLASS": "FRESH_ROOT_NATIVE",
+      "EXPECTED_ROUTE": ["kael", "kovan", "kovan", "kovan", "kovan"],
+      "ACTUAL_ROUTE": null,
+      "ROOT_SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX",
+      "CHILD_SESSIONS": [
+        {"TRACE_REF": "K-FAST-A", "NATIVE_SESSION_ID": "ses_ef2679fd7ffeFLfpB0fvr2P734", "AGENT": "kovan", "PARENT_SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX", "SESSION_KIND": "USEFUL_WRITER"},
+        {"TRACE_REF": "K-FAST-B", "NATIVE_SESSION_ID": "ses_ef2679fccffe2dYjKBYGeJkoXO", "AGENT": "kovan", "PARENT_SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX", "SESSION_KIND": "USEFUL_WRITER"},
+        {"TRACE_REF": "K-FAST-C", "NATIVE_SESSION_ID": "ses_ef2679fc3ffecUx7kRpo1Mn5t8", "AGENT": "kovan", "PARENT_SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX", "SESSION_KIND": "USEFUL_WRITER"},
+        {"TRACE_REF": "K-FAST-D", "NATIVE_SESSION_ID": "ses_ef2679fa1ffeRROY6Tc0u2iC97", "AGENT": "kovan", "PARENT_SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX", "SESSION_KIND": "USEFUL_WRITER"},
+        {"TRACE_REF": "K-FAST-NOX", "NATIVE_SESSION_ID": "ses_ef265dd58ffeT9tOmedBXm9MW8", "AGENT": "nox", "PARENT_SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX", "SESSION_KIND": "POST_WRITER_VALIDATION"}
+      ],
+      "OBSERVED_PRODUCT_ROLE_COUNTS": {"kael": 1, "kovan": 4},
+      "CONSULTATION_COUNTS": {"kael": null, "veyra": null, "orin": null, "kovan": null, "nox": null, "vera": null, "atlas": null, "argus": null, "talos": null, "thales": null, "helios": null, "aegis": null},
+      "MAX_SIMULTANEOUS_CHILDREN": null,
+      "NEGATIVE_CONTROLS": null,
+      "ROLE_PURITY": null,
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {"EXPECTED_RESULT": "four independent target markers", "OBSERVED_RESULT": "four independent target markers validated PASS", "MATCHES": true, "UNKNOWN": false},
+      "COMPLETION_GATE": {"PENDING_CHILD_COUNT": 0, "UNCONSUMED_RESULT_COUNT": 0, "UNKNOWN_EXECUTION_COUNT": 0, "EXACT_ONCE": null, "QUESTION_BARRIER_SATISFIED": null},
+      "USER_QUESTION_COUNT": null,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "PASS",
+      "ROUTE_MODE": "KAEL_ROOT",
+      "GATE_FACTS": {"EXPLICIT_OPTIMIZATION_INTENT": null, "EXPLICIT_PLANNING_INTENT": null, "COMPLEX_FEATURE": null, "OBVIOUS_FUNCTIONAL_CAUSE": null, "NONTRIVIAL_FUNCTIONAL_CAUSE": null, "SECURITY_BOUNDARY": null, "OPERATIONAL_TOOLING_FAILURE": null, "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": null, "THIRD_PARTY_BUG": null, "FAST_PROFILE_REQUESTED": true, "NORMAL_PROFILE_REQUESTED": false, "MAINTENANCE_ENTRY_EXPLICIT": null},
+      "OPERATIONAL_PROXIES": {"PROFILE": "FAST", "USEFUL_INDEPENDENT_WRITER_COUNT": 4, "ACTUAL_COUNTED_CONCURRENCY": null, "RETRY_COUNT": null, "WRITER_PATHS_UNIQUE": true, "APPROVAL_REQUIRED": null, "APPROVAL_GRANTED": null, "IMPLEMENTATION_AFTER_APPROVAL": null, "WALL_CLOCK_MS": null, "MEASURED": false, "MAX_SIMULTANEOUS_WRITER_MESSAGE_SPAN_OVERLAP": 4},
+      "EVENTS": [],
+      "EVIDENCE_PROVENANCE": {"CLASS": "FRESH_ROOT_NATIVE", "SOURCE": "Task-supplied native observations; this reconciliation performed no runtime recapture.", "NATIVE_ROOT_SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX", "NATIVE_CHILD_SESSION_IDS": ["ses_ef2679fd7ffeFLfpB0fvr2P734", "ses_ef2679fccffe2dYjKBYGeJkoXO", "ses_ef2679fc3ffecUx7kRpo1Mn5t8", "ses_ef2679fa1ffeRROY6Tc0u2iC97", "ses_ef265dd58ffeT9tOmedBXm9MW8"], "CHILD_ID_LIST_BASIS": "Identity enumeration; not launch or terminal order", "ORDER_BASIS": "Supplied writer message spans; total event order not reconstructed", "OBSERVED_AT": null, "USER_REPORTED": true, "FRESH_ROOT_CONFIRMED": true},
+      "NOTES": "Profile-level Phase 11 native schema fields are retained. ACTUAL_ROUTE and total order are null because no total child order was supplied; observed role counts are separate.",
+      "ROOT": {
+        "SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX",
+        "AGENT": "kael",
+        "TITLE": "FAST profile fixture marker edits for Phase 11 K",
+        "OUTCOME": "succeeded",
+        "PARENT_SESSION_ID": null,
+        "PARENT_SESSION_ID_OBSERVATION": "NOT_SUPPLIED"
+      },
+      "ROOT_ISOLATION": {
+        "STATUS": "PASS",
+        "INDEPENDENT_DISPOSABLE_WORKTREE": true,
+        "STARTING_HEAD": "d11f328bb2d398c446914bd47bd8de20f8e2e333",
+        "DIRECTORY": null,
+        "DIRECTORY_OBSERVATION": "NOT_SUPPLIED"
+      },
+      "WRITERS": [
+        {
+          "TRACE_REF": "K-FAST-A",
+          "SESSION_ID": "ses_ef2679fd7ffeFLfpB0fvr2P734",
+          "PARENT_SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX",
+          "AGENT": "kovan",
+          "TARGET_PATHS": ["tests/codex/fixtures/parallel/research-a.md"],
+          "MARKERS": {"A": "Phase 11 K marker: A"},
+          "MESSAGE_SPAN_EPOCH_MS": [1791229452792, 1791229491300],
+          "MESSAGE_SPAN_BASIS": "task-supplied native Kovan message span; not an uninterrupted execution interval",
+          "USEFUL_WRITER": true
+        },
+        {
+          "TRACE_REF": "K-FAST-B",
+          "SESSION_ID": "ses_ef2679fccffe2dYjKBYGeJkoXO",
+          "PARENT_SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX",
+          "AGENT": "kovan",
+          "TARGET_PATHS": ["tests/codex/fixtures/parallel/research-b.md"],
+          "MARKERS": {"B": "Phase 11 K marker: B"},
+          "MESSAGE_SPAN_EPOCH_MS": [1791229452655, 1791229487826],
+          "MESSAGE_SPAN_BASIS": "task-supplied native Kovan message span; not an uninterrupted execution interval",
+          "USEFUL_WRITER": true
+        },
+        {
+          "TRACE_REF": "K-FAST-C",
+          "SESSION_ID": "ses_ef2679fc3ffecUx7kRpo1Mn5t8",
+          "PARENT_SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX",
+          "AGENT": "kovan",
+          "TARGET_PATHS": ["tests/codex/fixtures/parallel/research-c.md"],
+          "MARKERS": {"C": "Phase 11 K marker: C"},
+          "MESSAGE_SPAN_EPOCH_MS": [1791229452739, 1791229540109],
+          "MESSAGE_SPAN_BASIS": "task-supplied native Kovan message span; may include blocked/same-session continuation, not uninterrupted execution",
+          "USEFUL_WRITER": true
+        },
+        {
+          "TRACE_REF": "K-FAST-D",
+          "SESSION_ID": "ses_ef2679fa1ffeRROY6Tc0u2iC97",
+          "PARENT_SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX",
+          "AGENT": "kovan",
+          "TARGET_PATHS": ["tests/codex/fixtures/parallel/research-d.md"],
+          "MARKERS": {"D": "Phase 11 K marker: D"},
+          "MESSAGE_SPAN_EPOCH_MS": [1791229452816, 1791229486186],
+          "MESSAGE_SPAN_BASIS": "task-supplied native Kovan message span; not an uninterrupted execution interval",
+          "USEFUL_WRITER": true
+        }
+      ],
+      "USEFUL_INDEPENDENT_WRITER_COUNT": 4,
+      "MAX_SIMULTANEOUS_WRITER_MESSAGE_SPAN_OVERLAP": 4,
+      "POST_WRITER_VALIDATION": {
+        "AGENT": "nox",
+        "SESSION_ID": "ses_ef265dd58ffeT9tOmedBXm9MW8",
+        "PARENT_SESSION_ID": "ses_ef268a320ffe69lb9JP0YVCiCX",
+        "RESULT": "PASS",
+        "SCOPE": "read-only Git integrity and diff-check",
+        "COUNTED_AS_USEFUL_WRITER": false
+      },
+      "DIRECT_CHILD_COUNTS": {
+        "KOVAN_WRITERS": 4,
+        "NOX_VALIDATORS": 1,
+        "TOTAL_DIRECT_CHILDREN": 5
+      },
+      "ROOT_TERMINAL_FACTS": {
+        "MARKERS_VALIDATED": "PASS",
+        "OUT_OF_SCOPE_CHANGES": "NONE",
+        "DIFF_CHECK": "PASS",
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+        "UNRESOLVED_WORK": "NONE",
+        "ANY_WORK_REMAINING": "NO"
+      },
+      "COMPLETION": {
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+        "UNRESOLVED_WORK": "NONE",
+        "ANY_WORK_REMAINING": "NO",
+        "RESULT_IDS": null,
+        "PER_INVOCATION_CONSUMPTION_TIMING": null,
+        "SESSION_LIFETIME_EXACT_ONCE": null
+      },
+      "SAME_SESSION_RECONCILIATION": {
+        "TRACE_REF": "K-FAST-C",
+        "SESSION_ID": "ses_ef2679fc3ffecUx7kRpo1Mn5t8",
+        "INITIAL_ATTEMPT": {
+          "OUTCOME": "BLOCKED",
+          "BLOCKER": "missing explicit AUTHORITY_GRANT heading",
+          "TOOL_ATTEMPT": "NOT_ATTEMPTED",
+          "TOOL_EXECUTION": "NOT_EXECUTED",
+          "CHANGES": "NONE"
+        },
+        "CONTINUATION": "SUCCEEDED",
+        "SAME_SESSION": true,
+        "BLIND_RETRY": false,
+        "REPLACEMENT_WRITER": false,
+        "CONTINUATION_COUNTS_AS_ADDITIONAL_WRITER": false,
+        "SPAN_CAVEAT": "C span can include blocked/same-session continuation and is not uninterrupted execution."
+      },
+      "UNKNOWN_METRICS": {
+        "ROOT_DIRECTORY": null,
+        "ROOT_PARENT_SESSION_ID": "NOT_SUPPLIED",
+        "ROOT_TERMINAL_MESSAGE_ID": null,
+        "NATIVE_PERMISSION_UI": "NOT_OBSERVABLE",
+        "NATIVE_PERMISSION_DECISION": "NOT_OBSERVABLE",
+        "WALL_CLOCK_MS": null,
+        "WALL_CLOCK_SPEEDUP": null,
+        "PROCESS_OR_SCHEDULER_PARALLELISM": "NOT_MEASURED",
+        "CPU_PARALLELISM": "NOT_MEASURED",
+        "TOTAL_EVENT_ORDER": "NOT_RECONSTRUCTED"
+      },
+      "ACCEPTANCE": {
+        "STATUS": "PASS",
+        "FRESH_ROOT_NATIVE": "PASS",
+        "WRITE_SCOPE_ISOLATION": "PASS",
+        "RESULT_RECONCILIATION": "PASS",
+        "COMPLETION_OWNERSHIP": "PASS",
+        "USEFUL_WRITER_COUNT_RANGE": [1, 4],
+        "MESSAGE_SPAN_OVERLAP_IS_NOT_PROCESS_OR_SCHEDULER_PARALLELISM": true
+      }
+    },
+    "NORMAL": {
+      "PROFILE": "NORMAL",
+      "TRACE_ID": "K-NORMAL-NATIVE",
+      "SCENARIO": "normal",
+      "CASE_ID": "K",
+      "CASE_LABEL": "PHASE11_CASE_K_FRESH_ROOT",
+      "REQUEST_CLASS": "FAST_VS_NORMAL",
+      "EVIDENCE_CLASS": "FRESH_ROOT_NATIVE",
+      "EXPECTED_ROUTE": ["kael", "kovan"],
+      "ACTUAL_ROUTE": null,
+      "ROOT_SESSION_ID": "ses_ef26272b9ffeVRK0pvuTcZsI5P",
+      "CHILD_SESSIONS": [
+        {"TRACE_REF": "K-NORMAL-WRITER", "NATIVE_SESSION_ID": "ses_ef261cb2fffeO9ZOYtqe64gvVH", "AGENT": "kovan", "PARENT_SESSION_ID": "ses_ef26272b9ffeVRK0pvuTcZsI5P", "SESSION_KIND": "USEFUL_WRITER"},
+        {"TRACE_REF": "K-NORMAL-NOX", "NATIVE_SESSION_ID": "ses_ef25fc66fffeTKf7W5XO4jmEZG", "AGENT": "nox", "PARENT_SESSION_ID": "ses_ef26272b9ffeVRK0pvuTcZsI5P", "SESSION_KIND": "POST_WRITER_VALIDATION"}
+      ],
+      "OBSERVED_PRODUCT_ROLE_COUNTS": {"kael": 1, "kovan": 1},
+      "CONSULTATION_COUNTS": {"kael": null, "veyra": null, "orin": null, "kovan": null, "nox": null, "vera": null, "atlas": null, "argus": null, "talos": null, "thales": null, "helios": null, "aegis": null},
+      "MAX_SIMULTANEOUS_CHILDREN": null,
+      "NEGATIVE_CONTROLS": null,
+      "ROLE_PURITY": null,
+      "DEPENDENCY_ORDER": [],
+      "RESULT_FIDELITY": {"EXPECTED_RESULT": "all four target markers", "OBSERVED_RESULT": "all four target markers validated PASS", "MATCHES": true, "UNKNOWN": false},
+      "COMPLETION_GATE": {"PENDING_CHILD_COUNT": 0, "UNCONSUMED_RESULT_COUNT": 0, "UNKNOWN_EXECUTION_COUNT": 0, "EXACT_ONCE": null, "QUESTION_BARRIER_SATISFIED": null},
+      "USER_QUESTION_COUNT": null,
+      "FINAL_OUTCOME": "SUCCEEDED",
+      "ROUTING_RESULT": "PASS",
+      "ROUTE_MODE": "KAEL_ROOT",
+      "GATE_FACTS": {"EXPLICIT_OPTIMIZATION_INTENT": null, "EXPLICIT_PLANNING_INTENT": null, "COMPLEX_FEATURE": null, "OBVIOUS_FUNCTIONAL_CAUSE": null, "NONTRIVIAL_FUNCTIONAL_CAUSE": null, "SECURITY_BOUNDARY": null, "OPERATIONAL_TOOLING_FAILURE": null, "HIGH_UNCERTAINTY_AFTER_BOUNDED_DIAGNOSIS": null, "THIRD_PARTY_BUG": null, "FAST_PROFILE_REQUESTED": false, "NORMAL_PROFILE_REQUESTED": true, "MAINTENANCE_ENTRY_EXPLICIT": null},
+      "OPERATIONAL_PROXIES": {"PROFILE": "NORMAL", "USEFUL_INDEPENDENT_WRITER_COUNT": 1, "ACTUAL_COUNTED_CONCURRENCY": null, "RETRY_COUNT": null, "WRITER_PATHS_UNIQUE": true, "APPROVAL_REQUIRED": null, "APPROVAL_GRANTED": null, "IMPLEMENTATION_AFTER_APPROVAL": null, "WALL_CLOCK_MS": null, "MEASURED": false, "MAX_SIMULTANEOUS_WRITER_MESSAGE_SPAN_OVERLAP": 1},
+      "EVENTS": [],
+      "EVIDENCE_PROVENANCE": {"CLASS": "FRESH_ROOT_NATIVE", "SOURCE": "Task-supplied native observations; this reconciliation performed no runtime recapture.", "NATIVE_ROOT_SESSION_ID": "ses_ef26272b9ffeVRK0pvuTcZsI5P", "NATIVE_CHILD_SESSION_IDS": ["ses_ef261cb2fffeO9ZOYtqe64gvVH", "ses_ef25fc66fffeTKf7W5XO4jmEZG"], "CHILD_ID_LIST_BASIS": "Identity enumeration; not launch or terminal order", "ORDER_BASIS": "Supplied writer message span; total event order not reconstructed", "OBSERVED_AT": null, "USER_REPORTED": true, "FRESH_ROOT_CONFIRMED": true},
+      "NOTES": "One useful NORMAL writer is this run's observation, not a semantic count invariant; the valid generic range is one through four. ACTUAL_ROUTE and total order remain null.",
+      "ROOT": {
+        "SESSION_ID": "ses_ef26272b9ffeVRK0pvuTcZsI5P",
+        "AGENT": "kael",
+        "TITLE": "Phase 11 K fixture marker edits under NORMAL profile",
+        "OUTCOME": "succeeded",
+        "PARENT_SESSION_ID": null,
+        "PARENT_SESSION_ID_OBSERVATION": "NOT_SUPPLIED"
+      },
+      "ROOT_ISOLATION": {
+        "STATUS": "PASS",
+        "INDEPENDENT_DISPOSABLE_WORKTREE": true,
+        "STARTING_HEAD": "d11f328bb2d398c446914bd47bd8de20f8e2e333",
+        "DIRECTORY": null,
+        "DIRECTORY_OBSERVATION": "NOT_SUPPLIED"
+      },
+      "WRITERS": [
+        {
+          "TRACE_REF": "K-NORMAL-WRITER",
+          "SESSION_ID": "ses_ef261cb2fffeO9ZOYtqe64gvVH",
+          "PARENT_SESSION_ID": "ses_ef26272b9ffeVRK0pvuTcZsI5P",
+          "AGENT": "kovan",
+          "TARGET_PATHS": [
+            "tests/codex/fixtures/parallel/research-a.md",
+            "tests/codex/fixtures/parallel/research-b.md",
+            "tests/codex/fixtures/parallel/research-c.md",
+            "tests/codex/fixtures/parallel/research-d.md"
+          ],
+          "MARKERS": {
+            "A": "Phase 11 K marker: A",
+            "B": "Phase 11 K marker: B",
+            "C": "Phase 11 K marker: C",
+            "D": "Phase 11 K marker: D"
+          },
+          "MESSAGE_SPAN_EPOCH_MS": [1791229834860, 1791229946073],
+          "MESSAGE_SPAN_BASIS": "task-supplied native Kovan message span; not an uninterrupted execution interval",
+          "USEFUL_WRITER": true
+        }
+      ],
+      "USEFUL_INDEPENDENT_WRITER_COUNT": 1,
+      "MAX_SIMULTANEOUS_WRITER_MESSAGE_SPAN_OVERLAP": 1,
+      "POST_WRITER_VALIDATION": {
+        "AGENT": "nox",
+        "SESSION_ID": "ses_ef25fc66fffeTKf7W5XO4jmEZG",
+        "PARENT_SESSION_ID": "ses_ef26272b9ffeVRK0pvuTcZsI5P",
+        "RESULT": "PASS",
+        "SCOPE": "read-only Git integrity and diff-check",
+        "COUNTED_AS_USEFUL_WRITER": false
+      },
+      "DIRECT_CHILD_COUNTS": {
+        "KOVAN_WRITERS": 1,
+        "NOX_VALIDATORS": 1,
+        "TOTAL_DIRECT_CHILDREN": 2
+      },
+      "ROOT_TERMINAL_FACTS": {
+        "MARKERS_VALIDATED": "PASS",
+        "OUT_OF_SCOPE_CHANGES": "NONE",
+        "DIFF_CHECK": "PASS",
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+        "UNRESOLVED_WORK": "NONE",
+        "ANY_WORK_REMAINING": "NO"
+      },
+      "COMPLETION": {
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+        "UNRESOLVED_WORK": "NONE",
+        "ANY_WORK_REMAINING": "NO",
+        "RESULT_IDS": null,
+        "PER_INVOCATION_CONSUMPTION_TIMING": null,
+        "SESSION_LIFETIME_EXACT_ONCE": null
+      },
+      "SAME_SESSION_RECONCILIATION": {
+        "TRACE_REF": "K-NORMAL-WRITER",
+        "SESSION_ID": "ses_ef261cb2fffeO9ZOYtqe64gvVH",
+        "INITIAL_ATTEMPT": {
+          "OUTCOME": "BLOCKED",
+          "BLOCKER": "missing explicit AUTHORITY_GRANT heading",
+          "TOOL_ATTEMPT": "NOT_ATTEMPTED",
+          "TOOL_EXECUTION": "NOT_EXECUTED",
+          "CHANGES": "NONE"
+        },
+        "CONTINUATION": "SUCCEEDED",
+        "SAME_SESSION": true,
+        "BLIND_RETRY": false,
+        "REPLACEMENT_WRITER": false,
+        "CONTINUATION_COUNTS_AS_ADDITIONAL_WRITER": false,
+        "SPAN_CAVEAT": "Message span covers the same writer session including same-session continuation; not uninterrupted execution."
+      },
+      "UNKNOWN_METRICS": {
+        "ROOT_DIRECTORY": null,
+        "ROOT_PARENT_SESSION_ID": "NOT_SUPPLIED",
+        "ROOT_TERMINAL_MESSAGE_ID": null,
+        "NATIVE_PERMISSION_UI": "NOT_OBSERVABLE",
+        "NATIVE_PERMISSION_DECISION": "NOT_OBSERVABLE",
+        "WALL_CLOCK_MS": null,
+        "WALL_CLOCK_SPEEDUP": null,
+        "PROCESS_OR_SCHEDULER_PARALLELISM": "NOT_MEASURED",
+        "CPU_PARALLELISM": "NOT_MEASURED",
+        "TOTAL_EVENT_ORDER": "NOT_RECONSTRUCTED"
+      },
+      "ACCEPTANCE": {
+        "STATUS": "PASS",
+        "FRESH_ROOT_NATIVE": "PASS",
+        "WRITE_SCOPE_ISOLATION": "PASS",
+        "RESULT_RECONCILIATION": "PASS",
+        "COMPLETION_OWNERSHIP": "PASS",
+        "USEFUL_WRITER_COUNT_RANGE": [1, 4],
+        "MESSAGE_SPAN_OVERLAP_IS_NOT_PROCESS_OR_SCHEDULER_PARALLELISM": true
+      }
+    }
+  },
+  "COMPARISON": {
+    "CLASSIFICATIONS": {
+      "FUNCTIONAL_PARITY": "PASS",
+      "FAST_PARTITIONING": "PASS",
+      "FAST_PARALLELISM": "PASS",
+      "NORMAL_COST_AWARENESS": "PASS",
+      "PROFILE_DIFFERENTIATION": "PASS",
+      "WRITE_SCOPE_ISOLATION": "PASS",
+      "RESULT_RECONCILIATION": "PASS",
+      "EFFICIENCY": "PASS",
+      "FAST_FRESH_ROOT_NATIVE": "PASS",
+      "NORMAL_FRESH_ROOT_NATIVE": "PASS",
+      "FAST_VS_NORMAL": "PASS",
+      "COMPLETION_OWNERSHIP": "PASS"
+    },
+    "FAST_PROFILE_STATUS": "PASS",
+    "NORMAL_PROFILE_STATUS": "PASS",
+    "FAST_VS_NORMAL": "PASS",
+    "FAST_USEFUL_WRITER_COUNT": 4,
+    "NORMAL_USEFUL_WRITER_COUNT": 1,
+    "MAX_SIMULTANEOUS_WRITER_MESSAGE_SPAN_OVERLAP": {"FAST": 4, "NORMAL": 1},
+    "WRITER_COUNT_BASIS": "Unique useful Kovan writer sessions; excludes Nox validation and same-session continuations.",
+    "MAX_OVERLAP_BASIS": "Native message-span overlap only; not scheduler, CPU/process parallelism, or wall-clock speedup.",
+    "WALL_CLOCK_SPEEDUP": null,
+    "CURRENT_REMAINING_NATIVE_CASES": [],
+    "PHASE11_STATUS": "PARTIAL",
+    "CLOSURE_REVIEW_READY": true,
+    "SHIPPED": false
+  },
+  "CLASSIFICATIONS": {
+    "FUNCTIONAL_PARITY": "PASS",
+    "FAST_PARTITIONING": "PASS",
+    "FAST_PARALLELISM": "PASS",
+    "NORMAL_COST_AWARENESS": "PASS",
+    "PROFILE_DIFFERENTIATION": "PASS",
+    "WRITE_SCOPE_ISOLATION": "PASS",
+    "RESULT_RECONCILIATION": "PASS",
+    "EFFICIENCY": "PASS",
+    "FAST_FRESH_ROOT_NATIVE": "PASS",
+    "NORMAL_FRESH_ROOT_NATIVE": "PASS",
+    "FAST_VS_NORMAL": "PASS",
+    "COMPLETION_OWNERSHIP": "PASS"
+  },
+  "EVENTS": [],
+  "EVENT_ORDER_BASIS": "No total order reconstructed; supplied writer message spans are recorded separately.",
+  "PHASE11_STATUS": "PARTIAL",
+  "PENDING_FRESH_ROOT_LABELS": [],
+  "RECONCILIATION_FILES_CHANGED": [
+    "tests/phase11-integrated-routing/RUNME.md",
+    "tests/phase11-integrated-routing/baseline.json",
+    "tests/phase11-integrated-routing/baseline.md",
+    "tests/phase11-integrated-routing/case-k.native-trace.json",
+    "tests/phase11-integrated-routing/cases.json",
+    "tests/phase11-integrated-routing/qualify.py",
+    "tests/phase11-integrated-routing/test_qualify.py"
+  ],
+  "EVIDENCE_PROVENANCE": {
+    "CLASS": "FRESH_ROOT_NATIVE",
+    "SOURCE": "Task-supplied native observations; this reconciliation performed no runtime recapture.",
+    "USER_REPORTED": true,
+    "RUNTIME_RECAPTURE_PERFORMED": false,
+    "TOTAL_EVENT_ORDER": "NOT_RECONSTRUCTED",
+    "NATIVE_PERMISSION_UI": "NOT_OBSERVABLE",
+    "NATIVE_PERMISSION_DECISION": "NOT_OBSERVABLE"
+  },
+  "NOTES": "FAST and NORMAL are distinct fresh roots on independent disposable worktrees at the same supplied starting HEAD, with the same four target paths and marker checks. FAST has four useful independent Kovan writers; all four supplied Kovan message spans overlap. NORMAL has one useful Kovan writer in this observation, but one through four is the valid useful-writer range; the synthetic two-writer NORMAL trace is only an illustration. Nox validation and same-session continuations are excluded from writer/session counts. C's span can include its blocked initial attempt and same-session continuation; spans do not establish uninterrupted execution or a total event order. The overlap figure is message-span overlap only, not scheduler/CPU/process parallelism or wall-clock speedup. Root aggregate child-terminal/consumed facts support completion; result IDs and exact-once consumption timing remain unknown. Overall Phase 11 is PARTIAL and closure-review-ready, not SHIPPED."
+}

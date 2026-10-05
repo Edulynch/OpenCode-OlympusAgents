@@ -628,8 +628,8 @@ not imposed as native choreography. The root terminal reports no changes to
 the original run files; this reconciliation changed only the ten scoped paths
 listed in `RECONCILIATION_FILES_CHANGED` in `case-g.native-trace.json` (Phase 11
 evidence, validator, tests, and documentation). At the G snapshot H and K
-remained pending. Case H is reconciled below; K alone
-is current pending work and Phase 11 remains **IN VALIDATION / PARTIAL**.
+remained pending. Case H is reconciled below; at the subsequent H snapshot, K
+alone remained current pending work and Phase 11 was still **IN VALIDATION / PARTIAL**.
 
 ## Case H native capture — bounded third-party defect containment
 
@@ -672,8 +672,9 @@ occurred during reconciliation; the original root terminal reports
 `FILES_CHANGED: NONE`. The H behavior, classification, bounded-evidence,
 reconciliation, no-blind-retry, no-unapproved-change, role-purity,
 completion-ownership, routing, and fresh-root-native criteria are PASS. Efficiency
-is `LEAN` as a qualification judgment, not a measurement. H is accepted; only K
-remains pending and Phase 11 remains **IN VALIDATION / PARTIAL**.
+is `LEAN` as a qualification judgment, not a measurement. At this H snapshot, H
+was accepted and K was the only pending case; Phase 11 remained
+**IN VALIDATION / PARTIAL**.
 
 The nine Phase 11 paths changed for this reconciliation are listed in
 `RECONCILIATION_FILES_CHANGED` in `case-h.native-trace.json`; none is an original
@@ -687,3 +688,67 @@ Those were G checks; they do not execute the Case G fixture or mutate its native
 sessions, and are not the independent Nox checks assigned after Case H
 reconciliation.
 Independent Nox validation remains separate.
+
+## Case K FAST/NORMAL native reconciliation — `p11-k-reconcile-write`
+
+The two supplied native observations are recorded in
+`case-k.native-trace.json`; this reconciliation made no runtime/API recapture,
+did not access either disposable worktree, and did not resume either root or
+child. The evidence provenance remains explicitly `USER_REPORTED: true`. The
+canonical repository was clean on branch `qualify/phase-11-integrated-routing`
+at `d11f328bb2d398c446914bd47bd8de20f8e2e333` before these scoped edits; the six
+existing targets were tracked, while the new native artifact did not yet exist.
+
+- Both fresh Kael roots began from the same supplied HEAD and used independent
+  disposable worktrees. Their root IDs are FAST
+  `ses_ef268a320ffe69lb9JP0YVCiCX` and NORMAL
+  `ses_ef26272b9ffeVRK0pvuTcZsI5P`. The task did not supply root-directory,
+  parent-session, root terminal-message, or permission-UI observations; those
+  remain null or `NOT_OBSERVABLE`.
+- Both roots targeted exactly
+  `tests/codex/fixtures/parallel/research-a.md` through `research-d.md`; their
+  A/B/C/D markers were reported validated, with no out-of-scope changes and
+  `git diff --check` PASS. Aggregate root statements report all required child
+  work terminal and consumed, no unresolved work, and no remaining work.
+- FAST's four useful direct Kovan sessions are A
+  `ses_ef2679fd7ffeFLfpB0fvr2P734`, B
+  `ses_ef2679fccffe2dYjKBYGeJkoXO`, C
+  `ses_ef2679fc3ffecUx7kRpo1Mn5t8`, and D
+  `ses_ef2679fa1ffeRROY6Tc0u2iC97`; each owns only its corresponding distinct
+  target. Their supplied message spans are retained verbatim in the artifact.
+  All four spans overlap, so the observed maximum is **four overlapping native
+  writer message spans**. This is not a reconstructed event order, continuous
+  execution, scheduler/CPU/process parallelism, or wall-clock speedup.
+- C's initial result was `BLOCKED` because the explicit `AUTHORITY_GRANT` heading
+  was missing; no tool was attempted or executed and no changes occurred. Kael
+  consumed that result and C continued in the same session successfully. This
+  was not a blind retry or replacement writer and does not increase the four
+  useful-writer count. C's full message span may include the blocked interval
+  and same-session continuation.
+- NORMAL's useful direct Kovan session is
+  `ses_ef261cb2fffeO9ZOYtqe64gvVH`, which owns all four targets and produced all
+  four markers. Its initial blocked result had the same missing-grant-envelope
+  cause, no attempted tool, no execution, and no changes; it continued
+  successfully in the same session without blind retry or replacement. The
+  observed NORMAL useful-writer count is **one**, while the semantic validator
+  accepts a useful NORMAL count from one through the four-writer Core ceiling.
+  The synthetic `K_NORMAL` trace remains byte-for-byte unchanged as its
+  illustrative two-writer example; its writer count is not a native semantic
+  invariant.
+- Post-writer read-only Nox checks are recorded separately from Kovan writer
+  counts: FAST `ses_ef265dd58ffeT9tOmedBXm9MW8` and NORMAL
+  `ses_ef25fc66fffeTKf7W5XO4jmEZG`. The task-supplied comparison reports
+  functional parity, FAST partitioning/parallelism, NORMAL cost-awareness,
+  profile differentiation, write-scope isolation, result reconciliation, and
+  efficiency as PASS. Result IDs, per-invocation consumption timing,
+  session-lifetime exact-once, native permission UI/decision, total event order,
+  and wall-clock metrics remain unknown/not observable.
+- FAST, NORMAL, and FAST-vs-NORMAL are each accepted. Current remaining native
+  cases and pending labels are **NONE**. All earlier per-case pending snapshots,
+  including the H snapshot that lists K as pending, remain historical and were
+  not rewritten. Phase 11 remains **PARTIAL**, closure-review-ready, and not
+  SHIPPED; final closure review and the separately recorded Argus/Thales and I
+  coverage limitations remain for Kael's review.
+
+Independent Nox validation is pending. This writer did not run the qualifier,
+unit tests, or `git diff --check`.

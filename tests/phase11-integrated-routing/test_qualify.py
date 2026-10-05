@@ -12,19 +12,26 @@ from qualify import (
     CASE_C_NOX_SESSION_ID,
     CASE_E_CLASSIFICATIONS,
     CASE_E_EXPECTED_ROUTE,
+    CASE_E1_PENDING_LABELS,
+    CASE_E2_PENDING_LABELS,
     CASE_F_CLASSIFICATIONS,
     CASE_F_COLLECTOR_SESSION_ID,
     CASE_F_EXPECTED_ROUTE,
+    CASE_F_PENDING_LABELS,
     CASE_F_ROOT_SESSION_ID,
     CASE_G_CLASSIFICATIONS,
     CASE_G_EXPECTED_ROUTE,
+    CASE_G_PENDING_LABELS,
     CASE_G_ROOT_SESSION_ID,
     CASE_G_THALES_SESSION_ID,
     CASE_G_VEYRA_SESSION_ID,
     CASE_H_CLASSIFICATIONS,
     CASE_H_EXPECTED_ROUTE,
+    CASE_H_PENDING_LABELS,
     CASE_H_ROOT_SESSION_ID,
     CASE_H_VEYRA_SESSION_ID,
+    CASE_K_CLASSIFICATIONS,
+    CASE_K_ROOTS,
     EIGHT_SPECIALISTS,
     HARD_BUDGET,
     load_json,
@@ -37,6 +44,7 @@ from qualify import (
     validate_native_case_f_capture,
     validate_native_case_g_capture,
     validate_native_case_h_capture,
+    validate_native_case_k_capture,
     validate_native_invocation_capture,
     validate_phase11_c_reconciliation,
     validate_phase11_d_reconciliation,
@@ -45,6 +53,7 @@ from qualify import (
     validate_phase11_f_reconciliation,
     validate_phase11_g_reconciliation,
     validate_phase11_h_reconciliation,
+    validate_phase11_k_reconciliation,
     validate_phase11_b3_reconciliation,
     validate_trace,
 )
@@ -72,6 +81,7 @@ NATIVE_G_THALES_EXPORT_DOC = load_json(HERE / "case-g.thales.session-export.json
 NATIVE_H_DOC = load_json(HERE / "case-h.native-trace.json")
 NATIVE_H_ROOT_EXPORT_DOC = load_json(HERE / "case-h.root.session-export.json")
 NATIVE_H_VEYRA_EXPORT_DOC = load_json(HERE / "case-h.veyra.session-export.json")
+NATIVE_K_DOC = load_json(HERE / "case-k.native-trace.json")
 CASES = {case["id"]: case for case in CASES_DOC["cases"]}
 TRACES = {trace["TRACE_ID"]: trace for trace in TRACES_DOC["traces"]}
 
@@ -694,18 +704,8 @@ class NativeCaseEMutationTests(unittest.TestCase):
         self.assertNotIn("reasoning", [part["type"] for part in NATIVE_E_EXPORT_DOC["messages"][1]["content"]])
         self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
         self.assertEqual(
-            [
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_E_FRESH_ROOT",
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
-            ],
+            CASE_E1_PENDING_LABELS,
             BASELINE_DOC["phase11_e_reconciliation"]["pending_fresh_root_labels"],
-        )
-        self.assertEqual(
-            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
-            BASELINE_DOC["live_qualification"]["pending_labels"],
         )
         self.assertEqual("NOT_EXERCISED", BASELINE_DOC["argus_same_session_followup_runtime_coverage"]["status"])
         self.assertEqual("PASS", BASELINE_DOC["phase11_b3_reconciliation"]["acceptance_status"])
@@ -818,8 +818,8 @@ class NativeCaseE2MutationTests(unittest.TestCase):
         self.assertFalse(NATIVE_E2_CHILD_EXPORT_DOC["projection_and_redaction"]["raw_export_persisted"])
         self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
         self.assertEqual(
-            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
-            BASELINE_DOC["live_qualification"]["pending_labels"],
+            CASE_E2_PENDING_LABELS,
+            BASELINE_DOC["phase11_e2_reconciliation"]["pending_fresh_root_labels"],
         )
         self.assertEqual(
             "NOT_EXERCISED",
@@ -946,8 +946,8 @@ class NativeCaseFMutationTests(unittest.TestCase):
         self.assertNotIn("EVENTS", NATIVE_F_DOC)
         self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
         self.assertEqual(
-            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
-            BASELINE_DOC["live_qualification"]["pending_labels"],
+            CASE_F_PENDING_LABELS,
+            BASELINE_DOC["phase11_f_reconciliation"]["pending_fresh_root_labels"],
         )
         self.assertEqual("FAIL", BASELINE_DOC["phase11_e_reconciliation"]["acceptance_status"])
         self.assertEqual("PASS", BASELINE_DOC["phase11_e2_reconciliation"]["acceptance_status"])
@@ -1151,8 +1151,8 @@ class NativeCaseGMutationTests(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
-            BASELINE_DOC["live_qualification"]["pending_labels"],
+            CASE_G_PENDING_LABELS,
+            BASELINE_DOC["phase11_g_reconciliation"]["pending_fresh_root_labels"],
         )
         for prior in ("phase11_b3_reconciliation", "phase11_c_reconciliation", "phase11_d_reconciliation", "phase11_e_reconciliation", "phase11_e2_reconciliation", "phase11_f_reconciliation"):
             self.assertIn("HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT", BASELINE_DOC[prior]["pending_fresh_root_labels"])
@@ -1392,8 +1392,8 @@ class NativeCaseHMutationTests(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
-            BASELINE_DOC["live_qualification"]["pending_labels"],
+            CASE_H_PENDING_LABELS,
+            BASELINE_DOC["phase11_h_reconciliation"]["pending_fresh_root_labels"],
         )
         self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
         self.assertEqual(
@@ -1472,6 +1472,129 @@ class NativeCaseHMutationTests(unittest.TestCase):
             validate_native_case_h_capture(
                 NATIVE_H_DOC, CASES["H"], raw_text, NATIVE_H_VEYRA_EXPORT_DOC
             ),
+        )
+
+
+class NativeCaseKMutationTests(unittest.TestCase):
+    def normal_synthetic_trace_with_one_writer(self) -> dict:
+        trace = changed("K_NORMAL")
+        trace["CHILD_SESSIONS"] = [child for child in trace["CHILD_SESSIONS"] if child["TRACE_REF"] == "SYN-W1"]
+        trace["EVENTS"] = [event for event in trace["EVENTS"] if event.get("CHILD_REF") != "SYN-W2"]
+        for order, event in enumerate(trace["EVENTS"], start=1):
+            event["ORDER"] = order
+        trace["EXPECTED_ROUTE"] = ["kael", "kovan"]
+        trace["ACTUAL_ROUTE"] = ["kael", "kovan"]
+        trace["CONSULTATION_COUNTS"]["kovan"] = 1
+        trace["MAX_SIMULTANEOUS_CHILDREN"] = 1
+        trace["OPERATIONAL_PROXIES"]["USEFUL_INDEPENDENT_WRITER_COUNT"] = 1
+        trace["OPERATIONAL_PROXIES"]["ACTUAL_COUNTED_CONCURRENCY"] = 1
+        trace["ROLE_PURITY"]["OBSERVED_ACTIONS"] = trace["ROLE_PURITY"]["OBSERVED_ACTIONS"][:2]
+        trace["RESULT_FIDELITY"]["EXPECTED_RESULT"] = "one independent scoped write with its result consumed"
+        trace["RESULT_FIDELITY"]["OBSERVED_RESULT"] = "one independent scoped write with its result consumed"
+        return trace
+
+    def test_normal_semantics_accept_one_useful_writer_and_preserve_two_writer_example(self) -> None:
+        self.assertEqual(["kael", "kovan"], CASES["K"]["expected_routes"]["normal"])
+        self.assertEqual(2, len(TRACES["K_NORMAL"]["CHILD_SESSIONS"]))
+        self.assertEqual([], validate_trace(TRACES["K_NORMAL"], CASES["K"]))
+        self.assertEqual([], validate_trace(self.normal_synthetic_trace_with_one_writer(), CASES["K"]))
+        self.assertEqual([1, 4], CASES["K"]["normal_route_semantics"]["useful_writer_count_range"])
+        self.assertTrue(CASES["K"]["normal_route_semantics"]["exact_count_is_not_semantic_invariant"])
+
+    def test_normal_semantics_reject_zero_writers_and_overlapping_ownership(self) -> None:
+        zero = self.normal_synthetic_trace_with_one_writer()
+        zero["CHILD_SESSIONS"] = []
+        zero["EVENTS"] = [event for event in zero["EVENTS"] if event.get("CHILD_REF") != "SYN-W1"]
+        for order, event in enumerate(zero["EVENTS"], start=1):
+            event["ORDER"] = order
+        zero["EXPECTED_ROUTE"] = ["kael"]
+        zero["ACTUAL_ROUTE"] = ["kael"]
+        zero["CONSULTATION_COUNTS"]["kovan"] = 0
+        zero["MAX_SIMULTANEOUS_CHILDREN"] = 0
+        zero["OPERATIONAL_PROXIES"]["USEFUL_INDEPENDENT_WRITER_COUNT"] = 0
+        zero["OPERATIONAL_PROXIES"]["ACTUAL_COUNTED_CONCURRENCY"] = 0
+        zero["ROLE_PURITY"]["OBSERVED_ACTIONS"] = zero["ROLE_PURITY"]["OBSERVED_ACTIONS"][:1]
+        zero_errors = failures(zero)
+        self.assertIn("K_NORMAL_USEFUL_WRITER_COUNT_OUT_OF_RANGE", zero_errors)
+
+        overlap = changed("K_NORMAL")
+        overlap["CHILD_SESSIONS"][1]["WRITE_PATHS"] = ["fixtures/normal/one.txt"]
+        self.assertIn("K_NORMAL_WRITER_PATHS_OVERLAP", failures(overlap))
+
+    def test_case_k_accepts_both_native_profiles_and_comparison_without_event_reconstruction(self) -> None:
+        self.assertEqual([], validate_native_case_k_capture(NATIVE_K_DOC, CASES["K"]))
+        self.assertEqual([], validate_phase11_k_reconciliation(BASELINE_DOC, CASES_DOC, NATIVE_K_DOC))
+        self.assertEqual(CASE_K_CLASSIFICATIONS, NATIVE_K_DOC["CLASSIFICATIONS"])
+        self.assertEqual(CASE_K_ROOTS["FAST"]["session_id"], NATIVE_K_DOC["PROFILES"]["FAST"]["ROOT"]["SESSION_ID"])
+        self.assertEqual(CASE_K_ROOTS["NORMAL"]["session_id"], NATIVE_K_DOC["PROFILES"]["NORMAL"]["ROOT"]["SESSION_ID"])
+        self.assertEqual(4, NATIVE_K_DOC["PROFILES"]["FAST"]["USEFUL_INDEPENDENT_WRITER_COUNT"])
+        self.assertEqual(1, NATIVE_K_DOC["PROFILES"]["NORMAL"]["USEFUL_INDEPENDENT_WRITER_COUNT"])
+        self.assertEqual([1, 4], NATIVE_K_DOC["PROFILES"]["NORMAL"]["ACCEPTANCE"]["USEFUL_WRITER_COUNT_RANGE"])
+        self.assertEqual([], NATIVE_K_DOC["EVENTS"])
+        self.assertEqual("NOT_RECONSTRUCTED", NATIVE_K_DOC["EVIDENCE_PROVENANCE"]["TOTAL_EVENT_ORDER"])
+        self.assertTrue(NATIVE_K_DOC["EVIDENCE_PROVENANCE"]["USER_REPORTED"])
+        self.assertFalse(NATIVE_K_DOC["EVIDENCE_PROVENANCE"]["RUNTIME_RECAPTURE_PERFORMED"])
+        self.assertEqual([], BASELINE_DOC["live_qualification"]["pending_labels"])
+        self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
+        self.assertEqual("NOT_EXERCISED", BASELINE_DOC["argus_same_session_followup_runtime_coverage"]["status"])
+
+    def test_case_k_native_mutations_reject_identity_scope_span_and_completion_drift(self) -> None:
+        wrong_writer = copy.deepcopy(NATIVE_K_DOC)
+        wrong_writer["PROFILES"]["FAST"]["WRITERS"][0]["SESSION_ID"] = "ses_forgedwriter"
+        self.assertIn(
+            "NATIVE_K_WRITER_ID_ROLE_SPAN_OR_SCOPE_MISMATCH:FAST:K-FAST-A",
+            validate_native_case_k_capture(wrong_writer, CASES["K"]),
+        )
+
+        overlapping_path = copy.deepcopy(NATIVE_K_DOC)
+        overlapping_path["PROFILES"]["FAST"]["WRITERS"][1]["TARGET_PATHS"] = [
+            "tests/codex/fixtures/parallel/research-a.md"
+        ]
+        self.assertIn(
+            "NATIVE_K_WRITER_ID_ROLE_SPAN_OR_SCOPE_MISMATCH:FAST:K-FAST-B",
+            validate_native_case_k_capture(overlapping_path, CASES["K"]),
+        )
+
+        wrong_span_count = copy.deepcopy(NATIVE_K_DOC)
+        wrong_span_count["PROFILES"]["FAST"]["MAX_SIMULTANEOUS_WRITER_MESSAGE_SPAN_OVERLAP"] = 3
+        self.assertIn(
+            "NATIVE_K_PROFILE_WRITER_COUNT_OR_MESSAGE_SPAN_MISMATCH:FAST",
+            validate_native_case_k_capture(wrong_span_count, CASES["K"]),
+        )
+
+        false_completion = copy.deepcopy(NATIVE_K_DOC)
+        false_completion["PROFILES"]["NORMAL"]["ROOT_TERMINAL_FACTS"]["REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED"] = "NO"
+        self.assertIn(
+            "NATIVE_K_ROOT_TERMINAL_FACTS_MISMATCH:NORMAL",
+            validate_native_case_k_capture(false_completion, CASES["K"]),
+        )
+
+    def test_case_k_native_mutations_reject_retry_overclaim_unknowns_and_history_rewrite(self) -> None:
+        blind_retry = copy.deepcopy(NATIVE_K_DOC)
+        blind_retry["PROFILES"]["NORMAL"]["SAME_SESSION_RECONCILIATION"]["BLIND_RETRY"] = True
+        self.assertIn(
+            "NATIVE_K_SAME_SESSION_CONTINUATION_MISMATCH:NORMAL",
+            validate_native_case_k_capture(blind_retry, CASES["K"]),
+        )
+
+        fabricated_ui = copy.deepcopy(NATIVE_K_DOC)
+        fabricated_ui["PROFILES"]["FAST"]["UNKNOWN_METRICS"]["NATIVE_PERMISSION_DECISION"] = "APPROVED"
+        self.assertIn(
+            "NATIVE_K_UNKNOWN_METRICS_OVERCLAIM:FAST",
+            validate_native_case_k_capture(fabricated_ui, CASES["K"]),
+        )
+
+        invented_order = copy.deepcopy(NATIVE_K_DOC)
+        invented_order["EVENTS"] = [{"ORDER": 1, "KIND": "CHILD_START"}]
+        self.assertIn("NATIVE_K_PROVENANCE_OR_ORDER_OVERCLAIM", validate_native_case_k_capture(invented_order, CASES["K"]))
+
+        rewritten_history = copy.deepcopy(BASELINE_DOC)
+        rewritten_history["phase11_h_reconciliation"]["pending_fresh_root_labels"].remove(
+            "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
+        )
+        self.assertIn(
+            "CASE_K_HISTORICAL_PENDING_SNAPSHOT_REWRITTEN:phase11_h_reconciliation",
+            validate_phase11_k_reconciliation(rewritten_history, CASES_DOC, NATIVE_K_DOC),
         )
 
 

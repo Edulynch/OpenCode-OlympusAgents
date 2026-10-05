@@ -62,7 +62,7 @@
   },
   "live_qualification": {
     "guided_current_session": "NOT_CAPTURED",
-    "fresh_root_native": "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F_PASS; G_PASS; H_PASS; K_PENDING",
+    "fresh_root_native": "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F_PASS; G_PASS; H_PASS; K_FAST_PASS; K_NORMAL_PASS; FAST_VS_NORMAL_PASS",
     "native_results_claimed": true,
     "pending_labels_at_baseline_capture": [
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_A",
@@ -78,9 +78,7 @@
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_K",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_L"
     ],
-    "pending_labels": [
-      "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
-    ],
+    "pending_labels": [],
     "reference_only_prompts": [
       "REFERENCE_ONLY PHASE11_CASE_A_GUIDED_RECOVERY",
       "REFERENCE_ONLY PHASE11_CASE_I_GUIDED_RECOVERY",
@@ -90,7 +88,7 @@
       "REFERENCE_ONLY PHASE11_CASE_L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERY"
     ],
     "overall_status": "PARTIAL",
-    "current_pending_state_source": "PH11-E2-CLOSURE records E2 as the latest Case E acceptance; phase11-f-corpus-write accepts F, P11-G-reconcile-write accepts G, and PHASE11-H-reconcile-write accepts H as FRESH_ROOT_NATIVE while E1's observed routing failure remains immutable history; original baseline and prior B3/C/D/E1/E2/F/G pending snapshots are preserved"
+    "current_pending_state_source": "PH11-E2-CLOSURE records E2 as the latest Case E acceptance; phase11-f-corpus-write accepts F, P11-G-reconcile-write accepts G, PHASE11-H-reconcile-write accepts H, and p11-k-reconcile-write accepts K FAST and NORMAL as FRESH_ROOT_NATIVE while E1's observed routing failure remains immutable history; original baseline and prior B3/C/D/E1/E2/F/G/H pending snapshots are preserved"
   },
   "recovered_user_observations": {
     "task_id": "P11-FIX-20261003",
@@ -1655,5 +1653,48 @@
     "native_followup_demonstration": false,
     "meaning": "Case D made no Argus evidence request; same-session follow-up runtime behavior was not demonstrated.",
     "future_review": "An optional genuine evidence-requesting scenario remains open for final coverage review."
+  },
+  "phase11_k_reconciliation": {
+    "task_id": "p11-k-reconcile-write",
+    "label": "PHASE11_CASE_K_FRESH_ROOT",
+    "source": "Task-supplied native observations; this reconciliation performed no runtime recapture.",
+    "evidence_artifact": "tests/phase11-integrated-routing/case-k.native-trace.json",
+    "evidence_class": "FRESH_ROOT_NATIVE",
+    "runtime_recapture_performed": false,
+    "common_starting_head": "d11f328bb2d398c446914bd47bd8de20f8e2e333",
+    "fast_root_session_id": "ses_ef268a320ffe69lb9JP0YVCiCX",
+    "normal_root_session_id": "ses_ef26272b9ffeVRK0pvuTcZsI5P",
+    "fast_writer_session_ids": [
+      "ses_ef2679fd7ffeFLfpB0fvr2P734",
+      "ses_ef2679fccffe2dYjKBYGeJkoXO",
+      "ses_ef2679fc3ffecUx7kRpo1Mn5t8",
+      "ses_ef2679fa1ffeRROY6Tc0u2iC97"
+    ],
+    "fast_writer_session_id_list_basis": "A/B/C/D marker-key enumeration; not launch or terminal order",
+    "normal_writer_session_ids": ["ses_ef261cb2fffeO9ZOYtqe64gvVH"],
+    "fast_useful_writer_count": 4,
+    "normal_observed_useful_writer_count": 1,
+    "normal_semantic_useful_writer_count_range": [1, 4],
+    "fast_max_message_span_overlap": 4,
+    "normal_max_message_span_overlap": 1,
+    "classifications": {
+      "FUNCTIONAL_PARITY": "PASS",
+      "FAST_PARTITIONING": "PASS",
+      "FAST_PARALLELISM": "PASS",
+      "NORMAL_COST_AWARENESS": "PASS",
+      "PROFILE_DIFFERENTIATION": "PASS",
+      "WRITE_SCOPE_ISOLATION": "PASS",
+      "RESULT_RECONCILIATION": "PASS",
+      "EFFICIENCY": "PASS",
+      "FAST_FRESH_ROOT_NATIVE": "PASS",
+      "NORMAL_FRESH_ROOT_NATIVE": "PASS",
+      "FAST_VS_NORMAL": "PASS",
+      "COMPLETION_OWNERSHIP": "PASS"
+    },
+    "remaining_native_cases": [],
+    "phase11_status": "PARTIAL",
+    "closure_review_ready": true,
+    "shipped": false,
+    "pending_fresh_root_labels": []
   }
 }

@@ -251,9 +251,7 @@ CASE_E1_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
 ]
-CURRENT_PHASE11_PENDING_LABELS = [
-    "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
-]
+CURRENT_PHASE11_PENDING_LABELS: list[str] = []
 CASE_G_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
@@ -270,8 +268,59 @@ CASE_E2_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
 ]
 CURRENT_PHASE11_FRESH_ROOT_STATE = (
-    "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F_PASS; G_PASS; H_PASS; K_PENDING"
+    "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F_PASS; G_PASS; H_PASS; "
+    "K_FAST_PASS; K_NORMAL_PASS; FAST_VS_NORMAL_PASS"
 )
+CASE_K_LABEL = "PHASE11_CASE_K_FRESH_ROOT"
+CASE_K_PENDING_LABEL = f"HUMAN_ACTION_REQUIRED {CASE_K_LABEL}"
+CASE_K_INITIAL_HEAD = "d11f328bb2d398c446914bd47bd8de20f8e2e333"
+CASE_K_TARGETS = {
+    "A": "tests/codex/fixtures/parallel/research-a.md",
+    "B": "tests/codex/fixtures/parallel/research-b.md",
+    "C": "tests/codex/fixtures/parallel/research-c.md",
+    "D": "tests/codex/fixtures/parallel/research-d.md",
+}
+CASE_K_MARKERS = {marker: f"Phase 11 K marker: {marker}" for marker in CASE_K_TARGETS}
+CASE_K_ROOTS = {
+    "FAST": {
+        "session_id": "ses_ef268a320ffe69lb9JP0YVCiCX",
+        "title": "FAST profile fixture marker edits for Phase 11 K",
+        "writer_sessions": {
+            "A": "ses_ef2679fd7ffeFLfpB0fvr2P734",
+            "B": "ses_ef2679fccffe2dYjKBYGeJkoXO",
+            "C": "ses_ef2679fc3ffecUx7kRpo1Mn5t8",
+            "D": "ses_ef2679fa1ffeRROY6Tc0u2iC97",
+        },
+        "nox_session_id": "ses_ef265dd58ffeT9tOmedBXm9MW8",
+    },
+    "NORMAL": {
+        "session_id": "ses_ef26272b9ffeVRK0pvuTcZsI5P",
+        "title": "Phase 11 K fixture marker edits under NORMAL profile",
+        "writer_sessions": {"NORMAL": "ses_ef261cb2fffeO9ZOYtqe64gvVH"},
+        "nox_session_id": "ses_ef25fc66fffeTKf7W5XO4jmEZG",
+    },
+}
+CASE_K_FAST_SPANS = {
+    "A": [1791229452792, 1791229491300],
+    "B": [1791229452655, 1791229487826],
+    "C": [1791229452739, 1791229540109],
+    "D": [1791229452816, 1791229486186],
+}
+CASE_K_NORMAL_SPAN = [1791229834860, 1791229946073]
+CASE_K_CLASSIFICATIONS = {
+    "FUNCTIONAL_PARITY": "PASS",
+    "FAST_PARTITIONING": "PASS",
+    "FAST_PARALLELISM": "PASS",
+    "NORMAL_COST_AWARENESS": "PASS",
+    "PROFILE_DIFFERENTIATION": "PASS",
+    "WRITE_SCOPE_ISOLATION": "PASS",
+    "RESULT_RECONCILIATION": "PASS",
+    "EFFICIENCY": "PASS",
+    "FAST_FRESH_ROOT_NATIVE": "PASS",
+    "NORMAL_FRESH_ROOT_NATIVE": "PASS",
+    "FAST_VS_NORMAL": "PASS",
+    "COMPLETION_OWNERSHIP": "PASS",
+}
 CASE_D_ROOT_SESSION_ID = "ses_ef8c726b7ffeqWgvWlpg0NcU1Q"
 CASE_D_ROOT_DIRECTORY = "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-d"
 CASE_D_ROOT_HEAD = "60eb1685ee866a59de46be09dba3555c1cd3e776"
@@ -765,8 +814,21 @@ def validate_trace(trace: dict[str, Any], case: dict[str, Any]) -> list[str]:
     scenario = trace.get("SCENARIO", "default")
     expected_routes = case.get("expected_routes", {})
     matrix_route = expected_routes.get(scenario)
+    normal_k_illustration = case.get("id") == "K" and scenario == "normal"
     if matrix_route is None:
         add("SCENARIO_NOT_IN_CASE_MATRIX")
+    elif normal_k_illustration:
+        if matrix_route != ["kael", "kovan"]:
+            add("K_NORMAL_MATRIX_ROUTE_MUST_DECLARE_MINIMUM_USEFUL_WRITER")
+        illustrative_route = trace.get("EXPECTED_ROUTE")
+        if (
+            not isinstance(illustrative_route, list)
+            or len(illustrative_route) < 2
+            or len(illustrative_route) > 5
+            or illustrative_route[0] != "kael"
+            or any(role != "kovan" for role in illustrative_route[1:])
+        ):
+            add("K_NORMAL_ILLUSTRATIVE_ROUTE_OUTSIDE_USEFUL_WRITER_RANGE")
     elif trace.get("EXPECTED_ROUTE") != matrix_route:
         add("EXPECTED_ROUTE_DOES_NOT_MATCH_CASE_MATRIX")
 
@@ -962,8 +1024,21 @@ def validate_trace(trace: dict[str, Any], case: dict[str, Any]) -> list[str]:
         add("UNKNOWN_ROUTE_MODE")
     if trace.get("ACTUAL_ROUTE") != derived_route:
         add("ACTUAL_ROUTE_DOES_NOT_MATCH_OBSERVED_CHILD_ORDER")
-    if matrix_route is not None and trace.get("ACTUAL_ROUTE") != matrix_route:
+    if matrix_route is not None and trace.get("ACTUAL_ROUTE") != matrix_route and not normal_k_illustration:
         add("ACTUAL_ROUTE_DIFFERS_FROM_EXPECTED_ROUTE")
+    if normal_k_illustration:
+        writers = [
+            child for child in children
+            if child.get("AGENT") == "kovan" and isinstance(child.get("WRITE_PATHS"), list) and child["WRITE_PATHS"]
+        ]
+        if not 1 <= len(writers) <= 4 or len(writers) != len(children):
+            add("K_NORMAL_USEFUL_WRITER_COUNT_OUT_OF_RANGE")
+        if trace.get("EXPECTED_ROUTE") != trace.get("ACTUAL_ROUTE"):
+            add("K_NORMAL_ILLUSTRATIVE_ROUTE_DOES_NOT_MATCH_OBSERVED_CHILD_ORDER")
+        paths = [path for child in writers for path in child.get("WRITE_PATHS", [])]
+        for index, left in enumerate(paths):
+            if any(_path_overlaps(left, right) for right in paths[index + 1 :]):
+                add("K_NORMAL_WRITER_PATHS_OVERLAP")
 
     consultation_counts = trace.get("CONSULTATION_COUNTS", {})
     computed_counts = {role: 0 for role in ALL_INVOCABLE_ROLES}
@@ -5864,6 +5939,448 @@ def validate_phase11_h_reconciliation(
     return errors
 
 
+def _max_simultaneous_message_span_overlap(writers: list[dict[str, Any]]) -> int | None:
+    """Count overlapping supplied message spans, not execution/process concurrency."""
+    endpoints: list[tuple[int, int]] = []
+    for writer in writers:
+        span = writer.get("MESSAGE_SPAN_EPOCH_MS")
+        if (
+            not isinstance(span, list)
+            or len(span) != 2
+            or any(not isinstance(point, int) or isinstance(point, bool) for point in span)
+            or span[0] >= span[1]
+        ):
+            return None
+        endpoints.extend(((span[0], 1), (span[1], -1)))
+    active = maximum = 0
+    for _, delta in sorted(endpoints, key=lambda endpoint: (endpoint[0], endpoint[1])):
+        active += delta
+        maximum = max(maximum, active)
+    return maximum
+
+
+def validate_native_case_k_capture(trace: dict[str, Any], case: dict[str, Any]) -> list[str]:
+    """Validate the two supplied Case K native profile observations without inventing event order."""
+    errors: list[str] = []
+    trace = trace if isinstance(trace, dict) else {}
+    case = case if isinstance(case, dict) else {}
+    if (
+        trace.get("CASE_ID") != "K"
+        or trace.get("CASE_LABEL") != CASE_K_LABEL
+        or trace.get("REQUEST_CLASS") != "FAST_VS_NORMAL"
+        or trace.get("EVIDENCE_CLASS") != "FRESH_ROOT_NATIVE"
+        or trace.get("STARTING_HEAD") != CASE_K_INITIAL_HEAD
+        or trace.get("TARGETS") != CASE_K_TARGETS
+        or trace.get("MARKERS") != CASE_K_MARKERS
+        or case.get("id") != "K"
+        or case.get("request_class") != "FAST_VS_NORMAL"
+        or case.get("expected_routes", {}).get("fast") != ["kael", "kovan", "kovan", "kovan", "kovan"]
+        or case.get("expected_routes", {}).get("normal") != ["kael", "kovan"]
+        or case.get("normal_route_semantics") != {
+            "minimum_useful_route": ["kael", "kovan"],
+            "useful_writer_count_range": [1, 4],
+            "exact_count_is_not_semantic_invariant": True,
+            "synthetic_illustration_trace_id": "K_NORMAL",
+        }
+    ):
+        errors.append("NATIVE_K_CASE_MATRIX_OR_TARGET_CONTRACT_MISMATCH")
+
+    provenance = trace.get("EVIDENCE_PROVENANCE", {})
+    if (
+        trace.get("EVENTS") != []
+        or trace.get("EVENT_ORDER_BASIS") != "No total order reconstructed; supplied writer message spans are recorded separately."
+        or provenance.get("CLASS") != "FRESH_ROOT_NATIVE"
+        or provenance.get("SOURCE") != "Task-supplied native observations; this reconciliation performed no runtime recapture."
+        or provenance.get("USER_REPORTED") is not True
+        or provenance.get("RUNTIME_RECAPTURE_PERFORMED") is not False
+        or provenance.get("NATIVE_PERMISSION_UI") != "NOT_OBSERVABLE"
+        or provenance.get("NATIVE_PERMISSION_DECISION") != "NOT_OBSERVABLE"
+        or provenance.get("TOTAL_EVENT_ORDER") != "NOT_RECONSTRUCTED"
+    ):
+        errors.append("NATIVE_K_PROVENANCE_OR_ORDER_OVERCLAIM")
+
+    profiles = trace.get("PROFILES", {})
+    if not isinstance(profiles, dict) or set(profiles) != {"FAST", "NORMAL"}:
+        return errors + ["NATIVE_K_PROFILE_SET_MISMATCH"]
+
+    expected_children: dict[str, list[dict[str, Any]]] = {
+        "FAST": [
+            {
+                "TRACE_REF": f"K-FAST-{marker}",
+                "SESSION_ID": CASE_K_ROOTS["FAST"]["writer_sessions"][marker],
+                "PARENT_SESSION_ID": CASE_K_ROOTS["FAST"]["session_id"],
+                "AGENT": "kovan",
+                "TARGET_PATHS": [CASE_K_TARGETS[marker]],
+                "MARKERS": {marker: CASE_K_MARKERS[marker]},
+                "MESSAGE_SPAN_EPOCH_MS": CASE_K_FAST_SPANS[marker],
+                "MESSAGE_SPAN_BASIS": (
+                    "task-supplied native Kovan message span; may include blocked/same-session continuation, not uninterrupted execution"
+                    if marker == "C"
+                    else "task-supplied native Kovan message span; not an uninterrupted execution interval"
+                ),
+                "USEFUL_WRITER": True,
+            }
+            for marker in ("A", "B", "C", "D")
+        ],
+        "NORMAL": [
+            {
+                "TRACE_REF": "K-NORMAL-WRITER",
+                "SESSION_ID": CASE_K_ROOTS["NORMAL"]["writer_sessions"]["NORMAL"],
+                "PARENT_SESSION_ID": CASE_K_ROOTS["NORMAL"]["session_id"],
+                "AGENT": "kovan",
+                "TARGET_PATHS": [CASE_K_TARGETS[marker] for marker in ("A", "B", "C", "D")],
+                "MARKERS": CASE_K_MARKERS,
+                "MESSAGE_SPAN_EPOCH_MS": CASE_K_NORMAL_SPAN,
+                "MESSAGE_SPAN_BASIS": "task-supplied native Kovan message span; not an uninterrupted execution interval",
+                "USEFUL_WRITER": True,
+            }
+        ],
+    }
+    common_terminal_facts = {
+        "MARKERS_VALIDATED": "PASS",
+        "OUT_OF_SCOPE_CHANGES": "NONE",
+        "DIFF_CHECK": "PASS",
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+        "UNRESOLVED_WORK": "NONE",
+        "ANY_WORK_REMAINING": "NO",
+    }
+    for profile_name in ("FAST", "NORMAL"):
+        profile = profiles.get(profile_name, {})
+        root_id = CASE_K_ROOTS[profile_name]["session_id"]
+        root = profile.get("ROOT", {})
+        expected_count = len(expected_children[profile_name])
+        expected_overlap = 4 if profile_name == "FAST" else 1
+        expected_total_children = expected_count + 1  # one separately counted Nox validator
+        children = profile.get("WRITERS", [])
+        if (
+            profile.get("PROFILE") != profile_name
+            or root.get("SESSION_ID") != root_id
+            or root.get("AGENT") != "kael"
+            or root.get("TITLE") != CASE_K_ROOTS[profile_name]["title"]
+            or root.get("OUTCOME") != "succeeded"
+            or root.get("PARENT_SESSION_ID") is not None
+            or root.get("PARENT_SESSION_ID_OBSERVATION") != "NOT_SUPPLIED"
+            or profile.get("ROOT_ISOLATION") != {
+                "STATUS": "PASS",
+                "INDEPENDENT_DISPOSABLE_WORKTREE": True,
+                "STARTING_HEAD": CASE_K_INITIAL_HEAD,
+                "DIRECTORY": None,
+                "DIRECTORY_OBSERVATION": "NOT_SUPPLIED",
+            }
+        ):
+            errors.append(f"NATIVE_K_PROFILE_ROOT_OR_ISOLATION_MISMATCH:{profile_name}")
+
+        expected_by_ref = {child["TRACE_REF"]: child for child in expected_children[profile_name]}
+        observed_by_ref = {
+            child.get("TRACE_REF"): child for child in children if isinstance(child, dict)
+        } if isinstance(children, list) else {}
+        invalid_writer_collection = not isinstance(children, list) or len(observed_by_ref) != len(children)
+        if invalid_writer_collection or set(observed_by_ref) != set(expected_by_ref):
+            errors.append(f"NATIVE_K_WRITER_SESSION_SET_MISMATCH:{profile_name}")
+        for trace_ref, expected in expected_by_ref.items():
+            observed = observed_by_ref.get(trace_ref, {})
+            if observed != expected or not NATIVE_SESSION_ID.fullmatch(str(observed.get("SESSION_ID", ""))):
+                errors.append(f"NATIVE_K_WRITER_ID_ROLE_SPAN_OR_SCOPE_MISMATCH:{profile_name}:{trace_ref}")
+
+        expected_route = ["kael", *(["kovan"] * expected_count)]
+        expected_native_children = [
+            {
+                "TRACE_REF": child["TRACE_REF"],
+                "NATIVE_SESSION_ID": child["SESSION_ID"],
+                "AGENT": "kovan",
+                "PARENT_SESSION_ID": root_id,
+                "SESSION_KIND": "USEFUL_WRITER",
+            }
+            for child in expected_children[profile_name]
+        ] + [{
+            "TRACE_REF": f"K-{profile_name}-NOX",
+            "NATIVE_SESSION_ID": CASE_K_ROOTS[profile_name]["nox_session_id"],
+            "AGENT": "nox",
+            "PARENT_SESSION_ID": root_id,
+            "SESSION_KIND": "POST_WRITER_VALIDATION",
+        }]
+        observed_native_children = profile.get("CHILD_SESSIONS", [])
+        observed_native_child_map = {
+            item.get("TRACE_REF"): item for item in observed_native_children if isinstance(item, dict)
+        } if isinstance(observed_native_children, list) else {}
+        expected_native_child_map = {item["TRACE_REF"]: item for item in expected_native_children}
+        expected_profile_gate_facts = {fact: None for fact in REQUIRED_GATE_FACTS}
+        expected_profile_gate_facts["FAST_PROFILE_REQUESTED"] = profile_name == "FAST"
+        expected_profile_gate_facts["NORMAL_PROFILE_REQUESTED"] = profile_name == "NORMAL"
+        expected_profile_proxies = {
+            "PROFILE": profile_name,
+            "USEFUL_INDEPENDENT_WRITER_COUNT": expected_count,
+            "ACTUAL_COUNTED_CONCURRENCY": None,
+            "RETRY_COUNT": None,
+            "WRITER_PATHS_UNIQUE": True,
+            "APPROVAL_REQUIRED": None,
+            "APPROVAL_GRANTED": None,
+            "IMPLEMENTATION_AFTER_APPROVAL": None,
+            "WALL_CLOCK_MS": None,
+            "MEASURED": False,
+            "MAX_SIMULTANEOUS_WRITER_MESSAGE_SPAN_OVERLAP": expected_overlap,
+        }
+        if (
+            profile.get("TRACE_ID") != f"K-{profile_name}-NATIVE"
+            or profile.get("SCENARIO") != profile_name.lower()
+            or profile.get("CASE_ID") != "K"
+            or profile.get("CASE_LABEL") != CASE_K_LABEL
+            or profile.get("REQUEST_CLASS") != "FAST_VS_NORMAL"
+            or profile.get("EVIDENCE_CLASS") != "FRESH_ROOT_NATIVE"
+            or profile.get("EXPECTED_ROUTE") != expected_route
+            or profile.get("ACTUAL_ROUTE") is not None
+            or profile.get("ROOT_SESSION_ID") != root_id
+            or set(observed_native_child_map) != set(expected_native_child_map)
+            or any(observed_native_child_map.get(ref) != expected for ref, expected in expected_native_child_map.items())
+            or profile.get("OBSERVED_PRODUCT_ROLE_COUNTS") != {"kael": 1, "kovan": expected_count}
+            or profile.get("CONSULTATION_COUNTS") != {role: None for role in ALL_INVOCABLE_ROLES}
+            or profile.get("MAX_SIMULTANEOUS_CHILDREN") is not None
+            or profile.get("NEGATIVE_CONTROLS") is not None
+            or profile.get("ROLE_PURITY") is not None
+            or profile.get("DEPENDENCY_ORDER") != []
+            or profile.get("RESULT_FIDELITY") != {
+                "EXPECTED_RESULT": "four independent target markers" if profile_name == "FAST" else "all four target markers",
+                "OBSERVED_RESULT": "four independent target markers validated PASS" if profile_name == "FAST" else "all four target markers validated PASS",
+                "MATCHES": True,
+                "UNKNOWN": False,
+            }
+            or profile.get("COMPLETION_GATE") != {
+                "PENDING_CHILD_COUNT": 0,
+                "UNCONSUMED_RESULT_COUNT": 0,
+                "UNKNOWN_EXECUTION_COUNT": 0,
+                "EXACT_ONCE": None,
+                "QUESTION_BARRIER_SATISFIED": None,
+            }
+            or profile.get("USER_QUESTION_COUNT") is not None
+            or profile.get("FINAL_OUTCOME") != "SUCCEEDED"
+            or profile.get("ROUTING_RESULT") != "PASS"
+            or profile.get("ROUTE_MODE") != "KAEL_ROOT"
+            or profile.get("GATE_FACTS") != expected_profile_gate_facts
+            or profile.get("OPERATIONAL_PROXIES") != expected_profile_proxies
+            or profile.get("EVENTS") != []
+            or profile.get("EVIDENCE_PROVENANCE", {}).get("CLASS") != "FRESH_ROOT_NATIVE"
+            or profile.get("EVIDENCE_PROVENANCE", {}).get("SOURCE") != "Task-supplied native observations; this reconciliation performed no runtime recapture."
+            or profile.get("EVIDENCE_PROVENANCE", {}).get("NATIVE_ROOT_SESSION_ID") != root_id
+            or profile.get("EVIDENCE_PROVENANCE", {}).get("NATIVE_CHILD_SESSION_IDS")
+            != [item["NATIVE_SESSION_ID"] for item in expected_native_children]
+            or profile.get("EVIDENCE_PROVENANCE", {}).get("CHILD_ID_LIST_BASIS") != "Identity enumeration; not launch or terminal order"
+            or profile.get("EVIDENCE_PROVENANCE", {}).get("ORDER_BASIS")
+            != ("Supplied writer message spans; total event order not reconstructed" if profile_name == "FAST" else "Supplied writer message span; total event order not reconstructed")
+            or profile.get("EVIDENCE_PROVENANCE", {}).get("OBSERVED_AT") is not None
+            or profile.get("EVIDENCE_PROVENANCE", {}).get("USER_REPORTED") is not True
+            or profile.get("EVIDENCE_PROVENANCE", {}).get("FRESH_ROOT_CONFIRMED") is not True
+        ):
+            errors.append(f"NATIVE_K_PROFILE_SCHEMA_OR_UNKNOWN_FIELDS_MISMATCH:{profile_name}")
+
+        writer_count = len(children) if isinstance(children, list) else -1
+        writer_range_valid = 1 <= writer_count <= 4
+        observed_span_overlap = _max_simultaneous_message_span_overlap(children) if isinstance(children, list) else None
+        if (
+            profile.get("USEFUL_INDEPENDENT_WRITER_COUNT") != writer_count
+            or not writer_range_valid
+            or (profile_name == "FAST" and writer_count != 4)
+            or profile.get("MAX_SIMULTANEOUS_WRITER_MESSAGE_SPAN_OVERLAP") != expected_overlap
+            or observed_span_overlap != expected_overlap
+        ):
+            errors.append(f"NATIVE_K_PROFILE_WRITER_COUNT_OR_MESSAGE_SPAN_MISMATCH:{profile_name}")
+
+        validation = profile.get("POST_WRITER_VALIDATION", {})
+        if validation != {
+            "AGENT": "nox",
+            "SESSION_ID": CASE_K_ROOTS[profile_name]["nox_session_id"],
+            "PARENT_SESSION_ID": root_id,
+            "RESULT": "PASS",
+            "SCOPE": "read-only Git integrity and diff-check",
+            "COUNTED_AS_USEFUL_WRITER": False,
+        }:
+            errors.append(f"NATIVE_K_POST_WRITER_VALIDATION_MISMATCH:{profile_name}")
+        if profile.get("DIRECT_CHILD_COUNTS") != {
+            "KOVAN_WRITERS": expected_count,
+            "NOX_VALIDATORS": 1,
+            "TOTAL_DIRECT_CHILDREN": expected_total_children,
+        }:
+            errors.append(f"NATIVE_K_DIRECT_CHILD_COUNTS_MISMATCH:{profile_name}")
+        if profile.get("ROOT_TERMINAL_FACTS") != common_terminal_facts:
+            errors.append(f"NATIVE_K_ROOT_TERMINAL_FACTS_MISMATCH:{profile_name}")
+        if profile.get("COMPLETION") != {
+            "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+            "UNRESOLVED_WORK": "NONE",
+            "ANY_WORK_REMAINING": "NO",
+            "RESULT_IDS": None,
+            "PER_INVOCATION_CONSUMPTION_TIMING": None,
+            "SESSION_LIFETIME_EXACT_ONCE": None,
+        }:
+            errors.append(f"NATIVE_K_COMPLETION_OR_RESULT_ID_OVERCLAIM:{profile_name}")
+        if profile.get("UNKNOWN_METRICS") != {
+            "ROOT_DIRECTORY": None,
+            "ROOT_PARENT_SESSION_ID": "NOT_SUPPLIED",
+            "ROOT_TERMINAL_MESSAGE_ID": None,
+            "NATIVE_PERMISSION_UI": "NOT_OBSERVABLE",
+            "NATIVE_PERMISSION_DECISION": "NOT_OBSERVABLE",
+            "WALL_CLOCK_MS": None,
+            "WALL_CLOCK_SPEEDUP": None,
+            "PROCESS_OR_SCHEDULER_PARALLELISM": "NOT_MEASURED",
+            "CPU_PARALLELISM": "NOT_MEASURED",
+            "TOTAL_EVENT_ORDER": "NOT_RECONSTRUCTED",
+        }:
+            errors.append(f"NATIVE_K_UNKNOWN_METRICS_OVERCLAIM:{profile_name}")
+        expected_continuation = {
+            "FAST": {
+                "TRACE_REF": "K-FAST-C",
+                "SESSION_ID": CASE_K_ROOTS["FAST"]["writer_sessions"]["C"],
+                "INITIAL_ATTEMPT": {
+                    "OUTCOME": "BLOCKED",
+                    "BLOCKER": "missing explicit AUTHORITY_GRANT heading",
+                    "TOOL_ATTEMPT": "NOT_ATTEMPTED",
+                    "TOOL_EXECUTION": "NOT_EXECUTED",
+                    "CHANGES": "NONE",
+                },
+                "CONTINUATION": "SUCCEEDED",
+                "SAME_SESSION": True,
+                "BLIND_RETRY": False,
+                "REPLACEMENT_WRITER": False,
+                "CONTINUATION_COUNTS_AS_ADDITIONAL_WRITER": False,
+                "SPAN_CAVEAT": "C span can include blocked/same-session continuation and is not uninterrupted execution.",
+            },
+            "NORMAL": {
+                "TRACE_REF": "K-NORMAL-WRITER",
+                "SESSION_ID": CASE_K_ROOTS["NORMAL"]["writer_sessions"]["NORMAL"],
+                "INITIAL_ATTEMPT": {
+                    "OUTCOME": "BLOCKED",
+                    "BLOCKER": "missing explicit AUTHORITY_GRANT heading",
+                    "TOOL_ATTEMPT": "NOT_ATTEMPTED",
+                    "TOOL_EXECUTION": "NOT_EXECUTED",
+                    "CHANGES": "NONE",
+                },
+                "CONTINUATION": "SUCCEEDED",
+                "SAME_SESSION": True,
+                "BLIND_RETRY": False,
+                "REPLACEMENT_WRITER": False,
+                "CONTINUATION_COUNTS_AS_ADDITIONAL_WRITER": False,
+                "SPAN_CAVEAT": "Message span covers the same writer session including same-session continuation; not uninterrupted execution.",
+            },
+        }[profile_name]
+        if profile.get("SAME_SESSION_RECONCILIATION") != expected_continuation:
+            errors.append(f"NATIVE_K_SAME_SESSION_CONTINUATION_MISMATCH:{profile_name}")
+        if profile.get("ACCEPTANCE") != {
+            "STATUS": "PASS",
+            "FRESH_ROOT_NATIVE": "PASS",
+            "WRITE_SCOPE_ISOLATION": "PASS",
+            "RESULT_RECONCILIATION": "PASS",
+            "COMPLETION_OWNERSHIP": "PASS",
+            "USEFUL_WRITER_COUNT_RANGE": [1, 4],
+            "MESSAGE_SPAN_OVERLAP_IS_NOT_PROCESS_OR_SCHEDULER_PARALLELISM": True,
+        }:
+            errors.append(f"NATIVE_K_PROFILE_ACCEPTANCE_MISMATCH:{profile_name}")
+
+    comparison = trace.get("COMPARISON", {})
+    if (
+        comparison.get("CLASSIFICATIONS") != CASE_K_CLASSIFICATIONS
+        or comparison.get("FAST_PROFILE_STATUS") != "PASS"
+        or comparison.get("NORMAL_PROFILE_STATUS") != "PASS"
+        or comparison.get("FAST_VS_NORMAL") != "PASS"
+        or comparison.get("FAST_USEFUL_WRITER_COUNT") != 4
+        or comparison.get("NORMAL_USEFUL_WRITER_COUNT") != 1
+        or comparison.get("MAX_SIMULTANEOUS_WRITER_MESSAGE_SPAN_OVERLAP") != {"FAST": 4, "NORMAL": 1}
+        or comparison.get("WRITER_COUNT_BASIS") != "Unique useful Kovan writer sessions; excludes Nox validation and same-session continuations."
+        or comparison.get("MAX_OVERLAP_BASIS") != "Native message-span overlap only; not scheduler, CPU/process parallelism, or wall-clock speedup."
+        or comparison.get("WALL_CLOCK_SPEEDUP") is not None
+        or comparison.get("CURRENT_REMAINING_NATIVE_CASES") != []
+        or comparison.get("PHASE11_STATUS") != "PARTIAL"
+        or comparison.get("SHIPPED") is not False
+        or comparison.get("CLOSURE_REVIEW_READY") is not True
+        or trace.get("CLASSIFICATIONS") != CASE_K_CLASSIFICATIONS
+        or trace.get("PENDING_FRESH_ROOT_LABELS") != []
+        or trace.get("PHASE11_STATUS") != "PARTIAL"
+        or trace.get("RECONCILIATION_FILES_CHANGED") != [
+            "tests/phase11-integrated-routing/RUNME.md",
+            "tests/phase11-integrated-routing/baseline.json",
+            "tests/phase11-integrated-routing/baseline.md",
+            "tests/phase11-integrated-routing/case-k.native-trace.json",
+            "tests/phase11-integrated-routing/cases.json",
+            "tests/phase11-integrated-routing/qualify.py",
+            "tests/phase11-integrated-routing/test_qualify.py",
+        ]
+    ):
+        errors.append("NATIVE_K_COMPARISON_CLASSIFICATION_OR_PHASE_STATUS_MISMATCH")
+    return errors
+
+
+def validate_phase11_k_reconciliation(
+    baseline: dict[str, Any], cases_doc: dict[str, Any], trace: dict[str, Any]
+) -> list[str]:
+    """Bind both K profiles to current pending state while preserving all historical snapshots."""
+    cases = {case.get("id"): case for case in cases_doc.get("cases", []) if isinstance(case, dict)}
+    errors = validate_native_case_k_capture(trace, cases.get("K", {}))
+    report = baseline.get("phase11_k_reconciliation")
+    if not isinstance(report, dict):
+        return errors + ["CASE_K_RECONCILIATION_MISSING"]
+
+    expected_report = {
+        "task_id": "p11-k-reconcile-write",
+        "label": CASE_K_LABEL,
+        "source": "Task-supplied native observations; this reconciliation performed no runtime recapture.",
+        "evidence_artifact": "tests/phase11-integrated-routing/case-k.native-trace.json",
+        "evidence_class": "FRESH_ROOT_NATIVE",
+        "runtime_recapture_performed": False,
+        "common_starting_head": CASE_K_INITIAL_HEAD,
+        "fast_root_session_id": CASE_K_ROOTS["FAST"]["session_id"],
+        "normal_root_session_id": CASE_K_ROOTS["NORMAL"]["session_id"],
+        "fast_writer_session_ids": [CASE_K_ROOTS["FAST"]["writer_sessions"][key] for key in ("A", "B", "C", "D")],
+        "fast_writer_session_id_list_basis": "A/B/C/D marker-key enumeration; not launch or terminal order",
+        "normal_writer_session_ids": [CASE_K_ROOTS["NORMAL"]["writer_sessions"]["NORMAL"]],
+        "fast_useful_writer_count": 4,
+        "normal_observed_useful_writer_count": 1,
+        "normal_semantic_useful_writer_count_range": [1, 4],
+        "fast_max_message_span_overlap": 4,
+        "normal_max_message_span_overlap": 1,
+        "classifications": CASE_K_CLASSIFICATIONS,
+        "remaining_native_cases": [],
+        "phase11_status": "PARTIAL",
+        "closure_review_ready": True,
+        "shipped": False,
+        "pending_fresh_root_labels": [],
+    }
+    for key, expected in expected_report.items():
+        if report.get(key) != expected:
+            errors.append(f"CASE_K_BASELINE_RECONCILIATION_MISMATCH:{key}")
+
+    current = baseline.get("live_qualification", {})
+    if (
+        current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
+        or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
+        or current.get("overall_status") != "PARTIAL"
+        or current.get("native_results_claimed") is not True
+        or "p11-k-reconcile-write" not in current.get("current_pending_state_source", "")
+    ):
+        errors.append("CURRENT_PHASE11_K_PENDING_STATE_MISMATCH")
+    for name in (
+        "phase11_b3_reconciliation", "phase11_c_reconciliation", "phase11_d_reconciliation",
+        "phase11_e_reconciliation", "phase11_e2_reconciliation", "phase11_f_reconciliation",
+        "phase11_g_reconciliation", "phase11_h_reconciliation",
+    ):
+        if CASE_K_PENDING_LABEL not in baseline.get(name, {}).get("pending_fresh_root_labels", []):
+            errors.append(f"CASE_K_HISTORICAL_PENDING_SNAPSHOT_REWRITTEN:{name}")
+    actions = [
+        action for action in cases_doc.get("fresh_root_actions", [])
+        if isinstance(action, dict) and action.get("case_id") == "K" and action.get("label") == CASE_K_LABEL
+    ]
+    expected_action = {
+        "scenario": "fast_and_normal_separate_roots",
+        "status": "PASS",
+        "evidence_class": "FRESH_ROOT_NATIVE",
+        "evidence_artifact": "case-k.native-trace.json",
+        "acceptance_status": "PASS",
+        "pending_resolution": False,
+        "profile_acceptance": {"FAST": "PASS", "NORMAL": "PASS", "FAST_VS_NORMAL": "PASS"},
+    }
+    if len(actions) != 1 or any(actions[0].get(key) != value for key, value in expected_action.items()):
+        errors.append("CASE_K_MATRIX_STATUS_OR_EVIDENCE_LINK_MISMATCH")
+    if baseline.get("argus_same_session_followup_runtime_coverage") != CASE_D_PENDING_FOLLOWUP_COVERAGE:
+        errors.append("CASE_K_ARGUS_FOLLOWUP_RUNTIME_COVERAGE_PROMOTED_OR_CONFLATED")
+    return errors
+
+
 def main() -> int:
     failures, documents = validate_corpus()
     static_failures = run_static_baseline_checks()
@@ -5885,6 +6402,7 @@ def main() -> int:
     native_h = load_json(HERE / "case-h.native-trace.json")
     case_h_root_export = load_json(HERE / "case-h.root.session-export.json")
     case_h_veyra_export = load_json(HERE / "case-h.veyra.session-export.json")
+    native_k = load_json(HERE / "case-k.native-trace.json")
     reconciliation_failures = validate_phase11_b3_reconciliation(
         baseline, documents["cases"], native_b3
     )
@@ -5918,6 +6436,9 @@ def main() -> int:
     case_h_failures = validate_phase11_h_reconciliation(
         baseline, documents["cases"], native_h, case_h_root_export, case_h_veyra_export
     )
+    case_k_failures = validate_phase11_k_reconciliation(
+        baseline, documents["cases"], native_k
+    )
     for label in ("ARGUS_GATE_MARKER", "TALOS_GATE_MARKER", "ATLAS_GATE_MARKER", "HELIOS_GATE_MARKER", "THALES_GATE_MARKER", "ROOT_OWNER_MARKER", "NO_NESTED_CHILD_MARKER", "CORE_CHILD_CEILING_MARKER"):
         if label in static_failures:
             print(f"STATIC_{label}: FAIL")
@@ -5942,18 +6463,14 @@ def main() -> int:
         print("G-NATIVE: PASS (FRESH_ROOT_NATIVE; Veyra source evidence precedes one Thales diagnosis; no Nox measurement or unneeded follow-up)")
     if not case_h_failures:
         print("H-NATIVE: PASS (FRESH_ROOT_NATIVE; bounded Veyra evidence supports operational third-party classification and existing reconciliation only)")
-    pending_fresh_root_cases = {"K"}
-    pending_labels: list[str] = []
-    for action in documents["cases"].get("fresh_root_actions", []):
-        case_id = action.get("case_id")
-        if case_id in pending_fresh_root_cases:
-            label = action.get("label", f"PHASE11_CASE_{case_id}_FRESH_ROOT")
-            pending_labels.append(label)
-            if case_id == "E" and action.get("status") == CASE_E_NATIVE_RESULT:
-                print(f"PENDING_ACCEPTANCE {label} (observed routing failure; no Case E rerun requested)")
-            else:
-                print(f"HUMAN_ACTION_REQUIRED {label}")
-    if failures or reconciliation_failures or case_c_failures or case_d_failures or case_e_failures or case_e2_failures or case_f_failures or case_g_failures or case_h_failures:
+    if not case_k_failures:
+        print("K-FAST-NATIVE: PASS (separate fresh root; four useful Kovan writers; four overlapping native message spans, not scheduler/process parallelism)")
+        print("K-NORMAL-NATIVE: PASS (separate fresh root; observed one useful Kovan writer; semantic acceptance permits one through four)")
+        print("K-FAST-VS-NORMAL: PASS (functional parity, scope, reconciliation, and profile differentiation)")
+    pending_labels = list(baseline.get("live_qualification", {}).get("pending_labels", []))
+    for label in pending_labels:
+        print(f"HUMAN_ACTION_REQUIRED {label}")
+    if failures or reconciliation_failures or case_c_failures or case_d_failures or case_e_failures or case_e2_failures or case_f_failures or case_g_failures or case_h_failures or case_k_failures:
         for failure in [
             *failures,
             *reconciliation_failures,
@@ -5964,6 +6481,7 @@ def main() -> int:
             *case_f_failures,
             *case_g_failures,
             *case_h_failures,
+            *case_k_failures,
         ]:
             print(f"FAIL: {failure}")
         print("PHASE11_QUALIFICATION: FAIL (artifact validation only)")
@@ -5973,10 +6491,10 @@ def main() -> int:
             print(f"FAIL: STATIC_{label}")
         print("PHASE11_QUALIFICATION: FAIL (bounded policy marker check)")
         return 1
-    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, B3/C/D/E2/F/G/H native reconciliations, and E1 historical failure are internally consistent; validation does not authenticate source exports)")
+    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, B3/C/D/E2/F/G/H/K native reconciliations, and E1 historical failure are internally consistent; validation does not authenticate source exports)")
     print("ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED (separate optional evidence-requesting scenario remains open for final coverage review; not a Case D blocker)")
-    print("PENDING_CASES: " + ", ".join(pending_labels) + "; F, G, and H are accepted natively, E2 closes current Case E acceptance while E1's observed routing failure remains historical; A/I/J/L recovered reports remain guided/history only.")
-    print("PHASE11_QUALIFICATION: PARTIAL (B3, C, D, E2, F, G, and H accepted; E1 failure retained as history; K acceptance remains pending)")
+    print("PENDING_CASES: " + (", ".join(pending_labels) if pending_labels else "NONE") + "; no current fresh-root native case remains. K FAST/NORMAL and their comparison are accepted; A/I/J/L recovered reports remain guided/history only and I remains PARTIAL.")
+    print("PHASE11_QUALIFICATION: PARTIAL (B3, C, D, E2, F, G, H, K FAST and K NORMAL accepted; E1 failure retained as history; separate closure review remains; not SHIPPED)")
     return 0
 
 

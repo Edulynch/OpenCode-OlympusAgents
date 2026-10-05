@@ -21,7 +21,7 @@ Case G's native record and root/Veyra/Thales projections are in
 Case H's native record and sanitized root/Veyra projections are in
 `case-h.native-trace.json`, `case-h.root.session-export.json`, and
 `case-h.veyra.session-export.json`.
-B3, C, D, E2, F, G, and H qualify their bounded
+B3, C, D, E2, F, G, H, and the separate Case K FAST/NORMAL profiles qualify their bounded
 acceptance outcomes; E1 remains an observed historical routing failure and is
 not rewritten as a pass. None of these native captures is inserted into the
 synthetic trace corpus or reconstructed as a synthetic lifecycle.
@@ -39,16 +39,17 @@ uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-on
 ```
 
 The first command validates the versioned case matrix, synthetic event semantics,
-completion/evidence claims, separate B1/B2/B3/C/D/E1/E2/F/G/H reconciliations, the
+completion/evidence claims, separate B1/B2/B3/C/D/E1/E2/F/G/H/K reconciliations, the
 bounded B3, C, and D native invocation captures, the original E1 failed-root
 projection, the E2 root/child export projections and accepted Talos route, the
 F root-only export projection and operational finding, and the G root/child
 export joins, static fixture result, evidence-before-diagnosis order, and
 conditional Thales follow-up semantics, the bounded H native reconciliation,
-and presence-only gate markers. It reports
+both K native profiles and their comparison (including message-span-only
+overlap and flexible NORMAL writer-count semantics), and presence-only gate markers. It reports
 `PHASE11_ARTIFACTS: PASS` when those artifacts are sound while overall
-qualification remains `PHASE11_QUALIFICATION: PARTIAL` until remaining
-acceptance items are resolved. The second command
+qualification remains `PHASE11_QUALIFICATION: PARTIAL` pending closure review
+and the separate open review items. The second command
 applies mutations to valid authored traces and bounded native captures, and
 requires the prohibited variants to fail. The third command currently runs only the feature fixture's green
 pre-feature compatibility tests. The future feature work must add acceptance
@@ -309,15 +310,42 @@ policy. No upstream patch, vendor, or fork was attempted. The projection removes
 scan, omits provider state/snapshots and all raw export/source text, and persists
 no raw export. This reconciliation performed no Case H execution, runtime
 reproduction, or disposable-worktree access. The original terminal reports no
-original-run file changes. Case H is accepted natively; only K remains pending
-and Phase 11 remains **IN VALIDATION / PARTIAL**.
+original-run file changes. At the H snapshot, H was accepted natively and K was
+the only pending case; Phase 11 remained **IN VALIDATION / PARTIAL**.
 
-## Remaining fresh-root work remains user action
+## Case K native capture — separate FAST and NORMAL roots
 
-Use a separate clean disposable project copy and a **new, verified Kael root for
-each still-unrun case**. K below remains pending fresh-root work. H, F, G, E2,
-and isolated B3, C, and bounded native D are accepted; E1's routing
-failure remains immutable history. A, I, J, and L
+`case-k.native-trace.json` records the task-supplied observations for the two
+distinct fresh Kael roots. Both began at the same supplied HEAD in independent
+disposable worktrees and used the same four fixture paths. FAST's four useful
+Kovan sessions each own one different target and all four supplied writer
+message spans overlap. NORMAL's observed useful count is one; semantic NORMAL
+acceptance permits a useful count from one through the four-writer ceiling. The
+unchanged synthetic `K_NORMAL` trace is an illustrative two-writer example, not
+a count requirement.
+
+The native artifact preserves the supplied writer spans and root/child
+identities without reconstructing a total event order or fabricating result
+IDs, message IDs, root directories, UI decisions, or consumption timing. FAST C
+and the NORMAL writer each continued in their original session after an initial
+blocked result with no tool attempt/execution and no changes; neither
+continuation is a replacement or additional writer. Post-writer Nox
+integrity/diff-check sessions are shown separately and excluded from writer
+counts. Four overlapping message spans do not establish uninterrupted work,
+scheduler/CPU/process parallelism, or wall-clock speedup. The supplied aggregate
+root completion facts support required-child completion and reconciliation.
+
+FAST, NORMAL, and their comparison pass. No fresh-root native cases or pending
+labels remain. Earlier snapshots that list K as pending remain historical and
+unchanged. Phase 11 is still **PARTIAL**, closure-review-ready, and not SHIPPED.
+This reconciliation used only task-supplied observations and performed no
+runtime recapture. Independent Nox validation is pending.
+
+## Remaining fresh-root work and historical prompts
+
+No current fresh-root case remains unrun. H, F, G, E2, K FAST/NORMAL, and
+isolated B3, C, and bounded native D are accepted; E1's routing failure remains
+immutable history. A, I, J, and L
 prompt references/history are retained below but are not new rerun requests. Do
 not reuse a guided/current session as a fresh root. Confirm the effective root
 agent, child parentage and actual roles from native session evidence before
@@ -412,7 +440,8 @@ synthetic per-session lifecycle.
   and `.opencode/agents/kael.md`. Classification is `OPERATIONAL_ISSUE`, with
   existing reconciliation as the safest supported level, no blind retry, and
   no unapproved patch/vendor/fork. No version/config action is supported by the
-  bounded evidence. H is no longer pending; Phase 11 remains PARTIAL for K.
+  bounded evidence. At the H snapshot, K was still pending; the later Case K
+  reconciliation below resolves it. Phase 11 remains PARTIAL pending closure review.
 - `REFERENCE_ONLY PHASE11_CASE_I_GUIDED_RECOVERY` — prior prompt reference: “Please evaluate whether optimizing
   `fixtures/benchmark/tiny_work.py:square_sum` for the stated target of reducing
   runtime by at least 20% is worthwhile. Use only bounded evidence and stop for
@@ -427,12 +456,12 @@ synthetic per-session lifecycle.
 - `REFERENCE_ONLY PHASE11_CASE_J_NEGATIVE_CONTROL` (not a rerun request) — prior prompt reference: “Change the
   simple fixture greeting to `Hello Phase 11 ready`.” A trivial local edit does
   not need Atlas.
-- `HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT` — Run two independent fresh roots on
-  the same disposable task: request the FAST profile for four independent
-  fixture-only text edits (disjoint files), then run a separate NORMAL-profile
-  control. Capture actual child start/terminal order, useful writer count,
-  nonoverlapping paths, dependency edges, and measured maximum simultaneous
-  children. Requested parallelism is not evidence of achieved concurrency.
+- `ACCEPTED PHASE11_CASE_K_FRESH_ROOT` — both separate native profiles and their
+  comparison are captured in `case-k.native-trace.json`. FAST records four
+  useful Kovan writers on disjoint paths; NORMAL records one useful Kovan writer
+  in this observation. The two-writer synthetic NORMAL trace remains an
+  illustrative example, not a native count rule. Message-span overlap is not
+  process/scheduler concurrency or wall-clock speedup. No K rerun is requested.
 - `REFERENCE_ONLY PHASE11_CASE_L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERY` — prior prompt reference: “Make the same harmless fixture-only
   edit as case A in a normal project request. Do not enter `/maintain`.” Verify
   Kael does not launch Aegis; this is not an instruction to test or invoke
@@ -562,8 +591,8 @@ sessions only, not the Case A/I/J/L native roots. Preserve them if available.
   useful context, but not independent fresh-root evidence.
 - `FRESH_ROOT_NATIVE`: observed native evidence from a separately verified Kael
   root, with actual root identity and any observed child/tool records and order.
-  B3, C, D, E2, F, G, and H are accepted; E1's captured native routing failure
-  remains historical, and K is the only current pending fresh-root case. B2's
+  B3, C, D, E2, F, G, H, and both K profiles are accepted; E1's captured native
+  routing failure remains historical. B2's
   routing observation is valid context but failed isolation. The recovered A/I/J/L
   observations remain guided/user-reported references and are not fresh-root
   evidence.
@@ -601,11 +630,12 @@ are marker-presence checks only.
 ## Current gate
 
 The A–L matrix, unchanged synthetic trace corpus, expanded mutation coverage,
-and B3/C/D/E1/E2/F/G/H native records are present. Case B1 remains a fixture
+and B3/C/D/E1/E2/F/G/H/K native records are present. Case B1 remains a fixture
 defect with Question Barrier PASS; B2 runtime behavior remains PASS but
 isolation/acceptance remains PARTIAL; B3, C, D, E2, F, G, and H fresh-root native
-acceptance are PASS. E1 remains a historical Talos-routing failure, while E2
-closes current Case E acceptance. K is the only current pending fresh-root case. D did
+acceptance and K FAST/NORMAL/comparison are PASS. E1 remains a historical
+Talos-routing failure, while E2 closes current Case E acceptance. No current
+fresh-root native case is pending. D did
 not exercise Argus follow-up runtime
 coverage, which remains a separate open review item. A/I/J/L observations
 remain guided/history-only, with no rerun requested. The overall phase is **IN

@@ -1,0 +1,80 @@
+{
+  "evidence_class": "FRESH_ROOT_NATIVE",
+  "source_api": "OpenCode V2 public read-only API",
+  "session_metadata_query": {
+    "method": "GET",
+    "path": "/api/session/ses_ef3d386abffeVKv396Rg46d5Ls",
+    "result": "SUCCESS"
+  },
+  "export_query": {
+    "method": "GET",
+    "path": "/api/experimental/session/ses_ef3d386abffeVKv396Rg46d5Ls/export?sanitize=false",
+    "result": "SUCCESS"
+  },
+  "export_schema": "OpenAPI SessionTransfer.Data: response.data.info plus response.data.messages; assistant public text is in message.content entries with type=text.",
+  "session": {
+    "id": "ses_ef3d386abffeVKv396Rg46d5Ls",
+    "agent": "thales",
+    "parent_id": "ses_ef3d4954bffeHMU8o3nWFjf6EP",
+    "parent_id_observation": "EXPLICIT_ID",
+    "directory": "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-g",
+    "title": "Diagnose contradictory fixed observations",
+    "execution_outcome": "succeeded",
+    "time": {"created": 1791205603966, "updated": 1791205603974, "idle": 1791205639393}
+  },
+  "message_count": 3,
+  "export_pagination": "NONE_OBSERVED",
+  "messages": [
+    {
+      "id": "msg_10c2c7a84001qJjkJ997lidz9p",
+      "type": "user",
+      "time": {"created": 1791205604001},
+      "text": "You are a subagent spawned by another session.\nTASK_ID: PHASE11_CASE_G_DIAGNOSIS\nROLE: thales\nQUESTION: What is the smallest supported diagnostic conclusion from the fixed same-input PASS → TIMEOUT → PASS sequence? Is any cause supported, or is one bounded additional source-evidence fact materially necessary to discriminate plausible causes?\nPROBLEM: Contradictory/intermittent technical observations for the same fixed input, in synthetic qualification evidence. The bounded sequence now establishes the diagnostic gate; no executions have been performed by this task.\nEXPECTED: Conservatively distinguish observed outcome inconsistency from a proven causal diagnosis. Stop at a supported bounded conclusion if sufficient; do not force evidence collection or another consultation.\nOBSERVED: Same input identity/value: id item-7, quantity 2. Ordered fixture results: ordinal 1 PASS; ordinal 2 TIMEOUT; ordinal 3 PASS.\nATTEMPTS: One read-only Stage 1 evidence collection completed and consumed. No reruns, reproduction, repairs, tests or mutations.\nEVIDENCE: Veyra's terminal Stage 1 result grounded only in fixed input and ordered observation records in tests/phase11-integrated-routing/fixtures/flaky/observations.json. No other evidence or runtime facts are supplied.\nCURRENT_SCOPE: Only this fixed sequence and same-input facts. Repository root C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-g; user supplied externally verified fresh-root isolation and starting HEAD e3636c062a3a6db3ccebd4fbdff69acf1173bf99. If materially needed to discriminate causes, one bounded read of the remaining fixture metadata may be requested through Kael; no other files. Do not conduct any reads yourself.\nCONSTRAINTS: Synthetic evidence only. Do not infer deterministic root cause from one timeout, randomization, network involvement, runtime conditions, or correlation as causation. Remain uncertain when appropriate. No implementation or optimization. Evidence collection and diagnosis are separate. You cannot launch workers. A final advisory conclusion is diagnosis only, not a fix.\nDO_NOT_TOUCH: No repository discovery, read/glob/grep/list, shell, tests, reruns, edits, creation, deletion, configuration, installs, Git operations, external paths, global configuration, subdelegation, or maintenance.\nEXPECTED_OUTPUT: STATUS: ADVICE | EVIDENCE_REQUEST | INCONCLUSIVE | BLOCKED. For advisory terminal result: DIAGNOSIS; EVIDENCE; ALTERNATIVE_HYPOTHESES; MISSING_EVIDENCE; RECOMMENDED_NEXT_ACTION; RECOMMENDED_ROLE; EXECUTION_DECISION; RISKS; calibrated CONFIDENCE; SUPPORTED_CAUSE or UNCONFIRMED. If additional evidence is truly needed, EVIDENCE_REQUEST must contain TARGET_ROLE: veyra, one exact QUESTION, bounded SCOPE (remaining metadata of this fixture only), WHY_NEEDED, EXPECTED_DISCRIMINATION. Do not request extra evidence merely to obtain a more specific cause when a sufficient smallest supported conclusion is already available.",
+      "files_count": 0
+    },
+    {
+      "id": "msg_10c2c7aaf001QnQ9OkAut43aHF",
+      "type": "assistant",
+      "agent": "thales",
+      "time": {"created": 1791205604296, "streamed": 1791205639204, "completed": 1791205639385},
+      "content": [
+        {
+          "type": "text",
+          "text": "STATUS: ADVICE\n\nDIAGNOSIS: The supplied records show different outcomes for the same fixed input. They establish recorded inconsistency—not reproduced runtime flakiness or a causal diagnosis.\n\nEVIDENCE: Input `item-7`, quantity `2`; ordered outcomes `PASS → TIMEOUT → PASS`. Evidence is synthetic; this task performed no executions.\n\nALTERNATIVE_HYPOTHESES: Unrecorded contextual differences and synthetic fixture construction remain possible explanations; neither is established or favored.\n\nMISSING_EVIDENCE: No causal evidence is supplied. Additional metadata is not materially necessary for this smallest supported conclusion.\n\nRECOMMENDED_NEXT_ACTION: Stop at recorded outcome inconsistency with cause unconfirmed. Do not request another read merely to seek specificity.\n\nRECOMMENDED_ROLE: none\n\nEXECUTION_DECISION: STOP\n\nRISKS: Treating identical input as identical execution conditions; mistaking fixture records for reproduced behavior; attributing the timeout to an unsupported cause.\n\nCONFIDENCE: High in the recorded inconsistency; causal confidence cannot be assessed.\n\nSUPPORTED_CAUSE: UNCONFIRMED"
+        }
+      ],
+      "text": "STATUS: ADVICE\n\nDIAGNOSIS: The supplied records show different outcomes for the same fixed input. They establish recorded inconsistency—not reproduced runtime flakiness or a causal diagnosis.\n\nEVIDENCE: Input `item-7`, quantity `2`; ordered outcomes `PASS → TIMEOUT → PASS`. Evidence is synthetic; this task performed no executions.\n\nALTERNATIVE_HYPOTHESES: Unrecorded contextual differences and synthetic fixture construction remain possible explanations; neither is established or favored.\n\nMISSING_EVIDENCE: No causal evidence is supplied. Additional metadata is not materially necessary for this smallest supported conclusion.\n\nRECOMMENDED_NEXT_ACTION: Stop at recorded outcome inconsistency with cause unconfirmed. Do not request another read merely to seek specificity.\n\nRECOMMENDED_ROLE: none\n\nEXECUTION_DECISION: STOP\n\nRISKS: Treating identical input as identical execution conditions; mistaking fixture records for reproduced behavior; attributing the timeout to an unsupported cause.\n\nCONFIDENCE: High in the recorded inconsistency; causal confidence cannot be assessed.\n\nSUPPORTED_CAUSE: UNCONFIRMED",
+      "finish": "stop"
+    },
+    {
+      "id": "msg_10c2d04e1001lMSjeE0QmvFAdd",
+      "type": "idle",
+      "time": {"created": 1791205639393},
+      "outcome": "succeeded"
+    }
+  ],
+  "tool_call_records": [],
+  "content_availability": {
+    "user_prompt": "PRESERVED_AFTER_BOUNDED_SECRET_PATTERN_FILTER",
+    "user_prompt_sha256": "621EC9D060B355F0F3D4DB7A94D60B1E8598B3A08CB68A23F71BD1AD6D7808C4",
+    "assistant_terminal_text": "PRESERVED_WITH_REASONING_REMOVED_AND_BOUNDED_SECRET_PATTERN_FILTER",
+    "tool_call_stubs": "NONE_OBSERVED",
+    "message_ids_types_and_timing": "RETAINED"
+  },
+  "projection_and_redaction": {
+    "description": "Parsed the public SessionTransfer.Data envelope (data.info and data.messages) using the published OpenAPI schema. Persisted the source user prompt, visible Thales terminal text, and message identities/times. Removed all reasoning parts and omitted provider state, snapshots, tokens, costs, tool inputs, and tool output bodies. The bounded credential-pattern scan found no matches. The raw export was not persisted.",
+    "reasoning_blocks_removed": 2,
+    "secret_values_redacted": 0,
+    "unrecognized_content_blocks_omitted": 0,
+    "provider_state_omitted": true,
+    "snapshots_omitted": true,
+    "tool_arguments_and_results_omitted": true,
+    "raw_export_persisted": false
+  },
+  "terminal_message_id": "msg_10c2c7aaf001QnQ9OkAut43aHF",
+  "terminal_outcome_record": {
+    "message_id": "msg_10c2d04e1001lMSjeE0QmvFAdd",
+    "type": "idle",
+    "outcome": "succeeded"
+  }
+}

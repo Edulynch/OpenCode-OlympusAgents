@@ -1,0 +1,358 @@
+{
+  "TRACE_ID": "H-NATIVE",
+  "CASE_ID": "H",
+  "SCENARIO": "default",
+  "REQUEST_CLASS": "THIRD_PARTY_BUG",
+  "EVIDENCE_CLASS": "FRESH_ROOT_NATIVE",
+  "CASE_LABEL": "PHASE11_CASE_H_FRESH_ROOT",
+  "ROOT_SESSION_ID": "ses_ef34594abffexNPYTX6t5yrosg",
+  "ROOT_DIRECTORY": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-h",
+  "ROOT_AGENT": "kael",
+  "ROOT_PARENT_SESSION_ID": null,
+  "ROOT_PARENT_SESSION_ID_OBSERVATION": "NOT_EXPOSED",
+  "ROOT_TITLE": "OpenCode defect containment and reconciliation policy",
+  "ROOT_EXECUTION_OUTCOME": "succeeded",
+  "ROOT_USER_MESSAGE_ID": "msg_10cba6b5a001SAQcr9iaDX3VJm",
+  "ROOT_VEYRA_INVOCATION_MESSAGE_ID": "msg_10cbaa06c001UeN4LzBOYK0s3L",
+  "ROOT_VEYRA_INVOCATION_TOOL_CALL_ID": "call_uTRMsGuCjvKPl3d7sTAyLNuF",
+  "ROOT_TERMINAL_MESSAGE_ID": "msg_10cbcfa65001PnEjIv3i6oooHL",
+  "ROOT_IDLE_MESSAGE_ID": "msg_10cbd443f0011BlEqlHG3toMs1",
+  "ROOT_STARTING_HEAD": "18a161b9a98383b748bb4353b356a605c9f25e7e",
+  "ROOT_STARTING_HEAD_SOURCE": "Original root user prompt",
+  "ROOT_STARTING_HEAD_FILESYSTEM_VERIFIED_BY_RECONCILIATION": false,
+  "ROOT_ISOLATION": {
+    "ROOT_DIRECTORY_MATCHES_PUBLIC_METADATA_AND_PROMPT": true,
+    "ROOT_DIRECTORY_SOURCE": "Public session metadata/export and original root prompt",
+    "STARTING_HEAD_SOURCE": "Original root user prompt",
+    "STARTING_HEAD_FILESYSTEM_VERIFIED_BY_RECONCILIATION": false,
+    "SEPARATE_DISPOSABLE_WORKTREE": null,
+    "FILESYSTEM_AUDIT_PERFORMED": false,
+    "DISPOSABLE_WORKTREE_ACCESSED_BY_RECONCILIATION": false
+  },
+  "API_EVIDENCE": {
+    "SOURCE": "OpenCode V2 public read-only API",
+    "EXPORT_SCHEMA": "OpenAPI SessionTransfer.Data response: data.info and data.messages; only metadata, message/tool identities, digests, ordering, and bounded public fact projections are retained.",
+    "ROOT_METADATA_GET": {
+      "PATH": "/api/session/ses_ef34594abffexNPYTX6t5yrosg",
+      "RESULT": "SUCCESS"
+    },
+    "ROOT_EXPORT_GET": {
+      "PATH": "/api/experimental/session/ses_ef34594abffexNPYTX6t5yrosg/export?sanitize=false",
+      "RESULT": "SUCCESS",
+      "PROJECTION_ARTIFACT": "case-h.root.session-export.json",
+      "MESSAGE_COUNT": 5,
+      "EXPORT_PAGINATION": "NONE_OBSERVED",
+      "REASONING_BLOCKS_REMOVED": 2,
+      "KNOWN_CREDENTIAL_PATTERN_MATCHES_REMOVED": 0,
+      "PROVIDER_STATE_AND_SNAPSHOTS_OMITTED": true,
+      "TOOL_ARGUMENTS_AND_RESULT_BODIES_OMITTED": true,
+      "RAW_EXPORT_PERSISTED": false,
+      "TIMESTAMPS_OMITTED": true
+    },
+    "VEYRA_METADATA_GET": {
+      "PATH": "/api/session/ses_ef344fba2ffes5dwAj9MP0A0kc",
+      "RESULT": "SUCCESS"
+    },
+    "VEYRA_EXPORT_GET": {
+      "PATH": "/api/experimental/session/ses_ef344fba2ffes5dwAj9MP0A0kc/export?sanitize=false",
+      "RESULT": "SUCCESS",
+      "PROJECTION_ARTIFACT": "case-h.veyra.session-export.json",
+      "MESSAGE_COUNT": 10,
+      "EXPORT_PAGINATION": "NONE_OBSERVED",
+      "REASONING_BLOCKS_REMOVED": 26,
+      "KNOWN_CREDENTIAL_PATTERN_MATCHES_REMOVED": 0,
+      "PROVIDER_STATE_AND_SNAPSHOTS_OMITTED": true,
+      "TOOL_ARGUMENTS_AND_RESULT_BODIES_OMITTED": true,
+      "RAW_EXPORT_PERSISTED": false,
+      "TIMESTAMPS_OMITTED": true
+    },
+    "DIRECT_CHILD_LISTING": {
+      "METHOD": "GET",
+      "FIRST_PAGE_PATH": "/api/session?parentID=ses_ef34594abffexNPYTX6t5yrosg&limit=100",
+      "FIRST_PAGE_RESULT": "SUCCESS",
+      "FIRST_PAGE_CHILD_SESSION_IDS": ["ses_ef344fba2ffes5dwAj9MP0A0kc"],
+      "FIRST_PAGE_NEXT_CURSOR": "PRESENT",
+      "SECOND_PAGE_PATH": "/api/session?parentID=ses_ef34594abffexNPYTX6t5yrosg&limit=100&cursor=<omitted>",
+      "SECOND_PAGE_RESULT": "SUCCESS",
+      "SECOND_PAGE_CHILD_SESSION_IDS": [],
+      "SECOND_PAGE_NEXT_CURSOR": null,
+      "CURSOR_VALUE_PERSISTED": false
+    },
+    "ROOT_TOOL_CALL_RECORDS": [
+      {
+        "ORDER": 1,
+        "PARENT_MESSAGE_ID": "msg_10cbaa06c001UeN4LzBOYK0s3L",
+        "TOOL_CALL_ID": "call_uTRMsGuCjvKPl3d7sTAyLNuF",
+        "AGENT": "veyra",
+        "TASK_LABEL": "PHASE11_CASE_H_FRESH_ROOT-evidence",
+        "CHILD_SESSION_ID": "ses_ef344fba2ffes5dwAj9MP0A0kc",
+        "EXECUTED": false,
+        "TOOL_STATE": "completed",
+        "RETURN_STATUS": "SUCCESS",
+        "RESULT_ID": null,
+        "RESULT_ID_OBSERVATION": "NOT_EXPOSED"
+      }
+    ],
+    "ROOT_SUBAGENT_INVOCATION_COUNT": 1,
+    "ROOT_OTHER_TOOL_CALLS": [
+      {"TOOL_CALL_ID": "call_qKwJspQUpYtjS8ATlzHMyCvG", "NAME": "skill", "STATE": "completed"}
+    ],
+    "CHILD_TOOL_CALL_COUNT": 10,
+    "CHILD_NESTED_SUBAGENT_CALL_COUNT": 0,
+    "VEYRA_SOURCE_TOOL_CALLS": {
+      "opencode.jsonc": {"read": 1, "grep": 1, "total": 2},
+      ".opencode/agents/kael.md": {"read": 5, "grep": 2, "total": 7},
+      "UNEXPECTED_FILE_OR_DIRECTORY_TARGETS": 0
+    },
+    "TOOL_EXECUTED_FLAG_CAVEAT": "Public tool records preserve executed=false alongside state=completed. This flag is not proof of non-execution; linked Veyra metadata/export and terminal records report success. Result IDs remain null/not exposed."
+  },
+  "EXPECTED_ROUTE": ["kael", "veyra"],
+  "ACTUAL_ROUTE": ["kael", "veyra"],
+  "ROUTE_RECONCILIATION": {
+    "EXPECTED_NATIVE_PRODUCT_ROUTE": ["kael", "veyra"],
+    "OBSERVED_NATIVE_PRODUCT_ROUTE": ["kael", "veyra"],
+    "OBSERVED_ROOT_CALL_ORDER": ["veyra"],
+    "ORDER_BASIS": "Observed root message order and paginated public direct-child listing; timestamps omitted",
+    "CLASSIFICATION": "PASS"
+  },
+  "CHILD_SESSIONS": [
+    {
+      "TRACE_REF": "H-VEYRA",
+      "NATIVE_SESSION_ID": "ses_ef344fba2ffes5dwAj9MP0A0kc",
+      "AGENT": "veyra",
+      "PARENT_AGENT": "kael",
+      "PARENT_SESSION_ID": "ses_ef34594abffexNPYTX6t5yrosg",
+      "LAUNCH_ORDER": 1,
+      "INVOCATION_COUNT": 1,
+      "EXECUTION_STATE": "SUCCEEDED",
+      "FINAL_OUTCOME": "succeeded",
+      "RETURN_STATUS": "SUCCESS",
+      "RESULT_ID": null,
+      "RESULT_ID_OBSERVATION": "NOT_EXPOSED",
+      "PURPOSE": "Bounded source evidence on runtime declaration and existing result-reconciliation policy; no implementation or runtime reproduction.",
+      "PARENT_MESSAGE_ID": "msg_10cbaa06c001UeN4LzBOYK0s3L",
+      "INVOCATION_TOOL_CALL_ID": "call_uTRMsGuCjvKPl3d7sTAyLNuF",
+      "TERMINAL_MESSAGE_ID": "msg_10cbc3c34001SztJMCvRUkztDX",
+      "TERMINAL_RETURN_CONSUMED": true
+    }
+  ],
+  "CONSULTATION_COUNTS": {
+    "kael": 0,
+    "veyra": 1,
+    "orin": 0,
+    "kovan": 0,
+    "nox": 0,
+    "vera": 0,
+    "atlas": 0,
+    "argus": 0,
+    "talos": 0,
+    "thales": 0,
+    "helios": 0,
+    "aegis": 0
+  },
+  "UNIQUE_CHILD_SESSION_COUNTS": {
+    "kael": 0,
+    "veyra": 1,
+    "orin": 0,
+    "kovan": 0,
+    "nox": 0,
+    "vera": 0,
+    "atlas": 0,
+    "argus": 0,
+    "talos": 0,
+    "thales": 0,
+    "helios": 0,
+    "aegis": 0
+  },
+  "MAX_SIMULTANEOUS_CHILDREN": null,
+  "NEGATIVE_CONTROLS": {
+    "nox": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "argus": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "talos": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "thales": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "kovan": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "orin": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "atlas": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "helios": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "aegis": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0},
+    "vera": {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0}
+  },
+  "BOUNDED_EVIDENCE": {
+    "STATUS": "PASS",
+    "SOURCE_EVIDENCE_ROLE": "veyra",
+    "SOURCE_PATHS": ["opencode.jsonc", ".opencode/agents/kael.md"],
+    "SOURCE_CONTENT_PERSISTED": false,
+    "LOCAL_RUNTIME_VERSION_DECLARED": "UNKNOWN",
+    "CONCRETE_VERSION_OR_CONFIGURATION_ACTION_SUPPORTED": false,
+    "EXISTING_RECONCILIATION_POLICY_CONFIRMED": true,
+    "BASIS": "Exact source paths are derived from original Veyra public tool-call metadata; the sanitized projection retains neither source contents nor tool arguments/results."
+  },
+  "THIRD_PARTY_CLASSIFICATION": {
+    "STATUS": "PASS",
+    "CLASSIFICATION": "OPERATIONAL_ISSUE",
+    "THIRD_PARTY_DEFECT_ESTABLISHED": true,
+    "PRODUCT_CODE_BUG_ESTABLISHED": false,
+    "UPSTREAM_DEFECT_REPAIRED": false,
+    "UPSTREAM_REPAIR_EXECUTION_FACTS": null
+  },
+  "EXISTING_RECONCILIATION": {
+    "STATUS": "PASS",
+    "SAFEST_SUPPORTED_LEVEL": "EXISTING_RECONCILIATION",
+    "PRESERVE_ORIGINAL_CHILD": true,
+    "RECONCILE_AND_CONSUME_ONCE": true,
+    "COMPLETION_UNCONFIRMED_IF_UNKNOWN": true,
+    "POSITIVE_NON_START_REQUIRED_BEFORE_RETRY": true,
+    "CONFIGURATION_OR_VERSION_CHANGE": "NOT_SUPPORTED_BY_BOUNDED_EVIDENCE"
+  },
+  "NO_BLIND_RETRY": {
+    "STATUS": "PASS",
+    "BLIND_RETRY_SAFE": false,
+    "RETRY_PERFORMED_BY_RECONCILIATION": false
+  },
+  "NO_UNAPPROVED_PATCH": {
+    "STATUS": "PASS",
+    "UPSTREAM_PATCH_ATTEMPTED": false,
+    "USER_APPROVAL_FOR_PATCH": "NOT_GRANTED_OR_REQUESTED"
+  },
+  "NO_VENDOR_OR_FORK": {
+    "STATUS": "PASS",
+    "VENDOR_OR_FORK_ATTEMPTED": false,
+    "USER_APPROVAL_FOR_VENDOR_OR_FORK": "NOT_GRANTED_OR_REQUESTED"
+  },
+  "EVIDENCE_OWNERSHIP": {
+    "SOURCE_EVIDENCE_ROLE": "veyra",
+    "SOURCE_EVIDENCE_KIND": "bounded public source evidence for runtime declaration and existing result reconciliation",
+    "ACTUAL_MEASUREMENT_REQUIRED": false,
+    "ACTUAL_MEASUREMENT_PERFORMED": false,
+    "NOX_INVOCATIONS": 0,
+    "NO_RUNTIME_REPRODUCTION_BY_RECONCILIATION": true
+  },
+  "ROLE_PURITY": {
+    "STATUS": "PASS",
+    "ROOT_AGENT": "kael",
+    "DIRECT_CHILDREN_ONLY": true,
+    "DIRECT_CHILD_COUNT": 1,
+    "NO_NESTED_SUBAGENT_DELEGATION": true,
+    "VEYRA_SOURCE_EVIDENCE_OWNER": true,
+    "OTHER_CASE_ROLES_ZERO": true,
+    "RECONCILIATION_ROLE_INCLUDED_IN_CASE_COUNTS": false,
+    "ROOT_SOURCE_WRITES": false,
+    "ORIGINAL_RUN_FILES_CHANGED": "NONE",
+    "VIOLATIONS": []
+  },
+  "DEPENDENCY_ORDER": [
+    {"BEFORE": "H-VEYRA:RESULT", "AFTER": "H-ROOT:FINALIZE", "ORDER_BASIS": "observed root message order"}
+  ],
+  "ROOT_TERMINAL_FACTS": {
+    "CLASSIFICATION": "OPERATIONAL_ISSUE",
+    "THIRD_PARTY_DEFECT_ESTABLISHED": "YES",
+    "LOCAL_RUNTIME_VERSION_DECLARED": "UNKNOWN",
+    "SAFEST_SUPPORTED_LEVEL": "EXISTING_RECONCILIATION",
+    "BLIND_RETRY_SAFE": "NO",
+    "UPSTREAM_PATCH_ATTEMPTED": "NO",
+    "VENDOR_OR_FORK_ATTEMPTED": "NO",
+    "FILES_CHANGED": "NONE",
+    "UNRESOLVED_WORK": "NONE",
+    "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+    "ANY_WORK_REMAINING": "NO"
+  },
+  "OBSERVED_TERMINAL_SNAPSHOT": {
+    "SOURCE": "OBSERVED_NATIVE_ROOT_TERMINAL_MESSAGE",
+    "ROOT_SESSION_ID": "ses_ef34594abffexNPYTX6t5yrosg",
+    "MESSAGE_ID": "msg_10cbcfa65001PnEjIv3i6oooHL",
+    "FACTS": {
+      "CLASSIFICATION": "OPERATIONAL_ISSUE",
+      "THIRD_PARTY_DEFECT_ESTABLISHED": "YES",
+      "LOCAL_RUNTIME_VERSION_DECLARED": "UNKNOWN",
+      "SAFEST_SUPPORTED_LEVEL": "EXISTING_RECONCILIATION",
+      "BLIND_RETRY_SAFE": "NO",
+      "UPSTREAM_PATCH_ATTEMPTED": "NO",
+      "VENDOR_OR_FORK_ATTEMPTED": "NO",
+      "FILES_CHANGED": "NONE",
+      "UNRESOLVED_WORK": "NONE",
+      "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+      "ANY_WORK_REMAINING": "NO"
+    },
+    "RAW_TERMINAL_TEXT_PERSISTED": false
+  },
+  "COMPLETION_GATE": {
+    "PENDING_CHILD_COUNT": 0,
+    "UNCONSUMED_RESULT_COUNT": 0,
+    "UNKNOWN_EXECUTION_COUNT": 0,
+    "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": true,
+    "ROOT_TERMINAL": true,
+    "RESULT_IDS": null,
+    "PER_INVOCATION_CONSUMPTION_TIMING": null,
+    "SESSION_LIFETIME_EXACT_ONCE": null,
+    "AGGREGATE_TERMINAL_SOURCE": "Root terminal reports required children terminal and consumed; result IDs and consumption timing are not exposed."
+  },
+  "USER_QUESTION_COUNT": 0,
+  "FINAL_OUTCOME": "SUCCEEDED",
+  "ROUTING_RESULT": "PASS",
+  "CASE_RESULT": "FRESH_ROOT_NATIVE_ACCEPTANCE_PASS",
+  "CASE_ACCEPTANCE": "PASS",
+  "CASE_RERUN_PERFORMED_BY_RECONCILIATION": false,
+  "RECONCILIATION_FILES_CHANGED": [
+    "tests/phase11-integrated-routing/RUNME.md",
+    "tests/phase11-integrated-routing/baseline.json",
+    "tests/phase11-integrated-routing/baseline.md",
+    "tests/phase11-integrated-routing/case-h.native-trace.json",
+    "tests/phase11-integrated-routing/case-h.root.session-export.json",
+    "tests/phase11-integrated-routing/case-h.veyra.session-export.json",
+    "tests/phase11-integrated-routing/cases.json",
+    "tests/phase11-integrated-routing/qualify.py",
+    "tests/phase11-integrated-routing/test_qualify.py"
+  ],
+  "EFFICIENCY": {
+    "CLASSIFICATION": "LEAN",
+    "BASIS": "Qualification judgment for one bounded Veyra source-evidence child, with no runtime reproduction, retry, patch, vendor, or fork; not a measured latency or concurrency result."
+  },
+  "UNKNOWN_METRICS": {
+    "LOCAL_RUNTIME_VERSION": null,
+    "CURRENT_CAPTURE_RUNTIME_VERSION_ATTRIBUTED_TO_ORIGINAL": false,
+    "MAX_SIMULTANEOUS_CHILDREN": null,
+    "WALL_CLOCK_MS": null,
+    "RUNTIME_DURATION_MS": null,
+    "RETRY_COUNT": null,
+    "PER_INVOCATION_RESULT_IDS": null,
+    "PER_INVOCATION_CONSUMPTION_TIMING": null,
+    "SESSION_LIFETIME_EXACT_ONCE": null,
+    "NATIVE_PERMISSION_UI": "NOT_OBSERVABLE",
+    "NATIVE_PERMISSION_DECISION": "NOT_OBSERVABLE",
+    "UPSTREAM_REPAIR_EXECUTION_FACTS": null,
+    "WORKTREE_FILESYSTEM_AUDIT": "NOT_PERFORMED"
+  },
+  "CLASSIFICATIONS": {
+    "CASE_H_BEHAVIOR": "PASS",
+    "THIRD_PARTY_CLASSIFICATION": "PASS",
+    "BOUNDED_EVIDENCE": "PASS",
+    "EXISTING_RECONCILIATION": "PASS",
+    "NO_BLIND_RETRY": "PASS",
+    "NO_UNAPPROVED_PATCH": "PASS",
+    "NO_VENDOR_OR_FORK": "PASS",
+    "ROLE_PURITY": "PASS",
+    "COMPLETION_OWNERSHIP": "PASS",
+    "ROUTING": "PASS",
+    "FRESH_ROOT_NATIVE": "PASS"
+  },
+  "PHASE11_STATUS": "PARTIAL",
+  "PENDING_FRESH_ROOT_LABELS": ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
+  "NOTES": "The original root classified an established third-party OpenCode runtime defect as OPERATIONAL_ISSUE, not an Olympus product-code bug. Veyra's original bounded read/grep targets were only opencode.jsonc and .opencode/agents/kael.md; neither a concrete runtime-version/configuration action nor an upstream patch/vendor/fork was supported. Existing reconciliation, no blind retry, COMPLETION_UNCONFIRMED when completion is unknown, and positive non-start before retry remain the supported policy. The reconciliation recaptured exact public metadata/exports, preserved message/tool identities and observed ordering, omitted timestamps and all reasoning/source bodies, and performed no Case H execution or runtime reproduction. Prior native artifact snapshots remain unchanged; K alone is current pending work.",
+  "EVIDENCE_PROVENANCE": {
+    "CLASS": "FRESH_ROOT_NATIVE",
+    "SOURCE": "Public OpenCode V2 metadata and SessionTransfer.Data exports for the exact root and Veyra child, bound to task-supplied Nox original-native verification; no Case H rerun or runtime replay.",
+    "NATIVE_ROOT_SESSION_ID": "ses_ef34594abffexNPYTX6t5yrosg",
+    "NATIVE_CHILD_SESSION_IDS": ["ses_ef344fba2ffes5dwAj9MP0A0kc"],
+    "NATIVE_CHILD_PARENT_SESSION_ID": "ses_ef34594abffexNPYTX6t5yrosg",
+    "ROOT_PARENT_SESSION_ID": null,
+    "ROOT_PARENT_SESSION_ID_OBSERVATION": "NOT_EXPOSED",
+    "ORDER_BASIS": "observed root message/tool-call order and paginated public direct-child listing; timestamps omitted",
+    "FRESH_ROOT_LABEL_CONFIRMED": true,
+    "ROOT_DIRECTORY_MATCHES_PUBLIC_METADATA": true,
+    "STARTING_HEAD_SOURCE": "Original root user prompt",
+    "STARTING_HEAD_FILESYSTEM_VERIFIED_BY_RECONCILIATION": false,
+    "WORKTREE_FILESYSTEM_AUDIT_PERFORMED": false,
+    "RECONCILIATION_ROLE": "kovan",
+    "RECONCILIATION_ROLE_COUNTED_IN_ORIGINAL_CASE_FAMILY": false
+  }
+}

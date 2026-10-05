@@ -18,7 +18,10 @@ captured in `case-f.native-trace.json` and `case-f.root-session.export.json`;
 Case G's native record and root/Veyra/Thales projections are in
 `case-g.native-trace.json`, `case-g.root.session-export.json`,
 `case-g.veyra.session-export.json`, and `case-g.thales.session-export.json`.
-B3, C, D, E2, F, and G qualify their bounded
+Case H's native record and sanitized root/Veyra projections are in
+`case-h.native-trace.json`, `case-h.root.session-export.json`, and
+`case-h.veyra.session-export.json`.
+B3, C, D, E2, F, G, and H qualify their bounded
 acceptance outcomes; E1 remains an observed historical routing failure and is
 not rewritten as a pass. None of these native captures is inserted into the
 synthetic trace corpus or reconstructed as a synthetic lifecycle.
@@ -36,12 +39,13 @@ uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-on
 ```
 
 The first command validates the versioned case matrix, synthetic event semantics,
-completion/evidence claims, separate B1/B2/B3/C/D/E1/E2/F/G reconciliations, the
+completion/evidence claims, separate B1/B2/B3/C/D/E1/E2/F/G/H reconciliations, the
 bounded B3, C, and D native invocation captures, the original E1 failed-root
 projection, the E2 root/child export projections and accepted Talos route, the
 F root-only export projection and operational finding, and the G root/child
 export joins, static fixture result, evidence-before-diagnosis order, and
-conditional Thales follow-up semantics, plus presence-only gate markers. It reports
+conditional Thales follow-up semantics, the bounded H native reconciliation,
+and presence-only gate markers. It reports
 `PHASE11_ARTIFACTS: PASS` when those artifacts are sound while overall
 qualification remains `PHASE11_QUALIFICATION: PARTIAL` until remaining
 acceptance items are resolved. The second command
@@ -275,13 +279,44 @@ negative Argus/Talos controls, no-install, role purity, completion ownership,
 routing, and `FRESH_ROOT_NATIVE` acceptance are PASS. `LEAN` is a qualification
 judgment, not measured efficiency. E1 remains a failed historical Case E route;
 E2 remains the separate accepted Case E result. F and G are no longer pending;
-only H and K remain fresh-root work and Phase 11 stays **IN VALIDATION / PARTIAL**.
+at the F snapshot, H and K remained fresh-root work and Phase 11 stayed
+**IN VALIDATION / PARTIAL**.
+
+## Case H native capture — bounded third-party defect containment
+
+`case-h.native-trace.json` and its root/Veyra projections reconcile the exact
+completed public sessions. The root is Kael
+`ses_ef34594abffexNPYTX6t5yrosg`; its parent is not exposed. Its prompt supplied
+the starting HEAD, which this reconciliation did not filesystem-verify. The
+paginated direct-child listing returned Veyra
+`ses_ef344fba2ffes5dwAj9MP0A0kc` on page one and no additional child on page two;
+Veyra's public parent ID matches the root. Root and child exports contain five
+and ten messages respectively. The observed product route is Kael -> Veyra, with
+one completed root subagent invocation. The public `executed=false` flags remain
+alongside `state=completed`; they are not interpreted as proof of non-execution.
+Result IDs, timing, concurrency, and permission UI/decision remain unknown.
+
+Veyra's original source tool calls target only `opencode.jsonc` and
+`.opencode/agents/kael.md`; the sanitized projection retains the normalized
+paths and call identities, not file contents, arguments, or tool results. The
+root terminal classifies the established third-party OpenCode runtime defect as
+`OPERATIONAL_ISSUE`, not an Olympus product-code bug. No specific local runtime
+version or concrete version/configuration action is supported. Existing result
+reconciliation, no blind retry, `COMPLETION_UNCONFIRMED` when completion is
+unknown, and positive non-start evidence before retry remain the supported
+policy. No upstream patch, vendor, or fork was attempted. The projection removes
+28 reasoning blocks, records zero matches for the bounded credential-pattern
+scan, omits provider state/snapshots and all raw export/source text, and persists
+no raw export. This reconciliation performed no Case H execution, runtime
+reproduction, or disposable-worktree access. The original terminal reports no
+original-run file changes. Case H is accepted natively; only K remains pending
+and Phase 11 remains **IN VALIDATION / PARTIAL**.
 
 ## Remaining fresh-root work remains user action
 
 Use a separate clean disposable project copy and a **new, verified Kael root for
-each still-unrun case**. H and K below remain pending fresh-root actions.
-F, G, E2, and isolated B3, C, and bounded native D are accepted; E1's routing
+each still-unrun case**. K below remains pending fresh-root work. H, F, G, E2,
+and isolated B3, C, and bounded native D are accepted; E1's routing
 failure remains immutable history. A, I, J, and L
 prompt references/history are retained below but are not new rerun requests. Do
 not reuse a guided/current session as a fresh root. Confirm the effective root
@@ -370,10 +405,14 @@ synthetic per-session lifecycle.
    independently filesystem-audited. The original terminal reports no original
    run file changes; the ten reconciliation paths are listed in
    `RECONCILIATION_FILES_CHANGED` in the native trace.
-- `HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT` — “A third-party dependency has a
-  confirmed defect. Use the safe resolution ladder (configuration/version,
-  wrapper/fallback, reversible workaround) and stop before any upstream patch,
-  vendor, or fork unless I explicitly approve that concrete action.”
+- `ACCEPTED PHASE11_CASE_H_FRESH_ROOT` — root/Veyra native evidence and sanitized
+  projections are recorded in `case-h.native-trace.json`,
+  `case-h.root.session-export.json`, and `case-h.veyra.session-export.json`.
+  The sole child is Veyra; bounded reads/greps are limited to `opencode.jsonc`
+  and `.opencode/agents/kael.md`. Classification is `OPERATIONAL_ISSUE`, with
+  existing reconciliation as the safest supported level, no blind retry, and
+  no unapproved patch/vendor/fork. No version/config action is supported by the
+  bounded evidence. H is no longer pending; Phase 11 remains PARTIAL for K.
 - `REFERENCE_ONLY PHASE11_CASE_I_GUIDED_RECOVERY` — prior prompt reference: “Please evaluate whether optimizing
   `fixtures/benchmark/tiny_work.py:square_sum` for the stated target of reducing
   runtime by at least 20% is worthwhile. Use only bounded evidence and stop for
@@ -523,9 +562,9 @@ sessions only, not the Case A/I/J/L native roots. Preserve them if available.
   useful context, but not independent fresh-root evidence.
 - `FRESH_ROOT_NATIVE`: observed native evidence from a separately verified Kael
   root, with actual root identity and any observed child/tool records and order.
-  B3, C, D, E2, F, and G are accepted; E1's captured native routing failure remains
-  historical; H and K remain unrun. B2's routing observation is valid
-  context but failed isolation. The recovered A/I/J/L
+  B3, C, D, E2, F, G, and H are accepted; E1's captured native routing failure
+  remains historical, and K is the only current pending fresh-root case. B2's
+  routing observation is valid context but failed isolation. The recovered A/I/J/L
   observations remain guided/user-reported references and are not fresh-root
   evidence.
 
@@ -562,11 +601,11 @@ are marker-presence checks only.
 ## Current gate
 
 The A–L matrix, unchanged synthetic trace corpus, expanded mutation coverage,
-and B3/C/D/E1/E2/F/G native records are present. Case B1 remains a fixture defect
-with Question Barrier PASS; B2 runtime behavior remains PASS but
-isolation/acceptance remains PARTIAL; B3, C, D, E2, F, and G fresh-root native
+and B3/C/D/E1/E2/F/G/H native records are present. Case B1 remains a fixture
+defect with Question Barrier PASS; B2 runtime behavior remains PASS but
+isolation/acceptance remains PARTIAL; B3, C, D, E2, F, G, and H fresh-root native
 acceptance are PASS. E1 remains a historical Talos-routing failure, while E2
-closes current Case E acceptance. H and K remain fresh-root work. D did
+closes current Case E acceptance. K is the only current pending fresh-root case. D did
 not exercise Argus follow-up runtime
 coverage, which remains a separate open review item. A/I/J/L observations
 remain guided/history-only, with no rerun requested. The overall phase is **IN

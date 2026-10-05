@@ -1,0 +1,136 @@
+{
+  "evidence_class": "FRESH_ROOT_NATIVE",
+  "source_api": "OpenCode V2 public read-only API",
+  "session_metadata_query": {
+    "method": "GET",
+    "path": "/api/session/ses_ef34594abffexNPYTX6t5yrosg",
+    "result": "SUCCESS"
+  },
+  "export_query": {
+    "method": "GET",
+    "path": "/api/experimental/session/ses_ef34594abffexNPYTX6t5yrosg/export?sanitize=false",
+    "result": "SUCCESS"
+  },
+  "export_schema": "OpenAPI SessionTransfer.Data: response.data.info plus response.data.messages; only metadata, message/tool identities, digests, ordering, and bounded public fact projections are retained.",
+  "session": {
+    "id": "ses_ef34594abffexNPYTX6t5yrosg",
+    "agent": "kael",
+    "parent_id": null,
+    "parent_id_observation": "NOT_EXPOSED",
+    "directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-h",
+    "directory_source": "Public session metadata and export location; matches original root prompt",
+    "title": "OpenCode defect containment and reconciliation policy",
+    "execution_outcome": "succeeded",
+    "time": null,
+    "time_observation": "OMITTED; timing metrics remain unknown"
+  },
+  "message_count": 5,
+  "export_pagination": "NONE_OBSERVED",
+  "timestamp_projection": null,
+  "messages": [
+    {
+      "order": 1,
+      "id": "msg_10cba6b5a001SAQcr9iaDX3VJm",
+      "type": "user",
+      "agent": null,
+      "public_text_sha256": "55BCC6DACFFBB4B63D5878164B60D04DCF0957FDADD825D4C307EF902B19F795",
+      "time": null,
+      "prompt_projection": {
+        "case_label": "PHASE11_CASE_H_FRESH_ROOT",
+        "declared_directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-h",
+        "starting_head": "18a161b9a98383b748bb4353b356a605c9f25e7e",
+        "starting_head_source": "Original root user prompt",
+        "starting_head_filesystem_verified_by_reconciliation": false
+      }
+    },
+    {
+      "order": 2,
+      "id": "msg_10cba6cb40016DdQia85h2LcZu",
+      "type": "assistant",
+      "agent": "kael",
+      "public_text_sha256": "859720558B8DB6396148C651DFA6BF9E5BE6C02071DF78F905A389C8F45F1AE3",
+      "omitted_reasoning_block_count": 1,
+      "time": null,
+      "tool_call_ids": ["call_qKwJspQUpYtjS8ATlzHMyCvG"]
+    },
+    {
+      "order": 3,
+      "id": "msg_10cbaa06c001UeN4LzBOYK0s3L",
+      "type": "assistant",
+      "agent": "kael",
+      "time": null,
+      "tool_call_ids": ["call_uTRMsGuCjvKPl3d7sTAyLNuF"]
+    },
+    {
+      "order": 4,
+      "id": "msg_10cbcfa65001PnEjIv3i6oooHL",
+      "type": "assistant",
+      "agent": "kael",
+      "public_text_sha256": "C6E6028AB334481EED5FBA41342B640A062D45D9DDE2DD864E747AB03D0A9614",
+      "omitted_reasoning_block_count": 1,
+      "time": null,
+      "public_fact_projection": {
+        "CLASSIFICATION": "OPERATIONAL_ISSUE",
+        "THIRD_PARTY_DEFECT_ESTABLISHED": "YES",
+        "LOCAL_RUNTIME_VERSION_DECLARED": "UNKNOWN",
+        "SAFEST_SUPPORTED_LEVEL": "EXISTING_RECONCILIATION",
+        "BLIND_RETRY_SAFE": "NO",
+        "UPSTREAM_PATCH_ATTEMPTED": "NO",
+        "VENDOR_OR_FORK_ATTEMPTED": "NO",
+        "FILES_CHANGED": "NONE",
+        "UNRESOLVED_WORK": "NONE",
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+        "ANY_WORK_REMAINING": "NO"
+      }
+    },
+    {
+      "order": 5,
+      "id": "msg_10cbd443f0011BlEqlHG3toMs1",
+      "type": "idle",
+      "agent": null,
+      "time": null,
+      "outcome": "succeeded"
+    }
+  ],
+  "tool_call_records": [
+    {
+      "id": "call_qKwJspQUpYtjS8ATlzHMyCvG",
+      "parent_message_id": "msg_10cba6cb40016DdQia85h2LcZu",
+      "name": "skill",
+      "executed": false,
+      "state": "completed",
+      "result_id": null,
+      "result_id_observation": "NOT_EXPOSED"
+    },
+    {
+      "id": "call_uTRMsGuCjvKPl3d7sTAyLNuF",
+      "parent_message_id": "msg_10cbaa06c001UeN4LzBOYK0s3L",
+      "name": "subagent",
+      "executed": false,
+      "state": "completed",
+      "agent": "veyra",
+      "task_label": "PHASE11_CASE_H_FRESH_ROOT-evidence",
+      "child_session_id": "ses_ef344fba2ffes5dwAj9MP0A0kc",
+      "return_status": "SUCCESS",
+      "result_id": null,
+      "result_id_observation": "NOT_EXPOSED",
+      "time": null
+    }
+  ],
+  "terminal_message_id": "msg_10cbcfa65001PnEjIv3i6oooHL",
+  "terminal_outcome_record": {
+    "message_id": "msg_10cbd443f0011BlEqlHG3toMs1",
+    "type": "idle",
+    "outcome": "succeeded"
+  },
+  "projection_and_redaction": {
+    "reasoning_blocks_removed": 2,
+    "visible_text_blocks_projected_to_digest_or_bounded_facts": 3,
+    "known_credential_pattern_matches_removed": 0,
+    "provider_state_and_snapshots_omitted": true,
+    "tool_arguments_and_result_bodies_omitted": true,
+    "raw_export_persisted": false,
+    "timestamps_omitted": true,
+    "unrecognized_content_blocks_omitted": 0
+  }
+}

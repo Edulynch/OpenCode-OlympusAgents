@@ -560,14 +560,15 @@ not a child of the Case F root and is not part of its route or role counts.
   visible text and observed no secret credentials; no redaction/filter count is
   asserted. Permission UI/decision remain `NOT_OBSERVABLE`.
 
-Case F is accepted as `NATIVE_EXECUTED_ROUTING_PASS`. Case G is now accepted as
-`FRESH_ROOT_NATIVE`; only H and K remain current fresh-root actions. The prior E1
-native routing failure remains immutable history and E2 remains the accepted
-Case E attempt. A remains PASS guided/recovered; I remains PARTIAL guided; J
-remains PASS guided/recovered; L's negative automatic-Aegis control remains
-PASS recovered; and `ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE` remains
-`NOT_EXERCISED`. Overall Phase 11 remains **IN VALIDATION / PARTIAL**, not
-SHIPPED.
+Case F is accepted as `NATIVE_EXECUTED_ROUTING_PASS`. Case G is accepted as
+`FRESH_ROOT_NATIVE`; at the G snapshot, H and K remained pending. The subsequent
+Case H reconciliation below accepts H as `FRESH_ROOT_NATIVE`, leaving K as the
+only current fresh-root action. The prior E1 native routing failure remains
+immutable history and E2 remains the accepted Case E attempt. A remains PASS
+guided/recovered; I remains PARTIAL guided; J remains PASS guided/recovered;
+L's negative automatic-Aegis control remains PASS recovered; and
+`ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE` remains `NOT_EXERCISED`. Overall
+Phase 11 remains **IN VALIDATION / PARTIAL**, not SHIPPED.
 
 At the time of the earlier Case F reconciliation, its writer-local qualifier,
 66-test Phase 11 suite, Harness Core safe-root check, all-harness renderer
@@ -626,11 +627,63 @@ separate synthetic G trace remains its illustrative iterative example and is
 not imposed as native choreography. The root terminal reports no changes to
 the original run files; this reconciliation changed only the ten scoped paths
 listed in `RECONCILIATION_FILES_CHANGED` in `case-g.native-trace.json` (Phase 11
-evidence, validator, tests, and documentation). Current pending work is H and K;
-Phase 11 remains **IN VALIDATION / PARTIAL**.
+evidence, validator, tests, and documentation). At the G snapshot H and K
+remained pending. Case H is reconciled below; K alone
+is current pending work and Phase 11 remains **IN VALIDATION / PARTIAL**.
 
-Current writer-local checks are recorded in `baseline.json`: the Phase 11
+## Case H native capture — bounded third-party defect containment
+
+`case-h.native-trace.json` and its sanitized root/Veyra export projections
+reconcile the exact completed public OpenCode V2 metadata and exports. The root
+is Kael `ses_ef34594abffexNPYTX6t5yrosg`, titled “OpenCode defect containment
+and reconciliation policy”; its public parent field is not exposed. The root
+directory matches both the public metadata and its prompt. The starting HEAD
+`18a161b9a98383b748bb4353b356a605c9f25e7e` is observed only in the original root
+prompt and was not filesystem-verified during this reconciliation. The
+paginated direct-child listing returned exactly Veyra
+`ses_ef344fba2ffes5dwAj9MP0A0kc` on its first page and no additional child on
+the second; Veyra's public parent ID explicitly matches the root. The observed
+product route is Kael -> Veyra, with one completed subagent invocation and no
+nested subagent call. Other original Case H roles, including Kovan, Nox, Argus,
+Talos, Thales, Orin, Atlas, Vera, Helios, and Aegis, remain at zero; the current
+Kovan reconciliation is excluded from original-case counts.
+
+Veyra's original read/grep tool-call path metadata confirms only the bounded
+targets `opencode.jsonc` and `.opencode/agents/kael.md` (two and seven tool calls,
+respectively). Source content, reasoning, tool arguments/results, provider
+state, snapshots, and raw exports were not persisted. Root and child exports
+contain five and ten messages; two root and 26 Veyra reasoning blocks were
+removed. A bounded credential-pattern scan of visible public text found zero
+matches. The public `executed=false` fields are retained beside `state=completed`
+and are not treated as proof of non-execution. Result IDs, timing metrics,
+maximum concurrency, current runtime version, and permission UI/decision remain
+unknown/null or `NOT_OBSERVABLE`; no current capture runtime version is
+attributed to the original case.
+
+The root terminal establishes an `OPERATIONAL_ISSUE` classification: a confirmed
+third-party OpenCode runtime defect, not an Olympus product-code bug. The bounded
+source evidence supports no specific local runtime version or concrete
+configuration/version action. Existing reconciliation is the safest supported
+level: preserve the original child, reconcile and consume once, do not blindly
+retry, report `COMPLETION_UNCONFIRMED` when completion is unknown, and require
+positive non-start evidence before retry. No upstream patch, vendor, or fork was
+attempted. No Case H rerun, runtime reproduction, or disposable-worktree access
+occurred during reconciliation; the original root terminal reports
+`FILES_CHANGED: NONE`. The H behavior, classification, bounded-evidence,
+reconciliation, no-blind-retry, no-unapproved-change, role-purity,
+completion-ownership, routing, and fresh-root-native criteria are PASS. Efficiency
+is `LEAN` as a qualification judgment, not a measurement. H is accepted; only K
+remains pending and Phase 11 remains **IN VALIDATION / PARTIAL**.
+
+The nine Phase 11 paths changed for this reconciliation are listed in
+`RECONCILIATION_FILES_CHANGED` in `case-h.native-trace.json`; none is an original
+Case H run file. Prior baseline and B3/C/D/E1/E2/F/G pending snapshots remain
+historical and unchanged.
+
+At the G snapshot, writer-local checks were recorded in `baseline.json`: the Phase 11
 qualifier reports artifact PASS with qualification PARTIAL; all 73 Phase 11
 unittests pass; and `git diff --check` passes with line-ending warnings only.
-These checks do not execute the Case G fixture or mutate its native sessions.
+Those were G checks; they do not execute the Case G fixture or mutate its native
+sessions, and are not the independent Nox checks assigned after Case H
+reconciliation.
 Independent Nox validation remains separate.

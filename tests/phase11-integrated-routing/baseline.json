@@ -62,7 +62,7 @@
   },
   "live_qualification": {
     "guided_current_session": "NOT_CAPTURED",
-    "fresh_root_native": "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F_PASS; G_PASS; H,K_PENDING",
+    "fresh_root_native": "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F_PASS; G_PASS; H_PASS; K_PENDING",
     "native_results_claimed": true,
     "pending_labels_at_baseline_capture": [
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_A",
@@ -79,7 +79,6 @@
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_L"
     ],
     "pending_labels": [
-      "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
     ],
     "reference_only_prompts": [
@@ -91,7 +90,7 @@
       "REFERENCE_ONLY PHASE11_CASE_L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERY"
     ],
     "overall_status": "PARTIAL",
-    "current_pending_state_source": "PH11-E2-CLOSURE records E2 as the latest Case E acceptance; phase11-f-corpus-write accepts F and P11-G-reconcile-write accepts G as FRESH_ROOT_NATIVE while E1's observed routing failure remains immutable history; original baseline and prior B3/C/D/E1/E2/F pending snapshots are preserved"
+    "current_pending_state_source": "PH11-E2-CLOSURE records E2 as the latest Case E acceptance; phase11-f-corpus-write accepts F, P11-G-reconcile-write accepts G, and PHASE11-H-reconcile-write accepts H as FRESH_ROOT_NATIVE while E1's observed routing failure remains immutable history; original baseline and prior B3/C/D/E1/E2/F/G pending snapshots are preserved"
   },
   "recovered_user_observations": {
     "task_id": "P11-FIX-20261003",
@@ -1558,6 +1557,97 @@
       "phase11_unittest": {"command": "uv run --python 3.11 python -m unittest discover -s tests/phase11-integrated-routing -p \"test_*.py\" -v", "exit_code": 0, "test_count": 73, "result": "PASS"},
       "git_diff_check": {"command": "git diff --check", "exit_code": 0, "result": "PASS", "line_ending_warnings_only": true}
     }
+  },
+  "phase11_h_reconciliation": {
+    "task_id": "PHASE11-H-reconcile-write",
+    "source": "Sanitized projections of the exact public OpenCode V2 metadata/exports for the root and Veyra child, bound to task-supplied Nox original-native verification; no Case H rerun, runtime reproduction, or disposable-worktree access.",
+    "label": "PHASE11_CASE_H_FRESH_ROOT",
+    "evidence_artifact": "tests/phase11-integrated-routing/case-h.native-trace.json",
+    "root_export_artifact": "tests/phase11-integrated-routing/case-h.root.session-export.json",
+    "veyra_export_artifact": "tests/phase11-integrated-routing/case-h.veyra.session-export.json",
+    "evidence_class": "FRESH_ROOT_NATIVE",
+    "root_session_id": "ses_ef34594abffexNPYTX6t5yrosg",
+    "root_directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-h",
+    "root_agent": "kael",
+    "root_parent_session_id": null,
+    "root_parent_session_id_observation": "NOT_EXPOSED",
+    "root_title": "OpenCode defect containment and reconciliation policy",
+    "root_terminal_outcome": "succeeded",
+    "root_user_message_id": "msg_10cba6b5a001SAQcr9iaDX3VJm",
+    "root_veyra_invocation_message_id": "msg_10cbaa06c001UeN4LzBOYK0s3L",
+    "root_veyra_invocation_tool_call_id": "call_uTRMsGuCjvKPl3d7sTAyLNuF",
+    "root_terminal_message_id": "msg_10cbcfa65001PnEjIv3i6oooHL",
+    "root_idle_message_id": "msg_10cbd443f0011BlEqlHG3toMs1",
+    "root_starting_head": "18a161b9a98383b748bb4353b356a605c9f25e7e",
+    "root_starting_head_source": "Original root user prompt",
+    "root_starting_head_filesystem_verified_by_reconciliation": false,
+    "veyra_session_id": "ses_ef344fba2ffes5dwAj9MP0A0kc",
+    "veyra_parent_session_id": "ses_ef34594abffexNPYTX6t5yrosg",
+    "veyra_terminal_message_id": "msg_10cbc3c34001SztJMCvRUkztDX",
+    "expected_product_route": ["kael", "veyra"],
+    "observed_product_route": ["kael", "veyra"],
+    "root_subagent_invocation_count": 1,
+    "root_tool_calls": [
+      {
+        "order": 1,
+        "parent_message_id": "msg_10cbaa06c001UeN4LzBOYK0s3L",
+        "tool_call_id": "call_uTRMsGuCjvKPl3d7sTAyLNuF",
+        "agent": "veyra",
+        "task_label": "PHASE11_CASE_H_FRESH_ROOT-evidence",
+        "child_session_id": "ses_ef344fba2ffes5dwAj9MP0A0kc",
+        "executed": false,
+        "state": "completed",
+        "return_status": "SUCCESS",
+        "result_id": null
+      }
+    ],
+    "direct_child_listing_page_counts": [1, 0],
+    "child_nested_subagent_call_count": 0,
+    "source_evidence_paths": ["opencode.jsonc", ".opencode/agents/kael.md"],
+    "unexpected_source_targets": 0,
+    "consultation_counts": {
+      "kael": 0, "veyra": 1, "orin": 0, "kovan": 0, "nox": 0, "vera": 0,
+      "atlas": 0, "argus": 0, "talos": 0, "thales": 0, "helios": 0, "aegis": 0
+    },
+    "classification": "OPERATIONAL_ISSUE",
+    "third_party_defect_established": true,
+    "product_code_bug_established": false,
+    "local_runtime_version_declared": "UNKNOWN",
+    "safest_supported_level": "EXISTING_RECONCILIATION",
+    "blind_retry_safe": false,
+    "upstream_patch_attempted": false,
+    "vendor_or_fork_attempted": false,
+    "files_changed_original_run": "NONE",
+    "required_children_terminal_and_consumed": true,
+    "result_ids": null,
+    "per_invocation_consumption_timing": null,
+    "session_lifetime_exact_once": null,
+    "efficiency": "LEAN",
+    "projection_and_redaction": {
+      "root_reasoning_blocks_removed": 2,
+      "veyra_reasoning_blocks_removed": 26,
+      "known_credential_pattern_matches_removed": 0,
+      "provider_state_and_snapshots_omitted": true,
+      "tool_arguments_and_result_bodies_omitted": true,
+      "raw_exports_persisted": false,
+      "timestamps_omitted": true
+    },
+    "acceptance_status": "PASS",
+    "case_result": "FRESH_ROOT_NATIVE_ACCEPTANCE_PASS",
+    "phase11_status": "PARTIAL",
+    "pending_fresh_root_labels": ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
+    "case_rerun_performed_by_reconciliation": false,
+    "reconciliation_files_changed": [
+      "tests/phase11-integrated-routing/RUNME.md",
+      "tests/phase11-integrated-routing/baseline.json",
+      "tests/phase11-integrated-routing/baseline.md",
+      "tests/phase11-integrated-routing/case-h.native-trace.json",
+      "tests/phase11-integrated-routing/case-h.root.session-export.json",
+      "tests/phase11-integrated-routing/case-h.veyra.session-export.json",
+      "tests/phase11-integrated-routing/cases.json",
+      "tests/phase11-integrated-routing/qualify.py",
+      "tests/phase11-integrated-routing/test_qualify.py"
+    ]
   },
   "argus_same_session_followup_runtime_coverage": {
     "status": "NOT_EXERCISED",

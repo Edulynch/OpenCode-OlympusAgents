@@ -21,6 +21,10 @@ from qualify import (
     CASE_G_ROOT_SESSION_ID,
     CASE_G_THALES_SESSION_ID,
     CASE_G_VEYRA_SESSION_ID,
+    CASE_H_CLASSIFICATIONS,
+    CASE_H_EXPECTED_ROUTE,
+    CASE_H_ROOT_SESSION_ID,
+    CASE_H_VEYRA_SESSION_ID,
     EIGHT_SPECIALISTS,
     HARD_BUDGET,
     load_json,
@@ -32,6 +36,7 @@ from qualify import (
     validate_native_case_e2_capture,
     validate_native_case_f_capture,
     validate_native_case_g_capture,
+    validate_native_case_h_capture,
     validate_native_invocation_capture,
     validate_phase11_c_reconciliation,
     validate_phase11_d_reconciliation,
@@ -39,6 +44,7 @@ from qualify import (
     validate_phase11_e2_reconciliation,
     validate_phase11_f_reconciliation,
     validate_phase11_g_reconciliation,
+    validate_phase11_h_reconciliation,
     validate_phase11_b3_reconciliation,
     validate_trace,
 )
@@ -63,6 +69,9 @@ NATIVE_G_DOC = load_json(HERE / "case-g.native-trace.json")
 NATIVE_G_ROOT_EXPORT_DOC = load_json(HERE / "case-g.root.session-export.json")
 NATIVE_G_VEYRA_EXPORT_DOC = load_json(HERE / "case-g.veyra.session-export.json")
 NATIVE_G_THALES_EXPORT_DOC = load_json(HERE / "case-g.thales.session-export.json")
+NATIVE_H_DOC = load_json(HERE / "case-h.native-trace.json")
+NATIVE_H_ROOT_EXPORT_DOC = load_json(HERE / "case-h.root.session-export.json")
+NATIVE_H_VEYRA_EXPORT_DOC = load_json(HERE / "case-h.veyra.session-export.json")
 CASES = {case["id"]: case for case in CASES_DOC["cases"]}
 TRACES = {trace["TRACE_ID"]: trace for trace in TRACES_DOC["traces"]}
 
@@ -695,10 +704,7 @@ class NativeCaseEMutationTests(unittest.TestCase):
             BASELINE_DOC["phase11_e_reconciliation"]["pending_fresh_root_labels"],
         )
         self.assertEqual(
-            [
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
-            ],
+            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
             BASELINE_DOC["live_qualification"]["pending_labels"],
         )
         self.assertEqual("NOT_EXERCISED", BASELINE_DOC["argus_same_session_followup_runtime_coverage"]["status"])
@@ -812,10 +818,7 @@ class NativeCaseE2MutationTests(unittest.TestCase):
         self.assertFalse(NATIVE_E2_CHILD_EXPORT_DOC["projection_and_redaction"]["raw_export_persisted"])
         self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
         self.assertEqual(
-            [
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
-            ],
+            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
             BASELINE_DOC["live_qualification"]["pending_labels"],
         )
         self.assertEqual(
@@ -943,10 +946,7 @@ class NativeCaseFMutationTests(unittest.TestCase):
         self.assertNotIn("EVENTS", NATIVE_F_DOC)
         self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
         self.assertEqual(
-            [
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
-                "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
-            ],
+            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
             BASELINE_DOC["live_qualification"]["pending_labels"],
         )
         self.assertEqual("FAIL", BASELINE_DOC["phase11_e_reconciliation"]["acceptance_status"])
@@ -1151,7 +1151,7 @@ class NativeCaseGMutationTests(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT", "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
+            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
             BASELINE_DOC["live_qualification"]["pending_labels"],
         )
         for prior in ("phase11_b3_reconciliation", "phase11_c_reconciliation", "phase11_d_reconciliation", "phase11_e_reconciliation", "phase11_e2_reconciliation", "phase11_f_reconciliation"):
@@ -1360,6 +1360,117 @@ class NativeCaseGMutationTests(unittest.TestCase):
             validate_native_case_g_capture(
                 misleading_reconciliation, CASES["G"], NATIVE_G_ROOT_EXPORT_DOC,
                 NATIVE_G_VEYRA_EXPORT_DOC, NATIVE_G_THALES_EXPORT_DOC,
+            ),
+        )
+
+
+class NativeCaseHMutationTests(unittest.TestCase):
+    def test_case_h_reconciles_bounded_native_route_and_keeps_phase11_partial(self) -> None:
+        self.assertEqual(CASE_H_ROOT_SESSION_ID, NATIVE_H_DOC["ROOT_SESSION_ID"])
+        self.assertEqual(CASE_H_EXPECTED_ROUTE, NATIVE_H_DOC["ACTUAL_ROUTE"])
+        self.assertEqual(CASE_H_VEYRA_SESSION_ID, NATIVE_H_DOC["CHILD_SESSIONS"][0]["NATIVE_SESSION_ID"])
+        self.assertEqual(
+            {"opencode.jsonc", ".opencode/agents/kael.md"},
+            set(NATIVE_H_VEYRA_EXPORT_DOC["source_evidence_scope"]["paths"]),
+        )
+        self.assertEqual(CASE_H_CLASSIFICATIONS, NATIVE_H_DOC["CLASSIFICATIONS"])
+        self.assertEqual("LEAN", NATIVE_H_DOC["EFFICIENCY"]["CLASSIFICATION"])
+        self.assertIsNone(NATIVE_H_DOC["UNKNOWN_METRICS"]["LOCAL_RUNTIME_VERSION"])
+        self.assertIsNone(NATIVE_H_DOC["UNKNOWN_METRICS"]["MAX_SIMULTANEOUS_CHILDREN"])
+        self.assertEqual("NOT_OBSERVABLE", NATIVE_H_DOC["UNKNOWN_METRICS"]["NATIVE_PERMISSION_UI"])
+        self.assertEqual("NOT_OBSERVABLE", NATIVE_H_DOC["UNKNOWN_METRICS"]["NATIVE_PERMISSION_DECISION"])
+        self.assertEqual(
+            [],
+            validate_native_case_h_capture(
+                NATIVE_H_DOC, CASES["H"], NATIVE_H_ROOT_EXPORT_DOC, NATIVE_H_VEYRA_EXPORT_DOC
+            ),
+        )
+        self.assertEqual(
+            [],
+            validate_phase11_h_reconciliation(
+                BASELINE_DOC, CASES_DOC, NATIVE_H_DOC, NATIVE_H_ROOT_EXPORT_DOC, NATIVE_H_VEYRA_EXPORT_DOC
+            ),
+        )
+        self.assertEqual(
+            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
+            BASELINE_DOC["live_qualification"]["pending_labels"],
+        )
+        self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
+        self.assertEqual(
+            ["HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT", "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
+            BASELINE_DOC["phase11_g_reconciliation"]["pending_fresh_root_labels"],
+        )
+        for prior in (
+            "phase11_b3_reconciliation", "phase11_c_reconciliation", "phase11_d_reconciliation",
+            "phase11_e_reconciliation", "phase11_e2_reconciliation", "phase11_f_reconciliation",
+        ):
+            self.assertIn("HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT", BASELINE_DOC[prior]["pending_fresh_root_labels"])
+
+    def test_case_h_rejects_scope_classification_and_parentage_mutations(self) -> None:
+        overbroad_scope = copy.deepcopy(NATIVE_H_VEYRA_EXPORT_DOC)
+        overbroad_scope["source_evidence_scope"]["paths"].append("unassigned.txt")
+        self.assertIn(
+            "NATIVE_H_SOURCE_SCOPE_OVERBROAD_OR_PROJECTION_MISMATCH",
+            validate_native_case_h_capture(
+                NATIVE_H_DOC, CASES["H"], NATIVE_H_ROOT_EXPORT_DOC, overbroad_scope
+            ),
+        )
+
+        invented_product_bug = copy.deepcopy(NATIVE_H_DOC)
+        invented_product_bug["THIRD_PARTY_CLASSIFICATION"]["PRODUCT_CODE_BUG_ESTABLISHED"] = True
+        self.assertIn(
+            "NATIVE_H_BOUNDED_FINDING_OR_SAFE_RESOLUTION_MISMATCH",
+            validate_native_case_h_capture(
+                invented_product_bug, CASES["H"], NATIVE_H_ROOT_EXPORT_DOC, NATIVE_H_VEYRA_EXPORT_DOC
+            ),
+        )
+
+        wrong_parent = copy.deepcopy(NATIVE_H_VEYRA_EXPORT_DOC)
+        wrong_parent["session"]["parent_id"] = "ses_fabricated_parent"
+        self.assertIn(
+            "NATIVE_H_ROOT_CHILD_METADATA_OR_PARENT_JOIN_MISMATCH",
+            validate_native_case_h_capture(
+                NATIVE_H_DOC, CASES["H"], NATIVE_H_ROOT_EXPORT_DOC, wrong_parent
+            ),
+        )
+
+        rewritten_history = copy.deepcopy(BASELINE_DOC)
+        rewritten_history["phase11_g_reconciliation"]["pending_fresh_root_labels"].remove(
+            "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT"
+        )
+        self.assertIn(
+            "CASE_H_HISTORICAL_PENDING_SNAPSHOT_REWRITTEN:phase11_g_reconciliation",
+            validate_phase11_h_reconciliation(
+                rewritten_history, CASES_DOC, NATIVE_H_DOC, NATIVE_H_ROOT_EXPORT_DOC, NATIVE_H_VEYRA_EXPORT_DOC
+            ),
+        )
+
+    def test_case_h_rejects_retry_patch_role_completion_and_runtime_overclaims(self) -> None:
+        mutations = (
+            ("NATIVE_H_BOUNDED_FINDING_OR_SAFE_RESOLUTION_MISMATCH", "NO_BLIND_RETRY", "BLIND_RETRY_SAFE", True),
+            ("NATIVE_H_BOUNDED_FINDING_OR_SAFE_RESOLUTION_MISMATCH", "NO_UNAPPROVED_PATCH", "UPSTREAM_PATCH_ATTEMPTED", True),
+            ("NATIVE_H_BOUNDED_FINDING_OR_SAFE_RESOLUTION_MISMATCH", "NO_VENDOR_OR_FORK", "VENDOR_OR_FORK_ATTEMPTED", True),
+            ("NATIVE_H_COMPLETION_PROVENANCE_OR_ACCEPTANCE_MISMATCH", "UNKNOWN_METRICS", "LOCAL_RUNTIME_VERSION", "1.2.3"),
+            ("NATIVE_H_BOUNDED_FINDING_OR_SAFE_RESOLUTION_MISMATCH", "CONSULTATION_COUNTS", "argus", 1),
+            ("NATIVE_H_COMPLETION_PROVENANCE_OR_ACCEPTANCE_MISMATCH", "COMPLETION_GATE", "RESULT_IDS", ["fabricated"]),
+        )
+        for error, section, field, value in mutations:
+            with self.subTest(section=section, field=field):
+                altered = copy.deepcopy(NATIVE_H_DOC)
+                altered[section][field] = value
+                self.assertIn(
+                    error,
+                    validate_native_case_h_capture(
+                        altered, CASES["H"], NATIVE_H_ROOT_EXPORT_DOC, NATIVE_H_VEYRA_EXPORT_DOC
+                    ),
+                )
+
+        raw_text = copy.deepcopy(NATIVE_H_ROOT_EXPORT_DOC)
+        raw_text["messages"][0]["text"] = "raw prompt must not be persisted"
+        self.assertIn(
+            "NATIVE_H_RAW_CONTENT_OR_TIMING_PERSISTED",
+            validate_native_case_h_capture(
+                NATIVE_H_DOC, CASES["H"], raw_text, NATIVE_H_VEYRA_EXPORT_DOC
             ),
         )
 

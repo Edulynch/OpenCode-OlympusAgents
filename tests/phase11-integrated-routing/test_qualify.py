@@ -34,6 +34,7 @@ from qualify import (
     CASE_K_ROOTS,
     EIGHT_SPECIALISTS,
     HARD_BUDGET,
+    PHASE11_CLOSURE_EXPECTATION,
     load_json,
     run_static_baseline_checks,
     validate_case_b_reconciliation,
@@ -583,7 +584,7 @@ class NativeCaseDMutationTests(unittest.TestCase):
         self.assertEqual("NOT_EXERCISED", NATIVE_D_DOC["ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE"])
         self.assertNotIn("HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT", BASELINE_DOC["live_qualification"]["pending_labels"])
         self.assertIn("HUMAN_ACTION_REQUIRED PHASE11_CASE_D_FRESH_ROOT", BASELINE_DOC["phase11_c_reconciliation"]["pending_fresh_root_labels"])
-        self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
+        self.assertEqual("SHIPPED", BASELINE_DOC["live_qualification"]["overall_status"])
 
     def test_case_d_native_capture_rejects_wrong_identity_parent_role_and_order(self) -> None:
         wrong_parent = copy.deepcopy(NATIVE_D_DOC)
@@ -702,7 +703,7 @@ class NativeCaseEMutationTests(unittest.TestCase):
         self.assertIn("PHASE11_CASE_E_FRESH_ROOT", NATIVE_E_EXPORT_DOC["messages"][0]["text"])
         self.assertNotIn("[redacted:text:", NATIVE_E_EXPORT_DOC["messages"][0]["text"])
         self.assertNotIn("reasoning", [part["type"] for part in NATIVE_E_EXPORT_DOC["messages"][1]["content"]])
-        self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
+        self.assertEqual("SHIPPED", BASELINE_DOC["live_qualification"]["overall_status"])
         self.assertEqual(
             CASE_E1_PENDING_LABELS,
             BASELINE_DOC["phase11_e_reconciliation"]["pending_fresh_root_labels"],
@@ -782,11 +783,11 @@ class NativeCaseEMutationTests(unittest.TestCase):
             validate_phase11_e_reconciliation(overclaimed, CASES_DOC, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC),
         )
 
-        shipped = copy.deepcopy(BASELINE_DOC)
-        shipped["live_qualification"]["overall_status"] = "SHIPPED"
+        stale_partial = copy.deepcopy(BASELINE_DOC)
+        stale_partial["live_qualification"]["overall_status"] = "PARTIAL"
         self.assertIn(
             "CURRENT_PHASE11_PENDING_STATE_MISMATCH",
-            validate_phase11_e_reconciliation(shipped, CASES_DOC, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC),
+            validate_phase11_e_reconciliation(stale_partial, CASES_DOC, NATIVE_E_DOC, NATIVE_E_EXPORT_DOC),
         )
 
 
@@ -816,7 +817,7 @@ class NativeCaseE2MutationTests(unittest.TestCase):
         self.assertEqual(0, NATIVE_E2_CHILD_EXPORT_DOC["projection_and_redaction"]["reasoning_blocks_removed"])
         self.assertFalse(NATIVE_E2_ROOT_EXPORT_DOC["projection_and_redaction"]["raw_export_persisted"])
         self.assertFalse(NATIVE_E2_CHILD_EXPORT_DOC["projection_and_redaction"]["raw_export_persisted"])
-        self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
+        self.assertEqual("SHIPPED", BASELINE_DOC["live_qualification"]["overall_status"])
         self.assertEqual(
             CASE_E2_PENDING_LABELS,
             BASELINE_DOC["phase11_e2_reconciliation"]["pending_fresh_root_labels"],
@@ -891,7 +892,7 @@ class NativeCaseE2MutationTests(unittest.TestCase):
             ),
         )
 
-    def test_case_e2_reconciliation_cannot_promote_e1_or_ship_phase11(self) -> None:
+    def test_case_e2_reconciliation_cannot_promote_e1_or_regress_current_phase_status(self) -> None:
         promoted_e1 = copy.deepcopy(BASELINE_DOC)
         promoted_e1["phase11_e_reconciliation"]["acceptance_status"] = "PASS"
         self.assertIn(
@@ -905,12 +906,12 @@ class NativeCaseE2MutationTests(unittest.TestCase):
             ),
         )
 
-        shipped = copy.deepcopy(BASELINE_DOC)
-        shipped["live_qualification"]["overall_status"] = "SHIPPED"
+        stale_partial = copy.deepcopy(BASELINE_DOC)
+        stale_partial["live_qualification"]["overall_status"] = "PARTIAL"
         self.assertIn(
             "CURRENT_PHASE11_E2_PENDING_STATE_MISMATCH",
             validate_phase11_e2_reconciliation(
-                shipped,
+                stale_partial,
                 CASES_DOC,
                 NATIVE_E2_DOC,
                 NATIVE_E2_ROOT_EXPORT_DOC,
@@ -944,7 +945,7 @@ class NativeCaseFMutationTests(unittest.TestCase):
             [child.get("NATIVE_SESSION_ID") for child in NATIVE_F_DOC["CHILD_SESSIONS"]],
         )
         self.assertNotIn("EVENTS", NATIVE_F_DOC)
-        self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
+        self.assertEqual("SHIPPED", BASELINE_DOC["live_qualification"]["overall_status"])
         self.assertEqual(
             CASE_F_PENDING_LABELS,
             BASELINE_DOC["phase11_f_reconciliation"]["pending_fresh_root_labels"],
@@ -1046,7 +1047,7 @@ class NativeCaseFMutationTests(unittest.TestCase):
             validate_native_case_f_capture(fabricated_timing, CASES["F"], NATIVE_F_EXPORT_DOC),
         )
 
-    def test_case_f_rejects_terminal_export_drift_and_current_status_promotion(self) -> None:
+    def test_case_f_rejects_terminal_export_drift_and_current_status_regression(self) -> None:
         changed_terminal = copy.deepcopy(NATIVE_F_EXPORT_DOC)
         text = changed_terminal["messages"][1]["content"][0]["text"]
         changed_terminal["messages"][1]["content"][0]["text"] = text.replace(
@@ -1094,11 +1095,11 @@ class NativeCaseFMutationTests(unittest.TestCase):
             validate_phase11_f_reconciliation(stale_pending, CASES_DOC, NATIVE_F_DOC, NATIVE_F_EXPORT_DOC),
         )
 
-        shipped = copy.deepcopy(BASELINE_DOC)
-        shipped["live_qualification"]["overall_status"] = "SHIPPED"
+        stale_partial = copy.deepcopy(BASELINE_DOC)
+        stale_partial["live_qualification"]["overall_status"] = "PARTIAL"
         self.assertIn(
             "CURRENT_PHASE11_F_PENDING_STATE_MISMATCH",
-            validate_phase11_f_reconciliation(shipped, CASES_DOC, NATIVE_F_DOC, NATIVE_F_EXPORT_DOC),
+            validate_phase11_f_reconciliation(stale_partial, CASES_DOC, NATIVE_F_DOC, NATIVE_F_EXPORT_DOC),
         )
 
         rewritten_e1 = copy.deepcopy(BASELINE_DOC)
@@ -1395,7 +1396,7 @@ class NativeCaseHMutationTests(unittest.TestCase):
             CASE_H_PENDING_LABELS,
             BASELINE_DOC["phase11_h_reconciliation"]["pending_fresh_root_labels"],
         )
-        self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
+        self.assertEqual("SHIPPED", BASELINE_DOC["live_qualification"]["overall_status"])
         self.assertEqual(
             ["HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT", "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"],
             BASELINE_DOC["phase11_g_reconciliation"]["pending_fresh_root_labels"],
@@ -1535,8 +1536,26 @@ class NativeCaseKMutationTests(unittest.TestCase):
         self.assertTrue(NATIVE_K_DOC["EVIDENCE_PROVENANCE"]["USER_REPORTED"])
         self.assertFalse(NATIVE_K_DOC["EVIDENCE_PROVENANCE"]["RUNTIME_RECAPTURE_PERFORMED"])
         self.assertEqual([], BASELINE_DOC["live_qualification"]["pending_labels"])
-        self.assertEqual("PARTIAL", BASELINE_DOC["live_qualification"]["overall_status"])
+        self.assertEqual("SHIPPED", BASELINE_DOC["live_qualification"]["overall_status"])
+        self.assertEqual(PHASE11_CLOSURE_EXPECTATION, BASELINE_DOC["live_qualification"]["closure"])
+        self.assertEqual("SHIPPED", NATIVE_K_DOC["PHASE11_STATUS"])
+        self.assertEqual("ACCEPT", NATIVE_K_DOC["COMPARISON"]["CLOSURE_REVIEW_RESULT"])
         self.assertEqual("NOT_EXERCISED", BASELINE_DOC["argus_same_session_followup_runtime_coverage"]["status"])
+
+    def test_case_k_rejects_missing_or_weakened_final_closure_record(self) -> None:
+        weakened = copy.deepcopy(BASELINE_DOC)
+        weakened["live_qualification"]["closure"]["VERA_CLOSURE_REVIEW"]["RESULT"] = "RETRY"
+        self.assertIn(
+            "CURRENT_PHASE11_K_CLOSURE_OR_PENDING_STATE_MISMATCH",
+            validate_phase11_k_reconciliation(weakened, CASES_DOC, NATIVE_K_DOC),
+        )
+
+        stale_status = copy.deepcopy(BASELINE_DOC)
+        stale_status["live_qualification"]["overall_status"] = "PARTIAL"
+        self.assertIn(
+            "CURRENT_PHASE11_K_CLOSURE_OR_PENDING_STATE_MISMATCH",
+            validate_phase11_k_reconciliation(stale_status, CASES_DOC, NATIVE_K_DOC),
+        )
 
     def test_case_k_native_mutations_reject_identity_scope_span_and_completion_drift(self) -> None:
         wrong_writer = copy.deepcopy(NATIVE_K_DOC)

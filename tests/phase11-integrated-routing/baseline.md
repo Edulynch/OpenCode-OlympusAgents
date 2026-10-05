@@ -752,3 +752,54 @@ existing targets were tracked, while the new native artifact did not yet exist.
 
 Independent Nox validation is pending. This writer did not run the qualifier,
 unit tests, or `git diff --check`.
+
+## Final Phase 11 integrated-routing closure — `P11-CLOSURE-ARTIFACTS`
+
+**`PHASE_11_INTEGRATED_ROUTING: SHIPPED`.** Vera's independent closure review
+(`ses_ef205f658ffeSvOF8e84tEEBqA`) returned **ACCEPT**, with no blocking or
+material findings. The integrated-routing goals are satisfied collectively and
+there are no pending native cases. This is not a claim that every possible
+runtime path was exercised or that guided, historical, synthetic, or
+non-exercised evidence is native PASS. The K reconciliation's current aggregate
+status and the qualifier's current-final-status assertions now reflect this
+review; earlier per-case and pending-state snapshots above remain historical.
+
+- Case I remains guided `PARTIAL`: the useful optimization baseline is missing.
+  This limits optimization evaluation quality, not routing behavior; no routing
+  defect is demonstrated. `CASE_I_PHASE11_CLOSURE_BLOCKER: NO`, and
+  `CASE_I_PARTIAL: NON_BLOCKING_FOR_PHASE11_CLOSURE`.
+- `ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED` and
+  `THALES_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED`. Both are
+  closure blockers `NO`; `FOLLOWUP_RUNTIME_COVERAGE:
+  NON_BLOCKING_NOT_EXERCISED`. The deterministic same-session iterative
+  invariant remains protected and conditional. D/G do not justify additional
+  evidence rounds.
+- Case E1 remains permanently `NATIVE_EXECUTED_ROUTING_FAIL`; E2 is `PASS`
+  `FRESH_ROOT_NATIVE`, and the routing defect is
+  `CLOSED — VERIFIED_BY_E2_FRESH_ROOT_NATIVE`. E2 does not rewrite the E1
+  observation.
+- Case K remains functionally equivalent across profiles: FAST recorded four
+  useful independent Kovan writers and four overlapping native message spans;
+  NORMAL recorded one writer and one overlapping message span. No scheduler
+  implementation guarantee or measured wall-clock speedup is claimed. The
+  synthetic NORMAL two-writer trace remains illustrative only.
+- A guided/recovered PASS; B/C/D/F/G/H fresh-root-native PASS; J
+  guided/recovered PASS; and L's recovered negative automatic-Aegis PASS remain
+  unchanged in their original evidence classes.
+- Separate follow-ups remain OPEN, not fixed by this closure: #1 upstream result
+  correlation; #7 global runtime discovery; #11 qualification simplification;
+  and #12 monolithic writer shell calls after Phase 11.
+
+Static artifact validation was independently reported by Nox
+(`ses_ef1f3ea4fffeEDitaoo0ggxz60`):
+
+- `uv run --python 3.11 python tests/phase11-integrated-routing/qualify.py` —
+  PASS, exit 0; `PHASE11_ARTIFACTS: PASS` and
+  `PHASE11_QUALIFICATION: SHIPPED`.
+- `uv run --python 3.11 python -m unittest discover -s tests/phase11-integrated-routing -p "test_*.py" -v`
+  — PASS, exit 0; 82 tests OK.
+- `git diff --check` — PASS, exit 0.
+
+These results validate the recorded artifacts and their consistency; they are
+not a runtime qualification or a claim that all possible runtime paths were
+exercised.

@@ -1,4 +1,4 @@
-# Phase 11 — Integrated Routing Qualification (PARTIAL)
+# Phase 11 — Integrated Routing Qualification (SHIPPED)
 
 This is a focused evidence validator, not a routing/runtime implementation. The
 checked-in A–L traces are `SYNTHETIC_TRACE`; their local `SYN-*` references and
@@ -26,6 +26,16 @@ acceptance outcomes; E1 remains an observed historical routing failure and is
 not rewritten as a pass. None of these native captures is inserted into the
 synthetic trace corpus or reconstructed as a synthetic lifecycle.
 
+## Final closure decision
+
+`PHASE_11_INTEGRATED_ROUTING: SHIPPED` follows independent Vera closure review
+`ACCEPT` (session `ses_ef205f658ffeSvOF8e84tEEBqA`): no blocking or material
+findings. Integrated-routing goals are satisfied collectively with no current
+native case pending; this does not claim every possible runtime path was
+exercised, nor promote guided, historical, synthetic, or non-exercised evidence
+to native PASS. The recorded closure rationale and residual coverage are in
+`baseline.md` and `baseline.json`.
+
 ## Automatic local commands
 
 From the repository root, using the pinned Python 3.11 interpreter and standard
@@ -47,9 +57,10 @@ export joins, static fixture result, evidence-before-diagnosis order, and
 conditional Thales follow-up semantics, the bounded H native reconciliation,
 both K native profiles and their comparison (including message-span-only
 overlap and flexible NORMAL writer-count semantics), and presence-only gate markers. It reports
-`PHASE11_ARTIFACTS: PASS` when those artifacts are sound while overall
-qualification remains `PHASE11_QUALIFICATION: PARTIAL` pending closure review
-and the separate open review items. The second command
+`PHASE11_ARTIFACTS: PASS` when those artifacts are sound; after the recorded
+independent closure review it reports `PHASE11_QUALIFICATION: SHIPPED`. This
+aggregate status does not authenticate source exports or imply that all runtime
+paths were exercised. The second command
 applies mutations to valid authored traces and bounded native captures, and
 requires the prohibited variants to fail. The third command currently runs only the feature fixture's green
 pre-feature compatibility tests. The future feature work must add acceptance
@@ -630,13 +641,31 @@ are marker-presence checks only.
 ## Current gate
 
 The A–L matrix, unchanged synthetic trace corpus, expanded mutation coverage,
-and B3/C/D/E1/E2/F/G/H/K native records are present. Case B1 remains a fixture
-defect with Question Barrier PASS; B2 runtime behavior remains PASS but
-isolation/acceptance remains PARTIAL; B3, C, D, E2, F, G, and H fresh-root native
-acceptance and K FAST/NORMAL/comparison are PASS. E1 remains a historical
-Talos-routing failure, while E2 closes current Case E acceptance. No current
-fresh-root native case is pending. D did
-not exercise Argus follow-up runtime
-coverage, which remains a separate open review item. A/I/J/L observations
-remain guided/history-only, with no rerun requested. The overall phase is **IN
-VALIDATION / PARTIAL**, not SHIPPED.
+and B3/C/D/E1/E2/F/G/H/K native records are present. The independently accepted
+closure records `PHASE_11_INTEGRATED_ROUTING: SHIPPED`; no current native case is
+pending, and the integrated-routing goals are satisfied collectively without
+claiming exhaustive runtime-path coverage. Case B1 remains a fixture defect
+with Question Barrier PASS; B2 runtime behavior remains PASS but its
+isolation/acceptance remains PARTIAL. B3, C, D, E2, F, G, H, and K FAST/NORMAL/
+comparison retain their fresh-root native PASS observations. E1 remains
+permanently `NATIVE_EXECUTED_ROUTING_FAIL`; E2 is `PASS FRESH_ROOT_NATIVE` and
+closes the routing defect. No historical E1 evidence is rewritten.
+
+Case I remains guided `PARTIAL` because the useful optimization baseline is
+missing; this is a non-blocking optimization-evaluation-quality limitation, not
+a demonstrated routing defect. Argus and Thales same-session follow-up runtime
+coverage both remain `NOT_EXERCISED`, with no Phase 11 closure blocker. Their
+iterative invariant remains deterministic, protected, and conditional; no
+additional D/G evidence rounds are justified. A guided/recovered PASS, J
+guided/recovered PASS, and L's recovered negative automatic-Aegis PASS remain
+unchanged and are not fresh-root-native evidence.
+
+Case K records four FAST independent useful Kovan writers and four overlapping
+native message spans, versus one NORMAL writer and one overlapping span; the
+functional parity result is PASS. These observations establish no scheduler
+implementation guarantee or measured wall-clock speedup. The synthetic
+NORMAL-two-writer example remains illustrative only.
+
+Separate follow-ups remain OPEN and are not silently marked fixed: #1 upstream
+result correlation, #7 global runtime discovery, #11 qualification
+simplification, and #12 monolithic writer shell calls (after Phase 11).

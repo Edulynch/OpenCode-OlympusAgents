@@ -252,6 +252,7 @@ CASE_E1_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
 ]
 CURRENT_PHASE11_PENDING_LABELS: list[str] = []
+CURRENT_PHASE11_STATUS = "SHIPPED"
 CASE_G_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
@@ -320,6 +321,57 @@ CASE_K_CLASSIFICATIONS = {
     "NORMAL_FRESH_ROOT_NATIVE": "PASS",
     "FAST_VS_NORMAL": "PASS",
     "COMPLETION_OWNERSHIP": "PASS",
+}
+PHASE11_CLOSURE_EXPECTATION = {
+    "PHASE_11_INTEGRATED_ROUTING": "SHIPPED",
+    "NO_PENDING_NATIVE_CASES": True,
+    "INTEGRATED_ROUTING_GOALS": "SATISFIED_COLLECTIVELY_WITHOUT_ALL_POSSIBLE_RUNTIME_PATHS_EXERCISED",
+    "VERA_CLOSURE_REVIEW": {
+        "RESULT": "ACCEPT",
+        "SESSION_ID": "ses_ef205f658ffeSvOF8e84tEEBqA",
+        "RATIONALE": "Independent review found no blocking or material findings; guided/history evidence and unexercised optional runtime paths remain honestly bounded and non-blocking for this integrated-routing closure.",
+    },
+    "CASE_I_GUIDED_RESULT": "PARTIAL",
+    "CASE_I_PHASE11_CLOSURE_BLOCKER": "NO",
+    "CASE_I_PARTIAL": "NON_BLOCKING_FOR_PHASE11_CLOSURE",
+    "CASE_I_NOTE": "The useful baseline is missing, limiting optimization evaluation quality; no routing defect is demonstrated.",
+    "ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE": "NOT_EXERCISED",
+    "ARGUS_FOLLOWUP_CLOSURE_BLOCKER": "NO",
+    "THALES_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE": "NOT_EXERCISED",
+    "THALES_FOLLOWUP_CLOSURE_BLOCKER": "NO",
+    "FOLLOWUP_RUNTIME_COVERAGE": "NON_BLOCKING_NOT_EXERCISED",
+    "SAME_SESSION_ITERATIVE_INVARIANT": "DETERMINISTIC_PROTECTED_AND_CONDITIONAL",
+    "ADDITIONAL_D_G_EVIDENCE_ROUNDS": "NOT_JUSTIFIED",
+    "E1_RESULT": "NATIVE_EXECUTED_ROUTING_FAIL",
+    "E1_STATUS": "PERMANENT_HISTORICAL_FAILURE",
+    "E2_RESULT": "PASS",
+    "E2_EVIDENCE_CLASS": "FRESH_ROOT_NATIVE",
+    "ROUTING_DEFECT": "CLOSED_VERIFIED_BY_E2",
+    "K_FAST_USEFUL_INDEPENDENT_KOVAN_WRITERS": 4,
+    "K_FAST_NATIVE_MESSAGE_SPAN_MAX": 4,
+    "K_NORMAL_USEFUL_INDEPENDENT_KOVAN_WRITERS": 1,
+    "K_NORMAL_NATIVE_MESSAGE_SPAN_MAX": 1,
+    "K_FUNCTIONAL_PARITY": "PASS",
+    "K_SCHEDULER_IMPLEMENTATION_GUARANTEE": "NOT_ESTABLISHED",
+    "K_WALL_CLOCK_SPEEDUP": "NOT_MEASURED",
+    "K_SYNTHETIC_NORMAL_TWO_WRITER_TRACE": "ILLUSTRATIVE_ONLY",
+    "RETAINED_ACCEPTANCE": {
+        "A_GUIDED_RECOVERED": "PASS",
+        "B_FRESH_ROOT_NATIVE": "PASS",
+        "C_FRESH_ROOT_NATIVE": "PASS",
+        "D_FRESH_ROOT_NATIVE": "PASS",
+        "F_FRESH_ROOT_NATIVE": "PASS",
+        "G_FRESH_ROOT_NATIVE": "PASS",
+        "H_FRESH_ROOT_NATIVE": "PASS",
+        "J_GUIDED_RECOVERED": "PASS",
+        "L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERED": "PASS",
+    },
+    "OPEN_FOLLOWUPS": [
+        {"ID": "#1", "DESCRIPTION": "upstream result correlation", "STATUS": "OPEN"},
+        {"ID": "#7", "DESCRIPTION": "global runtime discovery", "STATUS": "OPEN"},
+        {"ID": "#11", "DESCRIPTION": "qualification simplification", "STATUS": "OPEN"},
+        {"ID": "#12", "DESCRIPTION": "monolithic writer shell calls after Phase 11", "STATUS": "OPEN"},
+    ],
 }
 CASE_D_ROOT_SESSION_ID = "ses_ef8c726b7ffeqWgvWlpg0NcU1Q"
 CASE_D_ROOT_DIRECTORY = "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-d"
@@ -3222,7 +3274,7 @@ def validate_phase11_d_reconciliation(
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
         or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
         or current.get("native_results_claimed") is not True
-        or current.get("overall_status") != "PARTIAL"
+        or current.get("overall_status") != CURRENT_PHASE11_STATUS
     ):
         errors.append("CURRENT_PHASE11_PENDING_STATE_MISMATCH")
     action_rows = [
@@ -3552,7 +3604,7 @@ def validate_phase11_e_reconciliation(
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
         or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
         or current.get("native_results_claimed") is not True
-        or current.get("overall_status") != "PARTIAL"
+        or current.get("overall_status") != CURRENT_PHASE11_STATUS
     ):
         errors.append("CURRENT_PHASE11_PENDING_STATE_MISMATCH")
     if baseline.get("argus_same_session_followup_runtime_coverage") != CASE_D_PENDING_FOLLOWUP_COVERAGE:
@@ -4223,7 +4275,7 @@ def validate_phase11_e2_reconciliation(
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
         or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
         or current.get("native_results_claimed") is not True
-        or current.get("overall_status") != "PARTIAL"
+        or current.get("overall_status") != CURRENT_PHASE11_STATUS
         or "PH11-E2-CLOSURE" not in current.get("current_pending_state_source", "")
     ):
         errors.append("CURRENT_PHASE11_E2_PENDING_STATE_MISMATCH")
@@ -4816,7 +4868,7 @@ def validate_phase11_f_reconciliation(
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
         or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
         or current.get("native_results_claimed") is not True
-        or current.get("overall_status") != "PARTIAL"
+        or current.get("overall_status") != CURRENT_PHASE11_STATUS
         or "phase11-f-corpus-write" not in current.get("current_pending_state_source", "")
     ):
         errors.append("CURRENT_PHASE11_F_PENDING_STATE_MISMATCH")
@@ -5535,7 +5587,7 @@ def validate_phase11_g_reconciliation(
     if (
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
         or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
-        or current.get("overall_status") != "PARTIAL"
+        or current.get("overall_status") != CURRENT_PHASE11_STATUS
         or "P11-G-reconcile-write" not in current.get("current_pending_state_source", "")
     ):
         errors.append("CURRENT_PHASE11_G_PENDING_STATE_MISMATCH")
@@ -5913,7 +5965,7 @@ def validate_phase11_h_reconciliation(
     if (
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
         or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
-        or current.get("overall_status") != "PARTIAL"
+        or current.get("overall_status") != CURRENT_PHASE11_STATUS
         or current.get("native_results_claimed") is not True
         or "PHASE11-H-reconcile-write" not in current.get("current_pending_state_source", "")
     ):
@@ -6286,12 +6338,13 @@ def validate_native_case_k_capture(trace: dict[str, Any], case: dict[str, Any]) 
         or comparison.get("MAX_OVERLAP_BASIS") != "Native message-span overlap only; not scheduler, CPU/process parallelism, or wall-clock speedup."
         or comparison.get("WALL_CLOCK_SPEEDUP") is not None
         or comparison.get("CURRENT_REMAINING_NATIVE_CASES") != []
-        or comparison.get("PHASE11_STATUS") != "PARTIAL"
-        or comparison.get("SHIPPED") is not False
-        or comparison.get("CLOSURE_REVIEW_READY") is not True
+        or comparison.get("PHASE11_STATUS") != CURRENT_PHASE11_STATUS
+        or comparison.get("SHIPPED") is not True
+        or comparison.get("CLOSURE_REVIEW_READY") is not False
+        or comparison.get("CLOSURE_REVIEW_RESULT") != "ACCEPT"
         or trace.get("CLASSIFICATIONS") != CASE_K_CLASSIFICATIONS
         or trace.get("PENDING_FRESH_ROOT_LABELS") != []
-        or trace.get("PHASE11_STATUS") != "PARTIAL"
+        or trace.get("PHASE11_STATUS") != CURRENT_PHASE11_STATUS
         or trace.get("RECONCILIATION_FILES_CHANGED") != [
             "tests/phase11-integrated-routing/RUNME.md",
             "tests/phase11-integrated-routing/baseline.json",
@@ -6309,7 +6362,7 @@ def validate_native_case_k_capture(trace: dict[str, Any], case: dict[str, Any]) 
 def validate_phase11_k_reconciliation(
     baseline: dict[str, Any], cases_doc: dict[str, Any], trace: dict[str, Any]
 ) -> list[str]:
-    """Bind both K profiles to current pending state while preserving all historical snapshots."""
+    """Bind both K profiles to the accepted current closure without rewriting historical snapshots."""
     cases = {case.get("id"): case for case in cases_doc.get("cases", []) if isinstance(case, dict)}
     errors = validate_native_case_k_capture(trace, cases.get("K", {}))
     report = baseline.get("phase11_k_reconciliation")
@@ -6336,9 +6389,10 @@ def validate_phase11_k_reconciliation(
         "normal_max_message_span_overlap": 1,
         "classifications": CASE_K_CLASSIFICATIONS,
         "remaining_native_cases": [],
-        "phase11_status": "PARTIAL",
-        "closure_review_ready": True,
-        "shipped": False,
+        "phase11_status": CURRENT_PHASE11_STATUS,
+        "closure_review_ready": False,
+        "closure_review_status": "ACCEPT",
+        "shipped": True,
         "pending_fresh_root_labels": [],
     }
     for key, expected in expected_report.items():
@@ -6349,11 +6403,12 @@ def validate_phase11_k_reconciliation(
     if (
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
         or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
-        or current.get("overall_status") != "PARTIAL"
+        or current.get("overall_status") != CURRENT_PHASE11_STATUS
         or current.get("native_results_claimed") is not True
         or "p11-k-reconcile-write" not in current.get("current_pending_state_source", "")
+        or current.get("closure") != PHASE11_CLOSURE_EXPECTATION
     ):
-        errors.append("CURRENT_PHASE11_K_PENDING_STATE_MISMATCH")
+        errors.append("CURRENT_PHASE11_K_CLOSURE_OR_PENDING_STATE_MISMATCH")
     for name in (
         "phase11_b3_reconciliation", "phase11_c_reconciliation", "phase11_d_reconciliation",
         "phase11_e_reconciliation", "phase11_e2_reconciliation", "phase11_f_reconciliation",
@@ -6492,9 +6547,9 @@ def main() -> int:
         print("PHASE11_QUALIFICATION: FAIL (bounded policy marker check)")
         return 1
     print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, B3/C/D/E2/F/G/H/K native reconciliations, and E1 historical failure are internally consistent; validation does not authenticate source exports)")
-    print("ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED (separate optional evidence-requesting scenario remains open for final coverage review; not a Case D blocker)")
-    print("PENDING_CASES: " + (", ".join(pending_labels) if pending_labels else "NONE") + "; no current fresh-root native case remains. K FAST/NORMAL and their comparison are accepted; A/I/J/L recovered reports remain guided/history only and I remains PARTIAL.")
-    print("PHASE11_QUALIFICATION: PARTIAL (B3, C, D, E2, F, G, H, K FAST and K NORMAL accepted; E1 failure retained as history; separate closure review remains; not SHIPPED)")
+    print("ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED; THALES_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED (both non-blocking, not promoted to PASS)")
+    print("PENDING_CASES: " + (", ".join(pending_labels) if pending_labels else "NONE") + "; no current fresh-root native case remains. K FAST/NORMAL and their comparison are accepted; A/I/J/L recovered reports retain their guided/history evidence classes; I remains PARTIAL and non-blocking.")
+    print("PHASE11_QUALIFICATION: SHIPPED (independent VERA_CLOSURE_REVIEW: ACCEPT; integrated-routing goals satisfied collectively, not all possible runtime paths exercised; E1 routing failure retained as history)")
     return 0
 
 

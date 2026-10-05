@@ -252,6 +252,9 @@ CASE_E1_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
 ]
 CURRENT_PHASE11_PENDING_LABELS = [
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
+]
+CASE_G_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
 ]
@@ -267,7 +270,7 @@ CASE_E2_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
 ]
 CURRENT_PHASE11_FRESH_ROOT_STATE = (
-    "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F_PASS; G_PASS; H,K_PENDING"
+    "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F_PASS; G_PASS; H_PASS; K_PENDING"
 )
 CASE_D_ROOT_SESSION_ID = "ses_ef8c726b7ffeqWgvWlpg0NcU1Q"
 CASE_D_ROOT_DIRECTORY = "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-d"
@@ -565,6 +568,98 @@ CASE_G_CLASSIFICATIONS = {
     "CASE_G_RESULT_FIDELITY": "PASS",
     "CASE_G_COMPLETION_OWNERSHIP": "PASS",
     "CASE_G_THALES_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE": "NOT_EXERCISED",
+}
+CASE_H_LABEL = "PHASE11_CASE_H_FRESH_ROOT"
+CASE_H_TASK_LABEL = "PHASE11_CASE_H_FRESH_ROOT-evidence"
+CASE_H_ROOT_SESSION_ID = "ses_ef34594abffexNPYTX6t5yrosg"
+CASE_H_ROOT_DIRECTORY = "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-h"
+CASE_H_ROOT_TITLE = "OpenCode defect containment and reconciliation policy"
+CASE_H_ROOT_HEAD = "18a161b9a98383b748bb4353b356a605c9f25e7e"
+CASE_H_ROOT_USER_MESSAGE_ID = "msg_10cba6b5a001SAQcr9iaDX3VJm"
+CASE_H_ROOT_INITIAL_MESSAGE_ID = "msg_10cba6cb40016DdQia85h2LcZu"
+CASE_H_ROOT_VEYRA_MESSAGE_ID = "msg_10cbaa06c001UeN4LzBOYK0s3L"
+CASE_H_ROOT_TERMINAL_MESSAGE_ID = "msg_10cbcfa65001PnEjIv3i6oooHL"
+CASE_H_ROOT_IDLE_MESSAGE_ID = "msg_10cbd443f0011BlEqlHG3toMs1"
+CASE_H_ROOT_SKILL_CALL_ID = "call_qKwJspQUpYtjS8ATlzHMyCvG"
+CASE_H_VEYRA_CALL_ID = "call_uTRMsGuCjvKPl3d7sTAyLNuF"
+CASE_H_VEYRA_SESSION_ID = "ses_ef344fba2ffes5dwAj9MP0A0kc"
+CASE_H_VEYRA_TITLE = "Collect bounded containment evidence"
+CASE_H_VEYRA_USER_MESSAGE_ID = "msg_10cbb055e001H9vvIxDJkq4d0E"
+CASE_H_VEYRA_TERMINAL_MESSAGE_ID = "msg_10cbc3c34001SztJMCvRUkztDX"
+CASE_H_VEYRA_IDLE_MESSAGE_ID = "msg_10cbcf96f001jSq3so5OixxrXW"
+CASE_H_ROOT_PROMPT_SHA256 = "55BCC6DACFFBB4B63D5878164B60D04DCF0957FDADD825D4C307EF902B19F795"
+CASE_H_VEYRA_PROMPT_SHA256 = "8895A5926EC867AD46EFE69044691E16AA8B27E9747F31B3E0949D8F97795DF9"
+CASE_H_ROOT_TERMINAL_SHA256 = "C6E6028AB334481EED5FBA41342B640A062D45D9DDE2DD864E747AB03D0A9614"
+CASE_H_VEYRA_TERMINAL_SHA256 = "4B447E981FD6361E1FE7C363144D85BD7F77DE0BC99382237586F7526D1EA198"
+CASE_H_EXPECTED_ROUTE = ["kael", "veyra"]
+CASE_H_SOURCE_PATHS = ["opencode.jsonc", ".opencode/agents/kael.md"]
+CASE_H_VEYRA_TOOL_CALLS = [
+    ("call_FezJIDnZdFiFD0C7v9NTiXC8", "msg_10cbb0578001h1TQhcG0eC7oPW", "skill", None),
+    ("call_v69GrbjjaiOpb433jigqPemh", "msg_10cbb1c7f001B9LEMhu92FUZ91", "read", "opencode.jsonc"),
+    ("call_6ye9hjdRe8aNA0PTh165i5h2", "msg_10cbb1c7f001B9LEMhu92FUZ91", "grep", ".opencode/agents/kael.md"),
+    ("call_L4hRqakLa6KDPvit9mX4g0j6", "msg_10cbb346b001aIXpVittgy20SD", "read", ".opencode/agents/kael.md"),
+    ("call_wiDkOfXnf7swKrwRUgQQzi5e", "msg_10cbb346b001aIXpVittgy20SD", "read", ".opencode/agents/kael.md"),
+    ("call_wDqgNnnIFDxwrAjyjyTWYR0J", "msg_10cbb346b001aIXpVittgy20SD", "read", ".opencode/agents/kael.md"),
+    ("call_wauScjoFkFKOxa0yFH8AZIoi", "msg_10cbb56fe001WBMizGJz2850GK", "read", ".opencode/agents/kael.md"),
+    ("call_p4gzxW4EPu06Lp8jg3zNSuo9", "msg_10cbbd667001wuYIAV0GSpQXwj", "grep", ".opencode/agents/kael.md"),
+    ("call_KU4gWAZZLUE8nc53LLt8cNhr", "msg_10cbc065d001QdBQcACX81DING", "grep", "opencode.jsonc"),
+    ("call_FmXN3bxd86fL1naZi27zfWDk", "msg_10cbc180f0018ufwKSSV9ioWhQ", "read", ".opencode/agents/kael.md"),
+]
+CASE_H_ROLE_COUNTS = {role: 0 for role in ALL_INVOCABLE_ROLES}
+CASE_H_ROLE_COUNTS["veyra"] = 1
+CASE_H_NEGATIVE_ROLES = tuple(role for role in ALL_INVOCABLE_ROLES if role not in {"kael", "veyra"})
+CASE_H_PENDING_LABELS = ["HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"]
+CASE_H_RECONCILIATION_FILES_CHANGED = [
+    "tests/phase11-integrated-routing/RUNME.md",
+    "tests/phase11-integrated-routing/baseline.json",
+    "tests/phase11-integrated-routing/baseline.md",
+    "tests/phase11-integrated-routing/case-h.native-trace.json",
+    "tests/phase11-integrated-routing/case-h.root.session-export.json",
+    "tests/phase11-integrated-routing/case-h.veyra.session-export.json",
+    "tests/phase11-integrated-routing/cases.json",
+    "tests/phase11-integrated-routing/qualify.py",
+    "tests/phase11-integrated-routing/test_qualify.py",
+]
+CASE_H_ROOT_TERMINAL_FACTS = {
+    "CLASSIFICATION": "OPERATIONAL_ISSUE",
+    "THIRD_PARTY_DEFECT_ESTABLISHED": "YES",
+    "LOCAL_RUNTIME_VERSION_DECLARED": "UNKNOWN",
+    "SAFEST_SUPPORTED_LEVEL": "EXISTING_RECONCILIATION",
+    "BLIND_RETRY_SAFE": "NO",
+    "UPSTREAM_PATCH_ATTEMPTED": "NO",
+    "VENDOR_OR_FORK_ATTEMPTED": "NO",
+    "FILES_CHANGED": "NONE",
+    "UNRESOLVED_WORK": "NONE",
+    "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+    "ANY_WORK_REMAINING": "NO",
+}
+CASE_H_CLASSIFICATIONS = {
+    "CASE_H_BEHAVIOR": "PASS",
+    "THIRD_PARTY_CLASSIFICATION": "PASS",
+    "BOUNDED_EVIDENCE": "PASS",
+    "EXISTING_RECONCILIATION": "PASS",
+    "NO_BLIND_RETRY": "PASS",
+    "NO_UNAPPROVED_PATCH": "PASS",
+    "NO_VENDOR_OR_FORK": "PASS",
+    "ROLE_PURITY": "PASS",
+    "COMPLETION_OWNERSHIP": "PASS",
+    "ROUTING": "PASS",
+    "FRESH_ROOT_NATIVE": "PASS",
+}
+CASE_H_UNKNOWN_METRICS = {
+    "LOCAL_RUNTIME_VERSION": None,
+    "CURRENT_CAPTURE_RUNTIME_VERSION_ATTRIBUTED_TO_ORIGINAL": False,
+    "MAX_SIMULTANEOUS_CHILDREN": None,
+    "WALL_CLOCK_MS": None,
+    "RUNTIME_DURATION_MS": None,
+    "RETRY_COUNT": None,
+    "PER_INVOCATION_RESULT_IDS": None,
+    "PER_INVOCATION_CONSUMPTION_TIMING": None,
+    "SESSION_LIFETIME_EXACT_ONCE": None,
+    "NATIVE_PERMISSION_UI": "NOT_OBSERVABLE",
+    "NATIVE_PERMISSION_DECISION": "NOT_OBSERVABLE",
+    "UPSTREAM_REPAIR_EXECUTION_FACTS": None,
+    "WORKTREE_FILESYSTEM_AUDIT": "NOT_PERFORMED",
 }
 CASE_E_TERMINAL_FACTS = {
     "WORKTREE_ISOLATION": "SUPPLIED_VERIFIED",
@@ -5328,7 +5423,7 @@ def validate_phase11_g_reconciliation(
         "acceptance_status": "PASS",
         "case_result": "FRESH_ROOT_NATIVE_ACCEPTANCE_PASS",
         "phase11_status": "PARTIAL",
-        "pending_fresh_root_labels": CURRENT_PHASE11_PENDING_LABELS,
+        "pending_fresh_root_labels": CASE_G_PENDING_LABELS,
         "case_rerun_performed_by_reconciliation": False,
         "reconciliation_files_changed": CASE_G_RECONCILIATION_FILES_CHANGED,
     }
@@ -5396,6 +5491,379 @@ def validate_phase11_g_reconciliation(
     return errors
 
 
+def validate_native_case_h_capture(
+    trace: dict[str, Any],
+    case: dict[str, Any],
+    root_export: dict[str, Any],
+    veyra_export: dict[str, Any],
+) -> list[str]:
+    """Check H's bounded native route and sanitized projections."""
+    errors: list[str] = []
+    trace = trace if isinstance(trace, dict) else {}
+    case = case if isinstance(case, dict) else {}
+    root_export = root_export if isinstance(root_export, dict) else {}
+    veyra_export = veyra_export if isinstance(veyra_export, dict) else {}
+
+    if (
+        case.get("id") != "H"
+        or case.get("request_class") != "THIRD_PARTY_BUG"
+        or case.get("expected_routes", {}).get("default") != CASE_H_EXPECTED_ROUTE
+        or trace.get("CASE_ID") != "H"
+        or trace.get("REQUEST_CLASS") != "THIRD_PARTY_BUG"
+        or trace.get("CASE_LABEL") != CASE_H_LABEL
+        or trace.get("EXPECTED_ROUTE") != CASE_H_EXPECTED_ROUTE
+        or trace.get("ACTUAL_ROUTE") != CASE_H_EXPECTED_ROUTE
+        or trace.get("ROUTE_RECONCILIATION", {}).get("CLASSIFICATION") != "PASS"
+        or trace.get("ROUTE_RECONCILIATION", {}).get("OBSERVED_ROOT_CALL_ORDER") != ["veyra"]
+    ):
+        errors.append("NATIVE_H_CASE_MATRIX_OR_ROUTE_MISMATCH")
+
+    exports = (
+        (root_export, CASE_H_ROOT_SESSION_ID, 5, "case-h.root.session-export.json", 2, 3),
+        (veyra_export, CASE_H_VEYRA_SESSION_ID, 10, "case-h.veyra.session-export.json", 26, 2),
+    )
+    for export, session_id, count, artifact, reasoning_count, text_count in exports:
+        if (
+            export.get("evidence_class") != "FRESH_ROOT_NATIVE"
+            or export.get("source_api") != "OpenCode V2 public read-only API"
+            or export.get("session_metadata_query") != {"method": "GET", "path": f"/api/session/{session_id}", "result": "SUCCESS"}
+            or export.get("export_query") != {
+                "method": "GET", "path": f"/api/experimental/session/{session_id}/export?sanitize=false", "result": "SUCCESS"
+            }
+            or export.get("message_count") != count
+            or len(export.get("messages", [])) != count
+            or export.get("export_pagination") != "NONE_OBSERVED"
+            or export.get("timestamp_projection") is not None
+        ):
+            errors.append("NATIVE_H_EXPORT_QUERY_OR_MESSAGE_COUNT_MISMATCH")
+        redaction = export.get("projection_and_redaction", {})
+        if (
+            redaction.get("reasoning_blocks_removed") != reasoning_count
+            or sum(m.get("omitted_reasoning_block_count", 0) for m in export.get("messages", []) if isinstance(m, dict)) != reasoning_count
+            or redaction.get("visible_text_blocks_projected_to_digest_or_bounded_facts") != text_count
+            or redaction.get("known_credential_pattern_matches_removed") != 0
+            or redaction.get("provider_state_and_snapshots_omitted") is not True
+            or redaction.get("tool_arguments_and_result_bodies_omitted") is not True
+            or redaction.get("raw_export_persisted") is not False
+            or redaction.get("timestamps_omitted") is not True
+            or redaction.get("unrecognized_content_blocks_omitted") != 0
+        ):
+            errors.append("NATIVE_H_SANITIZATION_MISMATCH")
+        if any(
+            message.get("time") is not None
+            or any(key in message for key in ("text", "content", "reasoning", "providerState", "snapshot", "arguments", "result_body"))
+            for message in export.get("messages", [])
+            if isinstance(message, dict)
+        ):
+            errors.append("NATIVE_H_RAW_CONTENT_OR_TIMING_PERSISTED")
+
+    expected_sessions = (
+        (root_export, {
+            "id": CASE_H_ROOT_SESSION_ID, "agent": "kael", "parent_id": None,
+            "parent_id_observation": "NOT_EXPOSED", "directory": CASE_H_ROOT_DIRECTORY,
+            "directory_source": "Public session metadata and export location; matches original root prompt",
+            "title": CASE_H_ROOT_TITLE, "execution_outcome": "succeeded", "time": None,
+            "time_observation": "OMITTED; timing metrics remain unknown",
+        }),
+        (veyra_export, {
+            "id": CASE_H_VEYRA_SESSION_ID, "agent": "veyra", "parent_id": CASE_H_ROOT_SESSION_ID,
+            "parent_id_observation": "EXPLICIT_ID", "directory": CASE_H_ROOT_DIRECTORY,
+            "directory_source": "Public session metadata and export location",
+            "title": CASE_H_VEYRA_TITLE, "execution_outcome": "succeeded", "time": None,
+            "time_observation": "OMITTED; timing metrics remain unknown",
+        }),
+    )
+    if any(export.get("session") != expected for export, expected in expected_sessions):
+        errors.append("NATIVE_H_ROOT_CHILD_METADATA_OR_PARENT_JOIN_MISMATCH")
+
+    root_messages = root_export.get("messages", [])
+    veyra_messages = veyra_export.get("messages", [])
+    expected_root_ids = [
+        CASE_H_ROOT_USER_MESSAGE_ID, CASE_H_ROOT_INITIAL_MESSAGE_ID, CASE_H_ROOT_VEYRA_MESSAGE_ID,
+        CASE_H_ROOT_TERMINAL_MESSAGE_ID, CASE_H_ROOT_IDLE_MESSAGE_ID,
+    ]
+    expected_veyra_ids = [
+        CASE_H_VEYRA_USER_MESSAGE_ID, "msg_10cbb0578001h1TQhcG0eC7oPW", "msg_10cbb1c7f001B9LEMhu92FUZ91",
+        "msg_10cbb346b001aIXpVittgy20SD", "msg_10cbb56fe001WBMizGJz2850GK", "msg_10cbbd667001wuYIAV0GSpQXwj",
+        "msg_10cbc065d001QdBQcACX81DING", "msg_10cbc180f0018ufwKSSV9ioWhQ", CASE_H_VEYRA_TERMINAL_MESSAGE_ID,
+        CASE_H_VEYRA_IDLE_MESSAGE_ID,
+    ]
+    if (
+        [m.get("id") for m in root_messages] != expected_root_ids
+        or [m.get("type") for m in root_messages] != ["user", "assistant", "assistant", "assistant", "idle"]
+        or [m.get("id") for m in veyra_messages] != expected_veyra_ids
+        or [m.get("type") for m in veyra_messages]
+        != ["user", "assistant", "assistant", "assistant", "assistant", "assistant", "assistant", "assistant", "assistant", "idle"]
+        or [m.get("order") for m in root_messages] != list(range(1, 6))
+        or [m.get("order") for m in veyra_messages] != list(range(1, 11))
+        or root_export.get("terminal_message_id") != CASE_H_ROOT_TERMINAL_MESSAGE_ID
+        or veyra_export.get("terminal_message_id") != CASE_H_VEYRA_TERMINAL_MESSAGE_ID
+        or root_export.get("terminal_outcome_record") != {"message_id": CASE_H_ROOT_IDLE_MESSAGE_ID, "type": "idle", "outcome": "succeeded"}
+        or veyra_export.get("terminal_outcome_record") != {"message_id": CASE_H_VEYRA_IDLE_MESSAGE_ID, "type": "idle", "outcome": "succeeded"}
+    ):
+        errors.append("NATIVE_H_MESSAGE_ORDER_OR_TERMINAL_JOIN_MISMATCH")
+
+    root_prompt = root_messages[0].get("prompt_projection", {}) if root_messages else {}
+    child_prompt = veyra_messages[0].get("prompt_projection", {}) if veyra_messages else {}
+    root_terminal = next((m for m in root_messages if m.get("id") == CASE_H_ROOT_TERMINAL_MESSAGE_ID), {})
+    child_terminal = next((m for m in veyra_messages if m.get("id") == CASE_H_VEYRA_TERMINAL_MESSAGE_ID), {})
+    if (
+        root_prompt != {
+            "case_label": CASE_H_LABEL, "declared_directory": CASE_H_ROOT_DIRECTORY, "starting_head": CASE_H_ROOT_HEAD,
+            "starting_head_source": "Original root user prompt", "starting_head_filesystem_verified_by_reconciliation": False,
+        }
+        or (root_messages[0].get("public_text_sha256") if root_messages else None) != CASE_H_ROOT_PROMPT_SHA256
+        or child_prompt != {"task_label": CASE_H_TASK_LABEL, "role": "veyra"}
+        or (veyra_messages[0].get("public_text_sha256") if veyra_messages else None) != CASE_H_VEYRA_PROMPT_SHA256
+        or root_terminal.get("public_text_sha256") != CASE_H_ROOT_TERMINAL_SHA256
+        or root_terminal.get("public_fact_projection") != CASE_H_ROOT_TERMINAL_FACTS
+        or child_terminal.get("public_text_sha256") != CASE_H_VEYRA_TERMINAL_SHA256
+        or child_terminal.get("public_fact_projection") != {"STATUS": "SUCCESS", "source_evidence_scope_confirmed_by_tool_paths": True}
+    ):
+        errors.append("NATIVE_H_PROMPT_OR_TERMINAL_PROJECTION_MISMATCH")
+
+    root_tools = root_export.get("tool_call_records", [])
+    child_tools = veyra_export.get("tool_call_records", [])
+    expected_child_tools = [
+        {"id": call_id, "parent_message_id": parent_id, "name": name, **({"source_path": path} if path else {}),
+         "executed": False, "state": "completed", "result_id": None, "result_id_observation": "NOT_EXPOSED"}
+        for call_id, parent_id, name, path in CASE_H_VEYRA_TOOL_CALLS
+    ]
+    if (
+        len(root_tools) != 2
+        or root_tools[0] != {
+            "id": CASE_H_ROOT_SKILL_CALL_ID, "parent_message_id": CASE_H_ROOT_INITIAL_MESSAGE_ID,
+            "name": "skill", "executed": False, "state": "completed", "result_id": None,
+            "result_id_observation": "NOT_EXPOSED",
+        }
+        or root_tools[1] != {
+            "id": CASE_H_VEYRA_CALL_ID, "parent_message_id": CASE_H_ROOT_VEYRA_MESSAGE_ID, "name": "subagent",
+            "executed": False, "state": "completed", "agent": "veyra", "task_label": CASE_H_TASK_LABEL,
+            "child_session_id": CASE_H_VEYRA_SESSION_ID, "return_status": "SUCCESS", "result_id": None,
+            "result_id_observation": "NOT_EXPOSED", "time": None,
+        }
+        or child_tools != expected_child_tools
+    ):
+        errors.append("NATIVE_H_TOOL_CALL_OR_RESULT_ID_MISMATCH")
+
+    expected_source_counts = {
+        "opencode.jsonc": {"read": 1, "grep": 1, "total": 2},
+        ".opencode/agents/kael.md": {"read": 5, "grep": 2, "total": 7},
+    }
+    source_scope = veyra_export.get("source_evidence_scope", {})
+    if (
+        source_scope.get("paths") != CASE_H_SOURCE_PATHS
+        or source_scope.get("tool_call_counts_by_path") != expected_source_counts
+        or source_scope.get("unexpected_file_or_directory_targets") != 0
+        or source_scope.get("source_content_persisted") is not False
+    ):
+        errors.append("NATIVE_H_SOURCE_SCOPE_OVERBROAD_OR_PROJECTION_MISMATCH")
+
+    api = trace.get("API_EVIDENCE", {})
+    calls = api.get("ROOT_TOOL_CALL_RECORDS", [])
+    if (
+        trace.get("ROOT_SESSION_ID") != CASE_H_ROOT_SESSION_ID
+        or trace.get("ROOT_DIRECTORY", "").replace("\\", "/") != CASE_H_ROOT_DIRECTORY
+        or trace.get("ROOT_AGENT") != "kael"
+        or trace.get("ROOT_PARENT_SESSION_ID") is not None
+        or trace.get("ROOT_PARENT_SESSION_ID_OBSERVATION") != "NOT_EXPOSED"
+        or trace.get("ROOT_TITLE") != CASE_H_ROOT_TITLE
+        or trace.get("ROOT_EXECUTION_OUTCOME") != "succeeded"
+        or trace.get("ROOT_USER_MESSAGE_ID") != CASE_H_ROOT_USER_MESSAGE_ID
+        or trace.get("ROOT_VEYRA_INVOCATION_MESSAGE_ID") != CASE_H_ROOT_VEYRA_MESSAGE_ID
+        or trace.get("ROOT_VEYRA_INVOCATION_TOOL_CALL_ID") != CASE_H_VEYRA_CALL_ID
+        or trace.get("ROOT_TERMINAL_MESSAGE_ID") != CASE_H_ROOT_TERMINAL_MESSAGE_ID
+        or trace.get("ROOT_IDLE_MESSAGE_ID") != CASE_H_ROOT_IDLE_MESSAGE_ID
+        or trace.get("ROOT_STARTING_HEAD") != CASE_H_ROOT_HEAD
+        or trace.get("ROOT_STARTING_HEAD_SOURCE") != "Original root user prompt"
+        or trace.get("ROOT_STARTING_HEAD_FILESYSTEM_VERIFIED_BY_RECONCILIATION") is not False
+        or calls != [{
+            "ORDER": 1, "PARENT_MESSAGE_ID": CASE_H_ROOT_VEYRA_MESSAGE_ID, "TOOL_CALL_ID": CASE_H_VEYRA_CALL_ID,
+            "AGENT": "veyra", "TASK_LABEL": CASE_H_TASK_LABEL, "CHILD_SESSION_ID": CASE_H_VEYRA_SESSION_ID,
+            "EXECUTED": False, "TOOL_STATE": "completed", "RETURN_STATUS": "SUCCESS", "RESULT_ID": None,
+            "RESULT_ID_OBSERVATION": "NOT_EXPOSED",
+        }]
+        or api.get("ROOT_SUBAGENT_INVOCATION_COUNT") != 1
+        or api.get("CHILD_TOOL_CALL_COUNT") != 10
+        or api.get("CHILD_NESTED_SUBAGENT_CALL_COUNT") != 0
+        or api.get("DIRECT_CHILD_LISTING", {}).get("FIRST_PAGE_CHILD_SESSION_IDS") != [CASE_H_VEYRA_SESSION_ID]
+        or api.get("DIRECT_CHILD_LISTING", {}).get("SECOND_PAGE_CHILD_SESSION_IDS") != []
+        or api.get("DIRECT_CHILD_LISTING", {}).get("FIRST_PAGE_NEXT_CURSOR") != "PRESENT"
+        or api.get("DIRECT_CHILD_LISTING", {}).get("SECOND_PAGE_NEXT_CURSOR") is not None
+        or api.get("DIRECT_CHILD_LISTING", {}).get("CURSOR_VALUE_PERSISTED") is not False
+        or trace.get("ROOT_ISOLATION", {}).get("ROOT_DIRECTORY_MATCHES_PUBLIC_METADATA_AND_PROMPT") is not True
+        or trace.get("ROOT_ISOLATION", {}).get("SEPARATE_DISPOSABLE_WORKTREE") is not None
+        or trace.get("ROOT_ISOLATION", {}).get("FILESYSTEM_AUDIT_PERFORMED") is not False
+        or "not proof of non-execution" not in api.get("TOOL_EXECUTED_FLAG_CAVEAT", "")
+    ):
+        errors.append("NATIVE_H_ROOT_CALL_OR_CHILD_LISTING_MISMATCH")
+
+    child = trace.get("CHILD_SESSIONS", [])
+    if (
+        len(child) != 1
+        or child[0].get("NATIVE_SESSION_ID") != CASE_H_VEYRA_SESSION_ID
+        or child[0].get("PARENT_SESSION_ID") != CASE_H_ROOT_SESSION_ID
+        or child[0].get("TERMINAL_MESSAGE_ID") != CASE_H_VEYRA_TERMINAL_MESSAGE_ID
+        or child[0].get("EXECUTION_STATE") != "SUCCEEDED"
+        or child[0].get("RETURN_STATUS") != "SUCCESS"
+        or child[0].get("RESULT_ID") is not None
+        or child[0].get("TERMINAL_RETURN_CONSUMED") is not True
+    ):
+        errors.append("NATIVE_H_CHILD_PARENT_OR_COMPLETION_JOIN_MISMATCH")
+
+    if (
+        trace.get("CONSULTATION_COUNTS") != CASE_H_ROLE_COUNTS
+        or trace.get("UNIQUE_CHILD_SESSION_COUNTS") != CASE_H_ROLE_COUNTS
+        or any(trace.get("NEGATIVE_CONTROLS", {}).get(role) != {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0} for role in CASE_H_NEGATIVE_ROLES)
+        or trace.get("BOUNDED_EVIDENCE", {}).get("SOURCE_PATHS") != CASE_H_SOURCE_PATHS
+        or trace.get("BOUNDED_EVIDENCE", {}).get("STATUS") != "PASS"
+        or trace.get("BOUNDED_EVIDENCE", {}).get("LOCAL_RUNTIME_VERSION_DECLARED") != "UNKNOWN"
+        or trace.get("BOUNDED_EVIDENCE", {}).get("CONCRETE_VERSION_OR_CONFIGURATION_ACTION_SUPPORTED") is not False
+        or trace.get("BOUNDED_EVIDENCE", {}).get("EXISTING_RECONCILIATION_POLICY_CONFIRMED") is not True
+        or trace.get("BOUNDED_EVIDENCE", {}).get("SOURCE_CONTENT_PERSISTED") is not False
+        or trace.get("THIRD_PARTY_CLASSIFICATION", {}).get("STATUS") != "PASS"
+        or trace.get("THIRD_PARTY_CLASSIFICATION", {}).get("CLASSIFICATION") != "OPERATIONAL_ISSUE"
+        or trace.get("THIRD_PARTY_CLASSIFICATION", {}).get("THIRD_PARTY_DEFECT_ESTABLISHED") is not True
+        or trace.get("THIRD_PARTY_CLASSIFICATION", {}).get("PRODUCT_CODE_BUG_ESTABLISHED") is not False
+        or trace.get("THIRD_PARTY_CLASSIFICATION", {}).get("UPSTREAM_DEFECT_REPAIRED") is not False
+        or trace.get("THIRD_PARTY_CLASSIFICATION", {}).get("UPSTREAM_REPAIR_EXECUTION_FACTS") is not None
+        or trace.get("EXISTING_RECONCILIATION", {}).get("STATUS") != "PASS"
+        or trace.get("EXISTING_RECONCILIATION", {}).get("SAFEST_SUPPORTED_LEVEL") != "EXISTING_RECONCILIATION"
+        or trace.get("EXISTING_RECONCILIATION", {}).get("PRESERVE_ORIGINAL_CHILD") is not True
+        or trace.get("EXISTING_RECONCILIATION", {}).get("RECONCILE_AND_CONSUME_ONCE") is not True
+        or trace.get("EXISTING_RECONCILIATION", {}).get("COMPLETION_UNCONFIRMED_IF_UNKNOWN") is not True
+        or trace.get("EXISTING_RECONCILIATION", {}).get("POSITIVE_NON_START_REQUIRED_BEFORE_RETRY") is not True
+        or trace.get("NO_BLIND_RETRY", {}).get("STATUS") != "PASS"
+        or trace.get("NO_BLIND_RETRY", {}).get("BLIND_RETRY_SAFE") is not False
+        or trace.get("NO_BLIND_RETRY", {}).get("RETRY_PERFORMED_BY_RECONCILIATION") is not False
+        or trace.get("NO_UNAPPROVED_PATCH", {}).get("STATUS") != "PASS"
+        or trace.get("NO_UNAPPROVED_PATCH", {}).get("UPSTREAM_PATCH_ATTEMPTED") is not False
+        or trace.get("NO_VENDOR_OR_FORK", {}).get("STATUS") != "PASS"
+        or trace.get("NO_VENDOR_OR_FORK", {}).get("VENDOR_OR_FORK_ATTEMPTED") is not False
+        or trace.get("EVIDENCE_OWNERSHIP", {}).get("ACTUAL_MEASUREMENT_REQUIRED") is not False
+        or trace.get("EVIDENCE_OWNERSHIP", {}).get("ACTUAL_MEASUREMENT_PERFORMED") is not False
+        or trace.get("EVIDENCE_OWNERSHIP", {}).get("NOX_INVOCATIONS") != 0
+        or trace.get("ROLE_PURITY", {}).get("STATUS") != "PASS"
+        or trace.get("ROLE_PURITY", {}).get("NO_NESTED_SUBAGENT_DELEGATION") is not True
+        or trace.get("ROLE_PURITY", {}).get("RECONCILIATION_ROLE_INCLUDED_IN_CASE_COUNTS") is not False
+    ):
+        errors.append("NATIVE_H_BOUNDED_FINDING_OR_SAFE_RESOLUTION_MISMATCH")
+
+    completion = trace.get("COMPLETION_GATE", {})
+    provenance = trace.get("EVIDENCE_PROVENANCE", {})
+    if (
+        trace.get("ROOT_TERMINAL_FACTS") != CASE_H_ROOT_TERMINAL_FACTS
+        or completion.get("PENDING_CHILD_COUNT") != 0
+        or completion.get("UNCONSUMED_RESULT_COUNT") != 0
+        or completion.get("REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED") is not True
+        or completion.get("ROOT_TERMINAL") is not True
+        or completion.get("RESULT_IDS") is not None
+        or completion.get("PER_INVOCATION_CONSUMPTION_TIMING") is not None
+        or trace.get("UNKNOWN_METRICS") != CASE_H_UNKNOWN_METRICS
+        or trace.get("MAX_SIMULTANEOUS_CHILDREN") is not None
+        or trace.get("USER_QUESTION_COUNT") != 0
+        or trace.get("FINAL_OUTCOME") != "SUCCEEDED"
+        or trace.get("ROUTING_RESULT") != "PASS"
+        or provenance.get("NATIVE_ROOT_SESSION_ID") != CASE_H_ROOT_SESSION_ID
+        or provenance.get("NATIVE_CHILD_SESSION_IDS") != [CASE_H_VEYRA_SESSION_ID]
+        or provenance.get("NATIVE_CHILD_PARENT_SESSION_ID") != CASE_H_ROOT_SESSION_ID
+        or provenance.get("FRESH_ROOT_LABEL_CONFIRMED") is not True
+        or provenance.get("ROOT_DIRECTORY_MATCHES_PUBLIC_METADATA") is not True
+        or provenance.get("WORKTREE_FILESYSTEM_AUDIT_PERFORMED") is not False
+        or provenance.get("ORDER_BASIS") != "observed root message/tool-call order and paginated public direct-child listing; timestamps omitted"
+        or provenance.get("STARTING_HEAD_FILESYSTEM_VERIFIED_BY_RECONCILIATION") is not False
+        or provenance.get("RECONCILIATION_ROLE_COUNTED_IN_ORIGINAL_CASE_FAMILY") is not False
+        or trace.get("CLASSIFICATIONS") != CASE_H_CLASSIFICATIONS
+        or trace.get("CASE_ACCEPTANCE") != "PASS"
+        or trace.get("PHASE11_STATUS") != "PARTIAL"
+        or trace.get("PENDING_FRESH_ROOT_LABELS") != CASE_H_PENDING_LABELS
+        or trace.get("CASE_RERUN_PERFORMED_BY_RECONCILIATION") is not False
+        or trace.get("RECONCILIATION_FILES_CHANGED") != CASE_H_RECONCILIATION_FILES_CHANGED
+        or trace.get("EFFICIENCY", {}).get("CLASSIFICATION") != "LEAN"
+        or trace.get("EFFICIENCY", {}).get("BASIS")
+        != "Qualification judgment for one bounded Veyra source-evidence child, with no runtime reproduction, retry, patch, vendor, or fork; not a measured latency or concurrency result."
+    ):
+        errors.append("NATIVE_H_COMPLETION_PROVENANCE_OR_ACCEPTANCE_MISMATCH")
+    return errors
+
+
+def validate_phase11_h_reconciliation(
+    baseline: dict[str, Any],
+    cases_doc: dict[str, Any],
+    trace: dict[str, Any],
+    root_export: dict[str, Any],
+    veyra_export: dict[str, Any],
+) -> list[str]:
+    """Bind H's native result to current PARTIAL status and preserve prior snapshots."""
+    cases = {case.get("id"): case for case in cases_doc.get("cases", []) if isinstance(case, dict)}
+    errors = validate_native_case_h_capture(trace, cases.get("H", {}), root_export, veyra_export)
+    report = baseline.get("phase11_h_reconciliation")
+    if not isinstance(report, dict):
+        return errors + ["CASE_H_RECONCILIATION_MISSING"]
+
+    expected = {
+        "task_id": "PHASE11-H-reconcile-write", "label": CASE_H_LABEL,
+        "evidence_artifact": "tests/phase11-integrated-routing/case-h.native-trace.json",
+        "root_export_artifact": "tests/phase11-integrated-routing/case-h.root.session-export.json",
+        "veyra_export_artifact": "tests/phase11-integrated-routing/case-h.veyra.session-export.json",
+        "evidence_class": "FRESH_ROOT_NATIVE", "root_session_id": CASE_H_ROOT_SESSION_ID,
+        "root_parent_session_id": None, "root_parent_session_id_observation": "NOT_EXPOSED",
+        "root_starting_head": CASE_H_ROOT_HEAD, "root_starting_head_filesystem_verified_by_reconciliation": False,
+        "veyra_session_id": CASE_H_VEYRA_SESSION_ID, "veyra_parent_session_id": CASE_H_ROOT_SESSION_ID,
+        "expected_product_route": CASE_H_EXPECTED_ROUTE, "observed_product_route": CASE_H_EXPECTED_ROUTE,
+        "root_subagent_invocation_count": 1, "direct_child_listing_page_counts": [1, 0],
+        "child_nested_subagent_call_count": 0, "source_evidence_paths": CASE_H_SOURCE_PATHS,
+        "unexpected_source_targets": 0, "classification": "OPERATIONAL_ISSUE",
+        "product_code_bug_established": False, "local_runtime_version_declared": "UNKNOWN",
+        "safest_supported_level": "EXISTING_RECONCILIATION", "blind_retry_safe": False,
+        "upstream_patch_attempted": False, "vendor_or_fork_attempted": False,
+        "files_changed_original_run": "NONE", "required_children_terminal_and_consumed": True,
+        "result_ids": None, "per_invocation_consumption_timing": None, "session_lifetime_exact_once": None,
+        "efficiency": "LEAN", "acceptance_status": "PASS", "case_result": "FRESH_ROOT_NATIVE_ACCEPTANCE_PASS",
+        "phase11_status": "PARTIAL", "pending_fresh_root_labels": CASE_H_PENDING_LABELS,
+        "case_rerun_performed_by_reconciliation": False,
+        "reconciliation_files_changed": CASE_H_RECONCILIATION_FILES_CHANGED,
+    }
+    for key, value in expected.items():
+        if report.get(key) != value:
+            errors.append(f"CASE_H_BASELINE_RECONCILIATION_MISMATCH:{key}")
+    if report.get("projection_and_redaction") != {
+        "root_reasoning_blocks_removed": 2, "veyra_reasoning_blocks_removed": 26,
+        "known_credential_pattern_matches_removed": 0, "provider_state_and_snapshots_omitted": True,
+        "tool_arguments_and_result_bodies_omitted": True, "raw_exports_persisted": False, "timestamps_omitted": True,
+    }:
+        errors.append("CASE_H_BASELINE_PROJECTION_OR_REDACTION_MISMATCH")
+
+    current = baseline.get("live_qualification", {})
+    if (
+        current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
+        or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
+        or current.get("overall_status") != "PARTIAL"
+        or current.get("native_results_claimed") is not True
+        or "PHASE11-H-reconcile-write" not in current.get("current_pending_state_source", "")
+    ):
+        errors.append("CURRENT_PHASE11_H_PENDING_STATE_MISMATCH")
+    for name in (
+        "phase11_b3_reconciliation", "phase11_c_reconciliation", "phase11_d_reconciliation",
+        "phase11_e_reconciliation", "phase11_e2_reconciliation", "phase11_f_reconciliation", "phase11_g_reconciliation",
+    ):
+        if "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT" not in baseline.get(name, {}).get("pending_fresh_root_labels", []):
+            errors.append(f"CASE_H_HISTORICAL_PENDING_SNAPSHOT_REWRITTEN:{name}")
+    actions = [
+        action for action in cases_doc.get("fresh_root_actions", [])
+        if isinstance(action, dict) and action.get("case_id") == "H" and action.get("label") == CASE_H_LABEL
+    ]
+    required_action = {
+        "scenario": "default", "status": "PASS", "evidence_class": "FRESH_ROOT_NATIVE",
+        "evidence_artifact": "case-h.native-trace.json", "acceptance_status": "PASS", "pending_resolution": False,
+    }
+    if len(actions) != 1 or any(actions[0].get(key) != value for key, value in required_action.items()):
+        errors.append("CASE_H_MATRIX_STATUS_OR_EVIDENCE_LINK_MISMATCH")
+    if baseline.get("argus_same_session_followup_runtime_coverage") != CASE_D_PENDING_FOLLOWUP_COVERAGE:
+        errors.append("CASE_H_ARGUS_FOLLOWUP_RUNTIME_COVERAGE_PROMOTED_OR_CONFLATED")
+    return errors
+
+
 def main() -> int:
     failures, documents = validate_corpus()
     static_failures = run_static_baseline_checks()
@@ -5414,6 +5882,9 @@ def main() -> int:
     case_g_root_export = load_json(HERE / "case-g.root.session-export.json")
     case_g_veyra_export = load_json(HERE / "case-g.veyra.session-export.json")
     case_g_thales_export = load_json(HERE / "case-g.thales.session-export.json")
+    native_h = load_json(HERE / "case-h.native-trace.json")
+    case_h_root_export = load_json(HERE / "case-h.root.session-export.json")
+    case_h_veyra_export = load_json(HERE / "case-h.veyra.session-export.json")
     reconciliation_failures = validate_phase11_b3_reconciliation(
         baseline, documents["cases"], native_b3
     )
@@ -5444,6 +5915,9 @@ def main() -> int:
         case_g_veyra_export,
         case_g_thales_export,
     )
+    case_h_failures = validate_phase11_h_reconciliation(
+        baseline, documents["cases"], native_h, case_h_root_export, case_h_veyra_export
+    )
     for label in ("ARGUS_GATE_MARKER", "TALOS_GATE_MARKER", "ATLAS_GATE_MARKER", "HELIOS_GATE_MARKER", "THALES_GATE_MARKER", "ROOT_OWNER_MARKER", "NO_NESTED_CHILD_MARKER", "CORE_CHILD_CEILING_MARKER"):
         if label in static_failures:
             print(f"STATIC_{label}: FAIL")
@@ -5466,7 +5940,9 @@ def main() -> int:
         print("F-NATIVE: PASS (FRESH_ROOT_NATIVE; Kael-only operational diagnosis; no product/security defect invented)")
     if not case_g_failures:
         print("G-NATIVE: PASS (FRESH_ROOT_NATIVE; Veyra source evidence precedes one Thales diagnosis; no Nox measurement or unneeded follow-up)")
-    pending_fresh_root_cases = {"H", "K"}
+    if not case_h_failures:
+        print("H-NATIVE: PASS (FRESH_ROOT_NATIVE; bounded Veyra evidence supports operational third-party classification and existing reconciliation only)")
+    pending_fresh_root_cases = {"K"}
     pending_labels: list[str] = []
     for action in documents["cases"].get("fresh_root_actions", []):
         case_id = action.get("case_id")
@@ -5477,7 +5953,7 @@ def main() -> int:
                 print(f"PENDING_ACCEPTANCE {label} (observed routing failure; no Case E rerun requested)")
             else:
                 print(f"HUMAN_ACTION_REQUIRED {label}")
-    if failures or reconciliation_failures or case_c_failures or case_d_failures or case_e_failures or case_e2_failures or case_f_failures or case_g_failures:
+    if failures or reconciliation_failures or case_c_failures or case_d_failures or case_e_failures or case_e2_failures or case_f_failures or case_g_failures or case_h_failures:
         for failure in [
             *failures,
             *reconciliation_failures,
@@ -5487,6 +5963,7 @@ def main() -> int:
             *case_e2_failures,
             *case_f_failures,
             *case_g_failures,
+            *case_h_failures,
         ]:
             print(f"FAIL: {failure}")
         print("PHASE11_QUALIFICATION: FAIL (artifact validation only)")
@@ -5496,10 +5973,10 @@ def main() -> int:
             print(f"FAIL: STATIC_{label}")
         print("PHASE11_QUALIFICATION: FAIL (bounded policy marker check)")
         return 1
-    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, B3/C/D/E2/F/G native reconciliations, and E1 historical failure are internally consistent; validation does not authenticate source exports)")
+    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, B3/C/D/E2/F/G/H native reconciliations, and E1 historical failure are internally consistent; validation does not authenticate source exports)")
     print("ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED (separate optional evidence-requesting scenario remains open for final coverage review; not a Case D blocker)")
-    print("PENDING_CASES: " + ", ".join(pending_labels) + "; F and G are accepted natively, E2 closes current Case E acceptance while E1's observed routing failure remains historical; A/I/J/L recovered reports remain guided/history only.")
-    print("PHASE11_QUALIFICATION: PARTIAL (B3, C, D, E2, F, and G accepted; E1 failure retained as history; H/K acceptance remains pending)")
+    print("PENDING_CASES: " + ", ".join(pending_labels) + "; F, G, and H are accepted natively, E2 closes current Case E acceptance while E1's observed routing failure remains historical; A/I/J/L recovered reports remain guided/history only.")
+    print("PHASE11_QUALIFICATION: PARTIAL (B3, C, D, E2, F, G, and H accepted; E1 failure retained as history; K acceptance remains pending)")
     return 0
 
 

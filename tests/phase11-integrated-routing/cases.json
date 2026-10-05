@@ -167,7 +167,7 @@
     {
       "id": "H",
       "request_class": "THIRD_PARTY_BUG",
-      "description": "Collect bounded version/config evidence and prefer the safe resolution ladder; no patch/vendor/fork without approval.",
+      "description": "Collect bounded version/config evidence, prefer existing reconciliation, and stop before an unapproved upstream patch, vendor, or fork.",
       "trace_ids": [
         "H"
       ],
@@ -334,7 +334,12 @@
     {
       "case_id": "H",
       "scenario": "default",
-      "label": "PHASE11_CASE_H_FRESH_ROOT"
+      "label": "PHASE11_CASE_H_FRESH_ROOT",
+      "status": "PASS",
+      "evidence_class": "FRESH_ROOT_NATIVE",
+      "evidence_artifact": "case-h.native-trace.json",
+      "acceptance_status": "PASS",
+      "pending_resolution": false
     },
     {
       "case_id": "I",

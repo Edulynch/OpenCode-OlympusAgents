@@ -1,0 +1,166 @@
+{
+  "evidence_class": "FRESH_ROOT_NATIVE",
+  "source_api": "OpenCode V2 public read-only API",
+  "session_metadata_query": {
+    "method": "GET",
+    "path": "/api/session/ses_ef344fba2ffes5dwAj9MP0A0kc",
+    "result": "SUCCESS"
+  },
+  "export_query": {
+    "method": "GET",
+    "path": "/api/experimental/session/ses_ef344fba2ffes5dwAj9MP0A0kc/export?sanitize=false",
+    "result": "SUCCESS"
+  },
+  "export_schema": "OpenAPI SessionTransfer.Data: response.data.info plus response.data.messages; only metadata, message/tool identities, digests, ordering, and bounded public fact projections are retained.",
+  "session": {
+    "id": "ses_ef344fba2ffes5dwAj9MP0A0kc",
+    "agent": "veyra",
+    "parent_id": "ses_ef34594abffexNPYTX6t5yrosg",
+    "parent_id_observation": "EXPLICIT_ID",
+    "directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-h",
+    "directory_source": "Public session metadata and export location",
+    "title": "Collect bounded containment evidence",
+    "execution_outcome": "succeeded",
+    "time": null,
+    "time_observation": "OMITTED; timing metrics remain unknown"
+  },
+  "message_count": 10,
+  "export_pagination": "NONE_OBSERVED",
+  "timestamp_projection": null,
+  "messages": [
+    {
+      "order": 1,
+      "id": "msg_10cbb055e001H9vvIxDJkq4d0E",
+      "type": "user",
+      "agent": null,
+      "public_text_sha256": "8895A5926EC867AD46EFE69044691E16AA8B27E9747F31B3E0949D8F97795DF9",
+      "time": null,
+      "prompt_projection": {
+        "task_label": "PHASE11_CASE_H_FRESH_ROOT-evidence",
+        "role": "veyra"
+      }
+    },
+    {
+      "order": 2,
+      "id": "msg_10cbb0578001h1TQhcG0eC7oPW",
+      "type": "assistant",
+      "agent": "veyra",
+      "omitted_reasoning_block_count": 1,
+      "time": null,
+      "tool_call_ids": ["call_FezJIDnZdFiFD0C7v9NTiXC8"]
+    },
+    {
+      "order": 3,
+      "id": "msg_10cbb1c7f001B9LEMhu92FUZ91",
+      "type": "assistant",
+      "agent": "veyra",
+      "omitted_reasoning_block_count": 1,
+      "time": null,
+      "tool_call_ids": ["call_v69GrbjjaiOpb433jigqPemh", "call_6ye9hjdRe8aNA0PTh165i5h2"]
+    },
+    {
+      "order": 4,
+      "id": "msg_10cbb346b001aIXpVittgy20SD",
+      "type": "assistant",
+      "agent": "veyra",
+      "omitted_reasoning_block_count": 2,
+      "time": null,
+      "tool_call_ids": ["call_L4hRqakLa6KDPvit9mX4g0j6", "call_wiDkOfXnf7swKrwRUgQQzi5e", "call_wDqgNnnIFDxwrAjyjyTWYR0J"]
+    },
+    {
+      "order": 5,
+      "id": "msg_10cbb56fe001WBMizGJz2850GK",
+      "type": "assistant",
+      "agent": "veyra",
+      "omitted_reasoning_block_count": 9,
+      "time": null,
+      "tool_call_ids": ["call_wauScjoFkFKOxa0yFH8AZIoi"]
+    },
+    {
+      "order": 6,
+      "id": "msg_10cbbd667001wuYIAV0GSpQXwj",
+      "type": "assistant",
+      "agent": "veyra",
+      "omitted_reasoning_block_count": 3,
+      "time": null,
+      "tool_call_ids": ["call_p4gzxW4EPu06Lp8jg3zNSuo9"]
+    },
+    {
+      "order": 7,
+      "id": "msg_10cbc065d001QdBQcACX81DING",
+      "type": "assistant",
+      "agent": "veyra",
+      "omitted_reasoning_block_count": 1,
+      "time": null,
+      "tool_call_ids": ["call_KU4gWAZZLUE8nc53LLt8cNhr"]
+    },
+    {
+      "order": 8,
+      "id": "msg_10cbc180f0018ufwKSSV9ioWhQ",
+      "type": "assistant",
+      "agent": "veyra",
+      "omitted_reasoning_block_count": 2,
+      "time": null,
+      "tool_call_ids": ["call_FmXN3bxd86fL1naZi27zfWDk"]
+    },
+    {
+      "order": 9,
+      "id": "msg_10cbc3c34001SztJMCvRUkztDX",
+      "type": "assistant",
+      "agent": "veyra",
+      "public_text_sha256": "4B447E981FD6361E1FE7C363144D85BD7F77DE0BC99382237586F7526D1EA198",
+      "omitted_reasoning_block_count": 7,
+      "time": null,
+      "public_fact_projection": {
+        "STATUS": "SUCCESS",
+        "source_evidence_scope_confirmed_by_tool_paths": true
+      }
+    },
+    {
+      "order": 10,
+      "id": "msg_10cbcf96f001jSq3so5OixxrXW",
+      "type": "idle",
+      "agent": null,
+      "time": null,
+      "outcome": "succeeded"
+    }
+  ],
+  "source_evidence_scope": {
+    "paths": ["opencode.jsonc", ".opencode/agents/kael.md"],
+    "path_basis": "normalized public tool-call path metadata; tool arguments and result bodies omitted",
+    "tool_call_counts_by_path": {
+      "opencode.jsonc": {"read": 1, "grep": 1, "total": 2},
+      ".opencode/agents/kael.md": {"read": 5, "grep": 2, "total": 7}
+    },
+    "unexpected_file_or_directory_targets": 0,
+    "source_content_persisted": false
+  },
+  "tool_call_records": [
+    {"id": "call_FezJIDnZdFiFD0C7v9NTiXC8", "parent_message_id": "msg_10cbb0578001h1TQhcG0eC7oPW", "name": "skill", "executed": false, "state": "completed", "result_id": null, "result_id_observation": "NOT_EXPOSED"},
+    {"id": "call_v69GrbjjaiOpb433jigqPemh", "parent_message_id": "msg_10cbb1c7f001B9LEMhu92FUZ91", "name": "read", "source_path": "opencode.jsonc", "executed": false, "state": "completed", "result_id": null, "result_id_observation": "NOT_EXPOSED"},
+    {"id": "call_6ye9hjdRe8aNA0PTh165i5h2", "parent_message_id": "msg_10cbb1c7f001B9LEMhu92FUZ91", "name": "grep", "source_path": ".opencode/agents/kael.md", "executed": false, "state": "completed", "result_id": null, "result_id_observation": "NOT_EXPOSED"},
+    {"id": "call_L4hRqakLa6KDPvit9mX4g0j6", "parent_message_id": "msg_10cbb346b001aIXpVittgy20SD", "name": "read", "source_path": ".opencode/agents/kael.md", "executed": false, "state": "completed", "result_id": null, "result_id_observation": "NOT_EXPOSED"},
+    {"id": "call_wiDkOfXnf7swKrwRUgQQzi5e", "parent_message_id": "msg_10cbb346b001aIXpVittgy20SD", "name": "read", "source_path": ".opencode/agents/kael.md", "executed": false, "state": "completed", "result_id": null, "result_id_observation": "NOT_EXPOSED"},
+    {"id": "call_wDqgNnnIFDxwrAjyjyTWYR0J", "parent_message_id": "msg_10cbb346b001aIXpVittgy20SD", "name": "read", "source_path": ".opencode/agents/kael.md", "executed": false, "state": "completed", "result_id": null, "result_id_observation": "NOT_EXPOSED"},
+    {"id": "call_wauScjoFkFKOxa0yFH8AZIoi", "parent_message_id": "msg_10cbb56fe001WBMizGJz2850GK", "name": "read", "source_path": ".opencode/agents/kael.md", "executed": false, "state": "completed", "result_id": null, "result_id_observation": "NOT_EXPOSED"},
+    {"id": "call_p4gzxW4EPu06Lp8jg3zNSuo9", "parent_message_id": "msg_10cbbd667001wuYIAV0GSpQXwj", "name": "grep", "source_path": ".opencode/agents/kael.md", "executed": false, "state": "completed", "result_id": null, "result_id_observation": "NOT_EXPOSED"},
+    {"id": "call_KU4gWAZZLUE8nc53LLt8cNhr", "parent_message_id": "msg_10cbc065d001QdBQcACX81DING", "name": "grep", "source_path": "opencode.jsonc", "executed": false, "state": "completed", "result_id": null, "result_id_observation": "NOT_EXPOSED"},
+    {"id": "call_FmXN3bxd86fL1naZi27zfWDk", "parent_message_id": "msg_10cbc180f0018ufwKSSV9ioWhQ", "name": "read", "source_path": ".opencode/agents/kael.md", "executed": false, "state": "completed", "result_id": null, "result_id_observation": "NOT_EXPOSED"}
+  ],
+  "terminal_message_id": "msg_10cbc3c34001SztJMCvRUkztDX",
+  "terminal_outcome_record": {
+    "message_id": "msg_10cbcf96f001jSq3so5OixxrXW",
+    "type": "idle",
+    "outcome": "succeeded"
+  },
+  "projection_and_redaction": {
+    "reasoning_blocks_removed": 26,
+    "visible_text_blocks_projected_to_digest_or_bounded_facts": 2,
+    "known_credential_pattern_matches_removed": 0,
+    "provider_state_and_snapshots_omitted": true,
+    "tool_arguments_and_result_bodies_omitted": true,
+    "raw_export_persisted": false,
+    "timestamps_omitted": true,
+    "unrecognized_content_blocks_omitted": 0
+  }
+}

@@ -5,7 +5,8 @@
 native attempt remains an observed routing failure and has not been rewritten.
 **Historical E1 result:** `NATIVE_EXECUTED_ROUTING_FAIL`.
 **Current Case E acceptance:** E2 `NATIVE_EXECUTED_ROUTING_PASS`.
-**Phase 11:** **IN VALIDATION / PARTIAL**.
+**Phase 11:** **SHIPPED** after independent closure review; see the final
+integrated-routing closure record in `tests/phase11-integrated-routing/baseline.md`.
 
 ## Native evidence
 
@@ -187,11 +188,11 @@ inspected.
 
 Accordingly, the routing defect is **CLOSED —
 `VERIFIED_BY_E2_FRESH_ROOT_NATIVE`**. Current Case E acceptance is closed by E2;
-overall Phase 11 remains **IN VALIDATION / PARTIAL**, not SHIPPED. Fresh-root
-work F, G, H, and K remains pending. A is PASS guided/recovered, B/C/D/E2 are
-accepted fresh-root-native, I is PARTIAL guided, J is PASS guided/recovered, and
-L's recovered negative automatic-Aegis control is PASS.
-`ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE` remains `NOT_EXERCISED`.
-The closure's static validation commands and results are recorded in
+independent Vera closure review accepted Phase 11 as **SHIPPED**, with no
+pending native cases. This does not rewrite E1 or claim exhaustive runtime-path
+coverage. The guided Case I partial result and non-exercised Argus/Thales
+same-session follow-up coverage remain non-blocking and are recorded with the
+closure rationale in `tests/phase11-integrated-routing/baseline.md`. The
+closure's static validation commands and results are recorded in
 `tests/phase11-integrated-routing/baseline.md`; they validate artifacts and do
 not constitute a Case E rerun or independent source-export authentication.

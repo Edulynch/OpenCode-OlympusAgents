@@ -87,8 +87,59 @@
       "REFERENCE_ONLY PHASE11_CASE_J_NEGATIVE_CONTROL",
       "REFERENCE_ONLY PHASE11_CASE_L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERY"
     ],
-    "overall_status": "PARTIAL",
-    "current_pending_state_source": "PH11-E2-CLOSURE records E2 as the latest Case E acceptance; phase11-f-corpus-write accepts F, P11-G-reconcile-write accepts G, PHASE11-H-reconcile-write accepts H, and p11-k-reconcile-write accepts K FAST and NORMAL as FRESH_ROOT_NATIVE while E1's observed routing failure remains immutable history; original baseline and prior B3/C/D/E1/E2/F/G/H pending snapshots are preserved"
+    "overall_status": "SHIPPED",
+    "current_pending_state_source": "PH11-E2-CLOSURE records E2 as the latest Case E acceptance; phase11-f-corpus-write accepts F, P11-G-reconcile-write accepts G, PHASE11-H-reconcile-write accepts H, and p11-k-reconcile-write accepts K FAST and NORMAL as FRESH_ROOT_NATIVE while E1's observed routing failure remains immutable history; original baseline and prior B3/C/D/E1/E2/F/G/H pending snapshots are preserved; P11-CLOSURE-ARTIFACTS records independent Vera ACCEPT and current SHIPPED status",
+    "closure": {
+      "PHASE_11_INTEGRATED_ROUTING": "SHIPPED",
+      "NO_PENDING_NATIVE_CASES": true,
+      "INTEGRATED_ROUTING_GOALS": "SATISFIED_COLLECTIVELY_WITHOUT_ALL_POSSIBLE_RUNTIME_PATHS_EXERCISED",
+      "VERA_CLOSURE_REVIEW": {
+        "RESULT": "ACCEPT",
+        "SESSION_ID": "ses_ef205f658ffeSvOF8e84tEEBqA",
+        "RATIONALE": "Independent review found no blocking or material findings; guided/history evidence and unexercised optional runtime paths remain honestly bounded and non-blocking for this integrated-routing closure."
+      },
+      "CASE_I_GUIDED_RESULT": "PARTIAL",
+      "CASE_I_PHASE11_CLOSURE_BLOCKER": "NO",
+      "CASE_I_PARTIAL": "NON_BLOCKING_FOR_PHASE11_CLOSURE",
+      "CASE_I_NOTE": "The useful baseline is missing, limiting optimization evaluation quality; no routing defect is demonstrated.",
+      "ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE": "NOT_EXERCISED",
+      "ARGUS_FOLLOWUP_CLOSURE_BLOCKER": "NO",
+      "THALES_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE": "NOT_EXERCISED",
+      "THALES_FOLLOWUP_CLOSURE_BLOCKER": "NO",
+      "FOLLOWUP_RUNTIME_COVERAGE": "NON_BLOCKING_NOT_EXERCISED",
+      "SAME_SESSION_ITERATIVE_INVARIANT": "DETERMINISTIC_PROTECTED_AND_CONDITIONAL",
+      "ADDITIONAL_D_G_EVIDENCE_ROUNDS": "NOT_JUSTIFIED",
+      "E1_RESULT": "NATIVE_EXECUTED_ROUTING_FAIL",
+      "E1_STATUS": "PERMANENT_HISTORICAL_FAILURE",
+      "E2_RESULT": "PASS",
+      "E2_EVIDENCE_CLASS": "FRESH_ROOT_NATIVE",
+      "ROUTING_DEFECT": "CLOSED_VERIFIED_BY_E2",
+      "K_FAST_USEFUL_INDEPENDENT_KOVAN_WRITERS": 4,
+      "K_FAST_NATIVE_MESSAGE_SPAN_MAX": 4,
+      "K_NORMAL_USEFUL_INDEPENDENT_KOVAN_WRITERS": 1,
+      "K_NORMAL_NATIVE_MESSAGE_SPAN_MAX": 1,
+      "K_FUNCTIONAL_PARITY": "PASS",
+      "K_SCHEDULER_IMPLEMENTATION_GUARANTEE": "NOT_ESTABLISHED",
+      "K_WALL_CLOCK_SPEEDUP": "NOT_MEASURED",
+      "K_SYNTHETIC_NORMAL_TWO_WRITER_TRACE": "ILLUSTRATIVE_ONLY",
+      "RETAINED_ACCEPTANCE": {
+        "A_GUIDED_RECOVERED": "PASS",
+        "B_FRESH_ROOT_NATIVE": "PASS",
+        "C_FRESH_ROOT_NATIVE": "PASS",
+        "D_FRESH_ROOT_NATIVE": "PASS",
+        "F_FRESH_ROOT_NATIVE": "PASS",
+        "G_FRESH_ROOT_NATIVE": "PASS",
+        "H_FRESH_ROOT_NATIVE": "PASS",
+        "J_GUIDED_RECOVERED": "PASS",
+        "L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERED": "PASS"
+      },
+      "OPEN_FOLLOWUPS": [
+        {"ID": "#1", "DESCRIPTION": "upstream result correlation", "STATUS": "OPEN"},
+        {"ID": "#7", "DESCRIPTION": "global runtime discovery", "STATUS": "OPEN"},
+        {"ID": "#11", "DESCRIPTION": "qualification simplification", "STATUS": "OPEN"},
+        {"ID": "#12", "DESCRIPTION": "monolithic writer shell calls after Phase 11", "STATUS": "OPEN"}
+      ]
+    }
   },
   "recovered_user_observations": {
     "task_id": "P11-FIX-20261003",
@@ -1692,9 +1743,10 @@
       "COMPLETION_OWNERSHIP": "PASS"
     },
     "remaining_native_cases": [],
-    "phase11_status": "PARTIAL",
-    "closure_review_ready": true,
-    "shipped": false,
+    "phase11_status": "SHIPPED",
+    "closure_review_ready": false,
+    "closure_review_status": "ACCEPT",
+    "shipped": true,
     "pending_fresh_root_labels": []
   }
 }

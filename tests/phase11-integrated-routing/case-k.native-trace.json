@@ -349,9 +349,10 @@
     "MAX_OVERLAP_BASIS": "Native message-span overlap only; not scheduler, CPU/process parallelism, or wall-clock speedup.",
     "WALL_CLOCK_SPEEDUP": null,
     "CURRENT_REMAINING_NATIVE_CASES": [],
-    "PHASE11_STATUS": "PARTIAL",
-    "CLOSURE_REVIEW_READY": true,
-    "SHIPPED": false
+    "PHASE11_STATUS": "SHIPPED",
+    "CLOSURE_REVIEW_READY": false,
+    "CLOSURE_REVIEW_RESULT": "ACCEPT",
+    "SHIPPED": true
   },
   "CLASSIFICATIONS": {
     "FUNCTIONAL_PARITY": "PASS",
@@ -369,7 +370,7 @@
   },
   "EVENTS": [],
   "EVENT_ORDER_BASIS": "No total order reconstructed; supplied writer message spans are recorded separately.",
-  "PHASE11_STATUS": "PARTIAL",
+  "PHASE11_STATUS": "SHIPPED",
   "PENDING_FRESH_ROOT_LABELS": [],
   "RECONCILIATION_FILES_CHANGED": [
     "tests/phase11-integrated-routing/RUNME.md",
@@ -389,5 +390,5 @@
     "NATIVE_PERMISSION_UI": "NOT_OBSERVABLE",
     "NATIVE_PERMISSION_DECISION": "NOT_OBSERVABLE"
   },
-  "NOTES": "FAST and NORMAL are distinct fresh roots on independent disposable worktrees at the same supplied starting HEAD, with the same four target paths and marker checks. FAST has four useful independent Kovan writers; all four supplied Kovan message spans overlap. NORMAL has one useful Kovan writer in this observation, but one through four is the valid useful-writer range; the synthetic two-writer NORMAL trace is only an illustration. Nox validation and same-session continuations are excluded from writer/session counts. C's span can include its blocked initial attempt and same-session continuation; spans do not establish uninterrupted execution or a total event order. The overlap figure is message-span overlap only, not scheduler/CPU/process parallelism or wall-clock speedup. Root aggregate child-terminal/consumed facts support completion; result IDs and exact-once consumption timing remain unknown. Overall Phase 11 is PARTIAL and closure-review-ready, not SHIPPED."
+  "NOTES": "FAST and NORMAL are distinct fresh roots on independent disposable worktrees at the same supplied starting HEAD, with the same four target paths and marker checks. FAST has four useful independent Kovan writers; all four supplied Kovan message spans overlap. NORMAL has one useful Kovan writer in this observation, but one through four is the valid useful-writer range; the synthetic two-writer NORMAL trace is only an illustration. Nox validation and same-session continuations are excluded from writer/session counts. C's span can include its blocked initial attempt and same-session continuation; spans do not establish uninterrupted execution or a total event order. The overlap figure is message-span overlap only, not scheduler/CPU/process parallelism or wall-clock speedup. Root aggregate child-terminal/consumed facts support completion; result IDs and exact-once consumption timing remain unknown. Independent Vera closure review ACCEPT records Phase 11 SHIPPED with no pending native cases; not all possible runtime paths are claimed exercised."
 }

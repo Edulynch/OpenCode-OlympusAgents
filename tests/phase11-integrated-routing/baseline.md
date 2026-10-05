@@ -491,12 +491,13 @@ projection, and no disposable-worktree filesystem was read.
   only; its source trace and projection remain unchanged and its failed history
   is preserved.
 
-The latest live Phase 11 snapshot therefore removes E from current pending work;
-only F, G, H, and K remain pending fresh-root actions. Phase 11 remains
-**IN VALIDATION / PARTIAL**, not SHIPPED. A is PASS guided/recovered, B/C/D/E2
-are accepted `FRESH_ROOT_NATIVE`, I is PARTIAL guided, J is PASS
-guided/recovered, and L's recovered negative automatic-Aegis control is PASS.
-`ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE` remains
+At the E2 closure snapshot, E was removed from current pending work and F, G, H,
+and K remained pending fresh-root actions. The later Case F reconciliation below
+removes F from current pending state without rewriting the historical E2 snapshot.
+Phase 11 remains **IN VALIDATION / PARTIAL**, not SHIPPED. A is PASS
+guided/recovered, B/C/D/E2 are accepted `FRESH_ROOT_NATIVE`, I is PARTIAL
+guided, J is PASS guided/recovered, and L's recovered negative automatic-Aegis
+control is PASS. `ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE` remains
 `NOT_EXERCISED`; E2 did not demonstrate same-session follow-up behavior.
 
 Closure validation from the canonical repository passed:
@@ -515,3 +516,63 @@ Closure validation from the canonical repository passed:
 The E2 native/reconciliation validator adds material semantic checks and should
 receive independent Nox or Vera review before adoption; this writer did not
 perform or delegate that review. Kael decides whether to request the review.
+
+## Case F fresh-root native reconciliation — `phase11-f-corpus-write`
+
+The supplied complete read-only API observation and reasoning-redacted root
+projection are recorded in `case-f.native-trace.json` and
+`case-f.root-session.export.json` as `FRESH_ROOT_NATIVE`. This corpus writer did
+not re-query native APIs, access the root's temporary directory, inspect a
+worktree, or rerun the historical root. Nox's direct collector session
+`ses_ef69769d4ffeOolSaq4q5CN7EI` is recorded only as evidence provenance; it is
+not a child of the Case F root and is not part of its route or role counts.
+
+- The exact root is Kael `ses_ef6a0d293ffeggS6H8JnsTARAW`, titled “Windows
+  command-unavailable environment issue,” with execution outcome `succeeded`.
+  The metadata parent field was `NOT_EXPOSED`; the root is not claimed parentless.
+  The starting HEAD `627946defc9eef0eb25e15d9d8b2865b7d6960ad` and disposable
+  root were supplied in the original root prompt. Directory-filtered membership
+  returned that exact root and exhausted both pages; this reconciliation did not
+  independently verify the starting HEAD or perform a filesystem audit.
+- The complete export contains three messages and no export pagination. The
+  exact direct-child query returned no children; the complete root export had
+  zero tool-call records and zero nested tool wrappers. The observed route is
+  `Kael` only, matching the `OPERATIONAL_TOOLING_ISSUE` expectation. All recorded
+  role counts are zero, including Veyra, Orin, Atlas, Kovan, Argus, Nox, Vera,
+  Talos, Thales, Helios, and Aegis. The native capture contains no reconstructed
+  runtime event sequence; maximum simultaneous children and unrelated timing,
+  retry, and result-consumption measures remain `null`.
+- The preserved terminal answer classifies the plain `python` command
+  unavailability as an operational issue: test execution did not start. It
+  establishes neither a product bug nor a security bug, recommends invoking the
+  original targeted command through the known `uv run --python 3.11 python`
+  runtime without configuration changes, and states what evidence would be
+  needed before calling a product bug. No test was run during diagnosis.
+- The terminal reports `INSTALL_ATTEMPTED: NO`, `FILES_CHANGED: NONE`, no
+  unresolved work, required children terminal and consumed, and no work remaining.
+  Behavior, operational classification, no-invented-product/security-bug,
+  negative Argus/Talos controls, no-install, role purity, completion ownership,
+  routing, and fresh-root-native acceptance are PASS. Efficiency is `LEAN` as a
+  qualification judgment, not a measured latency or concurrency result.
+- One reasoning block was removed from the safe export projection; provider
+  state and snapshots were omitted, and the raw export was not persisted. Nox
+  did not assess secret filtering. The corpus writer inspected the supplied
+  visible text and observed no secret credentials; no redaction/filter count is
+  asserted. Permission UI/decision remain `NOT_OBSERVABLE`.
+
+Case F is accepted as `NATIVE_EXECUTED_ROUTING_PASS`. The current pending fresh-
+root set is G, H, and K. The prior E1 native routing failure remains immutable
+history and E2 remains the accepted Case E attempt. A remains PASS guided/
+recovered; I remains PARTIAL guided; J remains PASS guided/recovered; L's
+negative automatic-Aegis control remains PASS recovered; and
+`ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE` remains `NOT_EXERCISED`. Overall
+Phase 11 remains **IN VALIDATION / PARTIAL**, not SHIPPED.
+
+Writer-local checks for this reconciliation passed: the Phase 11 qualifier
+reported artifact validation PASS with qualification PARTIAL; the Phase 11
+unittest suite passed 66 tests; Harness Core safe-root read-only validation
+passed with all 29 managed-output hashes/mtimes unchanged; the all-harness
+renderer check passed read-only for 29 managed outputs; and `git diff --check`
+passed with line-ending warnings only. `PYTHONDONTWRITEBYTECODE=1` and `python -B`
+were used where applicable. These checks did not rerun Case F. Independent Nox
+validation remains the next review step.

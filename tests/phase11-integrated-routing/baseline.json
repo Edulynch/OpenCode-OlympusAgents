@@ -62,7 +62,7 @@
   },
   "live_qualification": {
     "guided_current_session": "NOT_CAPTURED",
-    "fresh_root_native": "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F,G,H,K_PENDING",
+    "fresh_root_native": "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F_PASS; G,H,K_PENDING",
     "native_results_claimed": true,
     "pending_labels_at_baseline_capture": [
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_A",
@@ -79,7 +79,6 @@
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_L"
     ],
     "pending_labels": [
-      "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
       "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
@@ -93,7 +92,7 @@
       "REFERENCE_ONLY PHASE11_CASE_L_NEGATIVE_AUTOMATIC_AEGIS_RECOVERY"
     ],
     "overall_status": "PARTIAL",
-    "current_pending_state_source": "PH11-E2-CLOSURE current native reconciliation; E2 passes and closes Case E acceptance while E1's observed routing failure remains an immutable failed historical attempt; original baseline, prior recovery labels, and B3/C/D/E1 pending labels are preserved as historical snapshots"
+    "current_pending_state_source": "PH11-E2-CLOSURE records E2 as the latest Case E acceptance; phase11-f-corpus-write current native reconciliation accepts F as FRESH_ROOT_NATIVE while E1's observed routing failure remains immutable history; original baseline and prior B3/C/D/E1/E2 pending snapshots are preserved"
   },
   "recovered_user_observations": {
     "task_id": "P11-FIX-20261003",
@@ -1171,6 +1170,179 @@
     },
     "case_rerun_performed_by_reconciliation": false,
     "core_policy_modified": false
+  },
+  "phase11_f_reconciliation": {
+    "task_id": "phase11-f-corpus-write",
+    "source": "Nox direct read-only native OpenCode V2 API reconciliation; the completed query results were recovered from the original Nox session after interrupted parent delivery, without re-query or root replay.",
+    "label": "PHASE11_CASE_F_FRESH_ROOT",
+    "evidence_artifact": "tests/phase11-integrated-routing/case-f.native-trace.json",
+    "export_artifact": "tests/phase11-integrated-routing/case-f.root-session.export.json",
+    "evidence_class": "FRESH_ROOT_NATIVE",
+    "root_session_id": "ses_ef6a0d293ffeggS6H8JnsTARAW",
+    "root_directory": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-f",
+    "root_agent": "kael",
+    "root_parent_session_id": null,
+    "root_parent_session_id_observation": "NOT_EXPOSED",
+    "root_title": "Windows command-unavailable environment issue",
+    "root_terminal_outcome": "succeeded",
+    "root_user_message_id": "msg_1095f2d70001yQlPWbonusnuKa",
+    "root_terminal_message_id": "msg_1095f2e910011Hmw2KfRXxqMw7",
+    "root_idle_message_id": "msg_1095f74b4001R44GqxRV7jViXp",
+    "root_starting_head": "627946defc9eef0eb25e15d9d8b2865b7d6960ad",
+    "root_starting_head_source": "Original root user prompt",
+    "root_starting_head_filesystem_verified": false,
+    "root_membership": {
+      "status": "SUPPLIED_VERIFIED",
+      "directory_metadata_matches_prompt": true,
+      "root_only_list_membership": true,
+      "directory_query_pages": 2,
+      "directory_query_page_item_counts": [1, 0],
+      "directory_query_total_filtered_items": 1,
+      "directory_query_cursor_exhausted": true,
+      "parent_id_observation": "NOT_EXPOSED",
+      "filesystem_audit_performed": false,
+      "separate_disposable_worktree": null
+    },
+    "direct_child_count": 0,
+    "root_tool_call_record_count": 0,
+    "nested_tool_wrapper_count": 0,
+    "root_export_message_count": 3,
+    "root_export_pagination": "NONE_OBSERVED",
+    "child_sessions": [],
+    "expected_product_route": ["kael"],
+    "observed_product_route": ["kael"],
+    "consultation_counts": {
+      "kael": 0,
+      "veyra": 0,
+      "orin": 0,
+      "kovan": 0,
+      "nox": 0,
+      "vera": 0,
+      "atlas": 0,
+      "argus": 0,
+      "talos": 0,
+      "thales": 0,
+      "helios": 0,
+      "aegis": 0
+    },
+    "unique_child_session_counts": {
+      "kael": 0,
+      "veyra": 0,
+      "orin": 0,
+      "kovan": 0,
+      "nox": 0,
+      "vera": 0,
+      "atlas": 0,
+      "argus": 0,
+      "talos": 0,
+      "thales": 0,
+      "helios": 0,
+      "aegis": 0
+    },
+    "max_simultaneous_children": null,
+    "classifications": {
+      "CASE_F_BEHAVIOR": "PASS",
+      "CASE_F_OPERATIONAL_CLASSIFICATION": "PASS",
+      "CASE_F_NO_PRODUCT_BUG_INVENTED": "PASS",
+      "CASE_F_NO_SECURITY_BUG_INVENTED": "PASS",
+      "CASE_F_NEGATIVE_ARGUS_CONTROL": "PASS",
+      "CASE_F_NEGATIVE_TALOS_CONTROL": "PASS",
+      "CASE_F_NO_INSTALL": "PASS",
+      "CASE_F_ROLE_PURITY": "PASS",
+      "CASE_F_COMPLETION_OWNERSHIP": "PASS",
+      "CASE_F_ROUTING": "PASS",
+      "CASE_F_FRESH_ROOT_NATIVE": "PASS"
+    },
+    "terminal_facts": {
+      "CLASSIFICATION": "OPERATIONAL_ISSUE — plain `python` is unavailable in the Windows shell; test execution did not start.",
+      "PRODUCT_BUG_ESTABLISHED": "NO",
+      "SECURITY_BUG_ESTABLISHED": "NO",
+      "SMALLEST_SAFE_NEXT_ACTION": "Recommend invoking the original targeted unittest command through the known working `uv run --python 3.11 python` runtime, without installation or configuration changes. Do not execute tests during this diagnosis.",
+      "EVIDENCE_REQUIRED_FOR_PRODUCT_BUG": "An actual failure after tests start under a working runtime, supported by expected behavior and evidence attributing the failure to product code rather than the environment or test harness.",
+      "INSTALL_ATTEMPTED": "NO",
+      "FILES_CHANGED": "NONE",
+      "UNRESOLVED_WORK": "NONE",
+      "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+      "ANY_WORK_REMAINING": "NO"
+    },
+    "completion_gate": {
+      "pending_child_count": 0,
+      "unconsumed_result_count": 0,
+      "unknown_execution_count": 0,
+      "required_children_terminal_and_consumed": true,
+      "result_ids": null,
+      "per_invocation_consumption_timing": null,
+      "session_lifetime_exact_once": null
+    },
+    "user_question_count": 0,
+    "final_outcome": "SUCCEEDED",
+    "install_attempted": "NO",
+    "files_changed": "NONE",
+    "core_policy_modified": false,
+    "case_rerun_performed_by_reconciliation": false,
+    "projection_and_redaction": {
+      "reasoning_blocks_removed": 1,
+      "provider_state_omitted": true,
+      "snapshots_omitted": true,
+      "secret_filtering": "NOT_ASSESSED_BY_NOX",
+      "visible_secret_credentials_observed": false,
+      "raw_export_persisted": false
+    },
+    "unknowns": {
+      "max_simultaneous_children": null,
+      "wall_clock_ms": null,
+      "runtime_duration_ms": null,
+      "retry_count": null,
+      "per_invocation_result_ids": null,
+      "per_invocation_consumption_timing": null,
+      "session_lifetime_exact_once": null,
+      "native_permission_ui": "NOT_OBSERVABLE",
+      "native_permission_decision": "NOT_OBSERVABLE",
+      "worktree_filesystem_audit": "NOT_PERFORMED"
+    },
+    "efficiency": "LEAN",
+    "writer_local_validation": {
+      "phase11_qualifier": {
+        "command": "uv run --python 3.11 python -B tests/phase11-integrated-routing/qualify.py",
+        "exit_code": 0,
+        "result": "PHASE11_ARTIFACTS: PASS; PHASE11_QUALIFICATION: PARTIAL"
+      },
+      "phase11_unittest": {
+        "command": "uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing -p \"test_*.py\" -v",
+        "exit_code": 0,
+        "test_count": 66,
+        "result": "PASS"
+      },
+      "harness_core_safe_root": {
+        "command": "uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-only",
+        "exit_code": 0,
+        "result": "PASS",
+        "managed_output_count_before": 29,
+        "managed_output_count_after": 29,
+        "hash_mtime_unchanged": true
+      },
+      "renderer_check": {
+        "command": "uv run --python 3.11 python -B scripts/render_harnesses.py check --harness all",
+        "exit_code": 0,
+        "result": "PASS (all; 29 managed output(s); read-only)"
+      },
+      "git_diff_check": {
+        "command": "git diff --check",
+        "exit_code": 0,
+        "result": "PASS",
+        "line_ending_warnings_only": true
+      },
+      "pythondontwritebytecode": true,
+      "case_f_rerun_performed": false
+    },
+    "acceptance_status": "PASS",
+    "case_result": "NATIVE_EXECUTED_ROUTING_PASS",
+    "phase11_status": "PARTIAL",
+    "pending_fresh_root_labels": [
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+      "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT"
+    ]
   },
   "argus_same_session_followup_runtime_coverage": {
     "status": "NOT_EXERCISED",

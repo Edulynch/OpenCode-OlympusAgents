@@ -1,0 +1,110 @@
+{
+  "evidence_class": "FRESH_ROOT_NATIVE",
+  "source_api": "OpenCode V2 public read-only API",
+  "session_metadata_query": {
+    "method": "GET",
+    "path": "/api/session/ses_ef6a0d293ffeggS6H8JnsTARAW",
+    "result": "SUCCESS"
+  },
+  "export_query": {
+    "method": "GET",
+    "path": "/api/experimental/session/ses_ef6a0d293ffeggS6H8JnsTARAW/export?sanitize=false",
+    "result": "SUCCESS"
+  },
+  "direct_child_query": {
+    "method": "GET",
+    "path": "/api/session?parentID=ses_ef6a0d293ffeggS6H8JnsTARAW",
+    "result": "SUCCESS",
+    "response": {
+      "parent_id": "ses_ef6a0d293ffeggS6H8JnsTARAW",
+      "data": [],
+      "cursor_previous": null,
+      "cursor_next": null,
+      "pages": 1
+    }
+  },
+  "directory_filtered_root_membership_query": {
+    "method": "GET",
+    "path": "/api/session?parentID=null&directory=C%3A%5CUsers%5CBLAUTECH%5CAppData%5CLocal%5CTemp%5Colympus-phase11-case-f",
+    "result": "SUCCESS",
+    "parent_id_filter": null,
+    "parent_id_field_observation": "NOT_EXPOSED",
+    "page_item_counts": [1, 0],
+    "pages": 2,
+    "cursor_exhausted": true,
+    "total_filtered_items": 1,
+    "matching_root_session_ids": ["ses_ef6a0d293ffeggS6H8JnsTARAW"],
+    "root_membership": true
+  },
+  "session": {
+    "id": "ses_ef6a0d293ffeggS6H8JnsTARAW",
+    "agent": "kael",
+    "parent_id": null,
+    "parent_id_observation": "NOT_EXPOSED",
+    "directory": "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-f",
+    "title": "Windows command-unavailable environment issue",
+    "execution_outcome": "succeeded",
+    "created_epoch_ms": 1791158595160,
+    "updated_epoch_ms": 1791158597772,
+    "idle_epoch_ms": 1791158613172,
+    "viewed_epoch_ms": 1791158613172
+  },
+  "messages": [
+    {
+      "id": "msg_1095f2d70001yQlPWbonusnuKa",
+      "type": "user",
+      "time": {"created": 1791158595195},
+      "files": [],
+      "agents": [],
+      "text": "PHASE11_CASE_F_FRESH_ROOT\n\nThe repository root and starting HEAD were externally verified immediately before this fresh OpenCode root was started.\n\nRepository root:\n\nC:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-f\n\nStarting HEAD:\n\n627946defc9eef0eb25e15d9d8b2865b7d6960ad\n\nAnalyze this bounded development failure:\n\nA developer reports that \"the tests are broken.\"\n\nThe only established failure is:\n\n`python -m unittest ...`\n\ncannot start because the plain `python` command is unavailable in the current Windows shell.\n\nThere is no observed failing product test, assertion failure, stack trace from application code, behavioral regression, security violation, or evidence that repository source is defective.\n\nA working Python 3.11 runtime is already known to be available through:\n\n`uv run --python 3.11 python`\n\nDetermine:\n\n- the correct classification of the observed failure;\n- whether a product defect has actually been established;\n- the smallest safe next action;\n- what evidence would be needed before classifying a product bug.\n\nThis is diagnosis/containment only.\n\nDo not:\n\n- install Python or dependencies;\n- modify PATH or global configuration;\n- modify repository files;\n- implement a workaround;\n- run broad repository discovery;\n- classify a product bug without evidence;\n- classify a security defect without evidence;\n- optimize;\n- use FAST;\n- enter `/maintain`;\n- commit, stage, push, merge, tag, or release.\n\nUse the smallest sufficient route under the current Olympus routing policy.\n\nDo not run tests merely to create evidence that the prompt explicitly says has not yet been observed.\n\nAt completion report only observable conclusions:\n\nCLASSIFICATION:\n...\n\nPRODUCT_BUG_ESTABLISHED:\nYES | NO\n\nSECURITY_BUG_ESTABLISHED:\nYES | NO\n\nSMALLEST_SAFE_NEXT_ACTION:\n...\n\nEVIDENCE_REQUIRED_FOR_PRODUCT_BUG:\n...\n\nINSTALL_ATTEMPTED:\nNO | YES\n\nFILES_CHANGED:\nNONE | ...\n\nUNRESOLVED_WORK:\nNONE | ...\n\nREQUIRED_CHILDREN_TERMINAL_AND_CONSUMED:\nYES | NO\n\nANY_WORK_REMAINING:\nYES | NO\n\nDo not invent session IDs, consultation counts, concurrency, permission decisions, executed commands, or native evidence that was not directly observed."
+    },
+    {
+      "id": "msg_1095f2e910011Hmw2KfRXxqMw7",
+      "type": "assistant",
+      "agent": "kael",
+      "time": {
+        "created": 1791158596549,
+        "streamed": 1791158613031,
+        "completed": 1791158613167
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "CLASSIFICATION:\nOPERATIONAL_ISSUE — plain `python` is unavailable in the Windows shell; test execution did not start.\n\nPRODUCT_BUG_ESTABLISHED:\nNO\n\nSECURITY_BUG_ESTABLISHED:\nNO\n\nSMALLEST_SAFE_NEXT_ACTION:\nRecommend invoking the original targeted unittest command through the known working `uv run --python 3.11 python` runtime, without installation or configuration changes. Do not execute tests during this diagnosis.\n\nEVIDENCE_REQUIRED_FOR_PRODUCT_BUG:\nAn actual failure after tests start under a working runtime, supported by expected behavior and evidence attributing the failure to product code rather than the environment or test harness.\n\nINSTALL_ATTEMPTED:\nNO\n\nFILES_CHANGED:\nNONE\n\nUNRESOLVED_WORK:\nNONE\n\nREQUIRED_CHILDREN_TERMINAL_AND_CONSUMED:\nYES\n\nANY_WORK_REMAINING:\nNO"
+        }
+      ]
+    },
+    {
+      "id": "msg_1095f74b4001R44GqxRV7jViXp",
+      "type": "idle",
+      "outcome": "succeeded",
+      "time": {"created": 1791158613172}
+    }
+  ],
+  "message_count": 3,
+  "export_pagination": "NONE_OBSERVED",
+  "tool_call_records": [],
+  "tool_call_record_count": 0,
+  "nested_tool_wrapper_count": 0,
+  "content_availability": {
+    "user_prompt": "PRESERVED_FROM_SUPPLIED_NATIVE_EVIDENCE",
+    "assistant_terminal_text": "PRESERVED_WITH_REASONING_REMOVED",
+    "provider_state_and_snapshots": "OMITTED",
+    "raw_export": "NOT_PERSISTED"
+  },
+  "projection_and_redaction": {
+    "description": "Persisted only the supplied user prompt, visible assistant terminal text, root/message metadata, and empty observed tool-call projection. One reasoning block was removed; provider state and snapshots were omitted; raw export was not persisted. Nox did not assess secret filtering. The corpus writer inspected the supplied visible text and observed no secret credentials; no filter or redaction count is claimed.",
+    "reasoning_blocks_removed": 1,
+    "provider_state_omitted": true,
+    "snapshots_omitted": true,
+    "secret_filtering": "NOT_ASSESSED_BY_NOX",
+    "visible_secret_credentials_observed": false,
+    "raw_export_persisted": false
+  },
+  "terminal_message_id": "msg_1095f2e910011Hmw2KfRXxqMw7",
+  "terminal_outcome_record": {
+    "message_id": "msg_1095f74b4001R44GqxRV7jViXp",
+    "type": "idle",
+    "outcome": "succeeded"
+  }
+}

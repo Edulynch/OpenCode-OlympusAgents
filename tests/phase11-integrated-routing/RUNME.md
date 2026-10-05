@@ -9,15 +9,16 @@ recovered guided outcomes and a reconciled B2 runtime observation (recorded
 below and in `baseline.json`). Separately, verified native B3 exports/history
 and CLI results are captured in `case-b3.native-trace.json`; verified native
 Case C exports/history are captured in `case-c.native-trace.json`; native
-Case D invocation history is captured in `case-d.native-trace.json`; and the
+Case D invocation history is captured in `case-d.native-trace.json`; the
 original Case E1 failure and the later E2 root/child exports are captured in
 `case-e.native-trace.json`, `case-e.root-session.export.json`,
 `case-e2.native-trace.json`, `case-e2.root-session.export.json`, and
-`case-e2.talos-session.export.json`. B3, C, D, and E2 qualify their bounded
+`case-e2.talos-session.export.json`; Case F's native root-only diagnosis is
+captured in `case-f.native-trace.json` and `case-f.root-session.export.json`.
+B3, C, D, E2, and F qualify their bounded
 acceptance outcomes; E1 remains an observed historical routing failure and is
-not rewritten as a pass. None of these native invocation-level captures is
-inserted into the synthetic trace corpus or reconstructed as a synthetic
-lifecycle.
+not rewritten as a pass. None of these native captures is inserted into the
+synthetic trace corpus or reconstructed as a synthetic lifecycle.
 
 ## Automatic local commands
 
@@ -32,11 +33,11 @@ uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-on
 ```
 
 The first command validates the versioned case matrix, synthetic event semantics,
-completion/evidence claims, separate B1/B2/B3/C/D/E1/E2 reconciliations, the
+completion/evidence claims, separate B1/B2/B3/C/D/E1/E2/F reconciliations, the
 bounded B3, C, and D native invocation captures, the original E1 failed-root
 projection, the E2 root/child export projections and accepted Talos route, and
-presence-only gate markers. It
-reports
+the F root-only export projection and operational finding, plus presence-only
+gate markers. It reports
 `PHASE11_ARTIFACTS: PASS` when those artifacts are sound while overall
 qualification remains `PHASE11_QUALIFICATION: PARTIAL` until remaining
 acceptance items are resolved. The second command
@@ -228,16 +229,56 @@ as parent and also succeeded.
   `NATIVE_EXECUTED_ROUTING_FAIL` with actual route Kael only; E2 does not rewrite
   or replace that historical fact. E2 closes current Case E acceptance.
 
-Phase 11 remains **IN VALIDATION / PARTIAL**, not SHIPPED. Current pending
-fresh-root work is F, G, H, and K. `ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE`
+Phase 11 remains **IN VALIDATION / PARTIAL**, not SHIPPED. At the E2 snapshot,
+pending fresh-root work was F, G, H, and K; the later F reconciliation below
+removes F from current pending. `ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE`
 remains `NOT_EXERCISED`; E2 did not exercise that separate runtime behavior.
+
+## Case F native capture — operational issue, no product bug established
+
+`case-f.native-trace.json` and `case-f.root-session.export.json` preserve the
+supplied completed Case F root evidence without rerunning or re-querying it. The
+root is Kael `ses_ef6a0d293ffeggS6H8JnsTARAW`; its parent-session field was
+`NOT_EXPOSED`. The supplied prompt records starting HEAD
+`627946defc9eef0eb25e15d9d8b2865b7d6960ad`; the reconciliation did not verify
+that HEAD against a filesystem. The directory-filtered native listing was
+exhausted and contained exactly this root. No filesystem audit was performed.
+The Nox collector is separate provenance, not a member of the historical Case F
+root family.
+
+The complete root export has three messages and no export pagination. The
+direct-child query is empty, and the root export has no tool-call records or
+nested tool wrappers. Expected and actual routes are both `Kael` only. All
+recorded specialist counts are zero, including Argus and Talos; no root runtime
+event sequence was reconstructed. Maximum simultaneous children, runtime and
+wall-clock durations, retry count, result IDs/consumption timing, and
+session-lifetime exact-once remain unknown (`null`). Permission UI and decision
+are `NOT_OBSERVABLE`.
+
+The visible terminal classifies the unavailable plain `python` command as an
+operational issue because the test command did not start. It establishes neither
+a product bug nor a security bug, recommends using the already-known
+`uv run --python 3.11 python` runtime for the original targeted command, and
+does not execute tests during diagnosis. It reports no install, no file changes,
+no unresolved work, required child work terminal and consumed, and no work
+remaining. The visible projection omits one reasoning block and provider state
+and snapshots; the raw export was not persisted. Nox did not assess secret
+filtering; the supplied visible text was inspected before persistence and no
+secret credentials were observed, without asserting a filter count.
+
+Case F behavior, operational classification, no-invented-product/security-bug,
+negative Argus/Talos controls, no-install, role purity, completion ownership,
+routing, and `FRESH_ROOT_NATIVE` acceptance are PASS. `LEAN` is a qualification
+judgment, not measured efficiency. E1 remains a failed historical Case E route;
+E2 remains the separate accepted Case E result. F is no longer pending; only G,
+H, and K remain fresh-root work and Phase 11 stays **IN VALIDATION / PARTIAL**.
 
 ## Remaining fresh-root work remains user action
 
 Use a separate clean disposable project copy and a **new, verified Kael root for
-each still-unrun case**. F, G, H, and K below remain pending fresh-root actions.
-E2 is accepted; E1's routing failure remains immutable history. Isolated B3 and
-C and bounded native D are also accepted. A, I, J, and L
+each still-unrun case**. G, H, and K below remain pending fresh-root actions.
+F, E2, and isolated B3, C, and bounded native D are accepted; E1's routing
+failure remains immutable history. A, I, J, and L
 prompt references/history are retained below but are not new rerun requests. Do
 not reuse a guided/current session as a fresh root. Confirm the effective root
 agent, child parentage and actual roles from native session evidence before
@@ -296,10 +337,16 @@ synthetic per-session lifecycle.
   one completed root subagent call. E2 closes the latest Case E acceptance while
   preserving E1's `NATIVE_EXECUTED_ROUTING_FAIL` history. No diagnosis replay,
   exploit, tests, or code-level mechanism claim is made.
-- `HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT` — “The test command is unavailable
-  because the local runner is not installed. Suggest the cheapest bounded
-  containment or usage correction; do not classify this as a product bug or
-  install anything.”
+- `ACCEPTED PHASE11_CASE_F_FRESH_ROOT` — native evidence and safe root-export
+  projection are in `case-f.native-trace.json` and
+  `case-f.root-session.export.json`. The complete root family is Kael only;
+  native API evidence records no direct child, tool call, or nested wrapper.
+  The terminal classifies unavailable plain `python` as an operational issue,
+  establishes neither a product nor security bug, recommends the known `uv`
+  Python 3.11 runtime without executing tests, and reports no install or file
+  changes. Root parentage was `NOT_EXPOSED`; its supplied starting HEAD was not
+  independently filesystem-verified during reconciliation. No rerun is
+  requested. Phase 11 remains PARTIAL.
 - `HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT` — “The fixed observation sequence in
   `fixtures/flaky/observations.json` is PASS, TIMEOUT, PASS for the same input.
   It is deterministic evidence, not random instability. Use bounded diagnosis
@@ -458,8 +505,8 @@ sessions only, not the Case A/I/J/L native roots. Preserve them if available.
   useful context, but not independent fresh-root evidence.
 - `FRESH_ROOT_NATIVE`: observed native evidence from a separately verified Kael
   root, with actual root identity and any observed child/tool records and order.
-  B3, C, D, and E2 are accepted; E1's captured native routing failure remains
-  historical; F, G, H, and K remain unrun. B2's routing observation is valid
+  B3, C, D, E2, and F are accepted; E1's captured native routing failure remains
+  historical; G, H, and K remain unrun. B2's routing observation is valid
   context but failed isolation. The recovered A/I/J/L
   observations remain guided/user-reported references and are not fresh-root
   evidence.
@@ -497,11 +544,11 @@ are marker-presence checks only.
 ## Current gate
 
 The A–L matrix, unchanged synthetic trace corpus, expanded mutation coverage,
-and B3/C/D/E1/E2 native records are present. Case B1 remains a fixture defect
+and B3/C/D/E1/E2/F native records are present. Case B1 remains a fixture defect
 with Question Barrier PASS; B2 runtime behavior remains PASS but
-isolation/acceptance remains PARTIAL; B3, C, D, and E2 fresh-root native
+isolation/acceptance remains PARTIAL; B3, C, D, E2, and F fresh-root native
 acceptance are PASS. E1 remains a historical Talos-routing failure, while E2
-closes current Case E acceptance. F, G, H, and K remain fresh-root work. D did
+closes current Case E acceptance. G, H, and K remain fresh-root work. D did
 not exercise Argus follow-up runtime
 coverage, which remains a separate open review item. A/I/J/L observations
 remain guided/history-only, with no rerun requested. The overall phase is **IN

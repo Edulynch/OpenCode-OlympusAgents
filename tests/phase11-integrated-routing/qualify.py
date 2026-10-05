@@ -251,11 +251,19 @@ CASE_E1_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
 ]
 CURRENT_PHASE11_PENDING_LABELS = [
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
+    "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
+]
+CASE_E2_PENDING_LABELS = [
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_F_FRESH_ROOT",
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_G_FRESH_ROOT",
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_H_FRESH_ROOT",
     "HUMAN_ACTION_REQUIRED PHASE11_CASE_K_FRESH_ROOT",
 ]
+CURRENT_PHASE11_FRESH_ROOT_STATE = (
+    "B3_PASS; C_PASS; D_PASS; E2_PASS (E1 routing failure retained as historical); F_PASS; G,H,K_PENDING"
+)
 CASE_D_ROOT_SESSION_ID = "ses_ef8c726b7ffeqWgvWlpg0NcU1Q"
 CASE_D_ROOT_DIRECTORY = "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-d"
 CASE_D_ROOT_HEAD = "60eb1685ee866a59de46be09dba3555c1cd3e776"
@@ -400,6 +408,42 @@ CASE_E2_CLASSIFICATIONS = {
     "CASE_E2_RESULT_FIDELITY": "PASS",
     "CASE_E2_COMPLETION_OWNERSHIP": "PASS",
     "CASE_E2_FRESH_ROOT_NATIVE": "PASS",
+}
+CASE_F_LABEL = "PHASE11_CASE_F_FRESH_ROOT"
+CASE_F_ROOT_SESSION_ID = "ses_ef6a0d293ffeggS6H8JnsTARAW"
+CASE_F_COLLECTOR_SESSION_ID = "ses_ef69769d4ffeOolSaq4q5CN7EI"
+CASE_F_ROOT_DIRECTORY = "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-phase11-case-f"
+CASE_F_ROOT_STARTING_HEAD = "627946defc9eef0eb25e15d9d8b2865b7d6960ad"
+CASE_F_ROOT_TITLE = "Windows command-unavailable environment issue"
+CASE_F_ROOT_USER_MESSAGE_ID = "msg_1095f2d70001yQlPWbonusnuKa"
+CASE_F_ROOT_TERMINAL_MESSAGE_ID = "msg_1095f2e910011Hmw2KfRXxqMw7"
+CASE_F_ROOT_IDLE_MESSAGE_ID = "msg_1095f74b4001R44GqxRV7jViXp"
+CASE_F_EXPECTED_ROUTE = ["kael"]
+CASE_F_ROLE_COUNTS = {role: 0 for role in ALL_INVOCABLE_ROLES}
+CASE_F_CLASSIFICATIONS = {
+    "CASE_F_BEHAVIOR": "PASS",
+    "CASE_F_OPERATIONAL_CLASSIFICATION": "PASS",
+    "CASE_F_NO_PRODUCT_BUG_INVENTED": "PASS",
+    "CASE_F_NO_SECURITY_BUG_INVENTED": "PASS",
+    "CASE_F_NEGATIVE_ARGUS_CONTROL": "PASS",
+    "CASE_F_NEGATIVE_TALOS_CONTROL": "PASS",
+    "CASE_F_NO_INSTALL": "PASS",
+    "CASE_F_ROLE_PURITY": "PASS",
+    "CASE_F_COMPLETION_OWNERSHIP": "PASS",
+    "CASE_F_ROUTING": "PASS",
+    "CASE_F_FRESH_ROOT_NATIVE": "PASS",
+}
+CASE_F_TERMINAL_FACTS = {
+    "CLASSIFICATION": "OPERATIONAL_ISSUE — plain `python` is unavailable in the Windows shell; test execution did not start.",
+    "PRODUCT_BUG_ESTABLISHED": "NO",
+    "SECURITY_BUG_ESTABLISHED": "NO",
+    "SMALLEST_SAFE_NEXT_ACTION": "Recommend invoking the original targeted unittest command through the known working `uv run --python 3.11 python` runtime, without installation or configuration changes. Do not execute tests during this diagnosis.",
+    "EVIDENCE_REQUIRED_FOR_PRODUCT_BUG": "An actual failure after tests start under a working runtime, supported by expected behavior and evidence attributing the failure to product code rather than the environment or test harness.",
+    "INSTALL_ATTEMPTED": "NO",
+    "FILES_CHANGED": "NONE",
+    "UNRESOLVED_WORK": "NONE",
+    "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": "YES",
+    "ANY_WORK_REMAINING": "NO",
 }
 CASE_E_TERMINAL_FACTS = {
     "WORKTREE_ISOLATION": "SUPPLIED_VERIFIED",
@@ -1850,7 +1894,7 @@ def validate_phase11_b3_reconciliation(
     current = baseline.get("live_qualification", {})
     if not isinstance(current, dict) or (
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
-            or current.get("fresh_root_native") != CASE_E2_CURRENT_PHASE_STATE
+            or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
         or current.get("native_results_claimed") is not True
     ):
         errors.append("CURRENT_PHASE11_PENDING_STATE_MISMATCH")
@@ -2433,7 +2477,7 @@ def validate_phase11_c_reconciliation(
     current = baseline.get("live_qualification", {})
     if not isinstance(current, dict) or (
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
-        or current.get("fresh_root_native") != CASE_E2_CURRENT_PHASE_STATE
+        or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
         or current.get("native_results_claimed") is not True
     ):
         errors.append("CURRENT_PHASE11_PENDING_STATE_MISMATCH")
@@ -2882,7 +2926,7 @@ def validate_phase11_d_reconciliation(
     current = baseline.get("live_qualification", {})
     if not isinstance(current, dict) or (
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
-        or current.get("fresh_root_native") != CASE_E2_CURRENT_PHASE_STATE
+        or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
         or current.get("native_results_claimed") is not True
         or current.get("overall_status") != "PARTIAL"
     ):
@@ -3212,7 +3256,7 @@ def validate_phase11_e_reconciliation(
     current = baseline.get("live_qualification", {})
     if not isinstance(current, dict) or (
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
-        or current.get("fresh_root_native") != CASE_E2_CURRENT_PHASE_STATE
+        or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
         or current.get("native_results_claimed") is not True
         or current.get("overall_status") != "PARTIAL"
     ):
@@ -3853,7 +3897,7 @@ def validate_phase11_e2_reconciliation(
     }
     if report.get("validation") != expected_validation:
         errors.append("CASE_E2_VALIDATION_RECORD_MISMATCH")
-    if report.get("pending_fresh_root_labels") != CURRENT_PHASE11_PENDING_LABELS:
+    if report.get("pending_fresh_root_labels") != CASE_E2_PENDING_LABELS:
         errors.append("CASE_E2_PENDING_LABELS_MISMATCH")
     if report.get("argus_same_session_followup_runtime_coverage") != "NOT_EXERCISED":
         errors.append("CASE_E2_ARGUS_FOLLOWUP_COVERAGE_PROMOTED")
@@ -3879,7 +3923,7 @@ def validate_phase11_e2_reconciliation(
     current = baseline.get("live_qualification", {})
     if not isinstance(current, dict) or (
         current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
-        or current.get("fresh_root_native") != CASE_E2_CURRENT_PHASE_STATE
+        or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
         or current.get("native_results_claimed") is not True
         or current.get("overall_status") != "PARTIAL"
         or "PH11-E2-CLOSURE" not in current.get("current_pending_state_source", "")
@@ -3932,6 +3976,586 @@ def validate_phase11_e2_reconciliation(
     return errors
 
 
+def validate_native_case_f_capture(
+    trace: dict[str, Any], case: dict[str, Any], root_export: dict[str, Any]
+) -> list[str]:
+    """Validate Case F's observed Kael-only operational diagnosis and safe projection."""
+    errors: list[str] = []
+    case = case if isinstance(case, dict) else {}
+    trace = trace if isinstance(trace, dict) else {}
+    root_export = root_export if isinstance(root_export, dict) else {}
+    expected_routes = case.get("expected_routes", {})
+    matrix_route = expected_routes.get("default") if isinstance(expected_routes, dict) else None
+
+    required_fields = (
+        "CASE_ID", "REQUEST_CLASS", "EXPECTED_ROUTE", "ACTUAL_ROUTE", "CHILD_SESSIONS",
+        "CONSULTATION_COUNTS", "MAX_SIMULTANEOUS_CHILDREN", "NEGATIVE_CONTROLS",
+        "ROLE_PURITY", "DEPENDENCY_ORDER", "RESULT_FIDELITY", "COMPLETION_GATE",
+        "USER_QUESTION_COUNT", "FINAL_OUTCOME", "ROUTING_RESULT", "NOTES",
+        "EVIDENCE_PROVENANCE",
+    )
+    missing = [field for field in required_fields if field not in trace]
+    if missing:
+        errors.append("NATIVE_F_REQUIRED_FIELDS_MISSING:" + ",".join(missing))
+
+    if (
+        case.get("id") != "F"
+        or case.get("request_class") != "OPERATIONAL_TOOLING_ISSUE"
+        or matrix_route != CASE_F_EXPECTED_ROUTE
+        or trace.get("CASE_ID") != "F"
+        or trace.get("SCENARIO") != "default"
+        or trace.get("REQUEST_CLASS") != "OPERATIONAL_TOOLING_ISSUE"
+        or trace.get("EVIDENCE_CLASS") != "FRESH_ROOT_NATIVE"
+    ):
+        errors.append("NATIVE_F_IDENTITY_OR_MATRIX_EXPECTATION_MISMATCH")
+
+    if (
+        trace.get("ROOT_SESSION_ID") != CASE_F_ROOT_SESSION_ID
+        or trace.get("ROOT_DIRECTORY", "").replace("\\", "/") != CASE_F_ROOT_DIRECTORY
+        or trace.get("ROOT_AGENT") != "kael"
+        or trace.get("ROOT_PARENT_SESSION_ID") is not None
+        or trace.get("ROOT_PARENT_SESSION_ID_OBSERVATION") != "NOT_EXPOSED"
+        or trace.get("ROOT_TITLE") != CASE_F_ROOT_TITLE
+        or trace.get("ROOT_EXECUTION_OUTCOME") != "succeeded"
+        or trace.get("ROOT_USER_MESSAGE_ID") != CASE_F_ROOT_USER_MESSAGE_ID
+        or trace.get("ROOT_TERMINAL_MESSAGE_ID") != CASE_F_ROOT_TERMINAL_MESSAGE_ID
+        or trace.get("ROOT_IDLE_MESSAGE_ID") != CASE_F_ROOT_IDLE_MESSAGE_ID
+        or trace.get("ROOT_STARTING_HEAD") != CASE_F_ROOT_STARTING_HEAD
+        or trace.get("ROOT_STARTING_HEAD_SOURCE") != "Original root user prompt"
+        or trace.get("ROOT_STARTING_HEAD_FILESYSTEM_VERIFIED") is not False
+    ):
+        errors.append("NATIVE_F_ROOT_IDENTITY_OR_UNVERIFIED_HEAD_MISMATCH")
+
+    expected_isolation = {
+        "WORKTREE_ISOLATION": "SUPPLIED_VERIFIED",
+        "DIRECTORY_METADATA_MATCHES_PROMPT": True,
+        "ROOT_ONLY_FILTERED_LIST_MEMBERSHIP": True,
+        "STARTING_HEAD_SOURCE": "Original root user prompt",
+        "STARTING_HEAD_FILESYSTEM_VERIFIED": False,
+        "SEPARATE_DISPOSABLE_WORKTREE": None,
+        "FILESYSTEM_AUDIT_PERFORMED": False,
+    }
+    if trace.get("ROOT_ISOLATION") != expected_isolation:
+        errors.append("NATIVE_F_ISOLATION_OR_FILESYSTEM_AUDIT_OVERCLAIM")
+
+    expected_provenance = {
+        "CLASS": "FRESH_ROOT_NATIVE",
+        "SOURCE": "Nox-supplied direct native OpenCode V2 read-only API reconciliation and complete root export projection; historical root not rerun.",
+        "NATIVE_ROOT_SESSION_ID": CASE_F_ROOT_SESSION_ID,
+        "NATIVE_CHILD_SESSION_IDS": [],
+        "ORDER_BASIS": "NOT_APPLICABLE_NO_RUNTIME_EVENT_SEQUENCE_CAPTURED",
+        "FRESH_ROOT_CONFIRMED": True,
+        "CAPTURED_BY_ROLE": "nox",
+        "CAPTURED_BY_SESSION_ID": CASE_F_COLLECTOR_SESSION_ID,
+        "CAPTURE_SESSION_IS_ROOT_CHILD": False,
+    }
+    if trace.get("EVIDENCE_PROVENANCE") != expected_provenance:
+        errors.append("NATIVE_F_ROOT_OR_CAPTURE_PROVENANCE_MISMATCH")
+    if "EVENTS" in trace and trace.get("EVENTS") != []:
+        errors.append("NATIVE_F_UNOBSERVED_RUNTIME_EVENTS_MUST_NOT_BE_ADDED")
+
+    api = trace.get("API_EVIDENCE", {})
+    expected_api = {
+        "SOURCE": "OpenCode V2 public read-only API",
+        "ROOT_METADATA_GET": {
+            "PATH": f"/api/session/{CASE_F_ROOT_SESSION_ID}",
+            "RESULT": "SUCCESS",
+        },
+        "ROOT_EXPORT_GET": {
+            "PATH": f"/api/experimental/session/{CASE_F_ROOT_SESSION_ID}/export?sanitize=false",
+            "RESULT": "SUCCESS",
+            "PROJECTION_ARTIFACT": "case-f.root-session.export.json",
+            "MESSAGE_COUNT": 3,
+            "EXPORT_PAGINATION": "NONE_OBSERVED",
+            "REASONING_BLOCKS_REMOVED": 1,
+            "PROVIDER_STATE_AND_SNAPSHOTS_OMITTED": True,
+            "RAW_EXPORT_PERSISTED": False,
+            "SECRET_FILTERING": "NOT_ASSESSED_BY_NOX",
+        },
+        "DIRECT_CHILD_QUERY": {
+            "PATH": f"/api/session?parentID={CASE_F_ROOT_SESSION_ID}",
+            "RESULT": "SUCCESS",
+            "PARENT_SESSION_ID": CASE_F_ROOT_SESSION_ID,
+            "CHILD_COUNT": 0,
+            "CHILDREN": [],
+            "CURSOR_PREVIOUS": None,
+            "CURSOR_NEXT": None,
+            "PAGES": 1,
+        },
+        "DIRECTORY_FILTERED_ROOT_MEMBERSHIP_QUERY": {
+            "PATH": "/api/session?parentID=null&directory=C%3A%5CUsers%5CBLAUTECH%5CAppData%5CLocal%5CTemp%5Colympus-phase11-case-f",
+            "RESULT": "SUCCESS",
+            "PARENT_ID_FILTER": None,
+            "PARENT_ID_FIELD_OBSERVATION": "NOT_EXPOSED",
+            "PAGE_ITEM_COUNTS": [1, 0],
+            "PAGES": 2,
+            "CURSOR_EXHAUSTED": True,
+            "TOTAL_FILTERED_ITEMS": 1,
+            "MATCHING_ROOT_SESSION_IDS": [CASE_F_ROOT_SESSION_ID],
+            "ROOT_MEMBERSHIP": True,
+        },
+        "ROOT_TOOL_CALL_RECORDS": [],
+        "ROOT_TOOL_CALL_RECORD_COUNT": 0,
+        "NESTED_TOOL_WRAPPER_COUNT": 0,
+        "TOOL_OBSERVATION_LIMIT": "Complete three-message root export contained no tool-call records or nested tool wrappers; no private runtime or worktree filesystem was accessed.",
+    }
+    if api != expected_api:
+        errors.append("NATIVE_F_API_CHILD_TOOL_OR_EXPORT_OBSERVATION_MISMATCH")
+
+    if (
+        trace.get("CHILD_SESSIONS") != []
+        or trace.get("CONSULTATION_COUNTS") != CASE_F_ROLE_COUNTS
+        or trace.get("UNIQUE_CHILD_SESSION_COUNTS") != CASE_F_ROLE_COUNTS
+        or trace.get("MAX_SIMULTANEOUS_CHILDREN") is not None
+    ):
+        errors.append("NATIVE_F_CHILD_COUNTS_OR_UNKNOWN_CONCURRENCY_MISMATCH")
+
+    expected_negative = {
+        role: {"INVOCATIONS": 0, "UNIQUE_CHILD_SESSIONS": 0}
+        for role in ALL_INVOCABLE_ROLES if role != "kael"
+    }
+    expected_negative["argus"]["STATUS"] = "PASS"
+    expected_negative["talos"]["STATUS"] = "PASS"
+    if trace.get("NEGATIVE_CONTROLS") != expected_negative:
+        errors.append("NATIVE_F_NEGATIVE_ARGUS_TALOS_OR_SPECIALIST_COUNTS_MISMATCH")
+
+    expected_role_purity = {
+        "STATUS": "PASS",
+        "ROOT_AGENT": "kael",
+        "NO_DIRECT_CHILDREN_OBSERVED": True,
+        "NO_NESTED_TOOL_WRAPPERS_OBSERVED": True,
+        "REVIEWER_EDITS_OBSERVED": False,
+        "ROOT_REPORTED_FILES_CHANGED": "NONE",
+        "FILESYSTEM_AUDIT_PERFORMED": False,
+        "VIOLATIONS": [],
+    }
+    if trace.get("ROLE_PURITY") != expected_role_purity:
+        errors.append("NATIVE_F_ROLE_PURITY_OR_FILE_AUDIT_OVERCLAIM")
+    if trace.get("DEPENDENCY_ORDER") != []:
+        errors.append("NATIVE_F_DEPENDENCY_ORDER_INVENTED")
+
+    expected_result = {
+        "EXPECTED_PRODUCT_ROUTE": CASE_F_EXPECTED_ROUTE,
+        "OBSERVED_PRODUCT_ROUTE": CASE_F_EXPECTED_ROUTE,
+        "ROUTE_MATCHES": True,
+        "EXPECTED_OPERATIONAL_CLASSIFICATION": "OPERATIONAL_ISSUE",
+        "OBSERVED_OPERATIONAL_CLASSIFICATION": "OPERATIONAL_ISSUE",
+        "PRODUCT_BUG_ESTABLISHED": False,
+        "SECURITY_BUG_ESTABLISHED": False,
+        "ROOT_EXECUTION_OUTCOME": "succeeded",
+        "CASE_ACCEPTANCE": "PASS",
+        "CASE_ACCEPTANCE_BASIS": "The observed command-unavailable condition is correctly classified without claiming an application failure; no test was run during diagnosis.",
+    }
+    if (
+        trace.get("EXPECTED_ROUTE") != CASE_F_EXPECTED_ROUTE
+        or trace.get("ACTUAL_ROUTE") != CASE_F_EXPECTED_ROUTE
+        or trace.get("ROUTE_RECONCILIATION", {}).get("EXPECTED_PRODUCT_ROUTE") != CASE_F_EXPECTED_ROUTE
+        or trace.get("ROUTE_RECONCILIATION", {}).get("OBSERVED_PRODUCT_ROUTE") != CASE_F_EXPECTED_ROUTE
+        or trace.get("ROUTE_RECONCILIATION", {}).get("OBSERVED_UNIQUE_CHILD_SESSION_LAUNCH_ORDER") != CASE_F_EXPECTED_ROUTE
+        or trace.get("ROUTE_RECONCILIATION", {}).get("CLASSIFICATION") != "NATIVE_EXECUTED_ROUTING_PASS"
+        or trace.get("RESULT_FIDELITY") != expected_result
+    ):
+        errors.append("NATIVE_F_ROUTE_OR_OPERATIONAL_RESULT_FIDELITY_MISMATCH")
+
+    expected_completion = {
+        "PENDING_CHILD_COUNT": 0,
+        "UNCONSUMED_RESULT_COUNT": 0,
+        "UNKNOWN_EXECUTION_COUNT": 0,
+        "REQUIRED_CHILDREN_TERMINAL_AND_CONSUMED": True,
+        "ROOT_TERMINAL": True,
+        "RESULT_IDS": None,
+        "PER_INVOCATION_CONSUMPTION_TIMING": None,
+        "SESSION_LIFETIME_EXACT_ONCE": None,
+    }
+    if (
+        trace.get("COMPLETION_GATE") != expected_completion
+        or trace.get("USER_QUESTION_COUNT") != 0
+        or trace.get("FINAL_OUTCOME") != "SUCCEEDED"
+        or trace.get("ROUTING_RESULT") != "PASS"
+        or trace.get("CASE_RESULT") != "NATIVE_EXECUTED_ROUTING_PASS"
+        or trace.get("CASE_ACCEPTANCE") != "PASS"
+    ):
+        errors.append("NATIVE_F_COMPLETION_OR_TERMINAL_OUTCOME_MISMATCH")
+
+    if trace.get("CLASSIFICATIONS") != CASE_F_CLASSIFICATIONS:
+        errors.append("NATIVE_F_CLASSIFICATION_STATUS_MISMATCH")
+    if trace.get("OBSERVED_TERMINAL_SNAPSHOT") != {
+        "SOURCE": "OBSERVED_NATIVE_ROOT_TERMINAL_MESSAGE",
+        "ROOT_SESSION_ID": CASE_F_ROOT_SESSION_ID,
+        "MESSAGE_ID": CASE_F_ROOT_TERMINAL_MESSAGE_ID,
+        "FACTS": CASE_F_TERMINAL_FACTS,
+    }:
+        errors.append("NATIVE_F_TERMINAL_OPERATIONAL_PRODUCT_SECURITY_OR_COMPLETION_FACTS_MISMATCH")
+    expected_operational_finding = {
+        "CLASSIFICATION": "OPERATIONAL_ISSUE",
+        "FAILURE": "The plain `python` command is unavailable in the Windows shell; test execution did not start.",
+        "PRODUCT_BUG_ESTABLISHED": False,
+        "SECURITY_BUG_ESTABLISHED": False,
+        "TESTS_RUN_DURING_DIAGNOSIS": "NONE",
+        "SMALLEST_SAFE_NEXT_ACTION": "Recommend the original targeted unittest command through the known working `uv run --python 3.11 python` runtime, without installation or configuration changes; do not execute tests during diagnosis.",
+        "EVIDENCE_REQUIRED_FOR_PRODUCT_BUG": "An actual failure after tests start under a working runtime, supported by expected behavior and evidence attributing the failure to product code rather than the environment or test harness.",
+    }
+    if trace.get("OPERATIONAL_FINDING") != expected_operational_finding:
+        errors.append("NATIVE_F_OPERATIONAL_CLASSIFICATION_OR_PRODUCT_SECURITY_CLAIMS_MISMATCH")
+    if (
+        trace.get("INSTALL_ATTEMPTED") != "NO"
+        or trace.get("FILES_CHANGED") != "NONE"
+        or trace.get("CORE_POLICY_MODIFIED") is not False
+        or trace.get("CASE_RERUN_PERFORMED_BY_RECONCILIATION") is not False
+    ):
+        errors.append("NATIVE_F_INSTALL_FILE_CHANGE_OR_REPLAY_CLAIM_MISMATCH")
+    if trace.get("EFFICIENCY") != {
+        "CLASSIFICATION": "LEAN",
+        "BASIS": "One required Kael-only operational diagnosis; no latency, throughput, or concurrency claim.",
+    }:
+        errors.append("NATIVE_F_EFFICIENCY_OR_METRIC_OVERCLAIM")
+    expected_unknowns = {
+        "MAX_SIMULTANEOUS_CHILDREN": None,
+        "WALL_CLOCK_MS": None,
+        "RUNTIME_DURATION_MS": None,
+        "RETRY_COUNT": None,
+        "PER_INVOCATION_RESULT_IDS": None,
+        "PER_INVOCATION_CONSUMPTION_TIMING": None,
+        "SESSION_LIFETIME_EXACT_ONCE": None,
+        "NATIVE_PERMISSION_UI": "NOT_OBSERVABLE",
+        "NATIVE_PERMISSION_DECISION": "NOT_OBSERVABLE",
+        "WORKTREE_FILESYSTEM_AUDIT": "NOT_PERFORMED",
+    }
+    if trace.get("UNKNOWN_METRICS") != expected_unknowns:
+        errors.append("NATIVE_F_UNKNOWN_METRIC_OR_PERMISSION_OBSERVABILITY_OVERCLAIM")
+
+    if root_export.get("evidence_class") != "FRESH_ROOT_NATIVE" or root_export.get("source_api") != (
+        "OpenCode V2 public read-only API"
+    ):
+        errors.append("NATIVE_F_EXPORT_IDENTITY_OR_SOURCE_MISMATCH")
+    expected_session = {
+        "id": CASE_F_ROOT_SESSION_ID,
+        "agent": "kael",
+        "parent_id": None,
+        "parent_id_observation": "NOT_EXPOSED",
+        "directory": "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-f",
+        "title": CASE_F_ROOT_TITLE,
+        "execution_outcome": "succeeded",
+        "created_epoch_ms": 1791158595160,
+        "updated_epoch_ms": 1791158597772,
+        "idle_epoch_ms": 1791158613172,
+        "viewed_epoch_ms": 1791158613172,
+    }
+    if root_export.get("session") != expected_session:
+        errors.append("NATIVE_F_EXPORT_ROOT_METADATA_MISMATCH")
+    if (
+        root_export.get("session_metadata_query") != {
+            "method": "GET", "path": f"/api/session/{CASE_F_ROOT_SESSION_ID}", "result": "SUCCESS"
+        }
+        or root_export.get("export_query") != {
+            "method": "GET",
+            "path": f"/api/experimental/session/{CASE_F_ROOT_SESSION_ID}/export?sanitize=false",
+            "result": "SUCCESS",
+        }
+        or root_export.get("direct_child_query", {}).get("response") != {
+            "parent_id": CASE_F_ROOT_SESSION_ID,
+            "data": [],
+            "cursor_previous": None,
+            "cursor_next": None,
+            "pages": 1,
+        }
+        or root_export.get("directory_filtered_root_membership_query") != {
+            "method": "GET",
+            "path": "/api/session?parentID=null&directory=C%3A%5CUsers%5CBLAUTECH%5CAppData%5CLocal%5CTemp%5Colympus-phase11-case-f",
+            "result": "SUCCESS",
+            "parent_id_filter": None,
+            "parent_id_field_observation": "NOT_EXPOSED",
+            "page_item_counts": [1, 0],
+            "pages": 2,
+            "cursor_exhausted": True,
+            "total_filtered_items": 1,
+            "matching_root_session_ids": [CASE_F_ROOT_SESSION_ID],
+            "root_membership": True,
+        }
+    ):
+        errors.append("NATIVE_F_EXPORT_API_QUERY_OR_ROOT_MEMBERSHIP_MISMATCH")
+
+    messages = root_export.get("messages", [])
+    message_types = [item.get("type") for item in messages if isinstance(item, dict)]
+    message_ids = [item.get("id") for item in messages if isinstance(item, dict)]
+    if (
+        root_export.get("message_count") != 3
+        or root_export.get("export_pagination") != "NONE_OBSERVED"
+        or message_types != ["user", "assistant", "idle"]
+        or message_ids != [CASE_F_ROOT_USER_MESSAGE_ID, CASE_F_ROOT_TERMINAL_MESSAGE_ID, CASE_F_ROOT_IDLE_MESSAGE_ID]
+        or root_export.get("terminal_message_id") != CASE_F_ROOT_TERMINAL_MESSAGE_ID
+        or root_export.get("terminal_outcome_record") != {
+            "message_id": CASE_F_ROOT_IDLE_MESSAGE_ID, "type": "idle", "outcome": "succeeded"
+        }
+    ):
+        errors.append("NATIVE_F_EXPORT_MESSAGE_OR_TERMINAL_SEQUENCE_MISMATCH")
+    user_message = _export_message(root_export, CASE_F_ROOT_USER_MESSAGE_ID) or {}
+    user_prompt = user_message.get("text", "") if isinstance(user_message.get("text"), str) else ""
+    prompt_markers = (
+        CASE_F_LABEL,
+        CASE_F_ROOT_STARTING_HEAD,
+        "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-phase11-case-f",
+        "`python -m unittest ...`",
+        "plain `python` command is unavailable",
+        "There is no observed failing product test",
+        "`uv run --python 3.11 python`",
+        "- install Python or dependencies;",
+        "Do not run tests merely to create evidence",
+    )
+    if (
+        user_message.get("files") != []
+        or user_message.get("agents") != []
+        or any(marker not in user_prompt for marker in prompt_markers)
+    ):
+        errors.append("NATIVE_F_ORIGINAL_PROMPT_OR_SCOPE_LIMITS_NOT_PRESERVED")
+
+    terminal_text = _export_text(root_export, CASE_F_ROOT_TERMINAL_MESSAGE_ID)
+    terminal_labels = tuple(CASE_F_TERMINAL_FACTS)
+    terminal_label_pattern = re.compile(
+        r"(?m)^(" + "|".join(re.escape(label) for label in terminal_labels) + r"):[ \t]*(.*)$"
+    )
+    terminal_label_matches = list(terminal_label_pattern.finditer(terminal_text))
+    terminal_values: dict[str, list[str]] = {}
+    for index, match in enumerate(terminal_label_matches):
+        next_start = (
+            terminal_label_matches[index + 1].start()
+            if index + 1 < len(terminal_label_matches)
+            else len(terminal_text)
+        )
+        inline_value = match.group(2).strip()
+        following_text = terminal_text[match.end():next_start].strip()
+        value = "\n".join(part for part in (inline_value, following_text) if part)
+        terminal_values.setdefault(match.group(1), []).append(value)
+    if any(
+        len(terminal_values.get(label, [])) != 1
+        or terminal_values[label][0] != expected
+        for label, expected in CASE_F_TERMINAL_FACTS.items()
+    ):
+        errors.append("NATIVE_F_EXPORT_TERMINAL_OPERATIONAL_PRODUCT_SECURITY_OR_COMPLETION_FACTS_MISMATCH")
+
+    content_types = _export_content_types(root_export)
+    expected_projection = {
+        "description": "Persisted only the supplied user prompt, visible assistant terminal text, root/message metadata, and empty observed tool-call projection. One reasoning block was removed; provider state and snapshots were omitted; raw export was not persisted. Nox did not assess secret filtering. The corpus writer inspected the supplied visible text and observed no secret credentials; no filter or redaction count is claimed.",
+        "reasoning_blocks_removed": 1,
+        "provider_state_omitted": True,
+        "snapshots_omitted": True,
+        "secret_filtering": "NOT_ASSESSED_BY_NOX",
+        "visible_secret_credentials_observed": False,
+        "raw_export_persisted": False,
+    }
+    if (
+        root_export.get("tool_call_records") != []
+        or root_export.get("tool_call_record_count") != 0
+        or root_export.get("nested_tool_wrapper_count") != 0
+        or root_export.get("projection_and_redaction") != expected_projection
+        or any(re.search(r"(?i)reason|thought|analysis", kind) for kind in content_types)
+    ):
+        errors.append("NATIVE_F_EXPORT_PROJECTION_TOOL_OR_SECRET_FILTER_CLAIM_MISMATCH")
+    return errors
+
+
+def validate_phase11_f_reconciliation(
+    baseline: dict[str, Any],
+    cases_doc: dict[str, Any],
+    trace: dict[str, Any],
+    root_export: dict[str, Any],
+) -> list[str]:
+    """Bind F's native observation into current Phase 11 state without rewriting history."""
+    cases = {
+        case.get("id"): case
+        for case in cases_doc.get("cases", [])
+        if isinstance(case, dict)
+    }
+    errors = validate_native_case_f_capture(trace, cases.get("F", {}), root_export)
+    report = baseline.get("phase11_f_reconciliation")
+    if not isinstance(report, dict):
+        return errors + ["CASE_F_RECONCILIATION_MISSING"]
+    if (
+        report.get("task_id") != "phase11-f-corpus-write"
+        or report.get("label") != CASE_F_LABEL
+        or report.get("evidence_artifact") != "tests/phase11-integrated-routing/case-f.native-trace.json"
+        or report.get("export_artifact") != "tests/phase11-integrated-routing/case-f.root-session.export.json"
+        or report.get("evidence_class") != "FRESH_ROOT_NATIVE"
+    ):
+        errors.append("CASE_F_EVIDENCE_LINK_OR_LABEL_MISMATCH")
+    expected_root_fields = {
+        "root_session_id": CASE_F_ROOT_SESSION_ID,
+        "root_directory": CASE_F_ROOT_DIRECTORY,
+        "root_agent": "kael",
+        "root_parent_session_id": None,
+        "root_parent_session_id_observation": "NOT_EXPOSED",
+        "root_title": CASE_F_ROOT_TITLE,
+        "root_terminal_outcome": "succeeded",
+        "root_user_message_id": CASE_F_ROOT_USER_MESSAGE_ID,
+        "root_terminal_message_id": CASE_F_ROOT_TERMINAL_MESSAGE_ID,
+        "root_idle_message_id": CASE_F_ROOT_IDLE_MESSAGE_ID,
+        "root_starting_head": CASE_F_ROOT_STARTING_HEAD,
+        "root_starting_head_source": "Original root user prompt",
+        "root_starting_head_filesystem_verified": False,
+    }
+    if any(report.get(key) != value for key, value in expected_root_fields.items()):
+        errors.append("CASE_F_BASELINE_ROOT_IDENTITY_OR_STARTING_HEAD_OVERCLAIM")
+    expected_membership = {
+        "status": "SUPPLIED_VERIFIED",
+        "directory_metadata_matches_prompt": True,
+        "root_only_list_membership": True,
+        "directory_query_pages": 2,
+        "directory_query_page_item_counts": [1, 0],
+        "directory_query_total_filtered_items": 1,
+        "directory_query_cursor_exhausted": True,
+        "parent_id_observation": "NOT_EXPOSED",
+        "filesystem_audit_performed": False,
+        "separate_disposable_worktree": None,
+    }
+    if report.get("root_membership") != expected_membership:
+        errors.append("CASE_F_BASELINE_ROOT_MEMBERSHIP_OR_ISOLATION_OVERCLAIM")
+    if (
+        report.get("direct_child_count") != 0
+        or report.get("root_tool_call_record_count") != 0
+        or report.get("nested_tool_wrapper_count") != 0
+        or report.get("root_export_message_count") != 3
+        or report.get("root_export_pagination") != "NONE_OBSERVED"
+        or report.get("child_sessions") != []
+        or report.get("expected_product_route") != CASE_F_EXPECTED_ROUTE
+        or report.get("observed_product_route") != CASE_F_EXPECTED_ROUTE
+        or report.get("consultation_counts") != CASE_F_ROLE_COUNTS
+        or report.get("unique_child_session_counts") != CASE_F_ROLE_COUNTS
+        or report.get("max_simultaneous_children") is not None
+    ):
+        errors.append("CASE_F_BASELINE_ROUTE_CHILD_OR_SPECIALIST_COUNTS_MISMATCH")
+    if report.get("classifications") != CASE_F_CLASSIFICATIONS or report.get("terminal_facts") != CASE_F_TERMINAL_FACTS:
+        errors.append("CASE_F_BASELINE_CLASSIFICATIONS_OR_TERMINAL_FACTS_MISMATCH")
+    expected_completion = {
+        "pending_child_count": 0,
+        "unconsumed_result_count": 0,
+        "unknown_execution_count": 0,
+        "required_children_terminal_and_consumed": True,
+        "result_ids": None,
+        "per_invocation_consumption_timing": None,
+        "session_lifetime_exact_once": None,
+    }
+    if (
+        report.get("completion_gate") != expected_completion
+        or report.get("user_question_count") != 0
+        or report.get("final_outcome") != "SUCCEEDED"
+        or report.get("install_attempted") != "NO"
+        or report.get("files_changed") != "NONE"
+        or report.get("core_policy_modified") is not False
+        or report.get("case_rerun_performed_by_reconciliation") is not False
+    ):
+        errors.append("CASE_F_BASELINE_COMPLETION_INSTALL_OR_FILE_FACTS_MISMATCH")
+    expected_projection = {
+        "reasoning_blocks_removed": 1,
+        "provider_state_omitted": True,
+        "snapshots_omitted": True,
+        "secret_filtering": "NOT_ASSESSED_BY_NOX",
+        "visible_secret_credentials_observed": False,
+        "raw_export_persisted": False,
+    }
+    if report.get("projection_and_redaction") != expected_projection:
+        errors.append("CASE_F_BASELINE_PROJECTION_OR_SECRET_FILTER_CLAIM_MISMATCH")
+    expected_unknowns = {
+        "max_simultaneous_children": None,
+        "wall_clock_ms": None,
+        "runtime_duration_ms": None,
+        "retry_count": None,
+        "per_invocation_result_ids": None,
+        "per_invocation_consumption_timing": None,
+        "session_lifetime_exact_once": None,
+        "native_permission_ui": "NOT_OBSERVABLE",
+        "native_permission_decision": "NOT_OBSERVABLE",
+        "worktree_filesystem_audit": "NOT_PERFORMED",
+    }
+    if report.get("unknowns") != expected_unknowns:
+        errors.append("CASE_F_BASELINE_UNKNOWN_METRICS_OR_PERMISSION_OBSERVABILITY_OVERCLAIM")
+    validation = report.get("writer_local_validation", {})
+    if (
+        validation.get("phase11_qualifier") != {
+            "command": "uv run --python 3.11 python -B tests/phase11-integrated-routing/qualify.py",
+            "exit_code": 0,
+            "result": "PHASE11_ARTIFACTS: PASS; PHASE11_QUALIFICATION: PARTIAL",
+        }
+        or validation.get("phase11_unittest") != {
+            "command": "uv run --python 3.11 python -B -m unittest discover -s tests/phase11-integrated-routing -p \"test_*.py\" -v",
+            "exit_code": 0,
+            "test_count": 66,
+            "result": "PASS",
+        }
+        or validation.get("harness_core_safe_root") != {
+            "command": "uv run --python 3.11 python -B tests/harness-core/qualify.py --safe-root-read-only",
+            "exit_code": 0,
+            "result": "PASS",
+            "managed_output_count_before": 29,
+            "managed_output_count_after": 29,
+            "hash_mtime_unchanged": True,
+        }
+        or validation.get("renderer_check") != {
+            "command": "uv run --python 3.11 python -B scripts/render_harnesses.py check --harness all",
+            "exit_code": 0,
+            "result": "PASS (all; 29 managed output(s); read-only)",
+        }
+        or validation.get("git_diff_check") != {
+            "command": "git diff --check",
+            "exit_code": 0,
+            "result": "PASS",
+            "line_ending_warnings_only": True,
+        }
+        or validation.get("pythondontwritebytecode") is not True
+        or validation.get("case_f_rerun_performed") is not False
+    ):
+        errors.append("CASE_F_WRITER_VALIDATION_RECORD_MISMATCH")
+    if (
+        report.get("efficiency") != "LEAN"
+        or report.get("acceptance_status") != "PASS"
+        or report.get("case_result") != "NATIVE_EXECUTED_ROUTING_PASS"
+        or report.get("phase11_status") != "PARTIAL"
+        or report.get("pending_fresh_root_labels") != CURRENT_PHASE11_PENDING_LABELS
+    ):
+        errors.append("CASE_F_ACCEPTANCE_PHASE_STATUS_OR_PENDING_LABELS_MISMATCH")
+
+    current = baseline.get("live_qualification", {})
+    if not isinstance(current, dict) or (
+        current.get("pending_labels") != CURRENT_PHASE11_PENDING_LABELS
+        or current.get("fresh_root_native") != CURRENT_PHASE11_FRESH_ROOT_STATE
+        or current.get("native_results_claimed") is not True
+        or current.get("overall_status") != "PARTIAL"
+        or "phase11-f-corpus-write" not in current.get("current_pending_state_source", "")
+    ):
+        errors.append("CURRENT_PHASE11_F_PENDING_STATE_MISMATCH")
+    if baseline.get("argus_same_session_followup_runtime_coverage") != CASE_D_PENDING_FOLLOWUP_COVERAGE:
+        errors.append("CASE_F_ARGUS_FOLLOWUP_RUNTIME_COVERAGE_PROMOTED_OR_CONFLATED")
+
+    actions = [
+        action for action in cases_doc.get("fresh_root_actions", [])
+        if isinstance(action, dict) and action.get("case_id") == "F" and action.get("label") == CASE_F_LABEL
+    ]
+    expected_action = {
+        "scenario": "default",
+        "status": "PASS",
+        "evidence_class": "FRESH_ROOT_NATIVE",
+        "evidence_artifact": "case-f.native-trace.json",
+        "acceptance_status": "PASS",
+        "pending_resolution": False,
+    }
+    if len(actions) != 1 or any(actions[0].get(key) != value for key, value in expected_action.items()):
+        errors.append("CASE_F_MATRIX_STATUS_OR_EVIDENCE_LINK_MISMATCH")
+
+    # E1 remains the immutable failed attempt; E2 remains the separate accepted retry.
+    e1 = baseline.get("phase11_e_reconciliation", {})
+    e2 = baseline.get("phase11_e2_reconciliation", {})
+    if (
+        e1.get("acceptance_status") != "FAIL"
+        or e1.get("case_result") != CASE_E_NATIVE_RESULT
+        or e1.get("root_session_id") != CASE_E_ROOT_SESSION_ID
+        or e2.get("acceptance_status") != "PASS"
+        or e2.get("case_result") != CASE_E2_NATIVE_RESULT
+        or e2.get("root_session_id") != CASE_E2_ROOT_SESSION_ID
+        or e2.get("pending_fresh_root_labels") != CASE_E2_PENDING_LABELS
+    ):
+        errors.append("CASE_F_E1_FAILED_HISTORY_OR_E2_ACCEPTANCE_REWRITTEN")
+    return errors
+
+
 def main() -> int:
     failures, documents = validate_corpus()
     static_failures = run_static_baseline_checks()
@@ -3944,6 +4568,8 @@ def main() -> int:
     native_e2 = load_json(HERE / "case-e2.native-trace.json")
     case_e2_root_export = load_json(HERE / "case-e2.root-session.export.json")
     case_e2_child_export = load_json(HERE / "case-e2.talos-session.export.json")
+    native_f = load_json(HERE / "case-f.native-trace.json")
+    case_f_root_export = load_json(HERE / "case-f.root-session.export.json")
     reconciliation_failures = validate_phase11_b3_reconciliation(
         baseline, documents["cases"], native_b3
     )
@@ -3963,6 +4589,9 @@ def main() -> int:
         case_e2_root_export,
         case_e2_child_export,
     )
+    case_f_failures = validate_phase11_f_reconciliation(
+        baseline, documents["cases"], native_f, case_f_root_export
+    )
     for label in ("ARGUS_GATE_MARKER", "TALOS_GATE_MARKER", "ATLAS_GATE_MARKER", "HELIOS_GATE_MARKER", "THALES_GATE_MARKER", "ROOT_OWNER_MARKER", "NO_NESTED_CHILD_MARKER", "CORE_CHILD_CEILING_MARKER"):
         if label in static_failures:
             print(f"STATIC_{label}: FAIL")
@@ -3981,7 +4610,9 @@ def main() -> int:
         print("E1-NATIVE: HISTORICAL_FAILURE_PRESERVED (original product route Kael-only versus required Kael -> Talos remains FAIL)")
     if not case_e2_failures:
         print("E2-NATIVE: PASS (FRESH_ROOT_NATIVE; direct Talos child and route reconciled; E1 failure retained as history)")
-    pending_fresh_root_cases = {"F", "G", "H", "K"}
+    if not case_f_failures:
+        print("F-NATIVE: PASS (FRESH_ROOT_NATIVE; Kael-only operational diagnosis; no product/security defect invented)")
+    pending_fresh_root_cases = {"G", "H", "K"}
     pending_labels: list[str] = []
     for action in documents["cases"].get("fresh_root_actions", []):
         case_id = action.get("case_id")
@@ -3992,7 +4623,7 @@ def main() -> int:
                 print(f"PENDING_ACCEPTANCE {label} (observed routing failure; no Case E rerun requested)")
             else:
                 print(f"HUMAN_ACTION_REQUIRED {label}")
-    if failures or reconciliation_failures or case_c_failures or case_d_failures or case_e_failures or case_e2_failures:
+    if failures or reconciliation_failures or case_c_failures or case_d_failures or case_e_failures or case_e2_failures or case_f_failures:
         for failure in [
             *failures,
             *reconciliation_failures,
@@ -4000,6 +4631,7 @@ def main() -> int:
             *case_d_failures,
             *case_e_failures,
             *case_e2_failures,
+            *case_f_failures,
         ]:
             print(f"FAIL: {failure}")
         print("PHASE11_QUALIFICATION: FAIL (artifact validation only)")
@@ -4009,10 +4641,10 @@ def main() -> int:
             print(f"FAIL: STATIC_{label}")
         print("PHASE11_QUALIFICATION: FAIL (bounded policy marker check)")
         return 1
-    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, B3/C/D, E1 historical failure, and E2 native acceptance are internally reconciled; validation does not authenticate source exports)")
+    print("PHASE11_ARTIFACTS: PASS (synthetic/static artifacts, B3/C/D/F, E1 historical failure, and E2 native acceptance are internally reconciled; validation does not authenticate source exports)")
     print("ARGUS_SAME_SESSION_FOLLOWUP_RUNTIME_COVERAGE: NOT_EXERCISED (separate optional evidence-requesting scenario remains open for final coverage review; not a Case D blocker)")
-    print("PENDING_CASES: " + ", ".join(pending_labels) + "; E2 closes current Case E acceptance while E1's observed routing failure remains historical; A/I/J/L recovered reports remain guided/history only.")
-    print("PHASE11_QUALIFICATION: PARTIAL (B3, C, D, and E2 accepted; E1 failure retained as history; F/G/H/K acceptance remains pending)")
+    print("PENDING_CASES: " + ", ".join(pending_labels) + "; F is accepted natively, E2 closes current Case E acceptance while E1's observed routing failure remains historical; A/I/J/L recovered reports remain guided/history only.")
+    print("PHASE11_QUALIFICATION: PARTIAL (B3, C, D, E2, and F accepted; E1 failure retained as history; G/H/K acceptance remains pending)")
     return 0
 
 

@@ -302,7 +302,12 @@
     {
       "case_id": "F",
       "scenario": "default",
-      "label": "PHASE11_CASE_F_FRESH_ROOT"
+      "label": "PHASE11_CASE_F_FRESH_ROOT",
+      "status": "PASS",
+      "evidence_class": "FRESH_ROOT_NATIVE",
+      "evidence_artifact": "case-f.native-trace.json",
+      "acceptance_status": "PASS",
+      "pending_resolution": false
     },
     {
       "case_id": "G",

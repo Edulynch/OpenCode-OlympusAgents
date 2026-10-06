@@ -270,6 +270,25 @@ an exact eligible operation when needed; this native boundary never grants
 task-level ownership beyond the declared scope. The trusted-project shell
 permission remains subject to those same scope contracts.
 
+## Bounded, observable mutations
+
+- Prefer native edit/write operations or small coherent shell batches for normal repository mutation.
+- Avoid one monolithic shell command containing many unrelated complete-file rewrites
+  or many large inline here-strings unless a material technical reason makes
+  batching preferable.
+- Keep mutation units small enough that affected targets are attributable,
+  outcomes are observable, partial completion can be reconciled, and recovery can
+  continue only missing work.
+- Treat an interrupted, cancelled, missing-result, or otherwise indeterminate
+  compound write as potentially partially executed. Reconcile actual
+  repository/file state before continuing; distinguish already-applied targets
+  from unapplied targets, never replay the compound mutation blindly, and
+  continue only the missing bounded work.
+- Positive evidence of confirmed non-execution may preserve bounded continuation/retry eligibility under the existing rules.
+- PowerShell, multiline commands, here-strings, and small coherent batches remain
+  allowed when technically justified. Do not apply a blanket command-length limit
+  or ban shell-based writes.
+
 ## Normal project Git work
 
 Kovan is the normal-plane Git writer for an explicitly requested operation in

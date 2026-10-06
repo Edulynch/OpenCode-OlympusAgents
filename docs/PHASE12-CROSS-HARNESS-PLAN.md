@@ -34,21 +34,33 @@ Default required workloads are only `TRIVIAL_EDIT`, `SECURITY_BOUNDARY`, and `FA
 
 Use the exact same prompt for both harnesses in each pair. Requirements below are acceptance conditions, not a demand for identical internal topology.
 
+**ROUTING-BLIND PROMPT RULE —** When route/specialist selection is an acceptance property, the matched runnable prompt MUST NOT disclose the expected route or specialist identity; expected routing belongs in acceptance/evaluation metadata, not user task text, to prevent benchmark prompt leakage. Exceptions: an explicit user-selected profile such as FAST; explicit planning/optimization intent when that intent itself is the task; or a role name when role selection is not the property under comparison.
+
 #### `TRIVIAL_EDIT`
 
 **Runnable matched task wording:**
 
-> Change only `tests/phase11-integrated-routing/fixtures/simple/message.txt` from its baseline text `Hello Phase 11 ready` to the single-line text `Hello Phase 12 cross-harness`. Use the smallest sufficient routing, Kael → Kovan; do not involve gratuitous specialists. Do not change any other path. Ensure the required terminal child result is delivered to and consumed by the root; the root completes only after that result is resolved. Report the changed paths and acceptance evidence.
+> Change only `tests/phase11-integrated-routing/fixtures/simple/message.txt` from its baseline text `Hello Phase 11 ready` to the single-line text `Hello Phase 12 cross-harness`. Use the smallest sufficient route. Change no other path. Do not add unnecessary research, planning, diagnosis, testing, review, or other specialist work when the result can be validated directly and cheaply. Ensure all required delegated work reaches a terminal result and is consumed before root completion. Report changed paths and acceptance evidence.
 
-The only authorized changed path is `tests/phase11-integrated-routing/fixtures/simple/message.txt`; its resulting text must be exactly `Hello Phase 12 cross-harness` (one line, with no extra text). No unrelated changes are allowed. Kael → Kovan is the smallest sufficient implementation route; no gratuitous specialist is required. The terminal child result must actually be delivered and consumed, and the root may complete only after it is resolved. Do not impose matching session IDs, timing, or scheduler behavior.
+**Acceptance:**
+
+- EXPECTED SEMANTIC ROUTE: Kael → Kovan.
+- The only authorized changed path is `tests/phase11-integrated-routing/fixtures/simple/message.txt`; its resulting text must be exactly `Hello Phase 12 cross-harness` (one line, with no extra text). No unrelated changes are allowed.
+- The required terminal result must actually be delivered and consumed before root completion; gratuitous specialist fan-out is a failure.
+- Do not require matching session IDs, timing, or scheduler behavior, or identical topology beyond the semantic invariant where native representation differs non-materially.
 
 #### `SECURITY_BOUNDARY`
 
 **Runnable matched task wording:**
 
-> Diagnosis only, using only these supplied facts: a `MEMBER` can delete another user's account; the established contract permits account deletion only to `ADMIN`. Classify the issue, identify the violated authorization boundary, give the minimum safe defensive fix direction, and specify bounded future validation. Do not inspect repository/source/runtime, write or implement, exploit, or conduct an audit. Kael must invoke Talos as a direct child and deliver and consume Talos's terminal result. Do not invoke Argus; do not involve an unrelated specialist without a material reason. Report any unknown mechanism as unknown.
+> Using only these supplied facts, diagnose: a `MEMBER` can delete another user's account; the established contract permits account deletion only to `ADMIN`. Classify the issue; identify the violated authorization/trust boundary; provide the minimum safe defensive fix direction; and specify bounded future validation. Do not inspect implementation, source, or runtime; write or implement; attempt exploitation; or broaden into a security audit. Use the smallest sufficient route under current Olympus policy. Report an unknown implementation mechanism as unknown.
 
-This is classification and bounded diagnosis only: no writes, implementation, source inspection, exploit attempt, or audit. Talos must actually be invoked by Kael as a direct child, and Talos's terminal result must be delivered and consumed. The established authorization-boundary violation must be classified. The mechanism in code may remain unknown and must not be invented. Argus count is zero; no unrelated specialist is required absent a material reason.
+**Acceptance:**
+
+- EXPECTED SEMANTIC ROUTE: Kael → Talos.
+- NEGATIVE CONTROL: Argus = 0.
+- Require actual Kael direct-child Talos invocation and delivery and consumption of Talos's terminal result, not just a proposed or named route.
+- Preserve classification of the established authorization violation, do not invent an implementation mechanism, and involve no unrelated specialist without a material reason. Diagnosis-only restrictions remain binding: no implementation/write, source or runtime inspection, exploitation, or security audit; include the minimum safe defensive fix direction and bounded future validation.
 
 #### `FAST_INDEPENDENT_TASKS`
 

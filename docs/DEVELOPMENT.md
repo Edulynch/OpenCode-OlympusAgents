@@ -285,8 +285,11 @@ fields are accepted; absent or renamed fields/values remain
 change Issue #1 missing-result/no-blind-retry semantics. The focused
 `tests/maintenance-handoff/qualify-fidelity.ps1` includes the exact runtime
 reproduction synthetically; it still does not prove native Aegis-to-Kael runtime
-delivery. Keep Issue #10 open until a new-session live Maintenance Handoff smoke
-verifies Aegis's terminal output and all exact values available to Kael.
+delivery. The reported loss was specific to normalization at the Maintenance
+Handoff boundary, not ordinary child-result delivery. [Issue #10 is closed](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10)
+after integration of [fix `a83847b84d6603aed144f5a8ce4b77de8a48fe32`](https://github.com/Edulynch/OpenCode-OlympusAgents/commit/a83847b84d6603aed144f5a8ce4b77de8a48fe32).
+The recorded Runtime fidelity PASS predates that integration; no post-integration
+smoke was repeated, so it is not evidence of a post-integration smoke PASS.
 
 ## Trusted-project execution
 

@@ -1,6 +1,6 @@
 # Phase 12 Cross-Harness Plan
 
-**Authority and status.** This is the authoritative reduced Phase 12 plan. It supersedes the historical six-workload scope recorded on `qualify/overnight-evidence-20261003-eff88d7f`; that historical plan is not restored or copied wholesale. This document freezes a future comparison design only. No Phase 12 trial has started and it reports no runtime result.
+**Authority and status.** This remains the authoritative reduced Phase 12 plan; its frozen design is preserved. It supersedes the historical six-workload scope recorded on `qualify/overnight-evidence-20261003-eff88d7f`, which is not restored or copied wholesale. The no-trials status records the point when this plan was frozen, not current phase status. Phase 12 is now **CLOSED**; see the [results ledger](PHASE12-CROSS-HARNESS-RESULTS.md).
 
 ## 1. Purpose and comparison limits
 
@@ -161,7 +161,9 @@ Issue #11 alignment: add no new meta-test framework, large qualifier, or fixture
 
 ## 9. Planning-task validation and readiness
 
-Before this document was created, `docs/PHASE12-CROSS-HARNESS-PLAN.md` was absent and the read-only Git check showed a clean working tree on `plan/phase-12-cross-harness-reduced` at pre-plan HEAD `345297901b69b9def30aab271134bf1e23852f99`. That pre-plan commit is provenance for planning only, not the trial baseline. Planning validation is limited to target absence, read-only Git branch/HEAD/status, the five fixture paths/text/identities, the capability source, and `git diff --check` for this document. No runtime trial, Phase 11/Core/render/install/release suite, or other test suite is part of this task. No trial has started. Integration and the plan-bearing baseline pin are prerequisites; **READY_FOR_PHASE12_TRIAL_1 remains NO** until both are complete and a separate user-authorized trial assignment exists.
+Before this document was created, `docs/PHASE12-CROSS-HARNESS-PLAN.md` was absent and the read-only Git check showed a clean working tree on `plan/phase-12-cross-harness-reduced` at pre-plan HEAD `345297901b69b9def30aab271134bf1e23852f99`. That pre-plan commit is provenance for planning only, not the trial baseline. Planning validation is limited to target absence, read-only Git branch/HEAD/status, the five fixture paths/text/identities, the capability source, and `git diff --check` for this document. No runtime trial, Phase 11/Core/render/install/release suite, or other test suite was part of that planning task. At planning-validation time, no runtime trial had started. Integration and the plan-bearing baseline pin were prerequisites; **READY_FOR_PHASE12_TRIAL_1 was NO** until both were complete and a separate user-authorized trial assignment existed.
+
+The no-trial statement and the `PHASE12_PLAN` / readiness values below are a historical planning snapshot, not current status. Phase 12 subsequently closed; the [results ledger](PHASE12-CROSS-HARNESS-RESULTS.md) records its executions and bounded interpretation.
 
 PHASE12_PLAN:
 FROZEN_PENDING_EXECUTION

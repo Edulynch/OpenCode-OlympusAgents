@@ -4,6 +4,14 @@
 
 Changes after v0.4.2 go here.
 
+### Phase closure
+
+- Phase 11 integrated-routing qualification is **SHIPPED** with no pending native cases; Case I remains guided PARTIAL and Argus/Thales same-session follow-up runtime coverage remains NOT_EXERCISED ([closure evidence](tests/phase11-integrated-routing/baseline.md)).
+- Phase 12 cross-harness evaluation is **CLOSED**: 3 matched pairs / 6 verified executions, with PASS limited to tested invariants; capability gaps remain and no total parity or winner is claimed ([results](docs/PHASE12-CROSS-HARNESS-RESULTS.md)).
+- [Issue #10 is CLOSED](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10) after the maintenance-specific exact-field handoff fix was integrated ([commit](https://github.com/Edulynch/OpenCode-OlympusAgents/commit/a83847b84d6603aed144f5a8ce4b77de8a48fe32)); its Runtime fidelity PASS predates integration, and no post-integration smoke was repeated.
+
+The Issue #10 OPEN references in the versioned v0.4.0 and v0.4.2 notes below record status at those releases; they are historical.
+
 ## v0.4.2
 
 This corrective release makes release-facing documentation remain truthful when

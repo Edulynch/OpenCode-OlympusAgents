@@ -696,6 +696,19 @@ Kael-mediated iterative evidence loops reconcile the original worker or end
 COMPLETION_UNCONFIRMED. No second worker is launched just because correlation
 failed.
 
+For an interrupted, cancelled, missing-result, or otherwise indeterminate
+compound write, retain the original execution identity/result context when
+available. If the original may still be active, keep its ownership and wait for
+its original result; do not inspect-and-write concurrently. Once safe to
+reconcile, inspect actual repository/file state against the original targets,
+distinguish already-applied from unapplied effects, and decide what remains.
+Never relaunch the full original mutation: continue only missing bounded work.
+Reuse the original worker/session when appropriate under existing continuation
+rules; use a new bounded worker only when native/session constraints or ownership
+actually require it. Positive evidence of confirmed non-execution preserves only
+the existing bounded retry eligibility. Consume any original result once; this
+rule does not weaken result-consumption semantics.
+
 ## Task contracts
 
 Send a complete, repository-relative contract. Read-only tasks use:

@@ -77,7 +77,10 @@ its actual output, and consume it once before continuing. Map task lifecycle as:
 Never declare DONE while required work is active, terminal-but-unconsumed, or
 unknown. Never fabricate a result, replace a child because output is missing, or
 blindly repeat a side-effecting operation. Reconcile the original execution and
-its effects first; if it remains unknown, report `COMPLETION_UNCONFIRMED`.
+its effects first; if it remains unknown, report `COMPLETION_UNCONFIRMED`. For
+an interrupted or indeterminate compound mutation, distinguish already-applied
+from unapplied effects and continue only missing bounded work; never replay the
+full mutation blindly.
 
 ## Authority and role boundaries
 

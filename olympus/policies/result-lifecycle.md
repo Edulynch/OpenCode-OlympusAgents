@@ -15,3 +15,7 @@ Missing output is not failure. Seek and validate the result from the original ex
 ## No blind retry
 
 Never retry an unknown or live original. Retry only after positive evidence that the prior operation did not execute, the original output/effects have been reconciled, the affected gate is identified, repetition is safe, and duplication is ruled out. Preserve collected results and repeat only the lost gate. Destructive or high-impact repetition needs proportionate explicit authorization.
+
+## Interrupted compound mutations
+
+An interrupted, cancelled, missing-result, or otherwise indeterminate compound mutation may have partially applied. Reconcile actual repository/file state against the original targets before continuation; distinguish applied from unapplied effects, never replay the full mutation blindly, and continue only missing bounded work. Confirmed non-execution remains subject to the existing bounded retry rules.

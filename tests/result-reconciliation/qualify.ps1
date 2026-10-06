@@ -51,6 +51,10 @@ function Reconcile-Restart($assignment, [string]$storedOutcome, [DateTimeOffset]
 }
 try {
     $kael = Text '.opencode/agents/kael.md'
+    $kovan = Text '.opencode/agents/kovan.md'
+    $lifecycle = Text 'olympus/policies/result-lifecycle.md'
+    $codexRoot = Text 'CODEX.md'
+    $codexKovan = Text '.codex/agents/kovan.toml'
     $docs = Text 'docs/DEVELOPMENT.md'
     $gates = Text 'tests/completion-gates/qualify.ps1'
     Check 'RR1_MISSING_NOT_FAILURE' ($kael -match 'MISSING PARENT TOOL OUTPUT != CHILD FAILURE' -and
@@ -97,6 +101,20 @@ try {
         $kael -match 'it does not prove terminal completion')
     Check 'RR18_OUTPUT_NOT_RETRY' ($kael -match 'Missing output is\s+neither failure nor retry authorization' -and
         $kael -match 'consume it once')
+    Check 'RR19_MONOLITHIC_WRITE_DEFAULT' ($kovan -match 'Prefer native edit/write operations or small coherent shell batches' -and
+        $kovan -match 'Avoid one monolithic shell command containing many unrelated complete-file rewrites\s+or many large inline here-strings unless a material technical reason makes\s+batching preferable')
+    Check 'RR20_INDETERMINATE_COMPOUND_RECONCILIATION' ($lifecycle -match 'An interrupted, cancelled, missing-result, or otherwise indeterminate compound mutation may have partially applied' -and
+        $kael -match 'inspect actual repository/file state against the original targets' -and
+        $kael -match 'distinguish already-applied from unapplied effects' -and
+        $kael -match 'Never relaunch the full original mutation: continue only missing bounded work')
+    Check 'RR21_CONFIRMED_NONEXECUTION_CONTINUATION' ($kael -match 'only positive native evidence that no child was\s+created' -and
+        $kael -match 'Eligibility is\s+not an automatic retry')
+    Check 'RR22_LEGITIMATE_SMALL_SHELL_BATCH' ($kovan -match 'PowerShell, multiline commands, here-strings, and small coherent batches remain\s+allowed when technically justified' -and
+        $kovan -match 'Do not apply a blanket command-length limit\s+or ban shell-based writes')
+    Check 'RR23_CODEX_PARTIAL_MUTATION_SEMANTICS' ($codexRoot -match 'For\s+an interrupted or indeterminate compound mutation, distinguish already-applied\s+from unapplied effects and continue only missing bounded work' -and
+        $codexRoot -match 'never replay the\s+full mutation blindly' -and
+        $codexKovan -match 'prefer native editing where available or small coherent shell batches' -and
+        $codexKovan -match 'reconcile actual file effects and continue only missing bounded work, never blindly replay the full mutation')
     Check 'NO_THALES_ON_ERROR' ($kael -match 'not by itself a reason to invoke Thales')
     Check 'PHASE3_INHERITS' ($kael -match 'Kael-mediated iterative evidence loops reconcile the original worker')
 
@@ -114,9 +132,9 @@ try {
     $unknown = Reconcile $b 'parent-output-missing' $false $false $false $false ''
     Check 'CASE_B_UNKNOWN' ($unknown.state -eq 'COMPLETION_UNCONFIRMED' -and
         -not $unknown.retryEligible -and $b.retries -eq 0)
-    $c = New-Assignment 'prelaunch-rejected' $false
+    $c = New-Assignment 'prelaunch-rejected-writer' $true
     $rejected = Reconcile $c 'native-prelaunch-rejection' $false $false $false $true ''
-    Check 'CASE_C_NOT_STARTED' ($rejected.state -eq 'CONFIRMED_NOT_STARTED' -and
+    Check 'CASE_C_NOT_STARTED' ($c.writer -and $rejected.state -eq 'CONFIRMED_NOT_STARTED' -and
         $rejected.retryEligible -and $rejected.action -eq 'RETRY_ELIGIBLE' -and $c.retries -eq 0)
     $d = New-Assignment 'writer-indeterminate' $true
     $writer = Reconcile $d 'parent-output-missing' $true $false $false $false ''

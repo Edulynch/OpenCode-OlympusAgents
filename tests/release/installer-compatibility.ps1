@@ -21,7 +21,7 @@ try {
     Check 'P3_STRICT_MODE' ($text -match 'Set-StrictMode\s+-Version\s+Latest')
     Check 'P5_NO_ISWINDOWS' ($text -notmatch '\$IsWindows' -and $text -match 'OSVersion\.Platform' -and $text -match 'PLATFORM_UNQUALIFIED')
 
-    $pwsh = (Get-Command pwsh -CommandType Application -ErrorAction Stop).Source
+    $pwsh = (Get-Command pwsh -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     $hosts = @()
     $windowsPowerShell = Get-Command powershell.exe -CommandType Application -ErrorAction SilentlyContinue
     if ($windowsPowerShell) {

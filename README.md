@@ -139,6 +139,8 @@ Then describe what you want to build in plain language. For example:
 
 > Add a search bar to my app. Make it keyboard-accessible and run the relevant tests.
 
+You can also say, “Plan this migration. Do not implement it,” or “Evaluate how to optimize this endpoint and stop before implementation.”
+
 Kael coordinates the team as needed: research, implementation, testing, and review. You don't have to choose agents yourself.
 
 ## 🧭 The Team

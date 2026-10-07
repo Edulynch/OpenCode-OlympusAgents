@@ -1,14 +1,28 @@
 [CmdletBinding()]
-param()
+param([ValidateSet('Both','Offline','Runtime')][string]$QualificationSlice = 'Both')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $run = Join-Path (Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode') ('thales-qualification-' + [guid]::NewGuid().ToString('N'))
 $old = Join-Path $run 'v020-source'
 $target = Join-Path $run 'target'
+$originalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
 function Check([string]$id, [bool]$ok) {
     if (-not $ok) { throw "$id FAIL" }
     Write-Output "$id PASS"
+}
+function Enable-OfflineOpenCodeStub([string]$FixtureRoot) {
+    $mockBin = Join-Path $FixtureRoot 'mock-opencode'
+    [IO.Directory]::CreateDirectory($mockBin) | Out-Null
+    Copy-Item -LiteralPath (Join-Path $source 'tests/release/fixtures/opencode.ps1') -Destination (Join-Path $mockBin 'opencode.ps1')
+    $pwsh = Join-Path $PSHOME 'pwsh.exe'
+    $wrapper = "@echo off`r`n`"$pwsh`" -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
+    [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), $wrapper, [Text.Encoding]::ASCII)
+    $windowsApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+    $parts = @($originalPath -split [regex]::Escape([IO.Path]::PathSeparator) | Where-Object {
+        $_ -and $_.Trim('"') -ine $windowsApps -and $_.Trim('"') -ine $PSHOME
+    })
+    $env:PATH = (@($mockBin,$PSHOME) + $parts) -join [IO.Path]::PathSeparator
 }
 function Install([string]$root, [string]$repo, [switch]$DryRun) {
     $args = @('-NoProfile','-File',(Join-Path $root 'install.ps1'),'-SourceRoot',$root,'-Target',$repo)
@@ -26,6 +40,8 @@ function Snapshot {
 }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
+    if ($QualificationSlice -eq 'Offline') { Enable-OfflineOpenCodeStub $run }
+    if ($QualificationSlice -ne 'Runtime') {
     $kael = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/kael.md'))
     $thales = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/thales.md'))
     Check 'TH1_TH2_TH17_SINGLE_IDENTITY' ((Test-Path (Join-Path $source '.opencode/agents/thales.md')) -and
@@ -45,6 +61,8 @@ try {
         $kael -match 'Kael → Aegis remains DENIED' -and $thales -match '(?s)Never directly invoke.*?Aegis')
     Check 'TH20_TH22_MODELS_CONCURRENCY' ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kael -match 'fan out up to four useful children' -and $kael -notmatch 'gpt-6-luna#fast')
+    }
+    if ($QualificationSlice -ne 'Runtime') {
     & git -C $source worktree add --detach $old 'v0.2.0^{commit}' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'v0.2.0 fixture checkout failed' }
     Check 'TH_ROLE_SEMANTICS' ($thales -match 'DO YOUR ROLE. DO NOT ABSORB ANOTHER ROLE TO SAVE A HANDOFF' -and
@@ -86,6 +104,8 @@ try {
     Check 'TH19_UNRELATED_INDEX_AND_BYTES' ((Snapshot) -ceq $before)
     $again = Install $source $target
     Check 'TH_IDEMPOTENT' ($again.Code -eq 0 -and $again.Output -match '(?m)^NO_CHANGES\s*$')
+    }
+    if ($QualificationSlice -ne 'Offline') {
     $fresh = Join-Path $run 'fresh'
     [IO.Directory]::CreateDirectory($fresh) | Out-Null
     & git -C $fresh init --quiet
@@ -100,7 +120,9 @@ try {
         -not (Test-Path (Join-Path $fresh '.opencode/agents/sorin.md')) -and
         @($agents | Where-Object id -eq 'sorin').Count -eq 0 -and
         @($agents | Where-Object { $_.id -eq 'thales' -and $_.model.id -eq 'gpt-6.1-sol' -and $_.model.variant -eq 'xhigh' }).Count -eq 1)
+    }
 
+    if ($QualificationSlice -ne 'Runtime') {
     $drift = Join-Path $run 'drift'
     [IO.Directory]::CreateDirectory($drift) | Out-Null
     & git -C $drift init --quiet
@@ -121,12 +143,20 @@ try {
     $foreignResult = Install $source $foreign
     Check 'TH_UNOWNED_SORIN_REFUSED' ($foreignResult.Code -ne 0 -and $foreignResult.Output -match 'INSTALL_CONFLICT' -and
         (Test-Path $foreignSorin) -and -not (Test-Path (Join-Path $foreign '.opencode/agents/thales.md')))
-    Write-Output 'THALES MIGRATION: PASS'
+    }
+    if ($QualificationSlice -eq 'Runtime') {
+        Write-Output 'THALES RUNTIME QUALIFICATION: PASS (fresh installed effective agent; no interactive session executed)'
+    } elseif ($QualificationSlice -eq 'Offline') {
+        Write-Output 'THALES OFFLINE QUALIFICATION: PASS (static and installer/history checks; effective OpenCode queries not run)'
+    } else {
+        Write-Output 'THALES MIGRATION: PASS'
+    }
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
     Write-Output 'THALES MIGRATION: FAIL'
     exit 1
 } finally {
+    [Environment]::SetEnvironmentVariable('PATH',$originalPath,'Process')
     if (Test-Path -LiteralPath $old) { & git -C $source worktree remove --force $old 2>$null | Out-Null }
     if (Test-Path -LiteralPath $run) {
         try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop }

@@ -128,6 +128,8 @@ The OpenCode activity display is read-only and disappears when no agents are wor
 
 Olympus treats an installed project as trusted. Kovan and Nox can run commands from that project while implementing and validating work. Only install Olympus into repositories you trust; see [Development & qualification](docs/DEVELOPMENT.md) for details.
 
+Contributors can run the unified qualification entry point from a source checkout with `pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FAST` (replace `FAST` with `FULL` or `RUNTIME`). FAST is offline-only, FULL adds the existing installer/history fixtures with an explicit qualification stub where needed, and RUNTIME is limited to effective runtime boundaries; the known OpenCode global-discovery GAP (#7) is diagnosed separately, not treated as supported. See [Development & qualification](docs/DEVELOPMENT.md) for prerequisites and evidence limits.
+
 ## 🔄 Update
 
 For the current published version, consult [GitHub Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases). The installer defaults to project scope and OpenCode; `-Harness` accepts `opencode`, `codex`, or `all`. Project verification checks only the requested managed harness subset, is read-only, and does not launch mutable runtime discovery in the target. See [Harness installation](docs/HARNESSES.md) for global static-install behavior and runtime limitations. Historical tagged validation attempts are recorded in [CHANGELOG.md](CHANGELOG.md).

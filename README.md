@@ -1,19 +1,17 @@
 <div align="center">
 
-# 🏛️ Olympus Agents
+# 🏛️ OpenCode Olympus Agents
 
-### Give your coding runtime a team.
+### Give OpenCode a team.
 
-**Multi-agent coding orchestration for OpenCode and Codex.**
-
-**Install once. Start building.**
+**Install once. Open OpenCode. Start building.**
 
 [![Latest release](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest)
 [![OpenCode V2](https://img.shields.io/badge/OpenCode-V2-f97316?style=flat-square)](https://opencode.ai/docs/)
 [![Windows Qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](docs/HARNESSES.md)
 [![MIT License](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
 
-<p><a href="#-install">Install</a> · <a href="#-uninstall">Uninstall</a> · <a href="#-start-building">Start Building</a> · <a href="#-the-team">Agents</a> · <a href="#-normal-vs-fast">NORMAL vs FAST</a> · <a href="#-live-activity">Live Activity</a> · <a href="#-update">Update</a> · <a href="#-documentation">Docs</a></p>
+<p><a href="#-install">Install</a> · <a href="#-start-building">Start Building</a> · <a href="#-the-team">Agents</a> · <a href="#-normal-vs-fast">NORMAL vs FAST</a> · <a href="#-live-activity">Live Activity</a> · <a href="#-update">Update</a> · <a href="#-documentation">Docs</a></p>
 
 </div>
 
@@ -21,118 +19,54 @@
 
 ### Requirements
 
-- Windows with PowerShell 7 installed
-- Git
-- OpenCode V2 when installing the OpenCode harness; Codex CLI when installing the Codex harness
+- Windows with PowerShell 7 installed (Windows PowerShell 5.1 may launch the installer, which delegates bootstrap to PowerShell 7)
+- Git and an existing Git project
+- OpenCode V2 and the configured models when installing OpenCode; Codex CLI when using Codex
 
-Choose the runtime explicitly: **OpenCode**, **Codex**, or **both**. There is no public default harness.
+Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Choose the current published version from [GitHub Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) and replace `<TAG>` with its immutable tag. The selected tag must include the dual-harness installer. Project scope remains the installer default; global installation is a separate Windows-qualified foundation.
 
-The small one-line entrypoints below resolve the latest published GitHub release automatically. The actual Olympus installer is then downloaded and executed from that release's exact immutable tag, so you never have to replace a version manually.
+#### OpenCode (default)
 
-### Project install
-
-Open PowerShell in the root of the Git project where you want Olympus.
-
-**OpenCode**
+The default preserves the one-line OpenCode install:
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/opencode.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1 | iex
 ```
 
-**Codex**
+This is equivalent to `-Harness opencode`; no harness selection prompt appears.
+
+#### Codex
+
+Run the downloaded script as a script block to pass installer parameters:
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/codex.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness codex
 ```
 
-**OpenCode + Codex**
+#### OpenCode + Codex
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/all.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness all
 ```
 
-Installing one harness is additive; it does not remove the other.
+Add `-Target (Get-Location).Path` when invoking from outside the project root. Each selection is additive: installing one harness does not remove the other. Use the same exact tag for installation and verification.
 
-### Global install
-
-Global installation is also explicit:
-
-**OpenCode**
+Verify just the requested project-local harness surface without writing files:
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/global/opencode.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness opencode -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness codex -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness all -Target (Get-Location).Path -VerifyOnly
 ```
 
-**Codex**
-
-```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/global/codex.ps1 | iex
-```
-
-**OpenCode + Codex**
-
-```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/global/all.ps1 | iex
-```
-
-Codex global runtime discovery is supported. OpenCode global files can be installed and verified, but OpenCode global runtime discovery remains a documented upstream **GAP**; use project installation when you need dependable OpenCode runtime discovery.
-
-Only run downloaded scripts you trust. The public entrypoint is intentionally small and auditable; release installation remains pinned to the immutable release tag it resolves.
-
-## 🧹 Uninstall
-
-Olympus removes only resources recorded in its ownership manifest. If an Olympus-managed file was modified, project uninstall refuses to delete it instead of silently discarding the change.
-
-### Project uninstall
-
-**OpenCode**
-
-```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/uninstall/project/opencode.ps1 | iex
-```
-
-**Codex**
-
-```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/uninstall/project/codex.ps1 | iex
-```
-
-**OpenCode + Codex**
-
-```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/uninstall/project/all.ps1 | iex
-```
-
-### Global uninstall
-
-**OpenCode**
-
-```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/uninstall/global/opencode.ps1 | iex
-```
-
-**Codex**
-
-```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/uninstall/global/codex.ps1 | iex
-```
-
-**OpenCode + Codex**
-
-```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/uninstall/global/all.ps1 | iex
-```
+Only run downloaded scripts in projects you trust; review the installer at the same immutable tag first if you prefer.
 
 ## 💬 Start Building
 
-In the same project folder, start the runtime you installed:
+In the same project folder, run:
 
 ```powershell
-# OpenCode
 opencode
-
-# Codex
-codex
 ```
 
 Then describe what you want to build in plain language. For example:
@@ -198,19 +132,7 @@ Contributors can run the unified qualification entry point from a source checkou
 
 ## 🔄 Update
 
-Run the same **install** command again for the same scope and harness. The entrypoint resolves the latest published release and the installer updates only Olympus-managed resources.
-
-Examples:
-
-```powershell
-# Project / OpenCode
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/opencode.ps1 | iex
-
-# Global / Codex
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/global/codex.ps1 | iex
-```
-
-Advanced verification, tagged release validation, and installer internals are documented in [Development & qualification](docs/DEVELOPMENT.md) and [Harness installation](docs/HARNESSES.md).
+For the current published version, consult [GitHub Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases). The installer defaults to project scope and OpenCode; `-Harness` accepts `opencode`, `codex`, or `all`. Project verification checks only the requested managed harness subset, is read-only, and does not launch mutable runtime discovery in the target. See [Harness installation](docs/HARNESSES.md) for global static-install behavior and runtime limitations. Historical tagged validation attempts are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## 🆘 Troubleshooting
 

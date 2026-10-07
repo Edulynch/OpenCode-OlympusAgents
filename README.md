@@ -1,10 +1,12 @@
 <div align="center">
 
-# 🏛️ OpenCode Olympus Agents
+# 🏛️ Olympus Agents
 
-### Give OpenCode a team.
+### Give your coding runtime a team.
 
-**Install once. Open OpenCode. Start building.**
+**Multi-agent coding orchestration for OpenCode and Codex.**
+
+**Install once. Start building.**
 
 [![Latest release](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest)
 [![OpenCode V2](https://img.shields.io/badge/OpenCode-V2-f97316?style=flat-square)](https://opencode.ai/docs/)
@@ -23,14 +25,14 @@
 - Git and an existing Git project
 - OpenCode V2 and the configured models when installing OpenCode; Codex CLI when using Codex
 
-Open PowerShell **in the root folder of the Git project** where you want to use Olympus. Choose the current published version from [GitHub Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) and replace `<TAG>` with its immutable tag. The selected tag must include the dual-harness installer. Project scope remains the installer default; global installation is a separate Windows-qualified foundation.
+Open PowerShell **in the root folder of the Git project** where you want to use Olympus. The commands below resolve the latest published GitHub release automatically, then download the installer from that release's exact immutable tag. No manual version replacement is required. Project scope remains the installer default; global installation is a separate Windows-qualified foundation.
 
 #### OpenCode (default)
 
 The default preserves the one-line OpenCode install:
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1 | iex
+$tag = (irm 'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest').tag_name; irm "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/install.ps1" | iex
 ```
 
 This is equivalent to `-Harness opencode`; no harness selection prompt appears.
@@ -40,13 +42,13 @@ This is equivalent to `-Harness opencode`; no harness selection prompt appears.
 Run the downloaded script as a script block to pass installer parameters:
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness codex
+$tag = (irm 'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest').tag_name; & ([scriptblock]::Create((irm "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/install.ps1"))) -Harness codex
 ```
 
 #### OpenCode + Codex
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness all
+$tag = (irm 'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest').tag_name; & ([scriptblock]::Create((irm "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/install.ps1"))) -Harness all
 ```
 
 Add `-Target (Get-Location).Path` when invoking from outside the project root. Each selection is additive: installing one harness does not remove the other. Use the same exact tag for installation and verification.
@@ -54,12 +56,13 @@ Add `-Target (Get-Location).Path` when invoking from outside the project root. E
 Verify just the requested project-local harness surface without writing files:
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness opencode -Target (Get-Location).Path -VerifyOnly
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness codex -Target (Get-Location).Path -VerifyOnly
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/<TAG>/install.ps1'))) -Harness all -Target (Get-Location).Path -VerifyOnly
+$tag = (irm 'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest').tag_name
+& ([scriptblock]::Create((irm "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/install.ps1"))) -Harness opencode -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/install.ps1"))) -Harness codex -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/install.ps1"))) -Harness all -Target (Get-Location).Path -VerifyOnly
 ```
 
-Only run downloaded scripts in projects you trust; review the installer at the same immutable tag first if you prefer.
+Only run downloaded scripts in projects you trust. The command resolves the latest published release, but the installer itself is fetched from that release's immutable tag; review that tagged installer first if you prefer.
 
 ## 💬 Start Building
 
@@ -132,7 +135,15 @@ Contributors can run the unified qualification entry point from a source checkou
 
 ## 🔄 Update
 
-For the current published version, consult [GitHub Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases). The installer defaults to project scope and OpenCode; `-Harness` accepts `opencode`, `codex`, or `all`. Project verification checks only the requested managed harness subset, is read-only, and does not launch mutable runtime discovery in the target. See [Harness installation](docs/HARNESSES.md) for global static-install behavior and runtime limitations. Historical tagged validation attempts are recorded in [CHANGELOG.md](CHANGELOG.md).
+To update Olympus, run the same install command again. It resolves the latest published release automatically and downloads the installer from that release's immutable tag.
+
+For OpenCode:
+
+```powershell
+$tag = (irm 'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest').tag_name; irm "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/install.ps1" | iex
+```
+
+For Codex or a dual-harness installation, use the corresponding `-Harness codex` or `-Harness all` command from [Install](#-install). The installer defaults to project scope and OpenCode. Project verification checks only the requested managed harness subset, is read-only, and does not launch mutable runtime discovery in the target. See [Harness installation](docs/HARNESSES.md) for global static-install behavior and runtime limitations. Historical tagged validation attempts are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## 🆘 Troubleshooting
 

@@ -564,6 +564,27 @@ function Report([string]$Repo, $Detection, $Plan, [string]$Status, [string]$Vers
     Write-Output "STATUS:"; Write-Output $Status
 }
 
+function Get-CodexInstructionsPrecedenceWarning([string]$Repo) {
+    if ($DryRun -or 'codex' -notin $SelectedHarnesses) { return $null }
+
+    # Codex prefers AGENTS.override.md to AGENTS.md. Empty instruction files
+    # are ignored, so only the first non-empty file in that order can shadow
+    # the generated CODEX.md at the project root.
+    foreach ($relative in @('AGENTS.override.md', 'AGENTS.md')) {
+        $path = Join-Path $Repo $relative
+        try {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf -ErrorAction Stop)) { continue }
+            $contents = [IO.File]::ReadAllText($path)
+        } catch {
+            return "OLYMPUS_CODEX_INSTRUCTIONS_WARNING: Could not inspect root $relative for Codex precedence; managed-file installation or verification does not guarantee Kael was loaded as root instructions. No user files were changed."
+        }
+        if ([string]::IsNullOrWhiteSpace($contents)) { continue }
+
+        return "OLYMPUS_CODEX_INSTRUCTIONS_WARNING: Codex gives non-empty root $relative precedence over CODEX.md. Managed-file installation or verification does not guarantee Kael was loaded as root instructions; the user-owned file was left unchanged."
+    }
+    return $null
+}
+
 function Get-Expected-Agents {
     $agentsRoot = Join-Path $SourceRoot '.opencode/agents'
     $files = @(Get-ChildItem -LiteralPath $agentsRoot -Filter '*.md' -File)
@@ -729,6 +750,8 @@ try {
 
     if ($VerifyOnly) {
         Assert-InstalledHarness $Repo $manifest
+        $codexInstructionsWarning = Get-CodexInstructionsPrecedenceWarning $Repo
+        if ($codexInstructionsWarning) { Write-Output $codexInstructionsWarning }
         Write-Output "OLYMPUS_VERIFY: $SourceVersion PASS"
         exit 0
     }
@@ -747,6 +770,10 @@ try {
     # decide whether installation is safe. Unrelated work stays untouched.
 
     $detection = Detect-Project $Repo
+    $codexInstructionsWarning = Get-CodexInstructionsPrecedenceWarning $Repo
+    if ($codexInstructionsWarning) {
+        $detection.Warnings = @($detection.Warnings) + @($codexInstructionsWarning)
+    }
     $AllContent = [ordered]@{}
     if ($null -ne $manifest) {
         foreach ($entry in $ExistingEntries) {

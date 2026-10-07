@@ -1,11 +1,13 @@
 [CmdletBinding()]
-param()
+param([ValidateSet('Both','Offline','Runtime')][string]$QualificationSlice = 'Both')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $work = Join-Path $root 'tests/.phase4c-work'
 $fixture = Join-Path $work ('autonomy-' + [guid]::NewGuid().ToString('N'))
 $utf8 = [Text.UTF8Encoding]::new($false)
+$originalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
+$mockBin = $null
 function Check([string]$Id, [bool]$Ok) {
     if (-not $Ok) { throw "$Id FAIL" }
     Write-Output "$Id PASS"
@@ -13,7 +15,24 @@ function Check([string]$Id, [bool]$Ok) {
 function Has($agent, [string]$action, [string]$effect) {
     return @($agent.permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq $effect }).Count -gt 0
 }
+function Enable-OfflineOpenCodeStub([string]$FixtureRoot) {
+    $script:mockBin = Join-Path $FixtureRoot ('autonomy-opencode-' + [guid]::NewGuid().ToString('N'))
+    [IO.Directory]::CreateDirectory($script:mockBin) | Out-Null
+    Copy-Item -LiteralPath (Join-Path $root 'tests/release/fixtures/opencode.ps1') -Destination (Join-Path $script:mockBin 'opencode.ps1')
+    $pwsh = Join-Path $PSHOME 'pwsh.exe'
+    $wrapper = "@echo off`r`n`"$pwsh`" -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
+    [IO.File]::WriteAllText((Join-Path $script:mockBin 'opencode.cmd'), $wrapper, [Text.Encoding]::ASCII)
+    $windowsApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+    $parts = @($originalPath -split [regex]::Escape([IO.Path]::PathSeparator) | Where-Object {
+        $_ -and $_.Trim('"') -ine $windowsApps -and $_.Trim('"') -ine $PSHOME
+    })
+    $env:PATH = (@($script:mockBin,$PSHOME) + $parts) -join [IO.Path]::PathSeparator
+}
 try {
+    if ($QualificationSlice -eq 'Offline') {
+        [IO.Directory]::CreateDirectory($work) | Out-Null
+        Enable-OfflineOpenCodeStub $work
+    }
     [IO.Directory]::CreateDirectory($fixture) | Out-Null
     [IO.File]::WriteAllText((Join-Path $fixture 'README.md'), "autonomy fixture`n", $utf8)
     & git -C $fixture init --quiet
@@ -23,6 +42,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Fixture Git commit failed.' }
     $install = (& pwsh -NoProfile -File (Join-Path $root 'scripts/bootstrap.ps1') -Target $fixture 2>&1 | Out-String)
     Check AU12 ($LASTEXITCODE -eq 0 -and $install -match '(?m)^READY\s*$')
+    if ($QualificationSlice -ne 'Offline') {
     Push-Location $fixture
     try {
         $agents = (& opencode debug agents 2>&1 | Out-String) | ConvertFrom-Json -Depth 100
@@ -45,10 +65,21 @@ try {
     Check AU11_STATIC ((Has $k external_directory ask) -and (Has $n external_directory ask) -and
         -not (Has $k external_directory allow) -and -not (Has $n external_directory allow) -and
         @($k.permissions + $n.permissions | Where-Object { $_.action -eq 'shell' -and $_.effect -eq 'ask' }).Count -eq 0)
-    $again = (& pwsh -NoProfile -File (Join-Path $root 'scripts/bootstrap.ps1') -Target $fixture 2>&1 | Out-String)
-    Check AU12_IDEMPOTENT ($LASTEXITCODE -eq 0 -and $again -match '(?m)^NO_CHANGES\s*$')
+    }
+    if ($QualificationSlice -ne 'Runtime') {
+        $again = (& pwsh -NoProfile -File (Join-Path $root 'scripts/bootstrap.ps1') -Target $fixture 2>&1 | Out-String)
+        Check AU12_IDEMPOTENT ($LASTEXITCODE -eq 0 -and $again -match '(?m)^NO_CHANGES\s*$')
+    }
+    if ($QualificationSlice -eq 'Offline') {
+        Write-Output 'AUTONOMY OFFLINE QUALIFICATION: PASS (fresh bootstrap and idempotence; effective rules not queried)'
+        exit 0
+    }
     Write-Output 'AU3/AU4/AU11 RUNTIME: PENDING INTERACTIVE VALIDATION (no child-agent execution in this harness)'
-    Write-Output 'AUTONOMY QUALIFICATION: PASS (static effective permissions and bootstrap only)'
+    if ($QualificationSlice -eq 'Runtime') {
+        Write-Output 'AUTONOMY RUNTIME QUALIFICATION: PASS (fresh effective permissions; interactive child execution not run)'
+    } else {
+        Write-Output 'AUTONOMY QUALIFICATION: PASS (static effective permissions and bootstrap only)'
+    }
     Write-Output ('FIXTURE_RETAINED: ' + $fixture)
     exit 0
 } catch {
@@ -56,4 +87,9 @@ try {
     Write-Output ('FIXTURE_RETAINED: ' + $fixture)
     Write-Output 'AUTONOMY QUALIFICATION: FAIL'
     exit 1
+} finally {
+    [Environment]::SetEnvironmentVariable('PATH',$originalPath,'Process')
+    if ($mockBin -and (Test-Path -LiteralPath $mockBin)) {
+        Remove-Item -LiteralPath $mockBin -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }

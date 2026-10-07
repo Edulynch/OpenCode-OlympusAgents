@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([ValidateSet('Both','Offline','Runtime')][string]$QualificationSlice = 'Both')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
@@ -250,7 +250,707 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
     [pscustomobject]@{ passed=($failures.Count -eq 0); evidence=$evidence }
 }
 
+function Test-AuthorityPathWithin([string]$Path, [string]$Base) {
+    $separators = [char[]]@([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
+    $candidate = [IO.Path]::GetFullPath($Path).TrimEnd($separators)
+    $basePath = [IO.Path]::GetFullPath($Base).TrimEnd($separators)
+    return $candidate.Equals($basePath,[StringComparison]::OrdinalIgnoreCase) -or
+        $candidate.StartsWith($basePath + [IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)
+}
+
+function Assert-AuthorityNoReparsePoints([string]$Path, [switch]$Recursive) {
+    $full = [IO.Path]::GetFullPath($Path)
+    $volumeRoot = [IO.Path]::GetPathRoot($full)
+    $parts = $full.Substring($volumeRoot.Length).Split(
+        [char[]]@([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar),
+        [StringSplitOptions]::RemoveEmptyEntries)
+    $current = $volumeRoot
+    foreach ($part in $parts) {
+        $current = Join-Path $current $part
+        if (-not (Test-Path -LiteralPath $current)) { continue }
+        $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw ('AUTHORITY_FIXTURE_REPARSE_POINT: ' + $item.FullName)
+        }
+    }
+    if ($Recursive -and (Test-Path -LiteralPath $full -PathType Container)) {
+        foreach ($item in @(Get-ChildItem -LiteralPath $full -Force -Recurse -ErrorAction Stop)) {
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw ('AUTHORITY_FIXTURE_REPARSE_POINT: ' + $item.FullName)
+            }
+        }
+    }
+}
+
+function Get-AuthorityPython311 {
+    foreach ($name in @('python3.11','python3','python')) {
+        $command = Get-Command $name -ErrorAction SilentlyContinue
+        if ($null -eq $command) { continue }
+        try {
+            $probe = @(& $command.Source -B -c 'import json,sys; print(json.dumps({"executable":sys.executable,"version":list(sys.version_info[:3])}))' 2>$null)
+            $probeExit = $LASTEXITCODE
+            if ($probeExit -ne 0 -or $probe.Count -eq 0) { continue }
+            $details = ($probe -join "`n") | ConvertFrom-Json -Depth 5 -ErrorAction Stop
+            $version = @($details.version | ForEach-Object { [int]$_ })
+            if ($version.Count -lt 2 -or $version[0] -lt 3 -or ($version[0] -eq 3 -and $version[1] -lt 11)) { continue }
+            $executable = [IO.Path]::GetFullPath([string]$details.executable)
+            if (Test-Path -LiteralPath $executable -PathType Leaf) { return $executable }
+        } catch { }
+    }
+    throw 'AUTHORITY_RUNTIME_SETUP_FAILED: Python 3.11+ executable could not be resolved before process isolation.'
+}
+
+function Get-AuthorityOpenCodeExecutable {
+    $applications = @(Get-Command 'opencode.exe' -CommandType Application -ErrorAction SilentlyContinue)
+    if ($applications.Count -gt 0) { return [IO.Path]::GetFullPath($applications[0].Source) }
+
+    $command = Get-Command opencode -ErrorAction Stop
+    $wrapperRoot = Split-Path -Parent $command.Source
+    if ([IO.Path]::GetExtension($command.Source) -in @('.ps1','.cmd','.bat')) {
+        $bundledExe = Join-Path $wrapperRoot 'node_modules/@opencode/cli/bin/opencode.exe'
+        if (Test-Path -LiteralPath $bundledExe -PathType Leaf) { return [IO.Path]::GetFullPath($bundledExe) }
+    }
+    if ($command.CommandType -eq [Management.Automation.CommandTypes]::Application -and
+        [IO.Path]::GetExtension($command.Source) -ieq '.exe') { return [IO.Path]::GetFullPath($command.Source) }
+    throw 'AUTHORITY_RUNTIME_CLI_UNRESOLVED: Could not resolve the real OpenCode executable.'
+}
+
+function Set-AuthorityChildEnvironment(
+    [Diagnostics.ProcessStartInfo]$StartInfo,
+    [string]$Root,
+    [string]$MockBin = '',
+    [switch]$MockBootstrap,
+    [string]$GitConfig = '',
+    [string]$GitTemplate = '',
+    [string]$OpenCodePassword = ''
+) {
+    $homePath = Join-Path $Root 'home'
+    $isolatedTemp = Join-Path $Root 'temp'
+    $xdgConfig = Join-Path $Root 'xdg-config'
+    $xdgData = Join-Path $Root 'xdg-data'
+    $xdgCache = Join-Path $Root 'xdg-cache'
+    $xdgState = Join-Path $Root 'xdg-state'
+    $appData = Join-Path $homePath 'AppData/Roaming'
+    $localAppData = Join-Path $homePath 'AppData/Local'
+    foreach ($path in @($homePath,$isolatedTemp,$xdgConfig,$xdgData,$xdgCache,$xdgState,$appData,$localAppData)) {
+        [IO.Directory]::CreateDirectory($path) | Out-Null
+    }
+
+    $preserved = [ordered]@{}
+    foreach ($key in @('PATH','SystemRoot','WINDIR','COMSPEC','PATHEXT')) {
+        $value = [Environment]::GetEnvironmentVariable($key,'Process')
+        if (-not [string]::IsNullOrWhiteSpace($value)) { $preserved[$key] = $value }
+    }
+    if (-not $preserved.Contains('PATH') -or -not $preserved.Contains('SystemRoot')) {
+        throw 'AUTHORITY_RUNTIME_ENVIRONMENT_INVALID: PATH and SystemRoot are required on Windows.'
+    }
+
+    $StartInfo.Environment.Clear()
+    foreach ($key in $preserved.Keys) { $StartInfo.Environment[$key] = [string]$preserved[$key] }
+    $drive = [IO.Path]::GetPathRoot($homePath).TrimEnd([char[]]@('\','/'))
+    $StartInfo.Environment['HOME'] = [IO.Path]::GetFullPath($homePath)
+    $StartInfo.Environment['USERPROFILE'] = [IO.Path]::GetFullPath($homePath)
+    $StartInfo.Environment['HOMEDRIVE'] = $drive
+    $StartInfo.Environment['HOMEPATH'] = $homePath.Substring($drive.Length)
+    $StartInfo.Environment['APPDATA'] = [IO.Path]::GetFullPath($appData)
+    $StartInfo.Environment['LOCALAPPDATA'] = [IO.Path]::GetFullPath($localAppData)
+    $StartInfo.Environment['XDG_CONFIG_HOME'] = [IO.Path]::GetFullPath($xdgConfig)
+    $StartInfo.Environment['XDG_DATA_HOME'] = [IO.Path]::GetFullPath($xdgData)
+    $StartInfo.Environment['XDG_CACHE_HOME'] = [IO.Path]::GetFullPath($xdgCache)
+    $StartInfo.Environment['XDG_STATE_HOME'] = [IO.Path]::GetFullPath($xdgState)
+    $StartInfo.Environment['TEMP'] = [IO.Path]::GetFullPath($isolatedTemp)
+    $StartInfo.Environment['TMP'] = [IO.Path]::GetFullPath($isolatedTemp)
+    if ($MockBootstrap) {
+        $StartInfo.Environment['PATH'] = [IO.Path]::GetFullPath($MockBin) + [IO.Path]::PathSeparator + [string]$preserved['PATH']
+    }
+    if ($GitConfig) {
+        $StartInfo.Environment['GIT_CONFIG_NOSYSTEM'] = '1'
+        $StartInfo.Environment['GIT_CONFIG_GLOBAL'] = [IO.Path]::GetFullPath($GitConfig)
+    }
+    if ($GitTemplate) { $StartInfo.Environment['GIT_TEMPLATE_DIR'] = [IO.Path]::GetFullPath($GitTemplate) }
+    if (-not [string]::IsNullOrWhiteSpace($OpenCodePassword)) {
+        $StartInfo.Environment['OPENCODE_PASSWORD'] = $OpenCodePassword
+    }
+}
+
+function Invoke-AuthorityCapturedProcess(
+    [string]$Executable,
+    [string[]]$Arguments,
+    [string]$WorkingDirectory,
+    [string]$Root,
+    [switch]$MockBootstrap,
+    [string]$MockBin = '',
+    [string]$GitConfig = '',
+    [string]$GitTemplate = '',
+    [string]$OpenCodePassword = ''
+) {
+    $startInfo = [Diagnostics.ProcessStartInfo]::new([IO.Path]::GetFullPath($Executable))
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.WorkingDirectory = [IO.Path]::GetFullPath($WorkingDirectory)
+    foreach ($argument in $Arguments) { $startInfo.ArgumentList.Add([string]$argument) }
+    Set-AuthorityChildEnvironment $startInfo $Root $MockBin -MockBootstrap:$MockBootstrap -GitConfig $GitConfig -GitTemplate $GitTemplate `
+        -OpenCodePassword $OpenCodePassword
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    try {
+        [void]$process.Start()
+        $startedUtc = $process.StartTime.ToUniversalTime()
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(120000)) {
+            try { $process.Kill($true) }
+            catch {
+                if (-not $process.HasExited) {
+                    throw ('AUTHORITY_RUNTIME_PROCESS_CLEANUP_FAILED: timed-out process could not be killed (pid=' +
+                        $process.Id + '; executable=' + $Executable + '; kill_error=' + (Compact-Evidence $_.Exception.Message) + ')')
+                }
+            }
+            if (-not $process.HasExited -and -not $process.WaitForExit(30000)) {
+                throw ('AUTHORITY_RUNTIME_PROCESS_CLEANUP_FAILED: timed-out process tree remained active after kill (pid=' +
+                    $process.Id + '; executable=' + $Executable + ')')
+            }
+            throw ('AUTHORITY_RUNTIME_PROCESS_TIMEOUT: ' + $Executable + ' ' + ($Arguments -join ' '))
+        }
+        $process.WaitForExit()
+        $completedUtc = $process.ExitTime.ToUniversalTime()
+        return [pscustomobject]@{
+            ExitCode=$process.ExitCode
+            Stdout=$stdoutTask.GetAwaiter().GetResult()
+            Stderr=$stderrTask.GetAwaiter().GetResult()
+            Pid=$process.Id
+            WorkingDirectory=$startInfo.WorkingDirectory
+            StartedUtc=$startedUtc
+            CompletedUtc=$completedUtc
+        }
+    } finally { $process.Dispose() }
+}
+
+function Assert-AuthorityNoOpenCodeChild([object]$Invocation, [string]$Executable) {
+    try {
+        $children = @(Get-CimInstance Win32_Process -Filter ("ParentProcessId = {0}" -f [int]$Invocation.Pid) -ErrorAction Stop)
+    } catch {
+        throw ('AUTHORITY_RUNTIME_CHILD_PROCESS_CHECK_FAILED: parent_pid=' + $Invocation.Pid +
+            '; query_error=' + (Compact-Evidence $_.Exception.Message))
+    }
+    $expectedExecutable = [IO.Path]::GetFullPath($Executable)
+    $lingering = [Collections.Generic.List[string]]::new()
+    foreach ($child in $children) {
+        if ([string]::IsNullOrWhiteSpace([string]$child.ExecutablePath)) {
+            throw ('AUTHORITY_RUNTIME_CHILD_PROCESS_CHECK_FAILED: direct child path unavailable (parent_pid=' +
+                $Invocation.Pid + '; child_pid=' + $child.ProcessId + ')')
+        }
+        $childExecutable = [IO.Path]::GetFullPath([string]$child.ExecutablePath)
+        if (-not [string]::Equals($childExecutable,$expectedExecutable,[StringComparison]::OrdinalIgnoreCase)) { continue }
+        if ($null -eq $child.CreationDate) {
+            throw ('AUTHORITY_RUNTIME_CHILD_PROCESS_CHECK_FAILED: OpenCode child creation time unavailable (parent_pid=' +
+                $Invocation.Pid + '; child_pid=' + $child.ProcessId + ')')
+        }
+        $childCreatedUtc = ([datetime]$child.CreationDate).ToUniversalTime()
+        if ($childCreatedUtc -ge $Invocation.StartedUtc.AddSeconds(-1) -and
+            $childCreatedUtc -le $Invocation.CompletedUtc.AddSeconds(1)) {
+            $lingering.Add(([string]$child.ProcessId) + '@' + $childExecutable)
+        }
+    }
+    if ($lingering.Count -gt 0) {
+        throw ('AUTHORITY_RUNTIME_CHILD_PROCESS_REMAINS: parent_pid=' + $Invocation.Pid +
+            '; children=' + ($lingering -join ', '))
+    }
+    Write-Output ('AUTHORITY_RUNTIME_CHILD_PROCESS_CHECK: PASS (parent_pid=' + $Invocation.Pid + '; direct_OpenCode_children=0)')
+}
+
+function Assert-AuthorityOwnedServer([object]$Server, [string]$RegistryPath) {
+    if ($Server.Process.HasExited) {
+        throw ('AUTHORITY_RUNTIME_SERVER_NOT_ALIVE: owned_pid=' + $Server.Process.Id + '; url=' + $Server.Url)
+    }
+    if (-not (Test-Path -LiteralPath $RegistryPath -PathType Leaf)) {
+        throw ('AUTHORITY_RUNTIME_SERVER_REGISTRY_MISSING: ' + $RegistryPath)
+    }
+    try {
+        $registry = [IO.File]::ReadAllText($RegistryPath) | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+    } catch {
+        throw ('AUTHORITY_RUNTIME_SERVER_REGISTRY_INVALID: ' + (Compact-Evidence $_.Exception.Message))
+    }
+    $pidProperty = $registry.PSObject.Properties['pid']
+    $urlProperty = $registry.PSObject.Properties['url']
+    $versionProperty = $registry.PSObject.Properties['version']
+    $passwordProperty = $registry.PSObject.Properties['password']
+    if ($null -eq $pidProperty -or $null -eq $urlProperty -or $null -eq $versionProperty -or $null -eq $passwordProperty -or
+        [int]$pidProperty.Value -ne [int]$Server.Process.Id -or
+        -not [string]::Equals([string]$urlProperty.Value,[string]$Server.Url,[StringComparison]::OrdinalIgnoreCase) -or
+        [string]::IsNullOrWhiteSpace([string]$versionProperty.Value) -or
+        [string]::IsNullOrWhiteSpace([string]$passwordProperty.Value)) {
+        throw ('AUTHORITY_RUNTIME_SERVER_REGISTRY_MISMATCH: expected_pid=' + $Server.Process.Id + '; expected_url=' + $Server.Url +
+            '; registry_pid=' + $(if ($null -eq $pidProperty) { '<missing>' } else { [string]$pidProperty.Value }) +
+            '; registry_url=' + $(if ($null -eq $urlProperty) { '<missing>' } else { [string]$urlProperty.Value }))
+    }
+    try {
+        $ownedListeners = @(Get-NetTCPConnection -ErrorAction Stop | Where-Object {
+            [int]$_.OwningProcess -eq [int]$Server.Process.Id -and
+            $_.State -eq 'Listen' -and
+            [string]::Equals([string]$_.LocalAddress,'127.0.0.1',[StringComparison]::OrdinalIgnoreCase) -and
+            [int]$_.LocalPort -eq [int]$Server.Port
+        })
+    } catch {
+        throw ('AUTHORITY_RUNTIME_SERVER_LISTENER_CHECK_FAILED: ' + (Compact-Evidence $_.Exception.Message))
+    }
+    if ($ownedListeners.Count -eq 0) {
+        throw ('AUTHORITY_RUNTIME_SERVER_LISTENER_MISMATCH: expected_pid=' + $Server.Process.Id +
+            '; expected_url=' + $Server.Url + '; expected_port=' + $Server.Port)
+    }
+    Write-Output ('AUTHORITY_RUNTIME_SERVER_REGISTRY: PASS (pid=' + $Server.Process.Id + '; url=' + $Server.Url + '; version/password=present)')
+    Write-Output ('AUTHORITY_RUNTIME_SERVER_LISTENER: PASS (pid=' + $Server.Process.Id + '; address=127.0.0.1; port=' + $Server.Port + ')')
+}
+
+function Stop-AuthorityOwnedServer([object]$Server) {
+    $process = $Server.Process
+    $processId = [int]$process.Id
+    $failures = [Collections.Generic.List[string]]::new()
+    $processExited = $false
+    $processExitCode = $null
+    try {
+        if (-not $process.HasExited) {
+            try { $process.Kill($true) }
+            catch {
+                if (-not $process.HasExited) { $failures.Add('owned process-tree kill_error=' + (Compact-Evidence $_.Exception.Message)) }
+            }
+        }
+        if (-not $process.WaitForExit(30000)) {
+            $failures.Add('owned server process remained active after bounded wait')
+        } elseif ($process.HasExited) {
+            $processExited = $true
+            $processExitCode = [int]$process.ExitCode
+        } else { $failures.Add('owned server process exit could not be confirmed') }
+    } catch { $failures.Add($_.Exception.Message) }
+
+    $streamResults = [ordered]@{ readiness='not_started'; stdout='not_started'; stderr='not_started' }
+    $streamsDrained = $true
+    foreach ($stream in @(
+        @{ Name='readiness'; Task=$Server.ReadinessTask },
+        @{ Name='stdout'; Task=$Server.StdoutTailTask },
+        @{ Name='stderr'; Task=$Server.StderrTask }
+    )) {
+        if ($null -eq $stream.Task) { continue }
+        try {
+            if (-not $stream.Task.Wait(10000)) {
+                $streamResults[$stream.Name] = 'timeout'
+                $streamsDrained = $false
+                $failures.Add($stream.Name + ' stream did not close after process exit')
+            } else {
+                $null = $stream.Task.GetAwaiter().GetResult()
+                $streamResults[$stream.Name] = 'drained'
+            }
+        } catch {
+            $streamResults[$stream.Name] = 'error'
+            $streamsDrained = $false
+            $failures.Add($stream.Name + '_drain_error=' + (Compact-Evidence $_.Exception.Message))
+        }
+    }
+
+    Write-Output ('AUTHORITY_RUNTIME_SERVER_STOP: pid=' + $processId + '; process_exited=' + $processExited +
+        '; exit_code=' + $(if ($null -eq $processExitCode) { '<unavailable>' } else { [string]$processExitCode }) +
+        '; readiness=' + $streamResults.readiness + '; stdout=' + $streamResults.stdout + '; stderr=' + $streamResults.stderr)
+    try { $process.Dispose() } catch { $failures.Add('process_dispose_error=' + (Compact-Evidence $_.Exception.Message)) }
+    if ($failures.Count -gt 0) {
+        throw ('AUTHORITY_RUNTIME_SERVER_CLEANUP_FAILED: pid=' + $processId + '; failures=' + ($failures -join '; '))
+    }
+    Write-Output ('AUTHORITY_RUNTIME_SERVER_CLEANUP: PASS (owned_pid=' + $processId +
+        '; process_exit_confirmed=YES; streams=drained)')
+}
+
+function Get-AuthorityResolvedPaths([string]$Text) {
+    $paths = [ordered]@{}
+    foreach ($line in ($Text -split "`r?`n")) {
+        $match = [regex]::Match([string]$line,'^\s*(?<name>[A-Za-z][A-Za-z0-9_-]*)\s{2,}(?<path>.+?)\s*$')
+        if (-not $match.Success) { continue }
+        $name = $match.Groups['name'].Value.ToLowerInvariant()
+        $value = $match.Groups['path'].Value.Trim()
+        if (-not [IO.Path]::IsPathFullyQualified($value)) { throw "AUTHORITY_RUNTIME_PATHS_FAILED: $name is not an absolute path: $value" }
+        if ($paths.Contains($name)) { throw "AUTHORITY_RUNTIME_PATHS_FAILED: duplicate path entry $name." }
+        $paths[$name] = [IO.Path]::GetFullPath($value)
+    }
+    return ,$paths
+}
+
+function Invoke-IsolatedAuthorityRuntime {
+    $qualificationBase = 'C:\Users\Public\olympus-authority-qualification'
+    $fixtureId = [guid]::NewGuid().ToString('N')
+    $fixtureRoot = Join-Path $qualificationBase $fixtureId
+    $rootCreated = $false
+    $primaryFailure = ''
+    $cleanupFailure = ''
+    $ownedServer = $null
+    $serverCleanupFailed = $false
+    try {
+        if (-not (Test-Path -LiteralPath 'C:\Users\Public' -PathType Container)) {
+            throw 'AUTHORITY_RUNTIME_SETUP_FAILED: C:\Users\Public is unavailable.'
+        }
+        Assert-AuthorityNoReparsePoints $qualificationBase
+        [IO.Directory]::CreateDirectory($qualificationBase) | Out-Null
+        Assert-AuthorityNoReparsePoints $qualificationBase
+        if (Test-Path -LiteralPath $fixtureRoot) { throw 'AUTHORITY_RUNTIME_SETUP_FAILED: generated fixture ID already exists.' }
+        [IO.Directory]::CreateDirectory($fixtureRoot) | Out-Null
+        $rootCreated = $true
+        Assert-AuthorityNoReparsePoints $fixtureRoot
+
+        $sourceRoot = Join-Path $fixtureRoot 'source'
+        $projectRoot = Join-Path $fixtureRoot 'project'
+        $mockBin = Join-Path $fixtureRoot 'bootstrap-mock-bin'
+        $homePath = Join-Path $fixtureRoot 'home'
+        $isolatedTemp = Join-Path $fixtureRoot 'temp'
+        $xdgConfig = Join-Path $fixtureRoot 'xdg-config'
+        $xdgData = Join-Path $fixtureRoot 'xdg-data'
+        $xdgCache = Join-Path $fixtureRoot 'xdg-cache'
+        $xdgState = Join-Path $fixtureRoot 'xdg-state'
+        $mockLog = Join-Path $fixtureRoot 'bootstrap-opencode.log'
+        $gitTemplate = Join-Path $fixtureRoot 'empty-git-template'
+        $gitConfig = Join-Path $fixtureRoot 'empty-gitconfig'
+        foreach ($path in @($sourceRoot,$projectRoot,$mockBin,$gitTemplate)) { [IO.Directory]::CreateDirectory($path) | Out-Null }
+        [IO.File]::WriteAllText($gitConfig,'', [Text.UTF8Encoding]::new($false))
+        Assert-AuthorityNoReparsePoints $fixtureRoot -Recursive
+
+        $canonicalSources = Join-Path $root 'olympus'
+        $rendererSource = Join-Path $root 'scripts/render_harnesses.py'
+        $bootstrapSource = Join-Path $root 'scripts/bootstrap.ps1'
+        $mockSource = Join-Path $root 'tests/release/fixtures/opencode.ps1'
+        foreach ($sourcePath in @($canonicalSources,$rendererSource,$bootstrapSource,$mockSource)) {
+            if (-not (Test-Path -LiteralPath $sourcePath)) { throw ('AUTHORITY_RUNTIME_SETUP_FAILED: required local source is missing: ' + $sourcePath) }
+        }
+        Copy-Item -LiteralPath $canonicalSources -Destination (Join-Path $sourceRoot 'olympus') -Recurse -Force -ErrorAction Stop
+        $stagedScripts = Join-Path $sourceRoot 'scripts'
+        [IO.Directory]::CreateDirectory($stagedScripts) | Out-Null
+        Copy-Item -LiteralPath $rendererSource -Destination (Join-Path $stagedScripts 'render_harnesses.py') -Force -ErrorAction Stop
+        Copy-Item -LiteralPath $bootstrapSource -Destination (Join-Path $stagedScripts 'bootstrap.ps1') -Force -ErrorAction Stop
+        Copy-Item -LiteralPath $mockSource -Destination (Join-Path $mockBin 'opencode-fixture.ps1') -Force -ErrorAction Stop
+
+        $pwsh = Join-Path $PSHOME 'pwsh.exe'
+        if (-not (Test-Path -LiteralPath $pwsh -PathType Leaf)) { $pwsh = (Get-Command pwsh -CommandType Application -ErrorAction Stop).Source }
+        $wrapper = "@echo off`r`n>>`"$mockLog`" echo %*`r`n`"$pwsh`" -NoProfile -File `"%~dp0opencode-fixture.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
+        [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'),$wrapper,[Text.Encoding]::ASCII)
+        Assert-AuthorityNoReparsePoints $fixtureRoot -Recursive
+
+        $python = Get-AuthorityPython311
+        $renderer = Join-Path $stagedScripts 'render_harnesses.py'
+        $renderOutput = @(& $python -B $renderer render --harness opencode --root $sourceRoot 2>&1)
+        $renderExit = [int]$LASTEXITCODE
+        if ($renderExit -ne 0) {
+            throw ('AUTHORITY_RUNTIME_RENDER_FAILED: exit=' + $renderExit + '; output=' + (Compact-Evidence ($renderOutput -join "`n")))
+        }
+
+        $gitCommand = Get-Command 'git.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -eq $gitCommand) { throw 'AUTHORITY_RUNTIME_SETUP_FAILED: git.exe is unavailable.' }
+        $gitResult = Invoke-AuthorityCapturedProcess $gitCommand.Source @('-C',$projectRoot,'init','--quiet') $projectRoot $fixtureRoot `
+            -GitConfig $gitConfig -GitTemplate $gitTemplate
+        if ($gitResult.ExitCode -ne 0) {
+            throw ('AUTHORITY_RUNTIME_GIT_INIT_FAILED: exit=' + $gitResult.ExitCode + '; stderr=' + (Compact-Evidence $gitResult.Stderr))
+        }
+
+        $gitRootResult = Invoke-AuthorityCapturedProcess $gitCommand.Source @('-C',$projectRoot,'rev-parse','--show-toplevel') $projectRoot $fixtureRoot `
+            -GitConfig $gitConfig -GitTemplate $gitTemplate
+        if ($gitRootResult.ExitCode -ne 0 -or
+            -not [string]::Equals([IO.Path]::GetFullPath($gitRootResult.Stdout.Trim()),[IO.Path]::GetFullPath($projectRoot),[StringComparison]::OrdinalIgnoreCase)) {
+            throw ('AUTHORITY_RUNTIME_GIT_ROOT_FAILED: expected=' + $projectRoot + '; actual=' + (Compact-Evidence $gitRootResult.Stdout))
+        }
+        Assert-AuthorityNoReparsePoints $fixtureRoot -Recursive
+
+        $bootstrap = Join-Path $stagedScripts 'bootstrap.ps1'
+        $bootstrapResult = Invoke-AuthorityCapturedProcess $pwsh @('-NoProfile','-File',$bootstrap,'-Target',$projectRoot,'-Harness','opencode') `
+            $projectRoot $fixtureRoot -MockBootstrap -MockBin $mockBin -GitConfig $gitConfig -GitTemplate $gitTemplate
+        $stubCalls = @()
+        if (Test-Path -LiteralPath $mockLog -PathType Leaf) { $stubCalls = @([IO.File]::ReadAllLines($mockLog)) }
+        $mockConfigCalls = @($stubCalls | Where-Object { $_.Trim() -eq 'debug config' }).Count
+        $mockAgentCalls = @($stubCalls | Where-Object { $_.Trim() -eq 'debug agents' }).Count
+        if ($bootstrapResult.ExitCode -ne 0 -or $mockConfigCalls -ne 1 -or $mockAgentCalls -ne 1) {
+            throw ('AUTHORITY_RUNTIME_BOOTSTRAP_FAILED: exit=' + $bootstrapResult.ExitCode + '; mock_calls=' + ($stubCalls -join ',') +
+                '; output=' + (Compact-Evidence ($bootstrapResult.Stdout + "`n" + $bootstrapResult.Stderr)))
+        }
+        Write-Output ('AUTHORITY_RUNTIME_SETUP: PASS (renderer=local Python ' + $python + '; bootstrap=local source; project=' + $projectRoot +
+            '; git_root=' + $projectRoot + '; mock_stub=' + (Join-Path $mockBin 'opencode.cmd') +
+            '; mock_calls=' + ($stubCalls -join ',') + '; real_OpenCode_calls=0)')
+
+        Assert-AuthorityNoReparsePoints $fixtureRoot -Recursive
+        $expectedProjectConfig = [IO.Path]::GetFullPath((Join-Path $projectRoot 'opencode.jsonc'))
+        if (-not (Test-Path -LiteralPath $expectedProjectConfig -PathType Leaf)) {
+            throw ('AUTHORITY_RUNTIME_CONFIG_CONTEXT_FAILED: staged project config is missing: ' + $expectedProjectConfig)
+        }
+        $realOpenCode = Get-AuthorityOpenCodeExecutable
+        Write-Output ('AUTHORITY_RUNTIME_FIXTURE: root=' + $fixtureRoot + '; source=' + $sourceRoot + '; project=' + $projectRoot +
+            '; checkout_generated_agents_used=NO; checkout_opencode_tree_copied=NO; runtime_cli=' + $realOpenCode)
+
+        $pathProbe = $null
+        $pathInvocationError = ''
+        try { $pathProbe = Invoke-AuthorityCapturedProcess $realOpenCode @('debug','paths') $projectRoot $fixtureRoot }
+        catch { $pathInvocationError = $_.Exception.Message }
+        if ($null -eq $pathProbe) {
+            Write-Output ('AUTHORITY_RUNTIME_QUERY: opencode debug paths pid=<unavailable>; cwd=' + $projectRoot + '; exit=<unavailable>')
+            throw ('AUTHORITY_RUNTIME_PATHS_FAILED: invocation_error=' + (Compact-Evidence $pathInvocationError))
+        }
+        Write-Output ('AUTHORITY_RUNTIME_QUERY: opencode debug paths pid=' + $pathProbe.Pid + '; cwd=' + $pathProbe.WorkingDirectory + '; exit=' + $pathProbe.ExitCode)
+        Assert-AuthorityNoOpenCodeChild $pathProbe $realOpenCode
+        if ($pathProbe.ExitCode -ne 0) {
+            throw ('AUTHORITY_RUNTIME_PATHS_FAILED: exit=' + $pathProbe.ExitCode + '; stderr=' + (Compact-Evidence $pathProbe.Stderr))
+        }
+        $resolvedPaths = Get-AuthorityResolvedPaths $pathProbe.Stdout
+        $requiredPathRoots = [ordered]@{
+            home=$homePath
+            config=$xdgConfig
+            data=$xdgData
+            cache=$xdgCache
+            state=$xdgState
+            tmp=$isolatedTemp
+        }
+        foreach ($name in $requiredPathRoots.Keys) {
+            if (-not $resolvedPaths.Contains($name)) { throw "AUTHORITY_RUNTIME_PATHS_FAILED: missing required path '$name'." }
+            if (-not (Test-AuthorityPathWithin $resolvedPaths[$name] $requiredPathRoots[$name])) {
+                throw ("AUTHORITY_RUNTIME_PATHS_FAILED: $name resolved outside its isolated root: " + $resolvedPaths[$name])
+            }
+        }
+        $allIsolatedRoots = @($homePath,$projectRoot,$xdgConfig,$xdgData,$xdgCache,$xdgState,$isolatedTemp)
+        foreach ($name in $resolvedPaths.Keys) {
+            if (@($allIsolatedRoots | Where-Object { Test-AuthorityPathWithin $resolvedPaths[$name] $_ }).Count -eq 0) {
+                throw ("AUTHORITY_RUNTIME_PATHS_FAILED: $name resolved outside fixture/isolation roots: " + $resolvedPaths[$name])
+            }
+        }
+        Write-Output ('AUTHORITY_RUNTIME_PATHS: PASS (home=' + $resolvedPaths.home + '; config=' + $resolvedPaths.config +
+            '; data=' + $resolvedPaths.data + '; cache=' + $resolvedPaths.cache + '; state=' + $resolvedPaths.state +
+            '; tmp=' + $resolvedPaths.tmp + ')')
+
+        $serverStartInfo = [Diagnostics.ProcessStartInfo]::new([IO.Path]::GetFullPath($realOpenCode))
+        $serverStartInfo.UseShellExecute = $false
+        $serverStartInfo.CreateNoWindow = $true
+        $serverStartInfo.RedirectStandardOutput = $true
+        $serverStartInfo.RedirectStandardError = $true
+        $serverStartInfo.WorkingDirectory = [IO.Path]::GetFullPath($projectRoot)
+        foreach ($argument in @('serve','--service','--hostname','127.0.0.1','--port','0')) {
+            $serverStartInfo.ArgumentList.Add([string]$argument)
+        }
+        Set-AuthorityChildEnvironment $serverStartInfo $fixtureRoot
+        $serverProcess = [Diagnostics.Process]::new()
+        $serverProcess.StartInfo = $serverStartInfo
+        $ownedServer = [pscustomobject]@{
+            Process=$serverProcess
+            Started=$false
+            StartedUtc=$null
+            ReadinessTask=$null
+            StdoutTailTask=$null
+            StderrTask=$null
+            Url=$null
+            Port=$null
+            ReadinessLine=$null
+        }
+        [void]$serverProcess.Start()
+        $ownedServer.Started = $true
+        $ownedServer.StartedUtc = $serverProcess.StartTime.ToUniversalTime()
+        $ownedServer.StderrTask = $serverProcess.StandardError.ReadToEndAsync()
+        $ownedServer.ReadinessTask = $serverProcess.StandardOutput.ReadLineAsync()
+        if (-not $ownedServer.ReadinessTask.Wait(30000)) {
+            throw 'AUTHORITY_RUNTIME_SERVER_START_FAILED: readiness line timed out after 30 seconds.'
+        }
+        $ownedServer.ReadinessLine = $ownedServer.ReadinessTask.GetAwaiter().GetResult()
+        $readinessMatch = [regex]::Match([string]$ownedServer.ReadinessLine,
+            '^server listening on (?<url>http://127\.0\.0\.1:(?<port>[0-9]+))\s*$',
+            [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if (-not $readinessMatch.Success) {
+            $startupStderr = if ($ownedServer.StderrTask.IsCompleted) { $ownedServer.StderrTask.GetAwaiter().GetResult() } else { '<still streaming>' }
+            throw ('AUTHORITY_RUNTIME_SERVER_START_FAILED: unexpected readiness line=' +
+                (Compact-Evidence ([string]$ownedServer.ReadinessLine)) + '; stderr=' + (Compact-Evidence $startupStderr))
+        }
+        $ownedServer.Port = [int]$readinessMatch.Groups['port'].Value
+        $ownedServer.Url = $readinessMatch.Groups['url'].Value
+        if ($ownedServer.Port -lt 1 -or $ownedServer.Port -gt 65535) {
+            throw ('AUTHORITY_RUNTIME_SERVER_START_FAILED: invalid loopback port ' + $ownedServer.Port)
+        }
+        if ($serverProcess.HasExited) {
+            $startupStderr = if ($ownedServer.StderrTask.IsCompleted) { $ownedServer.StderrTask.GetAwaiter().GetResult() } else { '<unavailable>' }
+            throw ('AUTHORITY_RUNTIME_SERVER_START_FAILED: server exited after readiness; stderr=' + (Compact-Evidence $startupStderr))
+        }
+        $ownedServer.StdoutTailTask = $serverProcess.StandardOutput.ReadToEndAsync()
+        Write-Output ('AUTHORITY_RUNTIME_SERVER: READY (pid=' + $serverProcess.Id + '; cwd=' + $serverStartInfo.WorkingDirectory +
+            '; url=' + $ownedServer.Url + '; command=serve --service --hostname 127.0.0.1 --port 0)')
+        $serviceRegistry = Join-Path (Join-Path $xdgState 'opencode') 'service.json'
+        Assert-AuthorityOwnedServer $ownedServer $serviceRegistry
+
+        $configProbe = $null
+        $configInvocationError = ''
+        try { $configProbe = Invoke-AuthorityCapturedProcess $realOpenCode @('debug','config') $projectRoot $fixtureRoot }
+        catch { $configInvocationError = $_.Exception.Message }
+        if ($null -eq $configProbe) {
+            Write-Output ('AUTHORITY_RUNTIME_QUERY: opencode debug config pid=<unavailable>; cwd=' + $projectRoot + '; exit=<unavailable>')
+            throw ('AUTHORITY_CONFIG_CONTEXT FAIL: opencode debug config invocation failed (runtime_exit=<unavailable>; stderr=<unavailable>; invocation_error=' +
+                (Compact-Evidence $configInvocationError) + ')')
+        }
+        Write-Output ('AUTHORITY_RUNTIME_QUERY: opencode debug config pid=' + $configProbe.Pid + '; cwd=' + $configProbe.WorkingDirectory + '; exit=' + $configProbe.ExitCode)
+        Assert-AuthorityNoOpenCodeChild $configProbe $realOpenCode
+        Assert-AuthorityOwnedServer $ownedServer $serviceRegistry
+        if ($configProbe.ExitCode -ne 0) {
+            throw ('AUTHORITY_CONFIG_CONTEXT FAIL: opencode debug config returned nonzero (runtime_exit=' +
+                [string]$configProbe.ExitCode + '; stderr=' + (Compact-Evidence $configProbe.Stderr) +
+                '; output=' + (Compact-Evidence $configProbe.Stdout) + ')')
+        }
+        try {
+            $configDocument = ConvertFrom-Json -InputObject $configProbe.Stdout -Depth 100 -NoEnumerate -ErrorAction Stop
+            if ($configDocument -isnot [array]) { throw 'debug config JSON root is not an array' }
+            $configPaths = @($configDocument | ForEach-Object {
+                if ($null -eq $_.path -or -not [string]$_.path) { throw 'config entry has no path' }
+                if (-not [IO.Path]::IsPathFullyQualified([string]$_.path)) { throw ('config entry path is not absolute: ' + [string]$_.path) }
+                [IO.Path]::GetFullPath([string]$_.path)
+            })
+        } catch {
+            throw ('AUTHORITY_CONFIG_CONTEXT FAIL: opencode debug config returned invalid JSON or path (runtime_exit=0; json_error=' +
+                (Compact-Evidence $_.Exception.Message) + '; stderr=' + (Compact-Evidence $configProbe.Stderr) +
+                '; output=' + (Compact-Evidence $configProbe.Stdout) + ')')
+        }
+        $globalConfigRoot = Join-Path $xdgConfig 'opencode'
+        $unexpectedConfigPaths = @($configPaths | Where-Object {
+            -not (Test-AuthorityPathWithin $_ $projectRoot) -and -not (Test-AuthorityPathWithin $_ $globalConfigRoot)
+        })
+        $matchingProjectConfig = @($configPaths | Where-Object {
+            [string]::Equals($_,$expectedProjectConfig,[StringComparison]::OrdinalIgnoreCase)
+        })
+        if ($matchingProjectConfig.Count -eq 0 -or $unexpectedConfigPaths.Count -gt 0) {
+            throw ('AUTHORITY_CONFIG_CONTEXT FAIL: expected fixture config missing or unexpected external config loaded (expected=' +
+                $expectedProjectConfig + '; discovered_paths=' + (Compact-Evidence ($configPaths -join ', ')) +
+                '; unexpected_paths=' + (Compact-Evidence ($unexpectedConfigPaths -join ', ')) +
+                '; stderr=' + (Compact-Evidence $configProbe.Stderr) + ')')
+        }
+        Write-Output ('AUTHORITY_CONFIG_CONTEXT: PASS (isolated project config matched=' + $expectedProjectConfig +
+            '; allowed_global_config=' + $globalConfigRoot + '; discovered=' + (Compact-Evidence ($configPaths -join ', ')) + ')')
+
+        Assert-AuthorityOwnedServer $ownedServer $serviceRegistry
+        try {
+            $activationRegistration = [IO.File]::ReadAllText($serviceRegistry) | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+            $activationPassword = [string]$activationRegistration.password
+        } catch {
+            throw ('AUTHORITY_PLUGIN_ACTIVATION_CONTEXT_FAILED: isolated service registration is invalid: ' +
+                (Compact-Evidence $_.Exception.Message))
+        }
+        if ([string]::IsNullOrWhiteSpace($activationPassword)) {
+            throw 'AUTHORITY_PLUGIN_ACTIVATION_CONTEXT_FAILED: isolated service registration has no password.'
+        }
+        $directoryHeader = 'x-opencode-directory:' + [Uri]::EscapeDataString($projectRoot)
+        $activationArguments = @('api','--server',$ownedServer.Url,'--header',$directoryHeader,'GET','/api/integration')
+        $activationProbe = $null
+        $activationInvocationError = ''
+        try {
+            $activationProbe = Invoke-AuthorityCapturedProcess $realOpenCode $activationArguments $projectRoot $fixtureRoot `
+                -OpenCodePassword $activationPassword
+        } catch { $activationInvocationError = $_.Exception.Message }
+        $activationPassword = $null
+        if ($null -eq $activationProbe) {
+            Write-Output ('AUTHORITY_RUNTIME_QUERY: opencode api GET /api/integration pid=<unavailable>; cwd=' + $projectRoot + '; exit=<unavailable>')
+            throw ('AUTHORITY_PLUGIN_ACTIVATION FAIL: invocation failed (invocation_error=' +
+                (Compact-Evidence $activationInvocationError) + ')')
+        }
+        Write-Output ('AUTHORITY_RUNTIME_QUERY: opencode api GET /api/integration pid=' + $activationProbe.Pid +
+            '; cwd=' + $activationProbe.WorkingDirectory + '; exit=' + $activationProbe.ExitCode)
+        Assert-AuthorityNoOpenCodeChild $activationProbe $realOpenCode
+        Assert-AuthorityOwnedServer $ownedServer $serviceRegistry
+        if ($activationProbe.ExitCode -ne 0) {
+            throw ('AUTHORITY_PLUGIN_ACTIVATION FAIL: GET /api/integration returned nonzero (runtime_exit=' +
+                [string]$activationProbe.ExitCode + '; stderr=' + (Compact-Evidence $activationProbe.Stderr) +
+                '; output=' + (Compact-Evidence $activationProbe.Stdout) + ')')
+        }
+        try {
+            $activationDocument = ConvertFrom-Json -InputObject $activationProbe.Stdout -Depth 60 -NoEnumerate -ErrorAction Stop
+            if ($null -eq $activationDocument.location -or $null -eq $activationDocument.location.directory) {
+                throw 'response has no location.directory'
+            }
+            if ($activationDocument.data -isnot [array]) { throw 'response data is not an integration array' }
+            $effectiveLocation = [string]$activationDocument.location.directory
+            if (-not [IO.Path]::IsPathFullyQualified($effectiveLocation)) {
+                throw ('effective location.directory is not absolute: ' + $effectiveLocation)
+            }
+            $effectiveLocation = [IO.Path]::GetFullPath($effectiveLocation)
+        } catch {
+            throw ('AUTHORITY_PLUGIN_ACTIVATION FAIL: GET /api/integration returned invalid context (json_error=' +
+                (Compact-Evidence $_.Exception.Message) + '; stderr=' + (Compact-Evidence $activationProbe.Stderr) +
+                '; output=' + (Compact-Evidence $activationProbe.Stdout) + ')')
+        }
+        if (-not [string]::Equals($effectiveLocation,[IO.Path]::GetFullPath($projectRoot),[StringComparison]::OrdinalIgnoreCase)) {
+            throw ('AUTHORITY_PLUGIN_ACTIVATION FAIL: endpoint resolved an unexpected directory (expected=' +
+                $projectRoot + '; actual=' + $effectiveLocation + ')')
+        }
+        Write-Output ('AUTHORITY_PLUGIN_ACTIVATION: PASS (endpoint=GET /api/integration; pid=' + $activationProbe.Pid +
+            '; effective_location=' + $effectiveLocation + '; integrations=' + $activationDocument.data.Count + ')')
+
+        $runtimeProbe = $null
+        $runtimeInvocationError = ''
+        try { $runtimeProbe = Invoke-AuthorityCapturedProcess $realOpenCode @('debug','agents') $projectRoot $fixtureRoot }
+        catch { $runtimeInvocationError = $_.Exception.Message }
+        if ($null -eq $runtimeProbe) {
+            Write-Output ('AUTHORITY_RUNTIME_QUERY: opencode debug agents pid=<unavailable>; cwd=' + $projectRoot + '; exit=<unavailable>')
+            $runtimeExit = $null
+            $runtimeJson = ''
+            $runtimeStderr = ''
+        } else {
+            Write-Output ('AUTHORITY_RUNTIME_QUERY: opencode debug agents pid=' + $runtimeProbe.Pid + '; cwd=' + $runtimeProbe.WorkingDirectory + '; exit=' + $runtimeProbe.ExitCode)
+            Assert-AuthorityNoOpenCodeChild $runtimeProbe $realOpenCode
+            Assert-AuthorityOwnedServer $ownedServer $serviceRegistry
+            $runtimeExit = $runtimeProbe.ExitCode
+            $runtimeJson = $runtimeProbe.Stdout
+            $runtimeStderr = $runtimeProbe.Stderr
+        }
+        $runtimeInspection = Inspect-EffectiveRules $runtimeExit $runtimeJson $runtimeStderr $runtimeInvocationError
+        Write-Output ('AUTH14_EVIDENCE: ' + $runtimeInspection.evidence)
+        if (-not $runtimeInspection.passed) {
+            throw ('AUTH14_OPENCODE_EFFECTIVE_RULES FAIL: ' + $runtimeInspection.evidence)
+        }
+        Write-Output 'AUTH14_OPENCODE_EFFECTIVE_RULES PASS'
+    } catch {
+        $primaryFailure = $_.Exception.Message
+    } finally {
+        if ($null -ne $ownedServer) {
+            if ($ownedServer.Started) {
+                try { Stop-AuthorityOwnedServer $ownedServer }
+                catch {
+                    $serverCleanupFailed = $true
+                    $cleanupFailure = $_.Exception.Message
+                    Write-Output ('AUTHORITY_RUNTIME_SERVER_CLEANUP: FAIL (' + $cleanupFailure + ')')
+                }
+            } else {
+                try { $ownedServer.Process.Dispose() }
+                catch {
+                    $serverCleanupFailed = $true
+                    $cleanupFailure = 'process_dispose_error=' + $_.Exception.Message
+                    Write-Output ('AUTHORITY_RUNTIME_SERVER_CLEANUP: FAIL (' + $cleanupFailure + ')')
+                }
+            }
+        }
+        if ($rootCreated) {
+            if ($serverCleanupFailed) {
+                Write-Output ('AUTHORITY_RUNTIME_CLEANUP: FAIL (fixture retained because owned server cleanup failed: ' + $fixtureRoot + ')')
+            } else {
+                try {
+                    $resolvedBase = [IO.Path]::GetFullPath($qualificationBase).TrimEnd([char[]]@('\','/'))
+                    $resolvedTarget = [IO.Path]::GetFullPath($fixtureRoot)
+                    if (-not [string]::Equals((Split-Path -Parent $resolvedTarget),$resolvedBase,[StringComparison]::OrdinalIgnoreCase) -or
+                        -not [string]::Equals((Split-Path -Leaf $resolvedTarget),$fixtureId,[StringComparison]::OrdinalIgnoreCase) -or
+                        -not (Test-AuthorityPathWithin $resolvedTarget $resolvedBase)) {
+                        throw ('AUTHORITY_RUNTIME_CLEANUP_TARGET_INVALID: ' + $resolvedTarget)
+                    }
+                    Assert-AuthorityNoReparsePoints $resolvedTarget -Recursive
+                    Remove-Item -LiteralPath $resolvedTarget -Recurse -Force -ErrorAction Stop
+                    if (Test-Path -LiteralPath $resolvedTarget) { throw ('fixture still exists after removal: ' + $resolvedTarget) }
+                    Write-Output ('AUTHORITY_RUNTIME_CLEANUP: PASS (removed=' + $resolvedTarget + ')')
+                } catch {
+                    $cleanupFailure = $_.Exception.Message
+                    Write-Output ('AUTHORITY_RUNTIME_CLEANUP: FAIL (' + $cleanupFailure + ')')
+                }
+            }
+        }
+    }
+    if ($primaryFailure -or $cleanupFailure) {
+        Write-Output 'AUTHORITY_RUNTIME_ISOLATION: FAIL'
+        throw ('AUTHORITY_RUNTIME_ISOLATION FAIL: primary=' + $(if ($primaryFailure) { $primaryFailure } else { 'none' }) +
+            '; cleanup=' + $(if ($cleanupFailure) { $cleanupFailure } else { 'PASS' }))
+    }
+    Write-Output 'AUTHORITY_RUNTIME_ISOLATION: PASS (clean process environments; isolated project config; owned loopback backend; setup stub separated; cleanup verified)'
+}
+
 try {
+    if ($QualificationSlice -ne 'Runtime') {
     $kael = Text '.opencode/agents/kael.md'
     $kovan = Text '.opencode/agents/kovan.md'
     $docs = Text 'docs/DEVELOPMENT.md'
@@ -475,29 +1175,13 @@ try {
     $badPermissionProbe = Inspect-EffectiveRules 0 '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"deny"}]}]'
     Check 'AUTH14_SINGLE_KOVAN_RULE_MISMATCH_FAILS' (-not $badPermissionProbe.passed -and
         $badPermissionProbe.evidence -match 'edit_\*_deny=1/0')
-
-    $runtimeJson = ''
-    $runtimeStderrRecords = @()
-    $runtimeStderr = ''
-    $runtimeExit = $null
-    $runtimeInvocationError = ''
-    Push-Location $root
-    try {
-        try {
-            $runtimeJson = (& opencode debug agents 2>Variable:runtimeStderrRecords | Out-String)
-            $runtimeExit = $LASTEXITCODE
-        } catch {
-            $runtimeInvocationError = $_.Exception.Message
-        }
-        $runtimeStderr = @($runtimeStderrRecords | ForEach-Object { [string]$_ }) -join "`n"
-    } finally { Pop-Location }
-    $runtimeInspection = Inspect-EffectiveRules $runtimeExit $runtimeJson $runtimeStderr $runtimeInvocationError
-    Write-Output ('AUTH14_EVIDENCE: ' + $runtimeInspection.evidence)
-    if (-not $runtimeInspection.passed) {
-        throw ('AUTH14_OPENCODE_EFFECTIVE_RULES FAIL: ' + $runtimeInspection.evidence)
     }
-    Write-Output 'AUTH14_OPENCODE_EFFECTIVE_RULES PASS'
 
+    if ($QualificationSlice -ne 'Offline') {
+        Invoke-IsolatedAuthorityRuntime
+    }
+
+    if ($QualificationSlice -ne 'Runtime') {
     $normalizedDocs = $docs -replace '\s+', ' '
     $reportingPolicy = $normalizedDocs -match '(?is)TOOL_ATTEMPT.*?TOOL_EXECUTION.*?NATIVE_PERMISSION_UI.*?USER_CONFIRMED_EXTERNAL_OBSERVATION.*?NOT_OBSERVABLE.*?Tool success does not establish that ASK was\s+absent.*?tool failure/denial alone does not establish a human rejection'
     Check 'AUTH15_NATIVE_PERMISSION_OBSERVABILITY_POLICY' ($reportingPolicy -and
@@ -529,9 +1213,16 @@ try {
         $manualConfirmation.NATIVE_PERMISSION_DECISION -eq 'NOT_OBSERVABLE' -and
         $manualConfirmation.USER_CONFIRMED_EXTERNAL_OBSERVATION -match '^USER_REPORTED:' -and
         $manualConfirmation.USER_CONFIRMED_EXTERNAL_OBSERVATION -match 'saw the native prompt and approved')
+    }
 
     Write-Output 'NATIVE_AUTHORITY_ASK_RUNTIME: NOT ASSESSED BY STATIC QUALIFICATION (report interactive event evidence separately)'
-    Write-Output 'AUTHORITY QUALIFICATION: PASS (static contracts, native/effective rules, and deterministic scope/approval cases; interactive outcome not asserted)'
+    if ($QualificationSlice -eq 'Runtime') {
+        Write-Output 'AUTHORITY RUNTIME QUALIFICATION: PASS (effective OpenCode rules; native ASK UI/decision not assessed)'
+    } elseif ($QualificationSlice -eq 'Offline') {
+        Write-Output 'AUTHORITY OFFLINE QUALIFICATION: PASS (static contracts and deterministic scope/approval cases; OpenCode query not run)'
+    } else {
+        Write-Output 'AUTHORITY QUALIFICATION: PASS (static contracts, native/effective rules, and deterministic scope/approval cases; interactive outcome not asserted)'
+    }
     exit 0
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)

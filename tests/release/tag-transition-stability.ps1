@@ -116,13 +116,13 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
         $roadmap -notmatch '(?i)v0\.4\.1.{0,500}(?:no\s+GitHub\s+Release|no\s+release\s+was\s+created)') {
         $errors.Add('DOC_ROADMAP_RELEASE_HISTORY')
     }
-    foreach ($required in @('issue #1 remains OPEN', 'discovery #7 remains OPEN', 'Issue #10 remains OPEN',
+    foreach ($required in @('issue #1 remains OPEN', 'discovery #7 remains OPEN',
+            '[#10](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10) are CLOSED',
             'OpenCode global runtime discovery is a known GAP', 'Codex DENY/Aegis remain gaps')) {
         if (-not [regex]::IsMatch($roadmap, [regex]::Escape($required), [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
             $errors.Add('DOC_KNOWN_CAPABILITY_GAP_MISSING')
         }
     }
-
     return @($errors | Sort-Object -Unique)
 }
 

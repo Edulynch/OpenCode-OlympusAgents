@@ -167,6 +167,12 @@ pwsh -NoProfile -File ./tests/global-installer/qualify.ps1
 pwsh -NoProfile -File ./tests/global-runtime/qualify.ps1
 ```
 
+The standalone OpenCode runtime qualifier currently reproduces the known Issue
+#7 global-discovery failure: installed global Olympus agents are absent from the
+effective roster. This diagnostic is intentionally outside the unified RUNTIME
+profile and is not a claim that OpenCode global runtime is supported. Codex
+global runtime remains `SUPPORTED` based on the user-provided evidence above.
+
 The OpenCode project adapter provides the `/maintain` command, hidden Aegis,
 native ASK, hard DENY, Activity HUD, roles, models, permissions, and
 installer-managed surface. This project capability statement does not imply
@@ -183,6 +189,17 @@ Kael root, Kael→Veyra, Kovan→Nox functional work, four-child fan-out/fan-in,
 concurrency of at least two, result delivery, ALLOW, and native ASK approval
 as passing/confirmed; these smokes were **not rerun** during modularization.
 `tests/codex/validate_profile.py` remains static qualification only.
+
+The direct Codex qualifier keeps its no-argument combined behavior. Its internal
+`--mode static` runs source/profile assertions without locating or invoking the
+Codex CLI; it omits the renderer check already exercised by safe Harness Core
+qualification. `--mode catalog` runs only `codex debug models --bundled`; when
+the CLI is absent it prints `CODEX_MODEL_CATALOG: NOT RUN (Codex CLI unavailable)`
+and exits 2. The contributor facade recognizes that explicit prerequisite result
+as `NOT RUN`; an unexplained child exit 2 is a failure, not a pass or skip.
+Neither mode performs an interactive Codex smoke. The contributor profile entry
+point and its FAST/FULL/RUNTIME boundaries are documented in
+[Development & qualification](DEVELOPMENT.md#unified-contributor-profiles-issue-11).
 
 ## Declared Codex gaps
 

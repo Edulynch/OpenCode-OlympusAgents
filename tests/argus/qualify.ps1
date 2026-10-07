@@ -1,12 +1,64 @@
 [CmdletBinding()]
-param()
+param([ValidateSet('Both','Offline','Runtime')][string]$QualificationSlice = 'Both')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $production = '63357c4e8394a0646acb80e8725b576a12c91e62'
 $run = Join-Path (Join-Path $env:LOCALAPPDATA 'Temp/opencode') ('argus-qualification-' + [guid]::NewGuid().ToString('N'))
 $old = Join-Path $run 'production-source'
-function Check([string]$id, [bool]$ok) { if (-not $ok) { throw "$id FAIL" }; Write-Output "$id PASS" }
+$originalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
+$script:CollectOfflineContracts = $QualificationSlice -eq 'Offline'
+$script:OfflineContractFailures = [Collections.Generic.List[string]]::new()
+function Check([string]$id, [bool]$ok) {
+    if (-not $ok) {
+        if ($script:CollectOfflineContracts) {
+            $null = $script:OfflineContractFailures.Add($id)
+            Write-Output "$id FAIL (recorded; continuing offline coverage)"
+            return
+        }
+        throw "$id FAIL"
+    }
+    Write-Output "$id PASS"
+}
+function Get-CanonicalRoleDisplay([string]$SourceRoot, [string]$RoleId) {
+    $identities = [IO.File]::ReadAllText((Join-Path $SourceRoot 'olympus/core/identities.toml'))
+    $pattern = '(?ms)^\[roles\.' + [regex]::Escape($RoleId) + '\]\s+display\s*=\s*"([^"]+)"'
+    $match = [regex]::Match($identities, $pattern)
+    if (-not $match.Success) { return $null }
+    return $match.Groups[1].Value
+}
+function Test-OpenCodeGeneratedAgentManaged([string]$BootstrapText, [string]$RendererText, [string]$SourceRoot, [string]$RoleId) {
+    $expectedPath = ".opencode/agents/$RoleId.md"
+    $rendererMapsCanonicalRole = $RendererText.Contains('for role in sorted(roles):') -and
+        $RendererText.Contains('"display_identity": identities[role]') -and
+        $RendererText.Contains('display = identities[role]') -and
+        $RendererText.Contains('output[root / ".opencode" / "agents" / f"{role}.md"] = header + prompt')
+    $bootstrapUsesGeneratedInventory = $BootstrapText.Contains('function Get-GeneratedHarnessOutputs([string]$Name) {') -and
+        $BootstrapText.Contains('$adapterRoot = Join-Path $SourceRoot (''.'' + $Name)') -and
+        $BootstrapText.Contains('$outputs[$relative] = $text') -and
+        $BootstrapText.Contains('$GeneratedByHarness[$harness] = Get-GeneratedHarnessOutputs $harness') -and
+        $BootstrapText.Contains('$OpenCodeGenerated = $GeneratedByHarness[''opencode'']') -and
+        $BootstrapText.Contains('$OpenCodeManaged = @($OpenCodeGenerated.Keys | Sort-Object)') -and
+        $BootstrapText.Contains('$Managed = @($ManagedContent.Keys | Sort-Object)')
+    $prefix = [IO.Path]::GetFullPath($SourceRoot).TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
+    $adapterPaths = @(Get-ChildItem -LiteralPath (Join-Path $SourceRoot '.opencode') -File -Recurse -Force | ForEach-Object {
+        $_.FullName.Substring($prefix.Length).Replace('\','/')
+    })
+    return $rendererMapsCanonicalRole -and $bootstrapUsesGeneratedInventory -and $adapterPaths -ccontains $expectedPath
+}
+function Enable-OfflineOpenCodeStub([string]$FixtureRoot) {
+    $mockBin = Join-Path $FixtureRoot 'mock-opencode'
+    [IO.Directory]::CreateDirectory($mockBin) | Out-Null
+    Copy-Item -LiteralPath (Join-Path $source 'tests/release/fixtures/opencode.ps1') -Destination (Join-Path $mockBin 'opencode.ps1')
+    $pwsh = Join-Path $PSHOME 'pwsh.exe'
+    $wrapper = "@echo off`r`n`"$pwsh`" -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
+    [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), $wrapper, [Text.Encoding]::ASCII)
+    $windowsApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+    $parts = @($originalPath -split [regex]::Escape([IO.Path]::PathSeparator) | Where-Object {
+        $_ -and $_.Trim('"') -ine $windowsApps -and $_.Trim('"') -ine $PSHOME
+    })
+    $env:PATH = (@($mockBin,$PSHOME) + $parts) -join [IO.Path]::PathSeparator
+}
 function Install([string]$root, [string]$target, [switch]$DryRun) {
     $args = @('-NoProfile','-File',(Join-Path $root 'install.ps1'),'-SourceRoot',$root,'-Target',$target)
     if ($DryRun) { $args += '-DryRun' }
@@ -48,13 +100,22 @@ function Simulate([string]$case, [string]$worker = 'TERMINAL') {
     }
     [pscustomobject]@{ Status=$status; Sessions=$sessions; Consultations=$calls; WorkerParent=$workerParent; SessionID=if ($eligible) { 'argus-1' } else { '' } }
 }
+$expected = @{ kael='gpt-6.1-sol#high'; atlas='gpt-6.1-sol#high'; argus='gpt-6.1-sol#high'; thales='gpt-6.1-sol#xhigh'; helios='gpt-6.1-sol#high'; aegis='gpt-6-luna#max'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
+    if ($QualificationSlice -eq 'Offline') { Enable-OfflineOpenCodeStub $run }
+    if ($QualificationSlice -ne 'Runtime') {
     $a = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/argus.md'))
     $k = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/kael.md'))
     $b = [IO.File]::ReadAllText((Join-Path $source 'scripts/bootstrap.ps1'))
+    $renderer = [IO.File]::ReadAllText((Join-Path $source 'scripts/render_harnesses.py'))
     $r = [IO.File]::ReadAllText((Join-Path $source 'docs/ROADMAP.md'))
-    Check AR1 ($a -match '(?m)^# 🐞 Argus The Bug Hunter\r?$' -and $a -match 'mode: subagent' -and $b -match '".opencode/agents/argus.md"')
+    $display = Get-CanonicalRoleDisplay $source 'argus'
+    $headingPattern = if ($display) { '(?m)^' + [regex]::Escape("# $display") + '\r?$' } else { '(?!)' }
+    Check AR1 ($null -ne $display -and $a -match 'GENERATED BY scripts/render_harnesses\.py' -and
+        $a -match $headingPattern -and $a -match 'mode: subagent' -and
+        (Test-Path -LiteralPath (Join-Path $source 'olympus/roles/argus.md') -PathType Leaf) -and
+        (Test-OpenCodeGeneratedAgentManaged $b $renderer $source 'argus'))
     Check AR2 ($a -match 'model: openai/gpt-6.1-sol#high')
     Check AR3 ($k -match '(?s)action: subagent\s+resource: argus\s+effect: allow' -and $k -match 'atlas, argus, talos, and helios are valid child role IDs')
     foreach ($pair in @(@('AR4','shell'),@('AR5','edit'),@('AR6','subagent'))) { Check $pair[0] ($a -match ('(?s)action: ' + $pair[1] + '\s+resource: "\*"\s+effect: deny')) }
@@ -81,7 +142,6 @@ try {
     Check AR27 ($k -match 'Issue #2 Aegis handoff remain unchanged' -and $k -match 'MAINTENANCE_RESULT_PENDING')
     Check AR28 ($a -match 'Kael → Aegis DENIED' -and $k -match 'Kael → Aegis remains DENIED' -and $k -match 'user → /maintain explicit only')
     Check AR29 ($k -match 'BUG_DIAGNOSIS means diagnosis only' -and $a -match 'Kael owns final completion')
-    $expected = @{ kael='gpt-6.1-sol#high'; atlas='gpt-6.1-sol#high'; argus='gpt-6.1-sol#high'; thales='gpt-6.1-sol#xhigh'; helios='gpt-6.1-sol#high'; aegis='gpt-6-luna#max'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
     Check AR30 (@($expected.Keys | Where-Object { ([IO.File]::ReadAllText((Join-Path $source ".opencode/agents/$_.md"))) -notmatch ('(?m)^model: "?openai/' + [regex]::Escape($expected[$_]) + '"?\r?$') }).Count -eq 0)
     Check AR31 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
     Check AR32 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match '\$OldReasoner = ''.opencode/agents/sorin.md''')
@@ -98,7 +158,10 @@ try {
     }
     $caseI = Simulate uncertain; Check CASE_I ($caseI.Status -eq 'INCONCLUSIVE' -and $caseI.Consultations -eq 3 -and $k -match 'existing Diagnostic Gate')
     $caseJ = Simulate indeterminate INDETERMINATE; Check CASE_J ($caseJ.Status -eq 'COMPLETION_UNCONFIRMED' -and $caseJ.Consultations -eq 1 -and $caseJ.WorkerParent -eq 'kael')
+    }
+    $script:CollectOfflineContracts = $false
 
+    if ($QualificationSlice -ne 'Runtime') {
     & git -C $source worktree add --detach $old $production | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'production worktree fixture failed' }
     $upgrade = Join-Path $run 'upgrade'
@@ -129,6 +192,9 @@ try {
     Check U_USER_INDEX ((Snapshot $upgrade) -ceq $before)
     $again = Install $source $upgrade
     Check U_IDEMPOTENT ($again.Code -eq 0 -and $again.Output -match '(?m)^NO_CHANGES\s*$')
+    }
+
+    if ($QualificationSlice -ne 'Offline') {
     $fresh = Join-Path $run 'fresh'; [IO.Directory]::CreateDirectory($fresh) | Out-Null; & git -C $fresh init --quiet
     $freshResult = Install $source $fresh
     Push-Location $fresh
@@ -138,6 +204,8 @@ try {
     Check F_FRESH ($freshResult.Code -eq 0 -and @($effectiveArgus | Where-Object { $_.model.id -eq 'gpt-6.1-sol' -and $_.model.variant -eq 'high' -and $_.mode -eq 'subagent' }).Count -eq 1 -and @($agents | Where-Object id -eq 'sorin').Count -eq 0)
     Check F_EFFECTIVE_DENY ($effectiveArgus.Count -eq 1 -and @('shell','edit','subagent','read','glob','grep','list','lsp' | Where-Object { $action = $_; @($effectiveArgus[0].permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq 'deny' }).Count -lt 1 -or @($effectiveArgus[0].permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq 'allow' }).Count -gt 0 }).Count -eq 0)
     Check F_ROSTER (@($expected.Keys | Where-Object { $id = $_; $want = $expected[$id].Split('#'); @($agents | Where-Object { $_.id -eq $id -and $_.model.id -eq $want[0] -and $_.model.variant -eq $want[1] }).Count -ne 1 }).Count -eq 0)
+    }
+    if ($QualificationSlice -ne 'Runtime') {
     $drift = Join-Path $run 'drift'; [IO.Directory]::CreateDirectory($drift) | Out-Null; & git -C $drift init --quiet
     Check D_BASE ((Install $old $drift).Code -eq 0)
     [IO.File]::AppendAllText((Join-Path $drift '.opencode/agents/kael.md'),"`n# user drift`n")
@@ -147,12 +215,23 @@ try {
     [IO.File]::WriteAllText((Join-Path $foreign '.opencode/agents/argus.md'),"user-owned argus`n")
     $conflict = Install $source $foreign
     Check D_UNOWNED_REFUSED ($conflict.Code -ne 0 -and $conflict.Output -match 'INSTALL_CONFLICT')
-    Write-Output 'ARGUS QUALIFICATION: PASS'
+    }
+    if ($QualificationSlice -eq 'Offline' -and $script:OfflineContractFailures.Count -gt 0) {
+        throw ('Offline static/synthetic check failures: ' + ($script:OfflineContractFailures -join ', '))
+    }
+    if ($QualificationSlice -eq 'Runtime') {
+        Write-Output 'ARGUS RUNTIME QUALIFICATION: PASS (fresh installed effective agents; no interactive session executed)'
+    } elseif ($QualificationSlice -eq 'Offline') {
+        Write-Output 'ARGUS OFFLINE QUALIFICATION: PASS (static/synthetic and installer/history checks; effective OpenCode queries not run)'
+    } else {
+        Write-Output 'ARGUS QUALIFICATION: PASS'
+    }
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
     Write-Output 'ARGUS QUALIFICATION: FAIL'
     exit 1
 } finally {
+    [Environment]::SetEnvironmentVariable('PATH',$originalPath,'Process')
     if (Test-Path -LiteralPath $old) { & git -C $source worktree remove --force $old 2>$null | Out-Null }
     if (Test-Path -LiteralPath $run) {
         try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop }

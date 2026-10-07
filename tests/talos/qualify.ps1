@@ -1,12 +1,38 @@
 [CmdletBinding()]
-param()
+param([ValidateSet('Both','Offline','Runtime')][string]$QualificationSlice = 'Both')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $production = '5911d06d998e5259ffa4b2aa4510e844f264f30f'
 $run = Join-Path (Join-Path $env:LOCALAPPDATA 'Temp/opencode') ('talos-qualification-' + [guid]::NewGuid().ToString('N'))
 $old = Join-Path $run 'production-source'
-function Check([string]$id, [bool]$ok) { if (-not $ok) { throw "$id FAIL" }; Write-Output "$id PASS" }
+$originalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
+$script:CollectOfflineContracts = $QualificationSlice -eq 'Offline'
+$script:OfflineContractFailures = [Collections.Generic.List[string]]::new()
+function Check([string]$id, [bool]$ok) {
+    if (-not $ok) {
+        if ($script:CollectOfflineContracts) {
+            $null = $script:OfflineContractFailures.Add($id)
+            Write-Output "$id FAIL (recorded; continuing offline coverage)"
+            return
+        }
+        throw "$id FAIL"
+    }
+    Write-Output "$id PASS"
+}
+function Enable-OfflineOpenCodeStub([string]$FixtureRoot) {
+    $mockBin = Join-Path $FixtureRoot 'mock-opencode'
+    [IO.Directory]::CreateDirectory($mockBin) | Out-Null
+    Copy-Item -LiteralPath (Join-Path $source 'tests/release/fixtures/opencode.ps1') -Destination (Join-Path $mockBin 'opencode.ps1')
+    $pwsh = Join-Path $PSHOME 'pwsh.exe'
+    $wrapper = "@echo off`r`n`"$pwsh`" -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
+    [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), $wrapper, [Text.Encoding]::ASCII)
+    $windowsApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+    $parts = @($originalPath -split [regex]::Escape([IO.Path]::PathSeparator) | Where-Object {
+        $_ -and $_.Trim('"') -ine $windowsApps -and $_.Trim('"') -ine $PSHOME
+    })
+    $env:PATH = (@($mockBin,$PSHOME) + $parts) -join [IO.Path]::PathSeparator
+}
 function Install([string]$root, [string]$target, [switch]$DryRun) {
     $args = @('-NoProfile','-File',(Join-Path $root 'install.ps1'),'-SourceRoot',$root,'-Target',$target)
     if ($DryRun) { $args += '-DryRun' }
@@ -57,8 +83,11 @@ function Simulate([string]$case, [string]$worker = 'TERMINAL') {
     }
     [pscustomobject]@{ Status=$status; Sessions=[int]$eligible; Consultations=$calls; WorkerParent=if ($eligible) { 'kael' } else { '' }; SessionID=if ($eligible) { 'talos-1' } else { '' }; AuditExpanded=$false; Replacement=$false }
 }
+$expected = @{ kael='gpt-6.1-sol#high'; atlas='gpt-6.1-sol#high'; argus='gpt-6.1-sol#high'; talos='gpt-6.1-sol#high'; helios='gpt-6.1-sol#high'; thales='gpt-6.1-sol#xhigh'; aegis='gpt-6-luna#max'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
+    if ($QualificationSlice -eq 'Offline') { Enable-OfflineOpenCodeStub $run }
+    if ($QualificationSlice -ne 'Runtime') {
     $t = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/talos.md'))
     $k = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/kael.md'))
     $codexRoot = [IO.File]::ReadAllText((Join-Path $source 'CODEX.md'))
@@ -104,7 +133,6 @@ try {
     Check TA29 ($k -match 'Issue #2 Aegis reconciliation remain unchanged' -and $k -match 'MAINTENANCE_RESULT_PENDING')
     Check TA30 ($k -match 'Kael → Aegis DENIED' -and $t -match 'user → /maintain explicit only')
     Check TA31 ($k -match 'SECURITY_DIAGNOSIS complete is diagnosis only' -and $t -match 'Kael alone routes normal workers')
-    $expected = @{ kael='gpt-6.1-sol#high'; atlas='gpt-6.1-sol#high'; argus='gpt-6.1-sol#high'; talos='gpt-6.1-sol#high'; helios='gpt-6.1-sol#high'; thales='gpt-6.1-sol#xhigh'; aegis='gpt-6-luna#max'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
     Check TA32 (@($expected.Keys | Where-Object { ([IO.File]::ReadAllText((Join-Path $source ".opencode/agents/$_.md"))) -notmatch ('(?m)^model: "?openai/' + [regex]::Escape($expected[$_]) + '"?\r?$') }).Count -eq 0)
     Check TA33 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
     Check TA34 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match '\$OldReasoner = ''.opencode/agents/sorin.md''')
@@ -122,7 +150,10 @@ try {
     $h = Simulate bounded; Check CASE_H ($h.Status -eq 'SECURITY_DIAGNOSIS' -and -not $h.AuditExpanded)
     $i = Simulate uncertain; Check CASE_I ($i.Status -eq 'INCONCLUSIVE' -and $i.Consultations -eq 3 -and $k -match 'independently evaluate Thales Diagnostic Gate')
     $j = Simulate indeterminate INDETERMINATE; Check CASE_J ($j.Status -eq 'COMPLETION_UNCONFIRMED' -and $j.Consultations -eq 1 -and -not $j.Replacement)
+    }
+    $script:CollectOfflineContracts = $false
 
+    if ($QualificationSlice -ne 'Runtime') {
     & git -C $source worktree add --detach $old $production | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'production worktree fixture failed' }
     $upgrade = Join-Path $run 'upgrade'; [IO.Directory]::CreateDirectory($upgrade) | Out-Null; & git -C $upgrade init --quiet
@@ -150,6 +181,8 @@ try {
     Check U_UPGRADE ($installed.Code -eq 0 -and (Test-Path (Join-Path $upgrade '.opencode/agents/talos.md')) -and @($manifest.managed_files | Where-Object path -eq '.opencode/agents/talos.md').Count -eq 1)
     Check U_USER_INDEX ((Snapshot $upgrade) -ceq $before)
     $again = Install $source $upgrade; Check U_IDEMPOTENT ($again.Code -eq 0 -and $again.Output -match '(?m)^NO_CHANGES\s*$')
+    }
+    if ($QualificationSlice -ne 'Offline') {
     $fresh = Join-Path $run 'fresh'; [IO.Directory]::CreateDirectory($fresh) | Out-Null; & git -C $fresh init --quiet
     $freshResult = Install $source $fresh
     Push-Location $fresh
@@ -159,6 +192,8 @@ try {
     Check F_FRESH ($freshResult.Code -eq 0 -and @($effective | Where-Object { $_.model.id -eq 'gpt-6.1-sol' -and $_.model.variant -eq 'high' -and $_.mode -eq 'subagent' }).Count -eq 1 -and @($agents | Where-Object id -eq 'sorin').Count -eq 0)
     Check F_EFFECTIVE_DENY ($effective.Count -eq 1 -and @('shell','edit','subagent','read','glob','grep','list','lsp' | Where-Object { $action = $_; @($effective[0].permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq 'deny' }).Count -lt 1 -or @($effective[0].permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq 'allow' }).Count -gt 0 }).Count -eq 0)
     Check F_ROSTER (@($expected.Keys | Where-Object { $id = $_; $want = $expected[$id].Split('#'); @($agents | Where-Object { $_.id -eq $id -and $_.model.id -eq $want[0] -and $_.model.variant -eq $want[1] }).Count -ne 1 }).Count -eq 0)
+    }
+    if ($QualificationSlice -ne 'Runtime') {
     $drift = Join-Path $run 'drift'; [IO.Directory]::CreateDirectory($drift) | Out-Null; & git -C $drift init --quiet
     Check D_BASE ((Install $old $drift).Code -eq 0)
     [IO.File]::AppendAllText((Join-Path $drift '.opencode/agents/kael.md'),"`n# user drift`n")
@@ -168,12 +203,23 @@ try {
     [IO.File]::WriteAllText((Join-Path $foreign '.opencode/agents/talos.md'),"user-owned talos`n")
     $conflict = Install $source $foreign
     Check D_UNOWNED_REFUSED ($conflict.Code -ne 0 -and $conflict.Output -match 'INSTALL_CONFLICT')
-    Write-Output 'TALOS QUALIFICATION: PASS'
+    }
+    if ($QualificationSlice -eq 'Offline' -and $script:OfflineContractFailures.Count -gt 0) {
+        throw ('Offline static/synthetic check failures: ' + ($script:OfflineContractFailures -join ', '))
+    }
+    if ($QualificationSlice -eq 'Runtime') {
+        Write-Output 'TALOS RUNTIME QUALIFICATION: PASS (fresh installed effective agent; no interactive session executed)'
+    } elseif ($QualificationSlice -eq 'Offline') {
+        Write-Output 'TALOS OFFLINE QUALIFICATION: PASS (static/synthetic and installer/history checks; effective OpenCode queries not run)'
+    } else {
+        Write-Output 'TALOS QUALIFICATION: PASS'
+    }
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
     Write-Output 'TALOS QUALIFICATION: FAIL'
     exit 1
 } finally {
+    [Environment]::SetEnvironmentVariable('PATH',$originalPath,'Process')
     if (Test-Path -LiteralPath $old) { & git -C $source worktree remove --force $old 2>$null | Out-Null }
     if (Test-Path -LiteralPath $run) {
         try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop }

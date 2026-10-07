@@ -1,7 +1,11 @@
 [CmdletBinding()]
-param([switch]$StaticOnly)
+param(
+    [switch]$StaticOnly,
+    [switch]$ProcessesOnly
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+if ($StaticOnly -and $ProcessesOnly) { throw 'StaticOnly and ProcessesOnly are mutually exclusive.' }
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 function Text([string]$path) { [IO.File]::ReadAllText((Join-Path $repo $path)) }
 function Check([string]$name, [bool]$value) {
@@ -44,6 +48,7 @@ function Join-And-Validate($unit) {
 }
 $units = [Collections.Generic.List[object]]::new()
 try {
+    if (-not $ProcessesOnly) {
     $aegis = Text '.opencode/agents/aegis.md'
     $kael = Text '.opencode/agents/kael.md'
     $docs = Text 'docs/DEVELOPMENT.md'
@@ -101,7 +106,9 @@ try {
         }) -notcontains $false -and $agentText -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
     Check 'CONCURRENCY_4_4' ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kael -match 'fan out up to four useful children' -and $kael -match 'NORMAL is cost/context-aware')
+    }
     if ($StaticOnly) { Write-Output 'EXTERNAL WORK OWNERSHIP QUALIFICATION: PASS (static only)'; exit 0 }
+    if (-not $StaticOnly) {
 
     # Disposable controller cases exercise real owned lifetimes, not an interactive agent.
     $fixture = Join-Path ([IO.Path]::GetTempPath()) ('opencode/external-ownership-' + [guid]::NewGuid().ToString('N'))
@@ -138,7 +145,12 @@ Write-Output "CONTROLLER TERMINAL $($result.label)"
         $parallelFinal -ge $lastTerminal -and @($joined | Where-Object { $_.Unit.Process.HasExited }).Count -eq 3)
     Write-Output "PARALLEL: overlapping=3 last launch=$($lastLaunch.ToString('o')) first terminal=$($firstTerminal.ToString('o')) last terminal=$($lastTerminal.ToString('o')) Aegis final(simulated)=$($parallelFinal.ToString('o'))"
     Write-Output 'VISIBLE WINDOWS OBSERVED: 0 (MainWindowHandle; desktop popup/focus not instrumented)'
-    Write-Output 'EXTERNAL WORK OWNERSHIP QUALIFICATION: PASS (static + disposable foreground processes; interactive agent not tested)'
+    if ($ProcessesOnly) {
+        Write-Output 'EXTERNAL WORK OWNERSHIP QUALIFICATION: PASS (disposable foreground processes; interactive agent not tested)'
+    } else {
+        Write-Output 'EXTERNAL WORK OWNERSHIP QUALIFICATION: PASS (static + disposable foreground processes; interactive agent not tested)'
+    }
+    }
 } catch {
     Write-Output "EVIDENCE: $($_.Exception.Message)"
     Write-Output 'EXTERNAL WORK OWNERSHIP QUALIFICATION: FAIL'

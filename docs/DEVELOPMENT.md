@@ -185,6 +185,105 @@ If drift occurs, inspect the reported path and manifest, back up any intentional
 
 ## Qualification
 
+### Unified contributor profiles (Issue #11)
+
+From the source checkout root, run exactly one selected profile:
+
+```powershell
+pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FAST
+pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FULL
+pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile RUNTIME
+```
+
+**FAST** is offline-only: safe-root-read-only Harness Core; Codex static checks;
+the 13 established PowerShell contract checks (including handoff fidelity); and
+external-work ownership static contracts. It never queries OpenCode or Codex,
+does not run disposable processes, and does not render generated outputs in the
+checkout. It does not include the nine installer/history selectors reserved for
+FULL. Direct qualifier defaults remain unchanged.
+
+**FULL** runs FAST exactly once, then the Windows global-installer fixture, the
+release qualifier with `-MockOpenCode`, installer compatibility, dual-harness
+installer, dirty-worktree checks, and the three existing Phase 11 offline
+commands (qualifier, integrated-routing unittests, feature-fixture unittests),
+followed by the Offline slices of Authority, Activity HUD, Argus, Atlas, Helios,
+Talos, Thales, Phase 4C, and Autonomy. Those nine slices execute their existing
+local installation, history, upgrade, drift, conflict, and synthetic checks;
+Activity also runs its local Node presentation tests. For bootstrap-driven
+offline fixtures only, they temporarily put the existing
+`tests/release/fixtures/opencode.ps1` qualification stub first on `PATH`, then
+restore the original process environment. That explicit deterministic fixture
+supports installation setup; its output is not treated as live OpenCode
+discovery or effective-runtime evidence, and RUNTIME never uses its output as
+runtime evidence. The
+FULL dirty-worktree installer check uses the same fixture only for its local
+OpenCode `--version` preflight. FULL does not contact a real OpenCode or Codex
+runtime. It does not call tag-transition stability a second time; that check is
+already nested in release qualification. Phase 11's existing historical corpus
+is used as-is.
+
+**RUNTIME** does not include FULL or FAST. It runs only the Codex bundled-model
+catalog probe, external-work ownership disposable process cases, and the
+existing effective-agent/plugin boundaries for Authority, Activity HUD, Argus,
+Atlas, Helios, Talos, Thales, Phase 4C, and Autonomy. Phase 4C's runtime
+selector includes P4C-2/11/12/14 and the existing M1 and Aegis-identity
+effective-runtime scenarios. M7 drift, legacy managed
+upgrade, and the Aegis identity scenario's independent file/hash/command/HUD
+assertions remain in FULL Offline and the direct Both qualifier, not RUNTIME.
+Authority Runtime builds a unique fixture under
+`C:\Users\Public\olympus-authority-qualification`, copies only the current
+canonical `olympus` sources plus the renderer and bootstrap scripts, renders
+OpenCode outputs there, and bootstraps them into a minimal Git project. The
+bootstrap uses the existing qualification stub from a child-only `PATH`; its
+output is setup evidence only. Runtime runs its queries from the fixture
+project: `debug paths` first confirms isolated paths, then Runtime starts an
+owned loopback OpenCode service on an ephemeral port and verifies its isolated
+XDG state registry. The subsequent `debug config`, authenticated
+`GET /api/integration`, and `debug agents` queries use that same backend. The
+integration request waits for plugin activation and verifies the returned
+`location.directory`; it uses only the service password from the fixture
+registry. Runtime checks that the registry still names the owned process after
+each query and verifies the owned loopback listener before stopping the service.
+Cleanup confirms process exit and drained streams, then removes the fixture;
+cleanup or removal failures fail qualification.
+Offline makes no real OpenCode calls; Both runs Offline plus this same Runtime
+path.
+Fresh fixture installs needed by runtime checks are part of their setup;
+unrelated offline suites and manual interactive smokes are not run. If Codex or
+OpenCode is unavailable, dependent checks are `NOT RUN`, never PASS; the
+aggregate is `PARTIAL` (exit 2). Only an explicitly designated missing
+prerequisite can produce `NOT RUN`; an unclassified child exit 2 is a failure.
+OpenCode global custom-agent discovery remains a known GAP (Issue #7), so the
+unified profile deliberately excludes `tests/global-runtime/qualify.ps1`. Run
+`pwsh -NoProfile -File ./tests/global-runtime/qualify.ps1` separately to diagnose
+that behavior; it currently reproduces the missing-global-roster failure and is
+not evidence that OpenCode global runtime is supported. Codex global runtime
+remains documented as `SUPPORTED` based on the user's provided evidence.
+A completed RUNTIME profile still does **not** qualify interactive child
+execution, native ASK UI or human approval/rejection, the question race, Codex
+sessions, or Activity TUI rendering; those remain separately observed/manual
+evidence.
+
+The profile runner uses a locally available Python 3.11+ interpreter, PowerShell
+7, and Git; it does not download packages or choose an environment manager.
+RUNTIME's external-process slice uses `ConvertFrom-Json -DateKind String` and
+requires PowerShell 7.5+; FAST runs only its `StaticOnly` selector and has no
+DateKind requirement. FULL's global installer is Windows-only. Release
+qualification with `-MockOpenCode` requires Windows `Win32_Process` process
+identity support and local historical refs `v0.2.0` and `v0.3.0-beta.3`.
+Other existing history-sensitive suites require their checked-in Git objects,
+including handoff `70f22...`, Argus `63357c4e8394a0646acb80e8725b576a12c91e62`,
+Atlas `dea863168fc16a6b97e0b6404c4334f4265f1e52`, Helios
+`a5b2c9a12f542217e7d9927034486f922756d17c`, Talos
+`5911d06d998e5259ffa4b2aa4510e844f264f30f`, and Thales tag `v0.2.0`.
+Phase 4C's historical identity fixture also needs commit
+`3ab1495fdfcdb8503e2411effe81e814da3f6eb6`; its local migration checks run in
+FULL and its existing effective-runtime portion is also selected by RUNTIME.
+
+The direct qualifier commands below retain their original combined behavior when
+called without a selector. The profile switches only select bounded existing
+slices; they do not add suites, profiles to Olympus itself, or duplicate tests.
+
 ### Current model mapping
 
 `olympus/core/models.toml` is the sole conceptual role→family/effort map.
@@ -231,7 +330,7 @@ pwsh -NoProfile -File ./tests/maintenance-handoff/qualify.ps1
 pwsh -NoProfile -File ./tests/maintenance-handoff/qualify-fidelity.ps1
 ```
 
-`tests/maintenance-scope/qualify.ps1` checks byte-zero frontmatter in both canonical and generated files, and `tests/authority/qualify.ps1` is the live effective-agent probe that changes to this checkout and runs `opencode debug agents`. Run both after any Harness Core render has finished; do not overlap either with a process that renders/rewrites this checkout's `.opencode` outputs. This isolates only the byte/runtime-sensitive gates and does not require serializing unrelated read-only qualifications.
+`tests/maintenance-scope/qualify.ps1` checks byte-zero frontmatter in both canonical and generated files. `tests/authority/qualify.ps1` stages generated runtime resources in a disposable project, so its live effective-agent probe does not depend on this checkout's `.opencode` outputs. This isolates only the byte/runtime-sensitive gates and does not require serializing unrelated read-only qualifications.
 
 `check` is read-only. Harness-core qualification tests renderer idempotence,
 drift/missing-output detection, canonical role/model/policy sources, and

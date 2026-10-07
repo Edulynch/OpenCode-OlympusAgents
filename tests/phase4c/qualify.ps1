@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([ValidateSet('Both','Offline','Runtime')][string]$QualificationSlice = 'Both')
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -11,6 +11,8 @@ $Utf8 = [Text.UTF8Encoding]::new($false)
 $RunId = [Guid]::NewGuid().ToString('N')
 $RunRoot = Join-Path $WorkRoot ('run-' + $RunId)
 $Results = [System.Collections.Generic.List[object]]::new()
+$OriginalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
+$MockBin = $null
 $ManagedPaths = @(
     'opencode.jsonc',
     '.opencode/agents/kael.md', '.opencode/agents/veyra.md',
@@ -238,12 +240,30 @@ function Assert-Installed([string]$Repo, [string]$ExpectedStatus) {
     $result = Invoke-Bootstrap $Repo
     Assert-Condition ($result.ExitCode -eq 0) ('Bootstrap failed: ' + $result.Text) 'BOOTSTRAP_BUG'
     Assert-Condition ($result.Text -match ('(?m)^' + [regex]::Escape($ExpectedStatus) + '\s*$')) ('Expected status ' + $ExpectedStatus + '. Output: ' + $result.Text) 'BOOTSTRAP_BUG'
+    if ($QualificationSlice -eq 'Offline') { return $null }
     $diagnostics = Get-OpenCodeDiagnostics $Repo
     Assert-ModelMapping $diagnostics.Agents
     return $diagnostics
 }
 
+function Enable-OfflineOpenCodeStub {
+    $script:MockBin = Join-Path $RunRoot 'mock-opencode'
+    [IO.Directory]::CreateDirectory($script:MockBin) | Out-Null
+    Copy-Item -LiteralPath (Join-Path $RepoRoot 'tests/release/fixtures/opencode.ps1') -Destination (Join-Path $script:MockBin 'opencode.ps1')
+    $pwsh = Join-Path $PSHOME 'pwsh.exe'
+    $wrapper = "@echo off`r`n`"$pwsh`" -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
+    [IO.File]::WriteAllText((Join-Path $script:MockBin 'opencode.cmd'), $wrapper, [Text.Encoding]::ASCII)
+    $windowsApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+    $parts = @($OriginalPath -split [regex]::Escape([IO.Path]::PathSeparator) | Where-Object {
+        $_ -and $_.Trim('"') -ine $windowsApps -and $_.Trim('"') -ine $PSHOME
+    })
+    $env:PATH = (@($script:MockBin,$PSHOME) + $parts) -join [IO.Path]::PathSeparator
+}
+
 function Run-Scenario([string]$Id, [scriptblock]$Body) {
+    $runtimeScenarios = @('P4C-2','P4C-11','P4C-12','P4C-14','M1-M4-M6-STATIC_BOOTSTRAP_ASSERTION',
+        'M-AEGIS-IDENTITY-UPGRADE')
+    if ($QualificationSlice -eq 'Runtime' -and $Id -notin $runtimeScenarios) { return }
     try {
         & $Body
         $Results.Add([pscustomobject]@{ Id = $Id; Status = 'PASS'; Classification = ''; Evidence = '' })
@@ -260,7 +280,9 @@ function Run-Scenario([string]$Id, [scriptblock]$Body) {
 try {
     Assert-Condition ([IO.File]::Exists($Bootstrap)) 'scripts/bootstrap.ps1 is missing.'
     Assert-Condition ($null -ne (Get-Command git -ErrorAction SilentlyContinue)) 'Git is unavailable.' 'ENVIRONMENT_LIMITATION'
-    Assert-Condition ($null -ne (Get-Command opencode -ErrorAction SilentlyContinue)) 'OpenCode is unavailable.' 'ENVIRONMENT_LIMITATION'
+    if ($QualificationSlice -ne 'Offline') {
+        Assert-Condition ($null -ne (Get-Command opencode -ErrorAction SilentlyContinue)) 'OpenCode is unavailable.' 'ENVIRONMENT_LIMITATION'
+    }
     Assert-Condition ($null -ne (Get-Command pwsh -ErrorAction SilentlyContinue)) 'PowerShell 7 is unavailable.' 'ENVIRONMENT_LIMITATION'
     $gitRoot = Full-Path (Invoke-Git $RepoRoot @('rev-parse', '--show-toplevel'))
     Assert-Condition ([string]::Equals($gitRoot, (Full-Path $RepoRoot), [StringComparison]::OrdinalIgnoreCase)) 'Harness is not running in the orchestrator Git repository.'
@@ -269,6 +291,7 @@ try {
     Assert-Descendant $WorkRoot $RepoRoot
     [IO.Directory]::CreateDirectory($RunRoot) | Out-Null
     Assert-Descendant $RunRoot $WorkRoot
+    if ($QualificationSlice -eq 'Offline') { Enable-OfflineOpenCodeStub }
 
     Run-Scenario 'P4C-1' {
         $scenarioDir = New-ScenarioHome 'p4c-01'
@@ -289,7 +312,9 @@ try {
         $scenarioDir = New-ScenarioHome 'p4c-02'
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'fresh install fixture' + [Environment]::NewLine })
         [void](Assert-Installed $repo 'READY')
+        if ($QualificationSlice -ne 'Runtime') {
         foreach ($relative in $ManagedPaths) { Assert-Condition (Test-Path -LiteralPath (Join-Path $repo ($relative -replace '/', [IO.Path]::DirectorySeparatorChar))) ('Installed file missing: ' + $relative) 'BOOTSTRAP_BUG' }
+        }
     }
 
     Run-Scenario 'P4C-3' {
@@ -416,20 +441,26 @@ try {
         $repo = New-CleanRepo $scenarioDir 'target' $files
         $result = Invoke-Bootstrap $repo
         Assert-Condition ($result.ExitCode -eq 0) ('Policy target install failed: ' + $result.Text) 'BOOTSTRAP_BUG'
+        if ($QualificationSlice -ne 'Offline') {
         $diagnostics = Get-OpenCodeDiagnostics $repo
         $nox = Get-Agent $diagnostics.Agents 'nox'
         Assert-Condition (Has-Rule $nox 'shell' '*' 'allow' -and -not (Has-Rule $nox 'shell' '*' 'ask')) 'Trusted-project Tester shell allow missing or ASK present.' 'BOOTSTRAP_BUG'
+        }
+        if ($QualificationSlice -ne 'Runtime') {
         $manifest = [IO.File]::ReadAllText((Join-Path $repo '.opencode/orchestrator-install.json')) | ConvertFrom-Json
         Assert-Condition (@($manifest.validation_commands | Where-Object { $_ -eq 'npm test' }).Count -eq 1) 'Relevant test suggestion missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (@($manifest.validation_commands | Where-Object { $_ -eq 'npm run deploy' }).Count -eq 0) 'Default suggestions include unrelated script.' 'BOOTSTRAP_BUG'
         Assert-Condition ([IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/nox.md')) -eq [IO.File]::ReadAllText((Join-Path $RepoRoot '.opencode/agents/nox.md'))) 'Bootstrap generated a command ACL.' 'BOOTSTRAP_BUG'
+        }
     }
 
     Run-Scenario 'P4C-12' {
         $scenarioDir = New-ScenarioHome 'p4c-12'
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'diagnostics fixture' + [Environment]::NewLine })
         $diagnostics = Assert-Installed $repo 'READY'
+        if ($QualificationSlice -ne 'Offline') {
         Assert-ModelMapping $diagnostics.Agents
+        }
     }
 
     Run-Scenario 'P4C-13' {
@@ -449,6 +480,7 @@ try {
         $scenarioDir = New-ScenarioHome 'p4c-14'
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'security fixture' + [Environment]::NewLine; 'package.json' = '{"packageManager":"npm@10","scripts":{"test":"node test.js"}}' + [Environment]::NewLine; 'package-lock.json' = '{}' + [Environment]::NewLine })
         $diagnostics = Assert-Installed $repo 'READY'
+        if ($QualificationSlice -ne 'Offline') {
         $agents = $diagnostics.Agents
         foreach ($id in @('kael', 'thales', 'atlas', 'argus', 'talos', 'helios', 'veyra', 'orin', 'vera')) {
             $agent = Get-Agent $agents $id
@@ -460,8 +492,12 @@ try {
         $allowedChildren = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object { $_.resource } | Select-Object -Unique)
         $expectedChildren = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'thales', 'atlas', 'argus', 'talos', 'helios')
         Assert-Condition ($allowedChildren.Count -eq $expectedChildren.Count -and @($allowedChildren | Where-Object { $_ -notin $expectedChildren }).Count -eq 0 -and @($expectedChildren | Where-Object { $allowedChildren -notcontains $_ }).Count -eq 0) 'Kael delegation allowlist mismatch.' 'BOOTSTRAP_BUG'
+        }
+        if ($QualificationSlice -ne 'Runtime') {
         $thalesPrompt = [IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/thales.md'))
         Assert-Condition ($thalesPrompt -match 'invoked only through the Diagnostic Gate') 'Thales Diagnostic Gate requirement missing.' 'BOOTSTRAP_BUG'
+        }
+        if ($QualificationSlice -ne 'Offline') {
         $thales = Get-Agent $agents 'thales'
         Assert-Condition (Has-Rule $thales 'subagent' '*' 'deny') 'Thales subagent DENY missing.' 'BOOTSTRAP_BUG'
         $kovan = Get-Agent $agents 'kovan'
@@ -478,9 +514,13 @@ try {
             Assert-Condition (Has-Rule $kovan 'edit' $resource 'deny') ('Kovan protected edit path missing: ' + $resource) 'BOOTSTRAP_BUG'
         }
         Assert-Condition (Has-Rule $kovan 'edit' '*.env.example' 'allow') 'Documented env-example exception missing.' 'BOOTSTRAP_BUG'
+        }
+        if ($QualificationSlice -ne 'Runtime') {
         $nativeConfig = [IO.File]::ReadAllText((Join-Path $repo 'opencode.jsonc'))
         Assert-Condition ($nativeConfig -match '(?s)"action":\s*"edit"\s*,\s*"resource":\s*"\*"\s*,\s*"effect":\s*"ask"' -and
             $nativeConfig -match '(?s)"action":\s*"external_directory"\s*,\s*"resource":\s*"\*"\s*,\s*"effect":\s*"ask"') 'Global native edit/external_directory ASK defaults missing.' 'BOOTSTRAP_BUG'
+        }
+        if ($QualificationSlice -ne 'Offline') {
         $nox = Get-Agent $agents 'nox'
         Assert-Condition (Has-Rule $nox 'edit' '*' 'deny') 'Nox edit DENY missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $nox 'shell' '*' 'allow') 'Nox shell ALLOW missing.' 'BOOTSTRAP_BUG'
@@ -490,6 +530,7 @@ try {
         Assert-Condition (@($shellRules | Where-Object effect -eq 'ask').Count -eq 0) 'Effective Nox shell ASK exists.' 'BOOTSTRAP_BUG'
         Assert-Condition (@($shellRules | Where-Object { $_.effect -eq 'allow' -and $_.resource -eq '*' }).Count -gt 0) 'Effective Nox broad shell allow missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $nox 'read' '*' 'allow') 'Nox source-read permission missing.' 'BOOTSTRAP_BUG'
+        }
     }
 
     # Aegis Plane extension: static/bootstrap assertions only. The interactive
@@ -499,6 +540,7 @@ try {
         $scenarioDir = New-ScenarioHome 'aegis-static'
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'Aegis fixture' + [Environment]::NewLine })
         $diagnostics = Assert-Installed $repo 'READY'
+        if ($QualificationSlice -ne 'Offline') {
         $agent = Get-Agent $diagnostics.Agents 'aegis'
         Assert-Condition ($agent.mode -eq 'subagent' -and $agent.hidden -eq $true -and $agent.model.providerID -eq 'openai' -and $agent.model.id -eq 'gpt-6-luna' -and $agent.model.variant -eq 'max') 'M1/M6: Aegis mode, hidden status, or model mismatch.' 'BOOTSTRAP_BUG'
         foreach ($action in @('read', 'glob', 'grep', 'list', 'lsp', 'shell', 'edit', 'external_directory')) {
@@ -509,6 +551,8 @@ try {
         $children = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object resource | Select-Object -Unique)
         $normal = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'thales', 'atlas', 'argus', 'talos', 'helios')
         Assert-Condition (Has-Rule $kael 'subagent' '*' 'deny' -and $children.Count -eq $normal.Count -and @($children | Where-Object { $_ -notin $normal }).Count -eq 0 -and @($normal | Where-Object { $children -notcontains $_ }).Count -eq 0) 'M3/M6: Kael delegation boundary changed.' 'BOOTSTRAP_BUG'
+        }
+        if ($QualificationSlice -ne 'Runtime') {
         $kaelPrompt = [IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/kael.md'))
         $lifecycle = [regex]::Match($kaelPrompt, '(?s)## User-facing lifecycle communication\s*(.*?)(?=\r?\n## |\z)').Groups[1].Value
         $handoff = [regex]::Match($kaelPrompt, '(?s)## Explicit Aegis result handoff\s*(.*?)(?=\r?\n## |\z)').Groups[1].Value
@@ -530,6 +574,7 @@ try {
         }
         $again = Invoke-Bootstrap $repo
         Assert-Condition ($again.ExitCode -eq 0 -and $again.Text -match '(?m)^NO_CHANGES\s*$') ('Aegis reinstall is not idempotent: ' + $again.Text) 'BOOTSTRAP_BUG'
+        }
     }
 
     Run-Scenario 'M7-MANAGED_DRIFT' {
@@ -616,6 +661,7 @@ try {
         [IO.File]::WriteAllText($manifestPath, (($manifest | ConvertTo-Json -Depth 100) + "`n"), $Utf8)
 
         [void](Assert-Installed $repo 'READY')
+        if ($QualificationSlice -ne 'Runtime') {
         Assert-Condition (-not (Test-Path -LiteralPath $oldPath) -and (Test-Path -LiteralPath $newPath)) 'Owned retired agent was not replaced by Aegis.' 'BOOTSTRAP_BUG'
         Assert-Condition ((Get-Hash $newPath) -eq (Get-Hash (Join-Path $RepoRoot '.opencode/agents/aegis.md'))) 'Installed Aegis content differs from the source agent.' 'BOOTSTRAP_BUG'
         $command = [IO.File]::ReadAllText($commandPath)
@@ -623,9 +669,12 @@ try {
         $activity = [IO.File]::ReadAllText($activityPath)
         Assert-Condition ((Get-Hash $activityPath) -eq (Get-Hash (Join-Path $RepoRoot '.opencode/plugins/olympus-activity/activity.ts')) -and
             $activity -match 'aegis:' -and $activity -notmatch '\bmaintenance\b') 'The installed Activity HUD still depends on the retired Maintenance ID.' 'BOOTSTRAP_BUG'
-        $agents = Get-OpenCodeDiagnostics $repo
-        Assert-Condition (@($agents.Agents | Where-Object id -eq 'maintenance').Count -eq 0) 'Retired maintenance agent ID remains effective after upgrade.' 'BOOTSTRAP_BUG'
-        [void](Get-Agent $agents.Agents 'aegis')
+        }
+        if ($QualificationSlice -ne 'Offline') {
+            $agents = Get-OpenCodeDiagnostics $repo
+            Assert-Condition (@($agents.Agents | Where-Object id -eq 'maintenance').Count -eq 0) 'Retired maintenance agent ID remains effective after upgrade.' 'BOOTSTRAP_BUG'
+            [void](Get-Agent $agents.Agents 'aegis')
+        }
     }
 
     Run-Scenario 'M-RETIRED-MAINTENANCE-MODIFIED-UNOWNED' {
@@ -697,7 +746,13 @@ try {
     }
     if ($failed.Count -eq 0) {
         Write-Output ('WORKSPACES_RETAINED: ' + $RunRoot)
-        Write-Output 'PHASE 4C QUALIFICATION: PASS'
+        if ($QualificationSlice -eq 'Runtime') {
+            Write-Output 'PHASE 4C RUNTIME QUALIFICATION: PASS (runtime-boundary scenarios; interactive /maintain smoke not run)'
+        } elseif ($QualificationSlice -eq 'Offline') {
+            Write-Output 'PHASE 4C OFFLINE QUALIFICATION: PASS (local bootstrap/history assertions; effective OpenCode queries not run)'
+        } else {
+            Write-Output 'PHASE 4C QUALIFICATION: PASS'
+        }
         exit 0
     }
     Write-Output ('WORKSPACES_RETAINED: ' + $RunRoot)
@@ -712,4 +767,6 @@ try {
     if (Test-Path -LiteralPath $RunRoot) { Write-Output ('WORKSPACES_RETAINED: ' + $RunRoot) }
     Write-Output 'PHASE 4C QUALIFICATION: FAIL'
     exit 1
+} finally {
+    [Environment]::SetEnvironmentVariable('PATH',$OriginalPath,'Process')
 }

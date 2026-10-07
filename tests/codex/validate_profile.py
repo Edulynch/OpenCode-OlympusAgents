@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import shutil
@@ -25,9 +26,43 @@ def toml(path: Path) -> dict:
         return tomllib.load(stream)
 
 
+def check_catalog(models: dict, *, standalone: bool = False) -> bool:
+    codex = shutil.which("codex")
+    if not codex:
+        if standalone:
+            print("CODEX_MODEL_CATALOG: NOT RUN (Codex CLI unavailable)")
+            return False
+        else:
+            print("Codex CLI absent: bundled model catalog check skipped")
+            return True
+    result = subprocess.run(
+        [codex, "debug", "models", "--bundled"],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=30,
+    )
+    catalog = json.loads(result.stdout)
+    available = {entry["slug"]: entry for entry in catalog["models"]}
+    for role, intent in models["roles"].items():
+        model = models["families"][intent["family"]]["codex"]
+        require(model in available, f"Codex bundled model catalog lacks {model} for {role}")
+        efforts = {item["effort"] for item in available[model]["supported_reasoning_levels"]}
+        require(intent["effort"] in efforts, f"Codex model {model} lacks {intent['effort']} for {role}")
+    print("CODEX_MODEL_CATALOG: PASS" if standalone else "Codex bundled model catalog: PASS")
+    return True
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--mode", choices=("all", "static", "catalog"), default="all")
+    args = parser.parse_args()
     require(sys.version_info >= (3, 11), "Python 3.11+ is required for tomllib")
     models = toml(ROOT / "olympus" / "core" / "models.toml")
+    if args.mode == "catalog":
+        return 0 if check_catalog(models, standalone=True) else 2
     policy = toml(ROOT / "olympus" / "policies" / "orchestration.toml")
     capabilities = toml(ROOT / "olympus" / "harnesses" / "capabilities.toml")
     canonical = {path.stem for path in (ROOT / "olympus" / "roles").glob("*.md")}
@@ -95,42 +130,25 @@ def main() -> int:
     opencode_runtime_text = "\n".join(path.read_text(encoding="utf-8") for path in [ROOT / "opencode.jsonc", *opencode_files])
     require("gpt-6-sol" not in opencode_runtime_text, "stale Sol model identifier found in OpenCode runtime files")
     require('"default_agent": "kael"' in (ROOT / "opencode.jsonc").read_text(encoding="utf-8"), "OpenCode default agent drifted")
-    render = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "render_harnesses.py"), "check", "--harness", "all"],
-        cwd=ROOT,
-        check=False,
-        timeout=45,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    require(render.returncode == 0, "generated adapters drifted: " + render.stdout + render.stderr)
-
-    codex = shutil.which("codex")
-    if codex:
-        result = subprocess.run(
-            [codex, "debug", "models", "--bundled"],
-            check=True,
+    if args.mode == "all":
+        render = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "render_harnesses.py"), "check", "--harness", "all"],
+            cwd=ROOT,
+            check=False,
+            timeout=45,
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=30,
         )
-        catalog = json.loads(result.stdout)
-        available = {entry["slug"]: entry for entry in catalog["models"]}
-        for role, intent in models["roles"].items():
-            model = models["families"][intent["family"]]["codex"]
-            require(model in available, f"Codex bundled model catalog lacks {model} for {role}")
-            efforts = {item["effort"] for item in available[model]["supported_reasoning_levels"]}
-            require(intent["effort"] in efforts, f"Codex model {model} lacks {intent['effort']} for {role}")
-        print("Codex bundled model catalog: PASS")
-    else:
-        print("Codex CLI absent: bundled model catalog check skipped")
+        require(render.returncode == 0, "generated adapters drifted: " + render.stdout + render.stderr)
+        check_catalog(models)
 
-    print("Olympus Codex static profile qualification: PASS")
-    print(f"Codex specialists: {len(files)}; Kael is root; Aegis: explicit GAP; max children: {policy['max_children']}; OpenCode roles: {len(opencode_files)}")
+    if args.mode == "all":
+        print("Olympus Codex static profile qualification: PASS")
+        print(f"Codex specialists: {len(files)}; Kael is root; Aegis: explicit GAP; max children: {policy['max_children']}; OpenCode roles: {len(opencode_files)}")
+    else:
+        print("Olympus Codex static profile qualification: PASS (Codex CLI and renderer check not run)")
     return 0
 
 

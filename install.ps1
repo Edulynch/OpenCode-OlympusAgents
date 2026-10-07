@@ -218,10 +218,22 @@ try {
         exit 0
     }
 
-    if ($Uninstall -and $Scope -ne 'global') {
-        throw 'UNINSTALL_SCOPE_INVALID: -Uninstall is currently supported only with -Scope global.'
-    }
     if ($Uninstall -and $DryRun) { throw 'UNINSTALL_MODE_INVALID: -Uninstall and -DryRun cannot be combined.' }
+    if ($Uninstall -and $Scope -eq 'project') {
+        $projectUninstallScript = Join-Path $source 'scripts/project-uninstall.ps1'
+        if (-not (Test-Path -LiteralPath $projectUninstallScript -PathType Leaf)) {
+            throw 'SOURCE_INVALID: Project uninstaller is missing.'
+        }
+        $projectUninstallArgs = @(
+            '-NoProfile',
+            '-File', $projectUninstallScript,
+            '-Target', $Target,
+            '-Harness', $Harness
+        )
+        & $pwsh.Source @projectUninstallArgs
+        if ($LASTEXITCODE -ne 0) { throw "PROJECT_UNINSTALL_FAILED: project uninstaller exited $LASTEXITCODE." }
+        exit 0
+    }
     if ($Scope -eq 'global') {
         $globalScript = Join-Path $source 'scripts/global-install.ps1'
         if (-not (Test-Path -LiteralPath $globalScript -PathType Leaf)) { throw 'SOURCE_INVALID: Global installer is missing.' }

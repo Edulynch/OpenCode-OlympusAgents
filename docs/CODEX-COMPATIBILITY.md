@@ -6,6 +6,10 @@ suministrada por el usuario para esta modularización. Los smokes aceptados no s
 repitieron aquí. El proyecto mantiene un capability contract explícito; las
 limitaciones de Codex no reducen garantías Core ni implican paridad con OpenCode.
 
+## UX nativa relevante
+
+Según la [referencia oficial de slash commands de Codex](https://learn.chatgpt.com/docs/developer-commands?surface=cli), consultada el 2026-10-07, `/plan` activa un modo propio de Codex: no es un comando Olympus ni equivale a invocar Atlas. `/fast`, cuando está disponible y aplica, selecciona el Fast service tier nativo del modelo, no el `FAST:` contextual de Olympus. El lenguaje natural sigue siendo la superficie portable entre harnesses; Olympus no promete paridad de comandos.
+
 ## Clasificación
 
 - `DIRECT_MAPPING`: primitive nativa con el mismo contrato operativo básico

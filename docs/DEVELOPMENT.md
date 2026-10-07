@@ -185,6 +185,8 @@ If drift occurs, inspect the reported path and manifest, back up any intentional
 
 ## Qualification
 
+The contextual `FAST:` request asks Olympus to use useful independent parallelism within its existing limits. The `FAST` qualification profile below selects offline checks; these two meanings are separate, and neither skips required validation or completion gates.
+
 ### Unified contributor profiles (Issue #11)
 
 From the source checkout root, run exactly one selected profile:

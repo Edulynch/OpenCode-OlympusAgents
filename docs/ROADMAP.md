@@ -61,14 +61,14 @@ The table captures shipped roles and current in-validation identities. Model ent
 
 Explicit user optimization intent may engage Helios; a performance fact alone never does. Cheap feasibility triage precedes bounded Nox measurements or Veyra source evidence. Helios proposes a small, evidence-backed benefit/effort/risk envelope or **DO_NOT_OPTIMIZE**; two automatic consultations normally suffice, third automatic denied. **STOP for user approval** of the concrete proposal before any implementation; Kael alone coordinates approved work, and success requires measured **BEFORE / AFTER / DELTA / TARGET / CORRECTNESS**. Static, synthetic, fresh-install, managed-upgrade and full non-live regression qualification passed. User-executed live evidence passed: Case A (Kael `ses_f1d00092cffei3vpkwwod5V6Gw`) used one Sol High Helios (`ses_f1cffb27fffeQK1m5hcXSf3t3u`) for two consultations in the same session, with bounded Kael-owned Veyra evidence (`ses_f1cff4df4ffeTmrPSOqZia0GBp`), a conservative proposal and an explicit approval stop; Case B (Kael `ses_f1cd99003ffeq9C1V0uMOt5G5L`) was observation-only, with zero Helios children. Case A's generic observer flagged `complete=False`, but native reconciliation confirmed the succeeded root, both terminal children consumed, empty inbox and no remaining required work. Neither live case was rerun during release review.
 
-## Command UX — EXPLORATION
+## Command UX — CLOSED
 
-Existing `/maintain` explicitly enters the hidden Aegis executor for its delivered task; it is never an automatic authority route. Normal user-project workflow remains Kael's recommended route. Candidate concepts below are not implemented commitments; exact names and behavior require validation:
+Phase 10 evaluated `/power`, `/plan`, `/performance` and `/fast`; none provides an exclusive capability or authority boundary that justifies a new Olympus command. Natural language and existing routing remain the primary UX. `/maintain` remains the exception because it explicitly enters the privileged Aegis maintenance plane.
 
-- `/power`: use all useful specialists and safe available parallelism aggressively, without bypassing role purity, dependencies, completion, writer ownership, or diagnostic gates.
-- `/plan`: explicit planning workflow.
-- `/fast`: candidate name for a direct/minimal path for obviously simple implementation work, **not** a skip-validation mode; may be confused with the existing FAST concurrency request profile. Decide the command repertoire in Phase 10.
-- `/performance` or `/helios`: explicit Helios optimization workflow.
+- `/power` — **DROP**. It mixes model, reasoning, parallelism, configuration and routing concerns; Olympus is not a model-configuration dashboard.
+- `/plan` — **DROP as an Olympus command**. Users can say “Plan X. Do not implement.” Atlas remains optional. Codex's native `/plan` belongs to that harness and does not equate to invoking Atlas.
+- `/performance` — **DROP**. An explicit optimization request already activates the Helios workflow; a discoverability alias adds no capability.
+- `/fast` — **DROP**. Keep contextual `FAST: <task>` for useful parallelism. It is distinct from FAST qualification, the automatic fast path and Codex's native `/fast` when available; it never skips validation or completion gates.
 
 ## Phase order
 
@@ -84,7 +84,7 @@ Existing `/maintain` explicitly enters the hidden Aegis executor for its deliver
 | 7 — Talos The Sentinel | **SHIPPED** | Bounded security defect and trust-boundary diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. |
 | 8 — Helios The Optimizer | **SHIPPED** | Explicit-only feasibility/proposal, mandatory user approval, before/after validation; user-executed live cases A and B passed. |
 | 9 — Aegis evolution | **SHIPPED on OpenCode; Codex GAP** | Hidden Aegis on Luna Max accepts the explicit `/maintain` command's task declaration immediately, without repository ownership/provenance admission; preserves Kael/child denials, task scope, and result reconciliation. |
-| 10 — Command UX | **EXPLORATION** | Validate a small useful repertoire: candidate `/power`, `/plan`, `/fast`, `/performance`; avoid command sprawl. |
+| 10 — Command UX | **CLOSED** | `/power`, `/plan`, `/performance` and `/fast` were evaluated and dropped: no exclusive capability; natural language and routing remain primary, with `/maintain` retained for its explicit privileged authority boundary. |
 | 11 — Integrated Routing Qualification | **SHIPPED** | [Closure evidence](../tests/phase11-integrated-routing/baseline.md): qualification is complete with no pending native cases. Case I remains guided PARTIAL; Argus/Thales same-session follow-up runtime coverage was NOT_EXERCISED. These are non-blocking limits, not evidence that every runtime path was exercised. |
 | 12 — Cross-harness evaluation | **CLOSED** | [Results](PHASE12-CROSS-HARNESS-RESULTS.md): 3 matched pairs / 6 verified executions; PASS for tested invariants only. Capability limitations remain; no total parity, superiority, or winner is claimed. |
 
@@ -124,5 +124,5 @@ Talos is an optional pure security-defect reasoner, not an auditor, implementer 
 | Runaway diagnostic loops, Thales overuse/underuse | Evidence budgets, no-progress stop, uncertainty gate and negative controls. |
 | Atlas overplanning; Argus gap-vs-bug confusion; Talos security overclassification | Gate planning by complexity; classify against evidence before specialist routing. |
 | Helios analysis costs more than benefit; third-party fork/patch debt | Baseline and expected-value stop; reversible containment first, explicit approval for patch/fork. |
-| `/power` overfanout; `/fast` skipping validation; command sprawl | Enforce dependencies, writer/completion gates and checks; keep the repertoire small. |
+| Command ambiguity or sprawl, including confusion among `FAST:`, FAST qualification, fast path and Codex-native `/fast` | Keep natural language and routing primary; preserve dependency, writer, validation and completion gates. |
 | False completion | Join, collect, validate and report all required work, including descendants and external jobs. |

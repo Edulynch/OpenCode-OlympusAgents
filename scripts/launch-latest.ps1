@@ -48,6 +48,11 @@ try {
         throw "LATEST_RELEASE_IDENTITY_MISMATCH: Downloaded installer does not identify itself as $tag."
     }
 
+    if ($Action -eq 'uninstall' -and $Scope -eq 'project' -and
+        $installerText -notmatch [regex]::Escape('scripts/project-uninstall.ps1')) {
+        throw "PROJECT_UNINSTALL_UNAVAILABLE_IN_LATEST_RELEASE: $tag predates project uninstall support."
+    }
+
     $args = @(
         '-NoProfile',
         '-File', $installer,

@@ -2,15 +2,52 @@
 
 ## [Unreleased]
 
-Changes after v0.4.2 go here.
-
-### Phase closure
-
-- Phase 11 integrated-routing qualification is **SHIPPED** with no pending native cases; Case I remains guided PARTIAL and Argus/Thales same-session follow-up runtime coverage remains NOT_EXERCISED ([closure evidence](tests/phase11-integrated-routing/baseline.md)).
-- Phase 12 cross-harness evaluation is **CLOSED**: 3 matched pairs / 6 verified executions, with PASS limited to tested invariants; capability gaps remain and no total parity or winner is claimed ([results](docs/PHASE12-CROSS-HARNESS-RESULTS.md)).
-- [Issue #10 is CLOSED](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10) after the maintenance-specific exact-field handoff fix was integrated ([commit](https://github.com/Edulynch/OpenCode-OlympusAgents/commit/a83847b84d6603aed144f5a8ce4b77de8a48fe32)); its Runtime fidelity PASS predates integration, and no post-integration smoke was repeated.
+Changes after v0.4.3 go here.
 
 The Issue #10 OPEN references in the versioned v0.4.0 and v0.4.2 notes below record status at those releases; they are historical.
+
+## v0.4.3
+
+### Highlights
+
+- Add a contributor-facing qualification entry point with the `FAST`, `FULL`, and `RUNTIME` profiles. FAST and FULL remain offline and deterministic; RUNTIME is separate and contains only supported runtime boundaries. Authority Runtime uses an isolated, hermetic fixture environment ([qualification details](docs/DEVELOPMENT.md#unified-contributor-profiles-issue-11)).
+- Phase 11 Integrated Routing Qualification is **SHIPPED** with no pending native cases; Case I remains guided PARTIAL and Argus/Thales same-session follow-up runtime coverage remains NOT_EXERCISED ([closure evidence](tests/phase11-integrated-routing/baseline.md)).
+- Phase 12 cross-harness evaluation is **CLOSED**: 3 matched pairs / 6 verified executions, with PASS limited to tested invariants; capability gaps remain and no total parity or winner is claimed ([results](docs/PHASE12-CROSS-HARNESS-RESULTS.md)).
+- [Issue #10 is CLOSED](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10) after the maintenance-specific exact-field handoff fix was integrated ([commit](https://github.com/Edulynch/OpenCode-OlympusAgents/commit/a83847b84d6603aed144f5a8ce4b77de8a48fe32)); its Runtime fidelity PASS predates integration, and no post-integration smoke was repeated.
+- Retain the Dual Harness Installer with explicit `-Harness opencode`, `-Harness codex`, and `-Harness all` entrypoints. Installation is additive; `installed_harnesses` records manifest ownership, and existing legacy OpenCode installations remain upgradeable. Project scope remains the default, and installation and uninstall are available for both project and global scope.
+- Project uninstall uses the ownership manifest and SHA-256 hashes, refuses managed-file drift, and preserves the other harness when uninstalling only one harness. Global uninstall removes only manifest/hash-verified resources.
+- Keep the Windows-qualified global static-install foundation. The installer can be launched from PowerShell 5.1 or PowerShell 7; PowerShell 7 selection is deterministic when PATH contains multiple `pwsh` executables.
+- Retain Olympus Harness Core as the shared source for OpenCode and Codex outputs; `VerifyOnly` checks the selected managed harness subset read-only, and user-owned files are preserved.
+
+### Capability limits
+
+- OpenCode V2 Issue #1 remains OPEN upstream (`No tool output found`); Olympus reconciles original results where possible and forbids blind retry, but does not fix upstream result correlation.
+- Issue #7 remains OPEN because OpenCode global runtime discovery remains a known GAP.
+- Global static installation is supported for both harnesses, but global runtime discovery is **GAP** for OpenCode and **SUPPORTED** for Codex (based on supplied runtime evidence). OpenCode global installation must not be treated as runtime-qualified.
+- Codex `DENY = GAP`, `AEGIS = GAP`, `RESULT_RECONCILIATION = PARTIAL`, and `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; Codex ASK is adaptable, not identical to OpenCode ASK. This release does not claim full parity.
+- Global installation is Windows-qualified. No Unix global install/runtime qualification is claimed.
+
+## Installation
+
+Choose the immutable v0.4.3 release source from the root of the trusted Git project:
+
+```powershell
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.3/install.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.3/install.ps1'))) -Harness codex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.3/install.ps1'))) -Harness all
+```
+
+The default is project-local OpenCode; use `-Scope global` explicitly for global installation. Global static installation does not imply OpenCode global runtime discovery support.
+
+## Verify installation
+
+Each command verifies only the selected managed project-local harness subset and is read-only:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.3/install.ps1'))) -Harness opencode -Version 'v0.4.3' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.3/install.ps1'))) -Harness codex -Version 'v0.4.3' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.3/install.ps1'))) -Harness all -Version 'v0.4.3' -Target (Get-Location).Path -VerifyOnly
+```
 
 ## v0.4.2
 

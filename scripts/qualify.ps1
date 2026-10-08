@@ -105,6 +105,7 @@ function Invoke-FullAdditions {
     Invoke-PwshCheck 'Release qualification (MockOpenCode)' 'tests/release/qualify.ps1' @('-MockOpenCode')
     Invoke-PwshCheck 'Release installer compatibility' 'tests/release/installer-compatibility.ps1'
     Invoke-PwshCheck 'Dual-harness installer' 'tests/release/dual-harness-installer.ps1'
+    Invoke-PwshCheck 'Codex instructions precedence' 'tests/codex-instructions-precedence/qualify.ps1'
     # The dirty-worktree installer fixture checks the local CLI version preflight;
     # use the established deterministic stub, never the user's real runtime.
     $dirtyMockRoot = Join-Path (Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode') ('issue11-dirty-worktree-opencode-' + [guid]::NewGuid().ToString('N'))

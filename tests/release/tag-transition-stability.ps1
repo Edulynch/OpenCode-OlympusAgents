@@ -44,6 +44,31 @@ function Get-ChangelogSection([string]$Text, [string]$Version) {
     return $tail
 }
 
+function Get-PrimaryReadmeInstallSection([string]$Readme) {
+    return [regex]::Match($Readme, '(?ms)^(?<heading>##[ \t]+[^\r\n]*\bInstall[ \t]*\r?\n)(?<body>.*?)(?=^##[ \t]+|\z)')
+}
+
+function Set-ReadmeInstallCommand($Docs, [string]$OldCommand, [string]$NewCommand) {
+    $readme = [string]$Docs['README.md']
+    $section = Get-PrimaryReadmeInstallSection $readme
+    if (-not $section.Success) { throw 'REGRESSION_MUTATION_SETUP_FAILED: README Install section was not found.' }
+    $bodyGroup = $section.Groups['body']
+    $body = $bodyGroup.Value
+    $index = $body.IndexOf($OldCommand, [StringComparison]::Ordinal)
+    if ($index -lt 0) { throw "REGRESSION_MUTATION_SETUP_FAILED: Install command was not found: $OldCommand" }
+    $updatedBody = $body.Substring(0, $index) + $NewCommand + $body.Substring($index + $OldCommand.Length)
+    $Docs['README.md'] = $readme.Substring(0, $bodyGroup.Index) + $updatedBody + $readme.Substring($bodyGroup.Index + $bodyGroup.Length)
+}
+
+function Add-ReadmeInstallCommand($Docs, [string]$Command) {
+    $readme = [string]$Docs['README.md']
+    $section = Get-PrimaryReadmeInstallSection $readme
+    if (-not $section.Success) { throw 'REGRESSION_MUTATION_SETUP_FAILED: README Install section was not found.' }
+    $bodyGroup = $section.Groups['body']
+    $insertAt = $bodyGroup.Index + $bodyGroup.Length
+    $Docs['README.md'] = $readme.Substring(0, $insertAt) + $Command + "`n" + $readme.Substring($insertAt)
+}
+
 function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG', 'POST_TAG')][string]$TagState) {
     $errors = [System.Collections.Generic.List[string]]::new()
     $versionRegex = [regex]::Escape($Version)
@@ -105,8 +130,30 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
     }
 
     $readme = [string]$Docs['README.md']
+    $installSection = Get-PrimaryReadmeInstallSection $readme
+    $readmeInstallInvalid = -not $installSection.Success
+    if ($installSection.Success) {
+        $installBody = $installSection.Groups['body'].Value
+        $publicCommandPattern = '^[ \t]*irm[ \t]+https://raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/master/install/(?:project|global)/(?:opencode|codex|all)\.ps1[ \t]*\|[ \t]*iex[ \t]*$'
+        $requiredEntrypoints = @(
+            'project/opencode', 'project/codex', 'project/all',
+            'global/opencode', 'global/codex', 'global/all'
+        )
+        foreach ($entrypoint in $requiredEntrypoints) {
+            $command = 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/' + $entrypoint + '.ps1 | iex'
+            if (-not [regex]::IsMatch($installBody, '(?m)^[ \t]*' + [regex]::Escape($command) + '[ \t]*\r?$')) {
+                $readmeInstallInvalid = $true
+            }
+        }
+
+        foreach ($line in ($installBody -split '\r?\n')) {
+            if ($line -match '(?i)^[ \t]*(?:irm|iwr|invoke-restmethod|invoke-webrequest|iex|invoke-expression)\b') {
+                if (-not [regex]::IsMatch($line, $publicCommandPattern)) { $readmeInstallInvalid = $true }
+            }
+        }
+    }
     if ($readme -notmatch 'https://github\.com/Edulynch/OpenCode-OlympusAgents/releases' -or
-        $readme -notmatch '<TAG>/install\.ps1' -or $readme -match 'v0\.4\.[012]') {
+        $readmeInstallInvalid -or $readme -match 'v0\.4\.[012]') {
         $errors.Add('DOC_README_VERSION_NEUTRAL_INSTALL')
     }
 
@@ -179,6 +226,32 @@ try {
     $releaseIdentityRegex = [regex]::new("(?m)^\`$ReleaseVersion\s*=\s*'[^']+'")
     $badIdentity['install.ps1'] = $releaseIdentityRegex.Replace([string]$badIdentity['install.ps1'], "`$ReleaseVersion = 'v0.4.1'", 1)
     Assert-Rejected $badIdentity $version 'PRE_TAG' 'DOC_ACTIVE_RELEASE_IDENTITY_MISMATCH' 'REGRESSION_REJECTS_ACTIVE_IDENTITY_MISMATCH'
+
+    $projectOpenCodeCommand = 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/opencode.ps1 | iex'
+    $badMissingPublicEntrypoint = Copy-ReleaseDocs $docs
+    Set-ReadmeInstallCommand $badMissingPublicEntrypoint $projectOpenCodeCommand ''
+    Assert-Rejected $badMissingPublicEntrypoint $version 'PRE_TAG' 'DOC_README_VERSION_NEUTRAL_INSTALL' 'REGRESSION_REJECTS_MISSING_PUBLIC_ENTRYPOINT_WITH_UPDATE_DUPLICATE'
+
+    $badWrongPublicEntrypoint = Copy-ReleaseDocs $docs
+    Set-ReadmeInstallCommand $badWrongPublicEntrypoint 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/global/all.ps1 | iex' 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/all.ps1 | iex'
+    Assert-Rejected $badWrongPublicEntrypoint $version 'PRE_TAG' 'DOC_README_VERSION_NEUTRAL_INSTALL' 'REGRESSION_REJECTS_WRONG_PUBLIC_ENTRYPOINT_SCOPE'
+
+    $badPinnedInstaller = Copy-ReleaseDocs $docs
+    $pinnedInstallerCommand = 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' + $version + '/install.ps1 | iex'
+    Set-ReadmeInstallCommand $badPinnedInstaller 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/codex.ps1 | iex' $pinnedInstallerCommand
+    Assert-Rejected $badPinnedInstaller $version 'PRE_TAG' 'DOC_README_VERSION_NEUTRAL_INSTALL' 'REGRESSION_REJECTS_PINNED_DIRECT_INSTALLER_URL'
+
+    $badDirectInstaller = Copy-ReleaseDocs $docs
+    Set-ReadmeInstallCommand $badDirectInstaller 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/global/opencode.ps1 | iex' 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install.ps1 | iex'
+    Assert-Rejected $badDirectInstaller $version 'PRE_TAG' 'DOC_README_VERSION_NEUTRAL_INSTALL' 'REGRESSION_REJECTS_ROOT_DIRECT_INSTALLER_URL'
+
+    $badForeignInstaller = Copy-ReleaseDocs $docs
+    Set-ReadmeInstallCommand $badForeignInstaller 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/all.ps1 | iex' 'irm https://example.invalid/install/project/all.ps1 | iex'
+    Assert-Rejected $badForeignInstaller $version 'PRE_TAG' 'DOC_README_VERSION_NEUTRAL_INSTALL' 'REGRESSION_REJECTS_FOREIGN_INSTALLER_URL'
+
+    $badExtraForeignInstaller = Copy-ReleaseDocs $docs
+    Add-ReadmeInstallCommand $badExtraForeignInstaller 'irm https://example.invalid/install/project/opencode.ps1 | iex'
+    Assert-Rejected $badExtraForeignInstaller $version 'PRE_TAG' 'DOC_README_VERSION_NEUTRAL_INSTALL' 'REGRESSION_REJECTS_EXTRA_FOREIGN_INSTALLER_WITH_VALID_ENTRYPOINTS'
 
     Write-Output "TAG-TRANSITION-STABILITY QUALIFICATION: PASS ($version; deterministic static semantic checks; no tag or GitHub Release created)"
 } catch {

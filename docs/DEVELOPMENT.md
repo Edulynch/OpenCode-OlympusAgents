@@ -187,6 +187,19 @@ If drift occurs, inspect the reported path and manifest, back up any intentional
 
 The contextual `FAST:` request asks Olympus to use useful independent parallelism within its existing limits. The `FAST` qualification profile below selects offline checks; these two meanings are separate, and neither skips required validation or completion gates.
 
+### Choosing qualification by change risk
+
+Choose checks that provide evidence proportionate to the change's risk:
+
+- **Documentation-only changes:** review the content and run `git diff --check`. Do not run FULL or RUNTIME by default.
+- **Localized bugs or changes:** first run the directly affected test or qualifier. Add FAST when shared contracts may also be affected.
+- **Olympus Core, routing, authority, models, or shared policies:** use focused tests during development, FAST for contracts, and FULL as final integration validation where appropriate.
+- **Installers, bootstrap, releases, or compatibility:** run affected fixtures during development and FULL before integrating significant changes.
+- **Changes depending on actual OpenCode or Codex behavior:** run focused RUNTIME checks when needed, within declared limits and capabilities.
+- **Failures:** fix the issue and repeat only the affected verification before widening coverage. Do not automatically rerun all of FULL after every adjustment.
+
+FAST, FULL, and RUNTIME retain their current behavior, and these rules do not replace existing mandatory validation. RUNTIME does not replace FULL, nor FULL RUNTIME. Do not omit failures or report unrun checks as PASS. Avoid unnecessary FULL repetitions without imposing a rigid limit when material changes warrant further validation.
+
 ### Unified contributor profiles (Issue #11)
 
 From the source checkout root, run exactly one selected profile:

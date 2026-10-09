@@ -26,8 +26,8 @@ function Resolve-Python311 {
     throw 'Python 3.11+ is unavailable locally; no environment or package installation was attempted.'
 }
 
-function Add-Result([string]$Name, [string]$Status, [string]$Detail = '') {
-    $null = $script:Results.Add([pscustomobject]@{ Name=$Name; Status=$Status; Detail=$Detail })
+function Add-Result([string]$Name, [string]$Status, [string]$Detail = '', [double]$DurationMs = 0) {
+    $null = $script:Results.Add([pscustomobject]@{ Name=$Name; Status=$Status; Detail=$Detail; DurationMs=$DurationMs })
 }
 
 function Mark-NotRun([string]$Name, [string]$Reason) {
@@ -39,29 +39,32 @@ function Invoke-Check([string]$Name, [string]$Executable, [string[]]$Arguments, 
     Write-Output "`n=== $Name ==="
     $code = 1
     $output = @()
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     try {
         $output = @(& $Executable @Arguments 2>&1)
         $code = [int]$LASTEXITCODE
     } catch {
         $output += 'TOOL ERROR: ' + $_.Exception.Message
         $code = 1
+    } finally {
+        $stopwatch.Stop()
     }
     foreach ($line in $output) { Write-Output $line }
     if ($code -eq 0) {
         Write-Output "[$Name] PASS (exit 0)"
-        Add-Result $Name 'PASS'
+        Add-Result $Name 'PASS' '' $stopwatch.Elapsed.TotalMilliseconds
     } elseif ($code -eq 2) {
         $text = ($output | Out-String)
         if ($AllowExplicitNotRun -and $text -match '(?m)^CODEX_MODEL_CATALOG: NOT RUN \(Codex CLI unavailable\)\s*$') {
             Write-Output "[$Name] NOT RUN (exit 2; explicit Codex CLI prerequisite unavailable)"
-            Add-Result $Name 'NOT RUN' 'Codex CLI unavailable; bundled catalog was not checked.'
+            Add-Result $Name 'NOT RUN' 'Codex CLI unavailable; bundled catalog was not checked.' $stopwatch.Elapsed.TotalMilliseconds
         } else {
             Write-Output "[$Name] FAIL (unexpected exit 2 without an allowed explicit NOT RUN reason)"
-            Add-Result $Name 'FAIL' 'exit 2 without a designated missing-prerequisite result'
+            Add-Result $Name 'FAIL' 'exit 2 without a designated missing-prerequisite result' $stopwatch.Elapsed.TotalMilliseconds
         }
     } else {
         Write-Output "[$Name] FAIL (exit $code)"
-        Add-Result $Name 'FAIL' "exit $code"
+        Add-Result $Name 'FAIL' "exit $code" $stopwatch.Elapsed.TotalMilliseconds
     }
 }
 
@@ -191,6 +194,7 @@ function Invoke-RuntimeSlice {
  $originalNoBytecode = [Environment]::GetEnvironmentVariable('PYTHONDONTWRITEBYTECODE','Process')
  $pythonShimRoot = $null
  $profileExitCode = 1
+$profileStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 try {
     if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'PowerShell 7 is required.' }
     if (-not (Test-Path -LiteralPath $script:PowerShell -PathType Leaf)) { throw 'The active PowerShell 7 executable could not be resolved from PSHOME.' }
@@ -247,4 +251,10 @@ try {
         Remove-Item -LiteralPath $pythonShimRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
+$profileStopwatch.Stop()
+Write-Output "`nQUALIFICATION TIMING (top 5 slowest)"
+foreach ($result in @($script:Results | Sort-Object -Property DurationMs -Descending | Select-Object -First 5)) {
+    Write-Output ('[{0}] {1}: {2:N2} ms' -f $result.Status, $result.Name, $result.DurationMs)
+}
+Write-Output ('TOTAL PROFILE TIME: {0:N2} ms' -f $profileStopwatch.Elapsed.TotalMilliseconds)
 exit $profileExitCode

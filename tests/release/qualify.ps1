@@ -301,12 +301,18 @@ try {
         $oldStableMismatch.Text -match 'OLYMPUS_VERIFY_REASON: MANAGED_FILE_MISMATCH')
     $previousBetaTarget = New-Target 'previous-beta3-cannot-resolve-candidate'
     $previousBetaInstall = Install $previousBetaTarget $previousBetaArchive $script:CandidateVersion
-    $previousBetaErrorPattern = [regex]::Escape("Archive root 'OpenCode-OlympusAgents-v0.3.0-beta.3' does not identify requested tag") +
-        "[\s|]*'" + [regex]::Escape($script:CandidateVersion) + "'\."
-    Check 'R27_PREVIOUS_BETA3_CANNOT_SATISFY_CANDIDATE' ($previousBetaInstall.Code -ne 0 -and
+    $previousBetaErrorPattern = [regex]::Escape(
+        "Archive root 'OpenCode-OlympusAgents-v0.3.0-beta.3' does not identify"
+    ) + "[\s|]*requested tag[\s|]*'" +
+        [regex]::Escape($script:CandidateVersion) + "'\."
+
+    Check 'R27_PREVIOUS_BETA3_CANNOT_SATISFY_CANDIDATE' (
+        $previousBetaInstall.Code -ne 0 -and
+        $previousBetaInstall.Text -match 'SOURCE_VERSION_MISMATCH' -and
         $previousBetaInstall.Text -match $previousBetaErrorPattern -and
         -not (Test-Path -LiteralPath (Join-Path $previousBetaTarget '.opencode/orchestrator-install.json')) -and
-        (Get-Content -LiteralPath (Join-Path $previousBetaTarget 'user-notes.txt') -Raw) -eq "preserve me`n")
+        (Get-Content -LiteralPath (Join-Path $previousBetaTarget 'user-notes.txt') -Raw) -eq "preserve me`n"
+    )
     $otherBetaTarget = New-Target 'verify-other-beta'
     $otherBetaInstall = Install $otherBetaTarget $betaArchive 'v0.3.0-beta.2'
     if ($otherBetaInstall.Code -ne 0) { throw 'Other-beta fixture install failed before version verification.' }

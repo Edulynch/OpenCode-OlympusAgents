@@ -75,7 +75,7 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/ins
 irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/global/all.ps1 | iex
 ```
 
-Codex global runtime discovery is supported. OpenCode global files can be installed and verified, but OpenCode global runtime discovery remains a documented upstream **GAP**; use project installation when you need dependable OpenCode runtime discovery.
+Codex global runtime discovery is classified **SUPPORTED** based on user-provided PASS evidence; it was not rerun here. OpenCode global files can be installed and verified, but OpenCode global runtime discovery remains a documented **GAP**; the observed missing roster does not establish its root cause. Use project installation when you need dependable OpenCode runtime discovery.
 
 Only run downloaded scripts you trust. The public entrypoint is intentionally small and auditable; release installation remains pinned to the immutable release tag it resolves.
 
@@ -155,13 +155,13 @@ Kael coordinates the team as needed: research, implementation, testing, and revi
 | **Argus — The Bug Hunter** (`argus`) | Optionally diagnoses nontrivial functional defects. |
 | **Nox — The Tester** (`nox`) | Runs checks and tests. |
 | **Vera — The Judge** (`vera`) | Reviews the result. |
-| **Talos — The Sentinel** (`talos`) | Optionally reasons about evidenced security defects. |
+| **Talos — The Sentinel** (`talos`) | Required when diagnosing/classifying an established or strongly evidenced material security, trust, or authorization boundary defect; no extra unanswered security question is required. Generic security mentions or suspicion without evidence do not trigger Talos automatically. |
 | **Thales — The Sage** (`thales`) | Helps diagnose difficult problems when needed. |
 | **Helios — The Optimizer** (`helios`) | On explicit optimization requests, proposes a bounded improvement and stops for user approval. |
 
 Olympus Core defines what the team and its orchestration mean. Harness adapters define how each runtime expresses the same Core. **OpenCode and Codex are the two supported project-local harnesses**; Codex uses its native root, agents, approvals, and activity view, while capability gaps remain explicit. Global static installation is supported for both, but global runtime discovery is `GAP` for OpenCode and `SUPPORTED` for Codex; see the [capability contract](docs/HARNESS-CAPABILITIES.md).
 
-The OpenCode and Codex adapters use the same Olympus Core, but their capabilities are not identical. OpenCode provides hard DENY, the explicit `/maintain` → Aegis entry, and the Activity HUD. Codex supports multi-agent work, result delivery, ALLOW, and adaptable ASK; DENY and Aegis remain gaps, and activity visibility is basic/partial. See the [capability contract](docs/HARNESS-CAPABILITIES.md).
+The OpenCode and Codex adapters use the same Olympus Core, but their capabilities are not identical. OpenCode provides hard DENY, the explicit `/maintain` → Aegis entry, and the Activity HUD. Codex supports multi-agent work, result delivery, ALLOW, and adaptable ASK; DENY and Aegis remain gaps, and activity visibility is basic/partial. For Codex, non-empty project-root `AGENTS.override.md` or `AGENTS.md` can take precedence over `CODEX.md`; install and read-only verification warn about these files but do not prove which root instructions or specialists are effective in a particular session. This observability follow-up remains open in [Issue #23](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/23). See the [capability contract](docs/HARNESS-CAPABILITIES.md).
 
 ### Out-of-scope project work
 

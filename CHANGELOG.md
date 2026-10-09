@@ -2,9 +2,54 @@
 
 ## [Unreleased]
 
-Changes after v0.4.3 go here.
+Changes after v0.4.4 go here.
 
 The Issue #10 OPEN references in the versioned v0.4.0 and v0.4.2 notes below record status at those releases; they are historical.
+
+## v0.4.4
+
+### Highlights
+
+- Freeze the existing Olympus architecture for this maintenance release: no new tiers or commands, and no changes to models, roles, authority policy, or concurrency limits.
+- Publish version-neutral project/global install and uninstall entrypoints in the README. Install entrypoints resolve the latest published release and then invoke the installer from that exact immutable tag; installation remains explicit about harness and scope.
+- Close the Command UX exploration: `/power`, `/plan`, `/performance`, and `/fast` are not Olympus commands. Natural language and existing routing remain primary; `/maintain` remains the explicit privileged entry.
+- Warn during Codex install and `-VerifyOnly` when a non-empty project-root `AGENTS.override.md` or `AGENTS.md` takes precedence over generated `CODEX.md`. The warning is non-fatal and leaves user-owned instructions unchanged; an existing isolated regression is included in FULL.
+- Correct stale roadmap model labels to GPT-6.1 Sol and refresh release/concurrency status; preserve Issue #7 as an observed global-discovery GAP with its root cause unproven.
+- Strengthen the existing release/documentation qualification for all six version-neutral project/global install entrypoints, rejecting wrong-scope, directly pinned, root-installer, or foreign README install commands. Qualification profiles now report elapsed time and the five slowest checks; the existing R27 release assertion handles the source-mismatch diagnostic accurately.
+- Make the existing PowerShell 5.1/7 compatibility check accept the line-wrapped missing-`pwsh` diagnostic while still requiring early failure before target creation.
+- Document risk-proportionate validation guidance for documentation, localized changes, shared policy, installer/release, and runtime-dependent changes without changing FAST, FULL, or RUNTIME behavior.
+- Retain the Dual Harness Installer with explicit `-Harness opencode`, `-Harness codex`, and `-Harness all` selections. Installation is additive; `installed_harnesses` records manifest ownership; legacy OpenCode installations remain upgradeable. The public installer launches from PowerShell 5.1 or PowerShell 7, with PowerShell 7 running bootstrap. Olympus Harness Core remains the shared source; `VerifyOnly` is read-only and user-owned files are preserved.
+
+### Capability limits
+
+- OpenCode global runtime discovery remains **GAP**: isolated evidence observed the expected global Olympus roster missing, but does not establish the root cause. Issue #7 remains OPEN. Codex global runtime discovery is **SUPPORTED** on user-provided PASS evidence; it was not rerun here. Static global installation does not prove runtime discovery.
+- OpenCode V2 Issue #1 remains OPEN upstream (`No tool output found`). Olympus reconciles original results where possible and forbids blind retry; it does not fix upstream result correlation.
+- Codex `DENY = GAP`, `AEGIS = GAP`, `RESULT_RECONCILIATION = PARTIAL`, `QUESTION_CENTRALIZATION = PARTIAL`, and `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; Codex ASK is adaptable, not identical to OpenCode ASK. This release does not claim full parity.
+- Codex root-instruction and specialist-visibility follow-up #23 remains OPEN. The precedence warning detects only non-empty project-root `AGENTS.override.md` / `AGENTS.md`; it does not prove which instructions or specialist activity are effective in every session. Codex has no Olympus Aegis or `/maintain` equivalent.
+- Optional Codex auto-review evaluation in Issue #13 remains deferred; this release does not enable it or change permission behavior.
+- Global installation is Windows-qualified. No Unix global install/runtime qualification is claimed.
+
+## Installation
+
+Open PowerShell in the root of the trusted Git project. These commands use the same exact v0.4.4 tag for installer source and version identity:
+
+```powershell
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.4/install.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.4/install.ps1'))) -Harness codex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.4/install.ps1'))) -Harness all
+```
+
+The default is project-local OpenCode; use `-Scope global` explicitly for global installation. Global OpenCode installation does not imply runtime discovery support.
+
+## Verify installation
+
+Each command verifies only the selected managed project-local harness subset and is read-only:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.4/install.ps1'))) -Harness opencode -Version 'v0.4.4' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.4/install.ps1'))) -Harness codex -Version 'v0.4.4' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.4/install.ps1'))) -Harness all -Version 'v0.4.4' -Target (Get-Location).Path -VerifyOnly
+```
 
 ## v0.4.3
 

@@ -123,8 +123,9 @@ isolated installer tests; no runtime semantic merge is claimed.
 
 The generated capability row `GLOBAL_RUNTIME_DISCOVERY` is per-harness:
 OpenCode is `GAP` because its isolated runtime omitted the installed global
-Olympus agents in both config modes; Codex remains `SUPPORTED` based on the
-user-provided runtime PASS evidence and was not re-run. The OpenCode
+Olympus agents in both config modes; this establishes the observed discovery gap,
+not its root cause, which remains unproven under Issue #7. Codex remains
+`SUPPORTED` based on the user-provided runtime PASS evidence and was not re-run. The OpenCode
 qualification `tests/global-runtime/qualify.ps1` records the fresh child
 environment, all effective `debug paths`, exact server PID/endpoint, config
 root, clean fixture cwd, first and lazy-load API responses, logs, and

@@ -21,6 +21,7 @@ $ManagedPaths = @(
     '.opencode/agents/thales.md', '.opencode/agents/atlas.md', '.opencode/agents/argus.md', '.opencode/agents/talos.md', '.opencode/agents/helios.md', '.opencode/agents/aegis.md',
     '.opencode/commands/maintain.md',
     '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx',
+    '.opencode/scripts/worktree-setup.ps1',
     '.opencode/orchestrator-install.json'
 )
 
@@ -597,7 +598,8 @@ try {
         [void](Assert-Installed $repo 'READY')
         # Reconstruct the pre-Maintenance Plane managed set (before the HUD too).
         $newPaths = @('.opencode/agents/aegis.md', '.opencode/commands/maintain.md',
-            '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
+            '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx',
+            '.opencode/scripts/worktree-setup.ps1')
         $manifestPath = Join-Path $repo '.opencode/orchestrator-install.json'
         $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -Depth 100
         $manifest.managed_files = @($manifest.managed_files | Where-Object { $_.path -notin $newPaths })
@@ -656,8 +658,9 @@ try {
                 [pscustomobject]@{ path=$_.path; sha256=(Get-Hash $commandPath) }
             } elseif ($_.path -eq '.opencode/plugins/olympus-activity/activity.ts') {
                 [pscustomobject]@{ path=$_.path; sha256=(Get-Hash $activityPath) }
-            } else { $_ }
+            } elseif ($_.path -ne '.opencode/scripts/worktree-setup.ps1') { $_ }
         })
+        [IO.File]::Delete((Join-Path $repo '.opencode/scripts/worktree-setup.ps1'))
         [IO.File]::WriteAllText($manifestPath, (($manifest | ConvertTo-Json -Depth 100) + "`n"), $Utf8)
 
         [void](Assert-Installed $repo 'READY')
@@ -691,12 +694,13 @@ try {
         [IO.File]::WriteAllText($ownedOld, $legacyText, $Utf8)
         $ownedManifestPath = Join-Path $ownedRepo '.opencode/orchestrator-install.json'
         $ownedManifest = [IO.File]::ReadAllText($ownedManifestPath) | ConvertFrom-Json -Depth 100
-        $ownedManifest.managed_files = @($ownedManifest.managed_files | ForEach-Object {
+        $ownedManifest.managed_files = @($ownedManifest.managed_files | Where-Object { $_.path -ne '.opencode/scripts/worktree-setup.ps1' } | ForEach-Object {
             if ($_.path -eq '.opencode/agents/aegis.md') {
                 [pscustomobject]@{ path='.opencode/agents/maintenance.md'; sha256=(Get-Hash $ownedOld) }
             } else { $_ }
         })
         [IO.File]::Delete($ownedNew)
+        [IO.File]::Delete((Join-Path $ownedRepo '.opencode/scripts/worktree-setup.ps1'))
         [IO.File]::WriteAllText($ownedManifestPath, (($ownedManifest | ConvertTo-Json -Depth 100) + "`n"), $Utf8)
         $ownedUpgrade = Invoke-Bootstrap $ownedRepo
         Assert-Condition ($ownedUpgrade.ExitCode -eq 0 -and $ownedUpgrade.Text -match '(?m)^READY\s*$' -and
@@ -711,12 +715,13 @@ try {
         [IO.File]::WriteAllText($modifiedOld, $legacyText, $Utf8)
         $modifiedManifestPath = Join-Path $modifiedRepo '.opencode/orchestrator-install.json'
         $modifiedManifest = [IO.File]::ReadAllText($modifiedManifestPath) | ConvertFrom-Json -Depth 100
-        $modifiedManifest.managed_files = @($modifiedManifest.managed_files | ForEach-Object {
+        $modifiedManifest.managed_files = @($modifiedManifest.managed_files | Where-Object { $_.path -ne '.opencode/scripts/worktree-setup.ps1' } | ForEach-Object {
             if ($_.path -eq '.opencode/agents/aegis.md') {
                 [pscustomobject]@{ path='.opencode/agents/maintenance.md'; sha256=(Get-Hash $modifiedOld) }
             } else { $_ }
         })
         [IO.File]::Delete($modifiedNew)
+        [IO.File]::Delete((Join-Path $modifiedRepo '.opencode/scripts/worktree-setup.ps1'))
         [IO.File]::WriteAllText($modifiedManifestPath, (($modifiedManifest | ConvertTo-Json -Depth 100) + "`n"), $Utf8)
         [IO.File]::AppendAllText($modifiedOld, "`nuser modification`n", $Utf8)
         $modifiedHash = Get-Hash $modifiedOld

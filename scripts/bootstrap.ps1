@@ -255,8 +255,10 @@ function Get-ManifestHarnesses($Manifest) {
 
 function Get-LegacyOpenCodeSets {
     $previous = @('.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
-    # Historical sets had maintenance where the new candidate has aegis.
-    $historical = @($OpenCodeManaged | ForEach-Object { if ($_ -eq '.opencode/agents/aegis.md') { $RetiredMaintenanceAgent } else { $_ } })
+    $currentBeforeWorktreeSetup = @($OpenCodeManaged | Where-Object { $_ -ne '.opencode/scripts/worktree-setup.ps1' })
+    # Historical inventories predate the worktree helper and had maintenance where the new candidate has aegis.
+    $historical = @($currentBeforeWorktreeSetup |
+        ForEach-Object { if ($_ -eq '.opencode/agents/aegis.md') { $RetiredMaintenanceAgent } else { $_ } })
     $currentBeforeArgus = @($historical | Where-Object { $_ -notin @('.opencode/agents/argus.md', '.opencode/agents/talos.md', '.opencode/agents/helios.md') })
     $currentBeforeTalos = @($historical | Where-Object { $_ -notin @('.opencode/agents/talos.md', '.opencode/agents/helios.md') })
     $currentBeforeHelios = @($historical | Where-Object { $_ -ne '.opencode/agents/helios.md' })
@@ -285,9 +287,10 @@ function Get-LegacyOpenCodeSets {
         $allowed += ,@($currentBeforeHelios | Where-Object { $_ -notin $missing })
     }
     foreach ($missing in @(@(), $previous, $LegacyMaintenanceFiles)) {
-        $allowed += ,@($OpenCodeManaged | Where-Object { $_ -notin $missing })
+        $allowed += ,@($currentBeforeWorktreeSetup | Where-Object { $_ -notin $missing })
         $allowed += ,@($historical | Where-Object { $_ -notin $missing })
     }
+    $allowed += ,@($OpenCodeManaged)
     return ,$allowed
 }
 

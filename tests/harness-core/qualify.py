@@ -284,11 +284,14 @@ def main(argv: list[str] | None = None) -> int:
     before = snapshot_outputs(managed)
     if safe_root_read_only:
         shared_capabilities = ROOT / "docs" / "HARNESS-CAPABILITIES.md"
+        worktree_setup = ROOT / ".opencode" / "scripts" / "worktree-setup.ps1"
         print(f"ROOT_MANAGED_OUTPUT_COUNT {len(managed)}")
         report_output_snapshot("ROOT_MANAGED_OUTPUT_BEFORE", before)
         check(
             "SAFE_ROOT_ALL_OUTPUT_COVERAGE",
-            len(managed) == 29 and shared_capabilities in managed,
+            len(managed) == 30
+            and shared_capabilities in managed
+            and worktree_setup in managed,
         )
         root_render_blocked = False
         try:

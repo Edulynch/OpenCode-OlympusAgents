@@ -81,14 +81,25 @@ try {
     $again = (& pwsh -NoProfile -File (Join-Path $root 'scripts/bootstrap.ps1') -Target $fixture 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0 -or $again -notmatch '(?m)^NO_CHANGES\s*$') { throw ('H1: Reinstall not idempotent: ' + $again) }
     Write-Output 'H1: reinstall idempotent PASS'
-    # Emulate a clean owned installation from immediately before the HUD.
-    $manifest.managed_files = @($manifest.managed_files | Where-Object { $_.path -notin $paths })
+    # Reconstruct a real pre-HUD inventory: the worktree setup helper was
+    # introduced later, so it must be absent from this historical fixture too.
+    $historicalMissing = @($paths) + @('.opencode/scripts/worktree-setup.ps1')
+    $manifest.managed_files = @($manifest.managed_files | Where-Object { $_.path -notin $historicalMissing })
     [IO.File]::WriteAllText($manifestPath, (($manifest | ConvertTo-Json -Depth 100) + "`n"), $utf8)
-    foreach ($path in $paths) { [IO.File]::Delete((Join-Path $fixture $path)) }
+    foreach ($path in $historicalMissing) { [IO.File]::Delete((Join-Path $fixture $path)) }
+    if (@($manifest.managed_files | Where-Object { $_.path -in $historicalMissing }).Count -gt 0) {
+        throw 'H1: Historical inventory retained a post-HUD managed resource.'
+    }
     $upgrade = (& pwsh -NoProfile -File (Join-Path $root 'scripts/bootstrap.ps1') -Target $fixture 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0 -or $upgrade -notmatch '(?m)^READY\s*$') { throw ('H1: Pre-HUD managed upgrade failed: ' + $upgrade) }
-    foreach ($path in $paths) { if (-not (Test-Path (Join-Path $fixture $path))) { throw ('H1: Upgrade missing ' + $path) } }
-    Write-Output 'H1: pre-HUD managed install safely upgraded PASS'
+    foreach ($path in $historicalMissing) {
+        if (-not (Test-Path (Join-Path $fixture $path))) { throw ('H1: Upgrade missing ' + $path) }
+        if ((Get-FileHash (Join-Path $fixture $path) -Algorithm SHA256).Hash -ne
+            (Get-FileHash (Join-Path $root $path) -Algorithm SHA256).Hash) {
+            throw ('H1: Upgrade altered managed resource ' + $path)
+        }
+    }
+    Write-Output 'H1: pre-HUD/pre-helper managed install safely upgraded PASS'
     $changed = Join-Path $fixture $paths[1]
     [IO.File]::AppendAllText($changed, "// local user edit`n", $utf8)
     $before = (Get-FileHash $changed -Algorithm SHA256).Hash

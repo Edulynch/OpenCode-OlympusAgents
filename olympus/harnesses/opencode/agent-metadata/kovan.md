@@ -57,6 +57,10 @@ permissions:
   - action: edit
     resource: ".opencode/plugins/olympus-activity/**"
     effect: deny
+  # The worktree provisioning script is Olympus-owned, not a project plugin.
+  - action: edit
+    resource: ".opencode/scripts/worktree-setup.ps1"
+    effect: deny
   - action: edit
     resource: ".opencode/orchestrator-install.json"
     effect: deny

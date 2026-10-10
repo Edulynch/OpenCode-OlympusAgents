@@ -19,7 +19,8 @@ function Covers([string]$scope, [string]$path) {
 function Is-OlympusOwned([string]$path, [string[]]$manifestPaths = @()) {
     $p = $path.Replace('\','/').TrimStart('/').ToLowerInvariant()
     $fixed = @('.opencode/agents/', '.opencode/commands/maintain.md',
-        '.opencode/plugins/olympus-activity/', '.opencode/orchestrator-install.json',
+        '.opencode/plugins/olympus-activity/', '.opencode/scripts/worktree-setup.ps1',
+        '.opencode/orchestrator-install.json',
         '.opencode/opencode.json', '.opencode/opencode.jsonc', '.codex/', 'CODEX.md',
         'olympus/', 'scripts/render_harnesses.py', 'opencode.jsonc', 'opencode.json')
     if (@($fixed | Where-Object { $p.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { return $true }
@@ -1056,9 +1057,19 @@ try {
             $_.FullName.Substring(([IO.Path]::GetFullPath($root).TrimEnd([char[]]@('\','/')).Length + 1)).Replace('\','/')
         })
     }
+    # Verify Windows paths really became repository-relative forward-slash
+    # paths; a malformed path must never make the DENY assertion meaningless.
+    Check 'AUTH9B_WINDOWS_MANAGED_PATH_NORMALIZED' (
+        '.opencode/scripts/worktree-setup.ps1' -in $managedPaths -and
+        @($managedPaths | Where-Object { $_.Contains('\') }).Count -eq 0
+    )
     Check 'AUTH9B_EVERY_INSTALLER_MANAGED_PATH_HAS_NATIVE_DENY' (@($managedPaths | Where-Object {
         (Native-Decision $nativeRules 'edit' $_) -ne 'DENY'
     }).Count -eq 0)
+    Check 'AUTH9C_WORKTREE_HELPER_NATIVE_DENY_AND_OWNERSHIP' (
+        (Native-Decision $nativeRules 'edit' '.opencode/scripts/worktree-setup.ps1') -eq 'DENY' -and
+        (Is-OlympusOwned '.opencode/scripts/worktree-setup.ps1')
+    )
 
     $siblingRepoPath = 'C:\workspace\unrelated-sibling\src\cart.ts'
     $externalDecision = Native-Decision $nativeRules 'external_directory' $siblingRepoPath

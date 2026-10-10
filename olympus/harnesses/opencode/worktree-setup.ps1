@@ -239,10 +239,25 @@ try {
 
     $manifestBytes = [Text.UTF8Encoding]::new($false).GetBytes($manifestText)
     $manifestHash = Sha-Bytes $manifestBytes
+    $destinationManifest = Get-Contained-Path $target $manifestRelative
+    $destinationOwned = Test-Path -LiteralPath $destinationManifest
+
+    # An existing, byte-identical file is not automatically Olympus-owned.
+    # Only a matching manifest already present in this worktree proves ownership.
+    if ($destinationOwned) {
+        $item = Get-Item -LiteralPath $destinationManifest -Force
+        if ($item.PSIsContainer -or (Sha-Bytes ([IO.File]::ReadAllBytes($destinationManifest))) -cne $manifestHash) {
+            Fail 'WORKTREE_SETUP_CONFLICT' 'Refusing to use an existing or drifted Olympus manifest.'
+        }
+    }
+
     $writes = [Collections.Generic.List[object]]::new()
     foreach ($payload in $payloads) {
         $destination = Get-Contained-Path $target $payload.Relative
         if (Test-Path -LiteralPath $destination) {
+            if (-not $destinationOwned) {
+                Fail 'WORKTREE_SETUP_CONFLICT' "Refusing to adopt an existing file without Olympus ownership: $($payload.Relative)"
+            }
             $item = Get-Item -LiteralPath $destination -Force
             if ($item.PSIsContainer -or (Sha-Bytes ([IO.File]::ReadAllBytes($destination))) -cne $payload.Hash) {
                 Fail 'WORKTREE_SETUP_CONFLICT' "Refusing to replace an existing user or drifted file: $($payload.Relative)"
@@ -251,26 +266,16 @@ try {
             $null = $writes.Add([pscustomobject]@{ Path=$destination; Bytes=$payload.Bytes; Relative=$payload.Relative })
         }
     }
-    $destinationManifest = Get-Contained-Path $target $manifestRelative
-    if (Test-Path -LiteralPath $destinationManifest) {
-        $item = Get-Item -LiteralPath $destinationManifest -Force
-        if ($item.PSIsContainer -or (Sha-Bytes ([IO.File]::ReadAllBytes($destinationManifest))) -cne $manifestHash) {
-            Fail 'WORKTREE_SETUP_CONFLICT' 'Refusing to replace an existing or drifted Olympus manifest.'
-        }
-    } else {
+    if (-not $destinationOwned) {
         $null = $writes.Add([pscustomobject]@{ Path=$destinationManifest; Bytes=$manifestBytes; Relative=$manifestRelative })
     }
 
     foreach ($write in $writes) {
-        # Re-check the exact destination immediately before creating it. File.Move
-        # does not replace a concurrently-created path, so user files stay safe.
+        # A file appearing after preflight has no verified ownership, even when
+        # its bytes match. File.Move independently prevents overwrites.
         $destination = Get-Contained-Path $target $write.Relative
         if (Test-Path -LiteralPath $destination) {
-            $item = Get-Item -LiteralPath $destination -Force
-            if ($item.PSIsContainer -or (Sha-Bytes ([IO.File]::ReadAllBytes($destination))) -cne (Sha-Bytes $write.Bytes)) {
-                Fail 'WORKTREE_SETUP_CONFLICT' "Destination changed during setup: $($write.Relative)"
-            }
-            continue
+            Fail 'WORKTREE_SETUP_CONFLICT' "Destination appeared during setup: $($write.Relative)"
         }
         Write-New-File $destination $write.Bytes
     }

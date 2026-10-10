@@ -48,6 +48,20 @@ function Sha-File([string]$Path) {
     (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
+function Get-Worktree-Snapshot([string]$Directory) {
+    # Include both paths and file bytes: a rejected setup must not create
+    # directories, modify the original file, or write a new ownership manifest.
+    $prefix = [IO.Path]::GetFullPath($Directory).TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
+    $items = @(
+        Get-ChildItem -LiteralPath $Directory -Force -Recurse | ForEach-Object {
+            $relative = $_.FullName.Substring($prefix.Length).Replace('\', '/')
+            if ($_.PSIsContainer) { "DIR|$relative" }
+            else { "FILE|$relative|$(Sha-File $_.FullName)" }
+        } | Sort-Object
+    )
+    return ($items -join "`n")
+}
+
 function Assert-InstalledManifest([string]$Directory) {
     $manifestPath = Join-Path $Directory '.opencode/orchestrator-install.json'
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return $false }
@@ -222,6 +236,33 @@ try {
             if (Test-Path -LiteralPath $alternativePath) { [IO.File]::Delete($alternativePath) }
         }
     }
+
+    # A byte-identical preexisting resource without an ownership manifest is
+    # still a user file. Both untracked and Git-tracked variants must be safe.
+    $unownedFile = Join-Path $negative 'opencode.jsonc'
+    [IO.File]::WriteAllBytes($unownedFile, [IO.File]::ReadAllBytes((Join-Path $main 'opencode.jsonc')))
+    $unownedSnapshot = Get-Worktree-Snapshot $negative
+    $unownedResult = Invoke-Worktree-Setup $negative
+    Check 'IDENTICAL_UNOWNED_FILE_REJECTED_WITHOUT_WRITES' ($unownedResult.Code -ne 0 -and
+        $unownedResult.Text -match 'WORKTREE_SETUP_CONFLICT' -and
+        (Get-Worktree-Snapshot $negative) -ceq $unownedSnapshot -and
+        -not (Test-Path -LiteralPath (Join-Path $negative '.opencode/orchestrator-install.json'))) $unownedResult.Text
+
+    # Commit only inside the disposable detached worktree to prove the helper
+    # refuses ownership of an identical file already tracked by Git.
+    Run-Git $negative @('add','--force','--','opencode.jsonc') | Out-Null
+    Run-Git $negative @('commit','--quiet','-m','fixture: tracked user configuration') | Out-Null
+    $trackedSnapshot = Get-Worktree-Snapshot $negative
+    $trackedResult = Invoke-Worktree-Setup $negative
+    $trackedFile = (Run-Git $negative @('ls-files','--','opencode.jsonc') | Out-String).Trim()
+    Check 'TRACKED_IDENTICAL_FILE_REJECTED_WITHOUT_WRITES' ($trackedResult.Code -ne 0 -and
+        $trackedResult.Text -match 'WORKTREE_SETUP_CONFLICT' -and
+        $trackedFile -ceq 'opencode.jsonc' -and
+        (Get-Worktree-Snapshot $negative) -ceq $trackedSnapshot -and
+        -not (Test-Path -LiteralPath (Join-Path $negative '.opencode/orchestrator-install.json'))) $trackedResult.Text
+
+    # The final positive fixture must again contain no user-owned destination.
+    Run-Git $negative @('rm','--quiet','--force','--','opencode.jsonc') | Out-Null
 
     $negativeValid = Invoke-Worktree-Setup $negative
     Check 'VALID_ROSTER_AFTER_NEGATIVE_PROBES' ($negativeValid.Code -eq 0 -and

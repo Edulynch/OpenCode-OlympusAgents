@@ -53,6 +53,20 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/ins
 
 Installing one harness is additive; it does not remove the other.
 
+### OpenCode Git worktrees (opt-in)
+
+Project-installed Olympus files are intentionally untracked. Git worktrees do not inherit those files from another checkout, so install/update Olympus in the main checkout first. To provision worktrees created through OpenCode V2, opt in once in that project's **Settings → Projects → Startup command**:
+
+```text
+pwsh -NoProfile -File "%OPENCODE_WORKTREE_BASE%\.opencode\scripts\worktree-setup.ps1"
+```
+
+This is a per-project OpenCode setting, not global configuration. OpenCode V2 supplies the two environment variables and waits for the startup command before completing native worktree creation. Olympus copies only paths listed in the source checkout's project manifest, verifies their SHA-256 hashes, and writes a separate manifest in each checkout. It creates missing files only; conflicting or drifted files, a modified source install, or a worktree from another Git repository stop setup without overwriting user data. It does not download code, stage files, or modify Git history. `--standalone` uses the same native project worktree startup path.
+
+Saving this setting is explicit consent to run the local helper when OpenCode creates future worktrees. If a startup command is already configured, preserve it and deliberately integrate the helper rather than replacing it. Manually created/existing worktrees can be provisioned by setting `OPENCODE_WORKTREE_BASE` to the installed checkout and `OPENCODE_WORKTREE_PATH` to the linked worktree, then running the same helper once. Olympus remains project-local; this does not depend on global agent discovery.
+
+This opt-in addresses missing/unavailable project resources, not every possible OpenCode prompt cancellation. If a prompt still cancels after the helper reports success and Kael is visible in that worktree, capture the OpenCode session status/error and exact location before attributing the cause.
+
 ### Global install
 
 Global installation is also explicit:

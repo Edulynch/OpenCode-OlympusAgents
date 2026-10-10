@@ -199,14 +199,15 @@ try {
         if (-not $r1Pass) { Write-Output "R1_INSTALL_OUTPUT: $($first.Text)" }
         Check 'R1_CANDIDATE_RESOLVED_CANDIDATE' $r1Pass
         $paths = @('opencode.jsonc', '.opencode/orchestrator-install.json', '.opencode/commands/maintain.md',
-            '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
+            '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx',
+            '.opencode/scripts/worktree-setup.ps1')
         $paths += @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios','aegis' | ForEach-Object { ".opencode/agents/$_.md" })
         Check 'R2_CANDIDATE_ROSTER_FILES' (@($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path $target $_) -PathType Leaf) }).Count -eq 0 -and
             -not (Test-Path -LiteralPath (Join-Path $target '.opencode/agents/maintenance.md')))
         $manifestPath = Join-Path $target '.opencode/orchestrator-install.json'
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
         Check 'R2_CANDIDATE_MANIFEST_VERSION_AND_OWNERSHIP' ($manifest.schema_version -eq 1 -and
-            $manifest.installed_version -eq $script:CandidateVersion -and $manifest.managed_files.Count -eq 16 -and
+            $manifest.installed_version -eq $script:CandidateVersion -and $manifest.managed_files.Count -eq 17 -and
             @($manifest.managed_files | Where-Object path -eq '.opencode/agents/aegis.md').Count -eq 1 -and
             @($manifest.managed_files | Where-Object path -eq '.opencode/agents/maintenance.md').Count -eq 0)
 
@@ -429,6 +430,9 @@ try {
 
     # Verified owned legacy maintenance.md is migrated; modified or unowned copies are never replaced.
     Check 'R22_STABLE_SOURCE_HAS_RETIRED_AGENT' (Test-Path -LiteralPath (Join-Path $stableTarget '.opencode/agents/maintenance.md'))
+    $stableManifest = Get-Content -LiteralPath (Join-Path $stableTarget '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json
+    Check 'R22_STABLE_HISTORICAL_INVENTORY' ($stableManifest.managed_files.Count -eq 12 -and
+        @($stableManifest.managed_files | Where-Object path -eq '.opencode/scripts/worktree-setup.ps1').Count -eq 0)
     $upgrade = Install $stableTarget $candidateArchive $script:CandidateVersion
     $upManifest = Get-Content -LiteralPath (Join-Path $stableTarget '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json
     Check 'R22_OWNED_RETIRED_AGENT_MIGRATED' ($upgrade.Code -eq 0 -and
@@ -436,6 +440,30 @@ try {
         (Test-Path -LiteralPath (Join-Path $stableTarget '.opencode/agents/aegis.md')) -and
         $upManifest.installed_version -eq $script:CandidateVersion -and
         @($upManifest.managed_files | Where-Object path -eq '.opencode/agents/maintenance.md').Count -eq 0)
+    $worktreeSetupPath = Join-Path $stableTarget '.opencode/scripts/worktree-setup.ps1'
+    $worktreeSetupEntry = @($upManifest.managed_files | Where-Object path -eq '.opencode/scripts/worktree-setup.ps1')
+    Check 'R22_WORKTREE_SETUP_INSTALLED_AND_OWNED' ((Test-Path -LiteralPath $worktreeSetupPath -PathType Leaf) -and
+        $upManifest.managed_files.Count -eq 17 -and $worktreeSetupEntry.Count -eq 1 -and
+        $worktreeSetupEntry[0].sha256 -eq (Get-FileHash -LiteralPath $worktreeSetupPath -Algorithm SHA256).Hash.ToLowerInvariant())
+    $upgradeAgain = Install $stableTarget $candidateArchive $script:CandidateVersion
+    Check 'R22_UPGRADE_REINSTALL_NO_CHANGES' ($upgradeAgain.Code -eq 0 -and $upgradeAgain.Text -match '(?m)^NO_CHANGES\s*$')
+
+    $alteredLegacyTarget = New-Target 'altered-historical-inventory'
+    $alteredLegacyInstall = Install $alteredLegacyTarget $stableArchive 'v0.2.0'
+    if ($alteredLegacyInstall.Code -ne 0) { throw 'Stable legacy fixture install failed before inventory test.' }
+    $alteredManifestPath = Join-Path $alteredLegacyTarget '.opencode/orchestrator-install.json'
+    $alteredManifest = Get-Content -LiteralPath $alteredManifestPath -Raw | ConvertFrom-Json
+    $alteredManifest.managed_files = @($alteredManifest.managed_files | ForEach-Object {
+        if ($_.path -eq 'opencode.jsonc') {
+            [pscustomobject]@{ path='.opencode/scripts/worktree-setup.ps1'; sha256=$_.sha256 }
+        } else { $_ }
+    })
+    [IO.File]::WriteAllText($alteredManifestPath, (($alteredManifest | ConvertTo-Json -Depth 100) + "`n"), $utf8)
+    $alteredLegacySnapshot = Get-ProjectSnapshot $alteredLegacyTarget
+    $alteredLegacyUpgrade = Install $alteredLegacyTarget $candidateArchive $script:CandidateVersion
+    Check 'R22_ALTERED_HISTORICAL_INVENTORY_REJECTED_READ_ONLY' ($alteredLegacyUpgrade.Code -ne 0 -and
+        $alteredLegacyUpgrade.Text -match 'INSTALL_MANIFEST_INCOMPATIBLE' -and
+        (Get-ProjectSnapshot $alteredLegacyTarget) -ceq $alteredLegacySnapshot)
 
     $modifiedLegacyTarget = New-Target 'modified-retired-agent'
     $modifiedInstall = Install $modifiedLegacyTarget $stableArchive 'v0.2.0'

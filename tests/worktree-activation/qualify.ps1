@@ -16,6 +16,7 @@ $baselineSource = Join-Path $run 'v0.4.4-source'
 $baselineArchive = Join-Path $run 'v0.4.4.zip'
 $first = Join-Path $treeRoot 'checkout-b'
 $second = Join-Path $treeRoot 'checkout-c'
+$negative = Join-Path $treeRoot 'checkout-negative'
 $mockBin = Join-Path $run 'mock-bin'
 $originalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
 $originalBase = [Environment]::GetEnvironmentVariable('OPENCODE_WORKTREE_BASE','Process')
@@ -166,7 +167,67 @@ try {
         Check 'SOURCE_DRIFT_BLOCKS_SETUP' ($drift.Code -ne 0 -and $drift.Text -match 'WORKTREE_SETUP_SOURCE_DRIFT') $drift.Text
     } finally { [IO.File]::WriteAllBytes($firstAgent, $originalAgentBytes) }
 
-    Write-Output 'WORKTREE ACTIVATION QUALIFICATION: PASS (two real linked worktrees; isolated Git fixture; no live model request)'
+
+    # Exercise manifest and config negatives against a fresh linked checkout:
+    # a failed preflight must not copy even one managed file.
+    Run-Git $main @('worktree','add','--quiet','--detach',$negative,'HEAD') | Out-Null
+    $negativeMarker = Join-Path $negative 'keep-user-file.txt'
+    [IO.File]::WriteAllText($negativeMarker, 'unchanged', $utf8)
+    $negativeMarkerHash = Sha-File $negativeMarker
+    $originalManifestBytes = [IO.File]::ReadAllBytes($sourceManifestPath)
+    $unexpectedSource = Join-Path $main '.opencode/agents/unexpected.md'
+    try {
+        # A missing managed agent must fail despite every supplied hash being valid.
+        $missingManifest = [Text.Encoding]::UTF8.GetString($originalManifestBytes) | ConvertFrom-Json -Depth 100
+        $missingManifest.managed_files = @($missingManifest.managed_files | Where-Object { $_.path -ne '.opencode/agents/kael.md' })
+        [IO.File]::WriteAllText($sourceManifestPath, ($missingManifest | ConvertTo-Json -Depth 100), $utf8)
+        $missing = Invoke-Worktree-Setup $negative
+        Check 'INCOMPLETE_INVENTORY_REJECTED_WITHOUT_WRITES' ($missing.Code -ne 0 -and
+            $missing.Text -match 'WORKTREE_SETUP_MANIFEST_INVALID' -and
+            -not (Test-Path -LiteralPath (Join-Path $negative 'opencode.jsonc')) -and
+            -not (Test-Path -LiteralPath (Join-Path $negative '.opencode/orchestrator-install.json')) -and
+            (Sha-File $negativeMarker) -ceq $negativeMarkerHash) $missing.Text
+
+        # A real extra source asset with a matching SHA previously passed.
+        [IO.File]::WriteAllBytes($unexpectedSource, [IO.File]::ReadAllBytes((Join-Path $main '.opencode/agents/kael.md')))
+        $extraManifest = [Text.Encoding]::UTF8.GetString($originalManifestBytes) | ConvertFrom-Json -Depth 100
+        $extraManifest.managed_files = @($extraManifest.managed_files) +
+            @([pscustomobject]@{ path='.opencode/agents/unexpected.md'; sha256=(Sha-File $unexpectedSource) })
+        [IO.File]::WriteAllText($sourceManifestPath, ($extraManifest | ConvertTo-Json -Depth 100), $utf8)
+        $extra = Invoke-Worktree-Setup $negative
+        Check 'FOREIGN_MANAGED_ENTRY_REJECTED_WITHOUT_WRITES' ($extra.Code -ne 0 -and
+            $extra.Text -match 'WORKTREE_SETUP_MANIFEST_INVALID' -and
+            -not (Test-Path -LiteralPath (Join-Path $negative 'opencode.jsonc')) -and
+            -not (Test-Path -LiteralPath (Join-Path $negative '.opencode/orchestrator-install.json')) -and
+            (Sha-File $negativeMarker) -ceq $negativeMarkerHash) $extra.Text
+    } finally {
+        [IO.File]::WriteAllBytes($sourceManifestPath, $originalManifestBytes)
+        if (Test-Path -LiteralPath $unexpectedSource) { [IO.File]::Delete($unexpectedSource) }
+    }
+
+    # Match the bootstrap's three conflicting config locations.
+    foreach ($alternative in @('opencode.json', '.opencode/opencode.json', '.opencode/opencode.jsonc')) {
+        $alternativePath = Join-Path $negative ($alternative -replace '/', [IO.Path]::DirectorySeparatorChar)
+        [IO.Directory]::CreateDirectory((Split-Path -Parent $alternativePath)) | Out-Null
+        [IO.File]::WriteAllText($alternativePath, "{`"user_owned`": true}`n", $utf8)
+        try {
+            $blocked = Invoke-Worktree-Setup $negative
+            $label = 'ALTERNATE_CONFIG_' + ($alternative -replace '[^a-zA-Z0-9]', '_')
+            Check ($label + '_REJECTED_WITHOUT_WRITES') ($blocked.Code -ne 0 -and
+                $blocked.Text -match 'WORKTREE_SETUP_CONFLICT' -and
+                -not (Test-Path -LiteralPath (Join-Path $negative 'opencode.jsonc')) -and
+                -not (Test-Path -LiteralPath (Join-Path $negative '.opencode/orchestrator-install.json')) -and
+                (Sha-File $negativeMarker) -ceq $negativeMarkerHash) $blocked.Text
+        } finally {
+            if (Test-Path -LiteralPath $alternativePath) { [IO.File]::Delete($alternativePath) }
+        }
+    }
+
+    $negativeValid = Invoke-Worktree-Setup $negative
+    Check 'VALID_ROSTER_AFTER_NEGATIVE_PROBES' ($negativeValid.Code -eq 0 -and
+        (Assert-InstalledManifest $negative) -and (Sha-File $negativeMarker) -ceq $negativeMarkerHash) $negativeValid.Text
+
+    Write-Output 'WORKTREE ACTIVATION QUALIFICATION: PASS (linked worktrees; strict inventory and config conflicts; no live model request)'
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
     Write-Output 'WORKTREE ACTIVATION QUALIFICATION: FAIL'
@@ -179,7 +240,7 @@ try {
     else { [Environment]::SetEnvironmentVariable('OPENCODE_WORKTREE_PATH',$originalTarget,'Process') }
     if ($run -and (Test-Path -LiteralPath $run)) {
         if (Test-Path -LiteralPath $main -PathType Container) {
-            foreach ($tree in @($second, $first)) {
+            foreach ($tree in @($negative, $second, $first)) {
                 if (Test-Path -LiteralPath $tree -PathType Container) {
                     & git -C $main worktree remove --force $tree 2>$null | Out-Null
                 }

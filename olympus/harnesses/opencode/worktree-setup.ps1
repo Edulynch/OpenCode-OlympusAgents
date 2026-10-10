@@ -137,6 +137,14 @@ try {
         Fail 'WORKTREE_SETUP_TARGET_INVALID' 'The destination is not a linked worktree of the Olympus-enabled source checkout.'
     }
 
+    # Reject the same foreign OpenCode config locations as the bootstrap
+    # installer, before calculating or applying any worktree writes.
+    foreach ($alternative in @('opencode.json', '.opencode/opencode.json', '.opencode/opencode.jsonc')) {
+        if (Test-Path -LiteralPath (Get-Contained-Path $target $alternative)) {
+            Fail 'WORKTREE_SETUP_CONFLICT' "Foreign OpenCode config exists: $alternative"
+        }
+    }
+
     $manifestRelative = '.opencode/orchestrator-install.json'
     $sourceManifestPath = Get-Contained-Path $base $manifestRelative
     if (-not (Test-Path -LiteralPath $sourceManifestPath -PathType Leaf)) {
@@ -148,14 +156,62 @@ try {
         ('scope' -in @($manifest.PSObject.Properties | ForEach-Object Name) -and [string]$manifest.scope -cne 'project')) {
         Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'Only a schema v1 project install manifest is supported.'
     }
-    $harnesses = if ($manifest.installed_harnesses) { @($manifest.installed_harnesses | ForEach-Object { [string]$_ }) } else { @('opencode') }
-    if ('opencode' -notin $harnesses) { Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'The source manifest does not own OpenCode resources.' }
+    # A new worktree helper only ships in modern manifests, so it must not
+    # silently accept the legacy no-harness format.
+    $harnesses = @($manifest.installed_harnesses | ForEach-Object { [string]$_ })
+    if ($harnesses.Count -lt 1 -or $harnesses.Count -gt 2 -or
+        @($harnesses | Where-Object { $_ -cnotin @('opencode', 'codex') }).Count -gt 0 -or
+        @($harnesses | Select-Object -Unique).Count -ne $harnesses.Count -or
+        'opencode' -cnotin $harnesses) {
+        Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'The source manifest must declare OpenCode and at most one Codex harness.'
+    }
+
+    # Installed projects lack Core renderer sources; this is the exact current
+    # bootstrap-generated roster. Historical sets remain bootstrap-only.
+    $expectedOpenCode = @(
+        '.opencode/agents/aegis.md',
+        '.opencode/agents/argus.md',
+        '.opencode/agents/atlas.md',
+        '.opencode/agents/helios.md',
+        '.opencode/agents/kael.md',
+        '.opencode/agents/kovan.md',
+        '.opencode/agents/nox.md',
+        '.opencode/agents/orin.md',
+        '.opencode/agents/talos.md',
+        '.opencode/agents/thales.md',
+        '.opencode/agents/vera.md',
+        '.opencode/agents/veyra.md',
+        '.opencode/commands/maintain.md',
+        '.opencode/plugins/olympus-activity/activity.ts',
+        '.opencode/plugins/olympus-activity/tui.tsx',
+        '.opencode/scripts/worktree-setup.ps1',
+        'opencode.jsonc'
+    )
+    $expectedCodex = @(
+        '.codex/agents/argus.toml',
+        '.codex/agents/atlas.toml',
+        '.codex/agents/helios.toml',
+        '.codex/agents/kovan.toml',
+        '.codex/agents/nox.toml',
+        '.codex/agents/orin.toml',
+        '.codex/agents/talos.toml',
+        '.codex/agents/thales.toml',
+        '.codex/agents/vera.toml',
+        '.codex/agents/veyra.toml',
+        '.codex/config.toml',
+        'CODEX.md'
+    )
+    $expected = @($expectedOpenCode)
+    if ('codex' -in $harnesses) { $expected += $expectedCodex }
 
     $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $payloads = [Collections.Generic.List[object]]::new()
     $setupEntryFound = $false
     foreach ($entry in @($manifest.managed_files)) {
         $relative = Normalize-Managed-Path ([string]$entry.path)
+        if ($expected -cnotcontains $relative) {
+            Fail 'WORKTREE_SETUP_MANIFEST_INVALID' "Managed path is not in the approved current inventory: $relative"
+        }
         if (-not $seen.Add($relative)) { Fail 'WORKTREE_SETUP_MANIFEST_INVALID' "Duplicate managed path: $relative" }
         $expectedHash = ([string]$entry.sha256).ToLowerInvariant()
         if ($expectedHash -notmatch '^[0-9a-f]{64}$') { Fail 'WORKTREE_SETUP_MANIFEST_INVALID' "Invalid SHA-256 for $relative" }
@@ -176,8 +232,9 @@ try {
         }
         $null = $payloads.Add([pscustomobject]@{ Relative=$relative; Bytes=$bytes; Hash=$expectedHash })
     }
-    if (-not $setupEntryFound -or 'opencode.jsonc' -notin $seen) {
-        Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'The source manifest does not contain the managed setup script and OpenCode root config.'
+    # An exact approved set with no duplicates must also have every expected entry.
+    if ($seen.Count -ne $expected.Count -or -not $setupEntryFound -or 'opencode.jsonc' -notin $seen) {
+        Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'The source manifest does not match the complete approved harness inventory.'
     }
 
     $manifestBytes = [Text.UTF8Encoding]::new($false).GetBytes($manifestText)

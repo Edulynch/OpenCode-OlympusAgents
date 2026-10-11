@@ -125,11 +125,14 @@ Kael routes work to the team; you do not need to pick agents manually.
 | **NORMAL** (default) | Only as much parallel work as the task needs |
 | **FAST** (explicit) | Up to four independent agents when safe |
 
+**NORMAL** (default): use only the parallel work that is useful.
+Explicitly ask for **FAST**: up to four agents can run independent tasks.
+
 ```text
 FAST: check these independent modules and fix the issues.
 ```
 
-FAST never skips verification or parallelizes dependent steps.
+FAST does not skip checks and never runs dependent tasks in parallel.
 
 ## 👀 Live Activity
 
@@ -149,6 +152,7 @@ The OpenCode HUD is read-only. Codex has its own basic/partial activity view.
 | Explicit Aegis maintenance | `/maintain <task>` |
 | Normal project work | Ask Kael in plain language |
 
+Normal Git work (including project releases) belongs to the normal Kael plane.
 Aegis is hidden and cannot be invoked automatically by Kael. Codex has no equivalent Aegis capability.
 
 ## 🛡️ Compatibility & Trust

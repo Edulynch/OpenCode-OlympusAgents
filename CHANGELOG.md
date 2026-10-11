@@ -20,8 +20,9 @@ The Issue #10 OPEN references in the versioned v0.4.0 and v0.4.2 notes below rec
 
 - Windows fixture qualification: 23 checks passed for worktree provisioning, manifests, hashes, idempotence, alternate configuration conflicts, and preservation of byte-identical preexisting files (including files tracked by Git).
 - Release `-MockOpenCode`, Phase4C `-QualificationSlice Offline`, and installer compatibility qualifications passed during this change; PowerShell 5.1 and PowerShell 7 installer compatibility were exercised.
+- Fix the noninteractive global OpenCode diagnostic (Issue #7) to query `agent.list` using V2 `location[directory]`. An offline FULL qualification checks the URI contract and refuses to classify missing agents as a proven runtime GAP without evidence that registration completed. Global runtime discovery remains unverified.
 - Native worktree activation and a read-only first prompt through Kael were observed in two isolated checkouts on an earlier candidate commit. Later updates were limited to manifest and user-file protection; those model prompts were not repeated.
-- The additional Python renderer checker was not completed in the Windows operator environment; generated worktree helper parity was verified independently against the canonical helper. These checks do not establish universal runtime behavior.
+- Python 3.11 renderer checks now pass for all 30 managed outputs on Windows, alongside source/generated worktree helper parity. These checks do not establish universal runtime behavior.
 
 ### Capability limits
 

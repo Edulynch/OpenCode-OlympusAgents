@@ -30,23 +30,30 @@ no es un custom agent `kael` separado.
    Esa pantalla **no mostró** identidad, parentesco, modelo ni resultado
    terminal del hijo histórico Kovan. No confunda `Ready` o `Inactive`
    de una tarea con el estado nativo de un subagente.
-3. **Hilos de especialistas:** la referencia oficial documenta `/agent`
-   (singular; alias `/subagents`) para cambiar al hilo de un subagente
-   existente e inspeccionarlo. No se ha demostrado aquí que la CLI permita
-   recuperar en ese selector un hijo **ya terminado** de una sesión antigua.
+3. **Hilos de especialistas:** en la CLI instalada **0.162.1**,
+   el comando observado `/subagents` abre el selector de hilos secundarios.
+   El comando `/agents` (plural) abre un panel **distinto** de tareas del
+   proyecto. Algunas referencias de Codex mencionan `/agent` (singular),
+   pero **no se verificó esa forma en esta instalación**: no la presente
+   como requisito o alias confirmado. No está demostrado que el selector
+   permita recuperar un hijo **ya terminado** de una sesión antigua.
    Si no aparece, informe `UI_NOT_OBSERVABLE_FOR_HISTORICAL_SESSION`,
    **no** `NO_DELEGATION`, `FAILED` ni una regresión de routing.
 
-   **Prueba real de visibilidad (Codex CLI 0.162.1):** tras pedir
-   explícitamente una única delegación de lectura a Veyra, `/subagents`
-   mostró `Main [default] (current)` y `/root/veyra_codex_visibility`
-   como entradas separadas con identificadores de hilo diferentes. El
-   panel mostraba `Sub-agents running` y `No recent activity yet`
-   mientras el root esperaba a su hijo. Esto acredita **visibilidad de
-   un hilo hijo activo**, no acredita por sí solo el `agent_type`
-   efectivo, el modelo del hijo, el resultado terminal ni su consumo
-   por el root. La captura mostraba `YOLO mode`, así que tampoco
-   verifica enforcement de permisos de `olympus-project`.
+   **Prueba real (Codex CLI 0.162.1):** el root solicitó una única tarea
+   de lectura a Veyra mediante `collaboration.spawn_agent` con
+   `agent_type: veyra` y recibió `/root/veyra_codex_visibility`.
+   Mientras trabajaba, `/subagents` mostró
+   `Main [default] (current)` y ese hijo con **IDs de hilo distintos**,
+   bajo `Sub-agents running`, inicialmente sin actividad reciente.
+   En el hilo Veyra se observó la lectura de `CODEX.md` y esta guía,
+   sin ediciones ni tests. Al finalizar, Kael reportó haber recibido
+   `FINAL_ANSWER` del **mismo hilo original** y resumió sus hallazgos.
+   La evidencia respalda delegación y entrega del resultado, pero **no**
+   muestra el modelo efectivo de Veyra, consumo facturado, ni un indicador
+   nativo independiente de resultado ya consumido por el root. El banner
+   mostraba `YOLO mode`, de modo que tampoco demuestra enforcement de
+   permisos de `olympus-project`.
 4. **Correlación comprobable:** el registro histórico de #23 contiene
    `spawn_agent(agent_type=kovan)`, ID de hijo distinto, relación con el
    padre, nickname **Popper**, estado terminal y el resultado original

@@ -77,6 +77,12 @@ independent review, use the one-writer/direct-check fast path. Do not invoke
 Veyra, Nox, Vera, Orin, or Atlas by habit. Specialist cost must justify its
 expected evidence.
 
+For NORMAL CHANGE outside the fast path, use TFR to choose focused validation;
+do not invoke Nox or Vera by default just because the trivial fast path is
+ineligible. Preserve mandatory independent validation or review whenever the
+user, affected risk, or project/CI/release contract requires it. Root completion
+still requires actual validated acceptance and all reconciled required results.
+
 Codex's orchestration waits for requested child results, but that does not waive
 Kael's result barrier. Track the original child through a terminal state, inspect
 its actual output, and consume it once before continuing. Map task lifecycle as:

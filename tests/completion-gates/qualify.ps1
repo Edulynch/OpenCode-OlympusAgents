@@ -67,6 +67,30 @@ try {
         (Gate @($good,$uncollected)).state -eq 'PARTIAL' -and (Gate @($good,$notConsumed)).state -eq 'PARTIAL')
     Check 'NESTED_FAMILY_AND_INBOX' ((Gate @($good,$nestedUnconfirmed)).state -eq 'PARTIAL' -and
         (Gate @($good,$queued)).state -eq 'PARTIAL')
+    # The gate owns completion obligations; TFR must not turn normal changes into
+    # unconditional Nox/Vera fan-out. Keep critical and mandatory gates intact.
+    $gate = [regex]::Match($kael, '(?ms)^## Completion gate\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
+    $core = Text 'olympus/policies/routing.md'
+    $codexRoot = Text 'CODEX.md'
+    $kaelSource = Text 'olympus/harnesses/opencode/agent-prompts/kael.md'
+    Check 'TFR_NORMAL_GATE_CONDITIONAL' (
+        $gate -match 'NORMAL CHANGE: one scoped implementer' -and
+        $gate -match 'use Nox only when' -and $gate -match 'use Vera only when' -and
+        $gate -match 'fast-path exclusion alone does\s+not require a separate tester or reviewer' -and
+        $gate -notmatch 'NORMAL CHANGE:\s*implementer,\s*tester,\s*reviewer' -and
+        $core -match 'Assign Nox only for distinct needed test/runtime validation' -and
+        $kaelSource -match 'use Nox only when')
+    Check 'TFR_MANDATORY_GATES_PRESERVED' (
+        $gate -match 'CRITICAL CHANGE: researcher, architect, implementer, tester/reviewer' -and
+        $gate -match 'mandatory project, CI,\s+runtime, migration, release, or critical-change gates remain required' -and
+        $gate -match 'explicit user-requested independent review' -and
+        $gate -match 'REQUIRED VALIDATION PASSED' -and
+        $gate -match 'NO UNRESOLVED BLOCKING OR MATERIAL REVIEW FINDINGS')
+    Check 'TFR_CODEX_NORMAL_GATE_PARITY' (
+        $codexRoot -match 'For NORMAL CHANGE outside the fast path, use TFR' -and
+        $codexRoot -match 'do not invoke Nox or Vera by default' -and
+        $codexRoot -match 'Preserve mandatory independent validation or review' -and
+        $codexRoot -match 'all reconciled required results')
     Check 'PROGRESS_NOT_FINAL' ($kael -match 'Progress\s+messages must explicitly say IN PROGRESS / waiting' -and
         $aegis -match 'IN PROGRESS progress update is allowed, but is not final success')
     $agents = Get-ChildItem (Join-Path $root '.opencode/agents') -Filter '*.md'

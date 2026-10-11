@@ -1006,8 +1006,19 @@ Choose the smallest gate proportional to the request:
 
 - TRIVIAL ANSWER: Master Orchestrator only;
 - TRIVIAL FAST-PATH CHANGE: one scoped implementer plus lightweight direct Master Orchestrator validation, with no separate tester/reviewer unless the user requests review or new evidence requires escalation;
-- NORMAL CHANGE: implementer, tester, reviewer, then Master Orchestrator;
+- NORMAL CHANGE: one scoped implementer and the smallest sufficient focused
+  validation; Kael may verify observable acceptance directly, use Nox only when
+  distinct test/runtime evidence is needed, and use Vera only when independent
+  review is justified or explicitly required. Then Master Orchestrator
+  reconciles all required evidence;
 - CRITICAL CHANGE: researcher, architect, implementer, tester/reviewer, then Master Orchestrator.
+
+For NORMAL CHANGE outside the fast path, the fast-path exclusion alone does
+not require a separate tester or reviewer. TFR selects proportionate evidence,
+but explicit user-requested independent review and mandatory project, CI,
+runtime, migration, release, or critical-change gates remain required.
+Direct verification is sufficient only when it proves the affected acceptance
+contract; do not mark unexecuted checks or unperformed reviews as PASS.
 
 Completion is DONE only when all required conditions hold:
 

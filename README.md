@@ -100,7 +100,7 @@ codex
 
 > Add a search bar to my app. Make it keyboard-accessible and run the relevant tests.
 
-Kael routes work to the team; you do not need to pick agents manually.
+Once Kael is active (automatically for project installs), it routes tasks to specialists; you do not need to pick those specialists manually.
 
 ## 🧭 Meet the Team
 

@@ -280,7 +280,23 @@ def main(argv: list[str] | None = None) -> int:
         raise AssertionError("renderer could not be imported")
     renderer = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(renderer)
-    managed = set(renderer.outputs_for(ROOT, "all"))
+    # Verify canonical testing guidance reaches both root adapters, not just their templates.
+    tfr_section = renderer.focused_testing_policy(ROOT)
+    check("TFR_CANONICAL_POLICY_ONCE", routing.count("## TFR — risk-based focused testing") == 1)
+    check("TFR_CONTRACT_AND_EVIDENCE_GATES", all(term in tfr_section for term in (
+        "observable behavior", "blast radius", "user projects", "real-runtime evidence",
+        "NOT RUN", "Nox", "Vera", "mandatory gates", "role purity",
+    )))
+    check("TFR_ROOT_TEMPLATES_SINGLE_TOKEN",
+          (ROOT / "olympus/harnesses/opencode/agent-prompts/kael.md").read_text(encoding="utf-8").count("{{tfr_policy}}") == 1
+          and (ROOT / "olympus/harnesses/codex/root.md").read_text(encoding="utf-8").count("{{tfr_policy}}") == 1)
+    outputs = renderer.outputs_for(ROOT, "all")
+    check("TFR_BOTH_ADAPTERS_FROM_SAME_CORE",
+          tfr_section in outputs[ROOT / ".opencode/agents/kael.md"]
+          and tfr_section in outputs[ROOT / "CODEX.md"]
+          and kael_prompt.count(tfr_section) == 1
+          and (ROOT / "CODEX.md").read_text(encoding="utf-8").count(tfr_section) == 1)
+    managed = set(outputs)
     before = snapshot_outputs(managed)
     if safe_root_read_only:
         shared_capabilities = ROOT / "docs" / "HARNESS-CAPABILITIES.md"
@@ -347,6 +363,19 @@ def main(argv: list[str] | None = None) -> int:
             "FIXTURE_SECOND_RENDER_ZERO_DIFF",
             fixture_second_render.returncode == 0 and "wrote 0 changed output(s)" in fixture_second_render.stdout,
         )
+        # A change to Core must invalidate both adapters until they are re-rendered.
+        fixture_routing = fixture / "olympus" / "policies" / "routing.md"
+        original_routing = fixture_routing.read_text(encoding="utf-8")
+        fixture_routing.write_text(original_routing + "\nTFR_FIXTURE_POLICY_CHANGE\n", encoding="utf-8")
+        tfr_opencode_check = run_renderer("check", "opencode", fixture, safe_root_read_only=safe_root_read_only)
+        tfr_codex_check = run_renderer("check", "codex", fixture, safe_root_read_only=safe_root_read_only)
+        check("TFR_CORE_DRIFT_INVALIDATES_BOTH_ROOT_OUTPUTS",
+              tfr_opencode_check.returncode == 1
+              and "DRIFT drift: .opencode/agents/kael.md" in tfr_opencode_check.stdout
+              and tfr_codex_check.returncode == 1
+              and "DRIFT drift: CODEX.md" in tfr_codex_check.stdout)
+        fixture_routing.write_text(original_routing, encoding="utf-8")
+
         drifted = fixture / ".opencode" / "agents" / "kael.md"
         drifted.write_text(drifted.read_text(encoding="utf-8") + "\nmanual drift\n", encoding="utf-8")
         drift_check = run_renderer("check", "opencode", fixture, safe_root_read_only=safe_root_read_only)

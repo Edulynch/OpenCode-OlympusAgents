@@ -55,6 +55,20 @@ threads open concurrently; `.codex/config.toml` sets Codex's native cap to four.
 Children must not spawn children or act as mini-orchestrators. Each child profile
 disables multi-agent tools. Kael schedules and owns all child work and completion.
 
+## TFR — risk-based focused testing
+
+For implementation, defect fixes, refactors, and maintenance in ANY user project, Kael selects the smallest sufficient validation **after** capability preflight and task-scoped discovery. Testing never grants new authority.
+
+- **Contract and risk:** identify the observable behavior, affected boundaries, and concrete regression risks. Assess LOW / MEDIUM / HIGH / CRITICAL proportionally using impact, blast radius, uncertainty, and actual external/native boundaries; line count is not a risk score. A trivial task need not generate a formal risk document.
+- **Use the project's tools:** discover only the relevant existing tests, scripts, and CI requirements. Olympus maintainer qualification profiles FAST / FULL / RUNTIME are NOT commands to impose on user projects. Preserve any explicitly required user, project, CI, migration, or release gate.
+- **Cheapest sufficient evidence:** documentation-only changes usually need content/diff checks; localized defects need a focused check and a meaningful regression in the relevant existing suite; shared contracts justify affected integration checks; permissions, sessions, UI, services, or other native behavior require real-runtime evidence when that behavior is claimed. Do not equate a static fixture with live execution.
+- **Failure modes, not test counts:** select normal, negative, boundary, and regression checks when their risks matter. Do not demand a test per method, a blanket code-coverage threshold, all suites on every change, or a separate duplicate regression harness.
+- **Role ownership:** Kael selects and reconciles evidence. Kovan may run authorized direct focused checks while implementing but cannot claim independent review. Assign Nox only for distinct needed test/runtime validation and Vera only for materially justified or explicitly requested independent review; neither is automatic for a small observable fix.
+- **Progressive escalation and stopping:** run targeted checks first. Widen only for failing or insufficient evidence, broader shared impact, an actual integration/runtime boundary, or existing mandatory gates. After a correction rerun the affected failing check, not FULL by habit. Stop once sufficient acceptance evidence and all mandatory gates are reconciled.
+- **Honest results:** distinguish executed PASS / FAIL from NOT RUN, BLOCKED, and unknown evidence; state what each check establishes and any unverified runtime behavior. Never declare completion for a mandatory unrun gate or unreconciled child result.
+
+TFR changes test selection, not authority, role purity, result lifecycle, user constraints, or release requirements.
+
 ## Fast path and completion
 
 For a small, deterministic task with known ownership, direct acceptance criteria,
@@ -62,6 +76,12 @@ no architectural choice, complex diagnosis, destructive risk, or requested
 independent review, use the one-writer/direct-check fast path. Do not invoke
 Veyra, Nox, Vera, Orin, or Atlas by habit. Specialist cost must justify its
 expected evidence.
+
+For NORMAL CHANGE outside the fast path, use TFR to choose focused validation;
+do not invoke Nox or Vera by default just because the trivial fast path is
+ineligible. Preserve mandatory independent validation or review whenever the
+user, affected risk, or project/CI/release contract requires it. Root completion
+still requires actual validated acceptance and all reconciled required results.
 
 Codex's orchestration waits for requested child results, but that does not waive
 Kael's result barrier. Track the original child through a terminal state, inspect

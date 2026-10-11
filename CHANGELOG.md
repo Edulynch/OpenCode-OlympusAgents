@@ -6,6 +6,49 @@ Changes after the latest published release go here.
 
 The Issue #10 OPEN references in the versioned v0.4.0 and v0.4.2 notes below record status at those releases; they are historical.
 
+## v0.4.6
+
+### Highlights
+
+- Make the README installation-first: short sections, direct project/global install and uninstall commands, compact agent and compatibility tables, and minimal prose.
+- Move the OpenCode worktree opt-in, manual setup, safety guarantees, and troubleshooting details to `docs/WORKTREES.md`.
+- Correct the version history: the v0.4.5 notes incorrectly said agent permissions were unchanged. The worktree qualification hotfix added a **specific native edit DENY** for Kovan on `.opencode/scripts/worktree-setup.ps1`; this version preserves that protection.
+- Keep the **Dual Harness Installer** additive for `-Harness opencode`, `-Harness codex`, and `-Harness all`. Its `installed_harnesses` inventory, legacy OpenCode installations, user-owned file protections, `VerifyOnly`, Windows PowerShell 5.1 / PowerShell 7 launchers, and Olympus Harness Core behavior remain unchanged. This patch updates documentation and the release identity only.
+
+### Validation
+
+- The v0.4.5 remote tagged archive passed a project `-Harness all` install and read-only `VerifyOnly` checks for OpenCode, Codex, and all; the user's fixture file hash was preserved.
+- The v0.4.5 master FULL qualification passed 35/35 offline suites, including the OpenCode V2 `location[directory]` diagnostic contract and the Kovan worktree-helper DENY checks. No model request or OpenCode global runtime discovery is inferred from those qualifications.
+- Worktree native smoke evidence preceded the later permission/qualification fixes; no additional model smoke is claimed by this documentation patch.
+
+### Capability limits
+
+- OpenCode global files install and verify, but global agent discovery remains **GAP/not runtime-proven** (Issue #7). Codex global discovery remains SUPPORTED on user-provided evidence, not a new smoke here.
+- Codex `DENY = GAP`, `AEGIS = GAP`, and `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; this release does not claim full parity. OpenCode has native DENY and the explicit `/maintain` entry, but the latter is not available through Codex.
+- This patch corrects README usability and release-note accuracy; it does not extend runtime capabilities.
+
+## Installation
+
+From a trusted Git project root, use the immutable release installer. OpenCode is the direct installer's default; select Codex or both explicitly:
+
+```powershell
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.6/install.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.6/install.ps1'))) -Harness codex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.6/install.ps1'))) -Harness all
+```
+
+For project-local OpenCode Git worktrees, see the [opt-in guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.4.6/docs/WORKTREES.md).
+
+## Verify installation
+
+Read-only checks for the exact installed harness subset:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.6/install.ps1'))) -Harness opencode -Version 'v0.4.6' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.6/install.ps1'))) -Harness codex -Version 'v0.4.6' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.6/install.ps1'))) -Harness all -Version 'v0.4.6' -Target (Get-Location).Path -VerifyOnly
+```
+
 ## v0.4.5
 
 ### Highlights

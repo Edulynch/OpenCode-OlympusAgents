@@ -36,6 +36,17 @@ no es un custom agent `kael` separado.
    recuperar en ese selector un hijo **ya terminado** de una sesión antigua.
    Si no aparece, informe `UI_NOT_OBSERVABLE_FOR_HISTORICAL_SESSION`,
    **no** `NO_DELEGATION`, `FAILED` ni una regresión de routing.
+
+   **Prueba real de visibilidad (Codex CLI 0.162.1):** tras pedir
+   explícitamente una única delegación de lectura a Veyra, `/subagents`
+   mostró `Main [default] (current)` y `/root/veyra_codex_visibility`
+   como entradas separadas con identificadores de hilo diferentes. El
+   panel mostraba `Sub-agents running` y `No recent activity yet`
+   mientras el root esperaba a su hijo. Esto acredita **visibilidad de
+   un hilo hijo activo**, no acredita por sí solo el `agent_type`
+   efectivo, el modelo del hijo, el resultado terminal ni su consumo
+   por el root. La captura mostraba `YOLO mode`, así que tampoco
+   verifica enforcement de permisos de `olympus-project`.
 4. **Correlación comprobable:** el registro histórico de #23 contiene
    `spawn_agent(agent_type=kovan)`, ID de hijo distinto, relación con el
    padre, nickname **Popper**, estado terminal y el resultado original

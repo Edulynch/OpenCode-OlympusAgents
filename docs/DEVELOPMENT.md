@@ -151,7 +151,7 @@ unresolved work. Phase 3 evidence class: USER_EXECUTED_LIVE_EVIDENCE; see
 
 ## Local/bootstrap installation
 
-From an Olympus source checkout, project bootstrap targets the **root of a separate, trusted Git project** on Windows with Git and PowerShell 7 available. OpenCode project installation additionally requires the OpenCode CLI and configured models; Codex-only project installation does not invoke OpenCode. The public installer can be launched from Windows PowerShell 5.1 or PowerShell 7 and delegates bootstrap to installed `pwsh`. `-Scope project` remains the default and its behavior is compatible with beta.5; `-Harness` accepts `opencode` (default), `codex`, or `all`, case-insensitively. The v0.4.0 and v0.4.1 immutable validation tags both failed release validation because of release-facing documentation contradictions; neither resulted in a GitHub Release. `-Scope global` writes to the evidenced harness user directories, does not overwrite global base config, and is currently Windows-qualified. Global OpenCode runtime discovery is `GAP`, while Codex global runtime is `SUPPORTED` based on supplied runtime evidence. `-Version` accepts only Olympus SemVer `vX.Y.Z`, `vX.Y.Z-alpha.N`, `vX.Y.Z-beta.N`, or `vX.Y.Z-rc.N`; the remote source must be the immutable matching tag.
+From an Olympus source checkout, project bootstrap targets the **root of a separate, trusted Git project** on Windows with Git and PowerShell 7 available. OpenCode project installation additionally requires the OpenCode CLI and configured models; Codex-only project installation does not invoke OpenCode. The public installer can be launched from Windows PowerShell 5.1 or PowerShell 7 and delegates bootstrap to installed `pwsh`. `-Scope project` remains the default and its behavior is compatible with beta.5; `-Harness` accepts `opencode` (default), `codex`, or `all`, case-insensitively. The v0.4.0 and v0.4.1 immutable validation tags both failed release validation because of release-facing documentation contradictions; neither resulted in a GitHub Release. `-Scope global` writes to the evidenced harness user directories, does not overwrite global base config, and is currently Windows-qualified. Global OpenCode runtime discovery is `SUPPORTED` for isolated Windows/OpenCode V2.0.26 based on real v0.4.6 install, plugin activation, agent roster and opt-in Kael selection evidence (Issue #7); no live model prompt or cross-version guarantee is implied. Codex global runtime is `SUPPORTED` based on separately supplied runtime evidence. `-Version` accepts only Olympus SemVer `vX.Y.Z`, `vX.Y.Z-alpha.N`, `vX.Y.Z-beta.N`, or `vX.Y.Z-rc.N`; the remote source must be the immutable matching tag.
 
 ```powershell
 pwsh -NoProfile -File ./scripts/bootstrap.ps1 -Target 'C:\path\to\project' -DryRun
@@ -268,12 +268,14 @@ unrelated offline suites and manual interactive smokes are not run. If Codex or
 OpenCode is unavailable, dependent checks are `NOT RUN`, never PASS; the
 aggregate is `PARTIAL` (exit 2). Only an explicitly designated missing
 prerequisite can produce `NOT RUN`; an unclassified child exit 2 is a failure.
-OpenCode global custom-agent discovery remains a known GAP (Issue #7), so the
-unified profile deliberately excludes `tests/global-runtime/qualify.ps1`. Run
-`pwsh -NoProfile -File ./tests/global-runtime/qualify.ps1` separately to diagnose
-that behavior; it currently reproduces the missing-global-roster failure and is
-not evidence that OpenCode global runtime is supported. Codex global runtime
-remains documented as `SUPPORTED` based on the user's provided evidence.
+OpenCode global custom-agent discovery is `SUPPORTED` for isolated Windows
+V2.0.26 (Issue #7: real v0.4.6 global install, loader active, 12/12 agents,
+2/2 controls, Kael configuration-level selection). The unified RUNTIME profile
+still excludes the historical long-running `tests/global-runtime/qualify.ps1`:
+that diagnostic does not yet observe plugin activation completion, so an early
+empty roster is inconclusive. Do not repeat it as a release gate or infer model
+execution from the reported discovery PASS. Codex global runtime remains
+`SUPPORTED` on user-provided evidence, not rerun here.
 A completed RUNTIME profile still does **not** qualify interactive child
 execution, native ASK UI or human approval/rejection, the question race, Codex
 sessions, or Activity TUI rendering; those remain separately observed/manual

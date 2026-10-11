@@ -4,6 +4,8 @@
 
 Changes after the latest published release go here.
 
+- Qualify OpenCode V2.0.26 global agent discovery on isolated Windows using the actual v0.4.6 installer: 15 managed resources, read-only VerifyOnly, active agent loader, 12 Olympus agents, two controls, and explicit Kael default selection without an LLM call. Update the canonical capability contract and docs; preserve the v0.4.6 tag and all historical versioned notes.
+
 The Issue #10 OPEN references in the versioned v0.4.0 and v0.4.2 notes below record status at those releases; they are historical.
 
 ## v0.4.6

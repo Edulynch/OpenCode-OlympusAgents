@@ -260,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
     check("CAPABILITY_CONTRACT_COMPLETE", set(capabilities) == {"opencode", "codex"} and all(set(value) == EXPECTED_CAPABILITIES for value in capabilities.values()) and all(state in {"SUPPORTED", "ADAPTABLE", "PARTIAL", "GAP", "NOT_NEEDED"} for value in capabilities.values() for state in value.values()))
     check("CODEX_ACTIVITY_IS_BASIC_PARTIAL", capabilities["codex"]["ACTIVITY_VISIBILITY"] == "PARTIAL")
     check("GLOBAL_RUNTIME_DISCOVERY_EVIDENCE_STATES",
-        capabilities["opencode"]["GLOBAL_RUNTIME_DISCOVERY"] == "GAP" and
+        capabilities["opencode"]["GLOBAL_RUNTIME_DISCOVERY"] == "SUPPORTED" and
         capabilities["codex"]["GLOBAL_RUNTIME_DISCOVERY"] == "SUPPORTED")
     check("CODEX_ASK_ADAPTABLE", capabilities["codex"]["ASK"] == "ADAPTABLE")
 

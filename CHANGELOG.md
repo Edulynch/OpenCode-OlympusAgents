@@ -4,6 +4,8 @@
 
 Changes after the latest published release go here.
 
+- Document Codex native root-instruction and specialist visibility (#23): distinguish `/status`, `/debug-config`, `/agent` and the observed `/agents` task dashboard, including the historical Kovan/Luna evidence and partial visibility limits. Documentation only; no agent, plugin, hook, or permission changes.
+
 - Fix OpenCode V2 startup documentation (#36): use the documented interactive Kael agent picker or user-owned `default_agent` opt-in instead of an unsupported top-level CLI selection flag. Clarify project vs global defaults; no runtime/config, permissions, installer, or immutable release tag changes.
 
 - Qualify OpenCode V2.0.26 global agent discovery on isolated Windows using the actual v0.4.6 installer: 15 managed resources, read-only VerifyOnly, active agent loader, 12 Olympus agents, two controls, and explicit Kael default selection without an LLM call. Update the canonical capability contract and docs; preserve the v0.4.6 tag and all historical versioned notes.

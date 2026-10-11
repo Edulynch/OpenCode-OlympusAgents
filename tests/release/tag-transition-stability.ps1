@@ -7,7 +7,7 @@ $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $utf8 = [Text.UTF8Encoding]::new($false)
 
 function Read-ReleaseDocs {
-    $paths = @('install.ps1', 'CHANGELOG.md', 'README.md', 'docs/ROADMAP.md')
+    $paths = @('install.ps1', 'CHANGELOG.md', 'README.md', 'docs/ROADMAP.md', 'olympus/harnesses/capabilities.toml')
     $paths += @(Get-ChildItem -LiteralPath (Join-Path $source 'docs') -Filter '*.md' -File -Recurse |
         ForEach-Object { $_.FullName.Substring($source.Length + 1).Replace('\', '/') } | Sort-Object -Unique)
     $docs = [ordered]@{}
@@ -42,6 +42,21 @@ function Get-ChangelogSection([string]$Text, [string]$Version) {
     $next = [regex]::Match($tail, '(?m)^##[ \t]+v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?(?:[ \t]+[^\r\n]*)?\r?$')
     if ($next.Success) { return $tail.Substring(0, $next.Index) }
     return $tail
+}
+
+# Read the canonical per-harness claim instead of hard-coding an old GAP.
+function Get-GlobalDiscoveryState([string]$Toml, [ValidateSet('opencode', 'codex')][string]$Harness) {
+    $section = [regex]::Match(
+        $Toml,
+        '(?ms)^\[' + [regex]::Escape($Harness) + '\][ \t]*\r?\n(?<body>.*?)(?=^\[|\z)'
+    )
+    if (-not $section.Success) { return '' }
+    $state = [regex]::Match(
+        $section.Groups['body'].Value,
+        '(?m)^[ \t]*GLOBAL_RUNTIME_DISCOVERY[ \t]*=[ \t]*"(?<value>SUPPORTED|ADAPTABLE|PARTIAL|GAP|NOT_NEEDED)"[ \t]*\r?$'
+    )
+    if (-not $state.Success) { return '' }
+    return $state.Groups['value'].Value
 }
 
 function Get-PrimaryReadmeInstallSection([string]$Readme) {
@@ -163,12 +178,31 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
         $roadmap -notmatch '(?i)v0\.4\.1.{0,500}(?:no\s+GitHub\s+Release|no\s+release\s+was\s+created)') {
         $errors.Add('DOC_ROADMAP_RELEASE_HISTORY')
     }
-    foreach ($required in @('issue #1 remains OPEN', 'discovery #7 remains OPEN',
+    foreach ($required in @('issue #1 remains OPEN',
             '[#10](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10) are CLOSED',
-            'OpenCode global runtime discovery is a known GAP', 'Codex DENY/Aegis remain gaps')) {
+            'Codex DENY/Aegis remain gaps')) {
         if (-not [regex]::IsMatch($roadmap, [regex]::Escape($required), [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
             $errors.Add('DOC_KNOWN_CAPABILITY_GAP_MISSING')
         }
+    }
+    if ($roadmap -notmatch '(?i)\b(?:global[ \t]+discovery|issue)[ \t]+#7\b') {
+        $errors.Add('DOC_KNOWN_CAPABILITY_GAP_MISSING')
+    }
+
+    # A capability can graduate from GAP after runtime evidence. Require the
+    # README, generated table, and roadmap to match the canonical TOML state.
+    $capabilities = [string]$Docs['olympus/harnesses/capabilities.toml']
+    $openCodeGlobal = Get-GlobalDiscoveryState $capabilities 'opencode'
+    $codexGlobal = Get-GlobalDiscoveryState $capabilities 'codex'
+    $generatedCapabilities = [string]$Docs['docs/HARNESS-CAPABILITIES.md']
+    $expectedRow = '| `GLOBAL_RUNTIME_DISCOVERY` | ' + $openCodeGlobal + ' | ' + $codexGlobal + ' |'
+    $roadmapClaim = '`GLOBAL_RUNTIME_DISCOVERY = ' + $openCodeGlobal + '`'
+    $readmeClaim = '(?m)^\|[ \t]*Agent discovery in runtime[ \t]*\|[ \t]*\*\*' + [regex]::Escape($openCodeGlobal) + '\b'
+    if (-not $openCodeGlobal -or -not $codexGlobal -or
+        -not $generatedCapabilities.Contains($expectedRow) -or
+        -not $roadmap.Contains($roadmapClaim) -or
+        -not [regex]::IsMatch($readme, $readmeClaim)) {
+        $errors.Add('DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH')
     }
     return @($errors | Sort-Object -Unique)
 }
@@ -221,6 +255,38 @@ try {
     $badFoundation = Copy-ReleaseDocs $docs
     $badFoundation['docs/ROADMAP.md'] = ([string]$badFoundation['docs/ROADMAP.md']) + "`nThe v0.4.0 foundation remains unmerged.`n"
     Assert-Rejected $badFoundation $version 'POST_TAG' 'DOC_FOUNDATION_CLAIMED_UNMERGED' 'REGRESSION_REJECTS_UNMERGED_FOUNDATION_CLAIM'
+
+    # Negative controls: this gate must reject contradictory current claims,
+    # without requiring OpenCode to remain in its historical GAP state.
+    $openCodeState = Get-GlobalDiscoveryState ([string]$docs['olympus/harnesses/capabilities.toml']) 'opencode'
+    $codexState = Get-GlobalDiscoveryState ([string]$docs['olympus/harnesses/capabilities.toml']) 'codex'
+    if (-not $openCodeState -or -not $codexState) { throw 'REGRESSION_MUTATION_SETUP_FAILED: canonical discovery states missing.' }
+    $otherState = if ($openCodeState -eq 'SUPPORTED') { 'GAP' } else { 'SUPPORTED' }
+    $correctRow = '| `GLOBAL_RUNTIME_DISCOVERY` | ' + $openCodeState + ' | ' + $codexState + ' |'
+    $wrongRow = '| `GLOBAL_RUNTIME_DISCOVERY` | ' + $otherState + ' | ' + $codexState + ' |'
+    $badGlobalTable = Copy-ReleaseDocs $docs
+    if (-not ([string]$badGlobalTable['docs/HARNESS-CAPABILITIES.md']).Contains($correctRow)) {
+        throw 'REGRESSION_MUTATION_SETUP_FAILED: expected capability row missing.'
+    }
+    $badGlobalTable['docs/HARNESS-CAPABILITIES.md'] = ([string]$badGlobalTable['docs/HARNESS-CAPABILITIES.md']).Replace($correctRow, $wrongRow)
+    Assert-Rejected $badGlobalTable $version 'POST_TAG' 'DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH' 'REGRESSION_REJECTS_GLOBAL_CAPABILITY_TABLE_MISMATCH'
+
+    $correctClaim = '`GLOBAL_RUNTIME_DISCOVERY = ' + $openCodeState + '`'
+    $wrongClaim = '`GLOBAL_RUNTIME_DISCOVERY = ' + $otherState + '`'
+    $badGlobalRoadmap = Copy-ReleaseDocs $docs
+    if (-not ([string]$badGlobalRoadmap['docs/ROADMAP.md']).Contains($correctClaim)) {
+        throw 'REGRESSION_MUTATION_SETUP_FAILED: expected roadmap discovery claim missing.'
+    }
+    $badGlobalRoadmap['docs/ROADMAP.md'] = ([string]$badGlobalRoadmap['docs/ROADMAP.md']).Replace($correctClaim, $wrongClaim)
+    Assert-Rejected $badGlobalRoadmap $version 'POST_TAG' 'DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH' 'REGRESSION_REJECTS_GLOBAL_ROADMAP_MISMATCH'
+
+    $badKnownCodexGap = Copy-ReleaseDocs $docs
+    $codexGapClaim = 'Codex DENY/Aegis remain gaps'
+    if (-not ([string]$badKnownCodexGap['docs/ROADMAP.md']).Contains($codexGapClaim)) {
+        throw 'REGRESSION_MUTATION_SETUP_FAILED: existing Codex capability gaps missing.'
+    }
+    $badKnownCodexGap['docs/ROADMAP.md'] = ([string]$badKnownCodexGap['docs/ROADMAP.md']).Replace($codexGapClaim, 'Codex capabilities are unchanged')
+    Assert-Rejected $badKnownCodexGap $version 'POST_TAG' 'DOC_KNOWN_CAPABILITY_GAP_MISSING' 'REGRESSION_REJECTS_MISSING_CODEX_GAPS'
 
     $badIdentity = Copy-ReleaseDocs $docs
     $releaseIdentityRegex = [regex]::new("(?m)^\`$ReleaseVersion\s*=\s*'[^']+'")

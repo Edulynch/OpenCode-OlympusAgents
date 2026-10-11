@@ -107,7 +107,7 @@ runtime discovery is a separate contract:
 
 | Harness | Global support | Runtime evidence and blocker |
 |---|---|---|
-| OpenCode | **GAP** | CLI `2.0.20`; run `4b1610d3387a4afcaa8fe24336ef0362` preflighted `opencode debug paths` in fresh A/B processes sharing the same isolated `HOME`, `USERPROFILE`, four XDG roots, and `TEMP/TMP`; every required path, including `tmp` and `log`, resolved inside those roots, with zero real-profile paths in runtime output. Both global installs and read-only `VerifyOnly` passed; each clean fixture returned HTTP 200 for `GET /api/agent` with the exact fixture location. The first response was empty; one explicit lazy-load probe returned only built-ins (`build`, `compaction`, `explore`, `general`, `plan`, `summary`, `title`). No Olympus agent or either diagnostic marker appeared, although all 12 generated global agent files were installed and verified and the hidden/subagent Aegis resource hash matched. Both owned servers were stopped after identity/listener checks and evidence/logs collected. Global custom-agent discovery remains a GAP and issue #7 stays OPEN. Evidence: `C:\Users\Public\opencode-olympus-qualification\olympus-global-runtime-4b1610d3387a4afcaa8fe24336ef0362`. |
+| OpenCode | **SUPPORTED — Windows V2.0.26 (isolated)** | Real `v0.4.6` global install: 15 managed resources; `VerifyOnly` read-only PASS; `opencode.config.agent` `active`; 12/12 Olympus agents plus 2/2 independent controls. An opt-in global `default_agent=kael` selected visible primary Kael; Aegis remained hidden. No LLM prompt. [Issue #7 acceptance](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7#issuecomment-6106396436). |
 | Codex | **SUPPORTED** | The user-provided Codex runtime evidence classifies `CODEX_GLOBAL_RUNTIME: SUPPORTED`. It was accepted as supplied and not re-run during this continuation; no additional Codex smoke or profile investigation was performed. Existing `DENY = GAP` and `AEGIS = GAP` classifications are unchanged. |
 
 OpenCode's official current config docs confirm global agents under
@@ -116,23 +116,28 @@ and later project-local config/`.opencode` sources taking precedence. Codex's
 current docs confirm global instructions under `$CODEX_HOME/AGENTS.md` (unless
 `AGENTS.override.md` exists), project instructions layered after the global
 instructions, custom agents under `$CODEX_HOME/agents/`, and profile files at
-`$CODEX_HOME/<profile>.config.toml`. These contracts establish intended paths
-and precedence, not runtime discovery. A global install plus unrelated project
-files and the installer-owned project override/migration paths are covered by
+`$CODEX_HOME/<profile>.config.toml`. These path/precedence rules remain
+separate from the runtime qualification recorded above. A global install plus
+unrelated project files and the installer-owned project override/migration paths are covered by
 isolated installer tests; no runtime semantic merge is claimed.
 
-The generated capability row `GLOBAL_RUNTIME_DISCOVERY` is per-harness:
-OpenCode is `GAP` because its isolated runtime omitted the installed global
-Olympus agents in both config modes; this establishes the observed discovery gap,
-not its root cause, which remains unproven under Issue #7. Codex remains
-`SUPPORTED` based on the user-provided runtime PASS evidence and was not re-run. The OpenCode
-qualification `tests/global-runtime/qualify.ps1` records the fresh child
-environment, all effective `debug paths`, exact server PID/endpoint, config
-root, clean fixture cwd, first and lazy-load API responses, logs, and
-real-profile sentinel results. `OPENCODE_CONFIG_DIR` is a config-layer
-override, not a sandbox for global data/cache/state paths. Latest evidence:
-`C:\Users\Public\opencode-olympus-qualification\olympus-global-runtime-4b1610d3387a4afcaa8fe24336ef0362`.
-No Unix global install/runtime is qualified.
+The generated `GLOBAL_RUNTIME_DISCOVERY` capability is `SUPPORTED` for both
+harnesses, on different evidence: OpenCode was tested in an isolated Windows
+V2.0.26 instance; Codex uses previously supplied global runtime PASS evidence.
+OpenCode qualification established agent registration and configuration-level
+Kael selection, **not** a model-backed conversation, universal V2 compatibility,
+or automatic replacement of a user's default. The installer intentionally
+preserves global `opencode.json` / `opencode.jsonc`; select Kael with
+`opencode --agent kael` or opt in through your own global configuration.
+
+A historical OpenCode V2.0.20 A/B investigation returned an empty roster. The
+older diagnostic used `?directory=...` rather than `location[directory]`,
+and did not establish agent-plugin activation completion. The earlier cause
+remains undiagnosed; its early snapshots do not override the newer V2.0.26
+acceptance. Preserve that history in [Issue #7](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7).
+The long-running `tests/global-runtime/qualify.ps1` remains a diagnostic,
+not the support-state gate; it does not yet require the plugin-ready signal.
+No Unix global install/runtime or live model-prompt smoke is qualified here.
 
 ### Codex global runtime evidence
 
@@ -164,20 +169,19 @@ pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Scope global -Harness all -Dr
 # Automated global path/ownership/verify/update/uninstall fixtures.
 pwsh -NoProfile -File ./tests/global-installer/qualify.ps1
 
-# OpenCode global path isolation and roster qualification.
+# Historical standalone OpenCode diagnostic (not the V2.0.26 acceptance gate).
 pwsh -NoProfile -File ./tests/global-runtime/qualify.ps1
 ```
 
-The standalone OpenCode runtime qualifier currently reproduces the known Issue
-#7 global-discovery failure: installed global Olympus agents are absent from the
-effective roster. This diagnostic is intentionally outside the unified RUNTIME
-profile and is not a claim that OpenCode global runtime is supported. Codex
-global runtime remains `SUPPORTED` based on the user-provided evidence above.
+The legacy global runtime qualifier remains outside the unified RUNTIME
+profile. Its older empty-roster observation did not wait for verified plugin
+activation and must not be treated as a current rejection of the V2.0.26
+supported-state evidence.
 
 The OpenCode project adapter provides the `/maintain` command, hidden Aegis,
 native ASK, hard DENY, Activity HUD, roles, models, permissions, and
-installer-managed surface. This project capability statement does not imply
-global runtime discovery, which remains a `GAP`.
+installer-managed surface. Global discovery is separately qualified above
+for isolated Windows V2.0.26; no model-backed prompt is implied.
 Codex installation does not imply capability parity: Codex multi-agent and
 result delivery are supported, ALLOW is supported, ASK is adaptable, DENY and
 Aegis remain gaps, and activity visibility is partial/basic. See the generated

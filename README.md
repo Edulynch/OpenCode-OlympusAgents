@@ -70,9 +70,9 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/ins
 | Global support | OpenCode | Codex |
 |---|---|---|
 | File installation and verification | Supported | Supported |
-| Agent discovery in runtime | **GAP — not proven** | **SUPPORTED** (user-provided evidence) |
+| Agent discovery in runtime | **SUPPORTED** (Windows V2.0.26; isolated) | **SUPPORTED** (user-provided evidence) |
 
-For dependable OpenCode agent discovery, use **project install**. See [capability limits](docs/HARNESS-CAPABILITIES.md) and [Issue #7](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7).
+OpenCode global installation preserves your existing default agent. Select Kael with `opencode --agent kael`, or opt in using your own global `default_agent` setting. Qualification covered discovery and configuration-level selection on isolated Windows/OpenCode V2.0.26; **no model-backed prompt was run**. See [capabilities](docs/HARNESS-CAPABILITIES.md) and [Issue #7](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7).
 
 ### Git worktrees (OpenCode, opt-in)
 

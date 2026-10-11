@@ -2,9 +2,54 @@
 
 ## [Unreleased]
 
-Changes after v0.4.4 go here.
+Changes after the latest published release go here.
 
 The Issue #10 OPEN references in the versioned v0.4.0 and v0.4.2 notes below record status at those releases; they are historical.
+
+## v0.4.5
+
+### Highlights
+
+- Fix OpenCode V2 project-local activation in newly created Git worktrees with an opt-in `Project.Commands.start` command and a local, manifest-verified setup helper (Issue #27). Two isolated worktrees processed a read-only first prompt using Kael on OpenCode v2.0.26.
+- Require the exact Olympus-owned resource inventory, 17 OpenCode files or 29 for an OpenCode + Codex installation, including SHA-256 validation and strict source/destination isolation. Reject missing, extra, and drifted resources before installation.
+- Preserve user-owned files: reject competing `opencode.json` / `opencode.jsonc` configuration locations, and never adopt an existing file without a matching worktree-local ownership manifest, even if its content hash is identical. Fail safely rather than overwriting or silently changing the effective configuration.
+- Keep startup opt-in and idempotent: re-running a verified setup reports no changes. Respect existing startup commands; no global installation or mutable download is required.
+- Retain compatibility with legacy OpenCode installations and the additive Dual Harness Installer using explicit `-Harness opencode`, `-Harness codex`, and `-Harness all`. Existing `installed_harnesses`, PowerShell 5.1 / PowerShell 7 entrypoints, Olympus Harness Core, and read-only `VerifyOnly` behavior are unchanged.
+
+### Validation
+
+- Windows fixture qualification: 23 checks passed for worktree provisioning, manifests, hashes, idempotence, alternate configuration conflicts, and preservation of byte-identical preexisting files (including files tracked by Git).
+- Release `-MockOpenCode`, Phase4C `-QualificationSlice Offline`, and installer compatibility qualifications passed during this change; PowerShell 5.1 and PowerShell 7 installer compatibility were exercised.
+- Native worktree activation and a read-only first prompt through Kael were observed in two isolated checkouts on an earlier candidate commit. Later updates were limited to manifest and user-file protection; those model prompts were not repeated.
+- The additional Python renderer checker was not completed in the Windows operator environment; generated worktree helper parity was verified independently against the canonical helper. These checks do not establish universal runtime behavior.
+
+### Capability limits
+
+- Worktree provisioning is opt-in and qualified for OpenCode V2 on Windows. It addresses missing Olympus project resources in linked worktrees; it does not establish the cause of every possible prompt cancellation.
+- OpenCode global runtime discovery remains a documented GAP. Codex `DENY = GAP`, `AEGIS = GAP`, and `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; this release does not claim full parity between harnesses.
+- Issue #8 (authorization continuity across compaction/resume) and Issue #28 (explicit Kael-to-Aegis maintenance delegation) remain independent. No privileged maintenance route or agent permissions change in this patch.
+
+## Installation
+
+From the root of a trusted Git project, use the immutable release tag. OpenCode project installation is the default; select the other harnesses explicitly:
+
+```powershell
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.5/install.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.5/install.ps1'))) -Harness codex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.5/install.ps1'))) -Harness all
+```
+
+The Git worktree startup hook is optional; see the README for the per-project OpenCode setup and precautions when another startup command already exists.
+
+## Verify installation
+
+These checks verify the exact managed installation subset without changing files:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.5/install.ps1'))) -Harness opencode -Version 'v0.4.5' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.5/install.ps1'))) -Harness codex -Version 'v0.4.5' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.5/install.ps1'))) -Harness all -Version 'v0.4.5' -Target (Get-Location).Path -VerifyOnly
+```
 
 ## v0.4.4
 

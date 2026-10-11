@@ -187,6 +187,21 @@ If drift occurs, inspect the reported path and manifest, back up any intentional
 
 The contextual `FAST:` request asks Olympus to use useful independent parallelism within its existing limits. The `FAST` qualification profile below selects offline checks; these two meanings are separate, and neither skips required validation or completion gates.
 
+### TFR in software built with Olympus
+
+The canonical **TFR (risk-based focused testing)** decision rule lives in
+`olympus/policies/routing.md` and is delivered to Kael in both OpenCode and
+Codex through the existing renderer. For an unrelated user repository, Kael
+discovers that project's real testing commands and chooses proportionate
+checks; it does **not** assume Olympus's own FAST/FULL/RUNTIME qualifier
+profiles exist there. Nox and Vera are used only for distinct needed evidence,
+and passing static prompts is not a claim about live model decisions.
+
+The guidance below concerns **qualification of OlympusAgents itself**.
+Keep historical coverage and mandatory gates until an evidenced contract
+mapping and measured cost justify consolidation; do not delete tests just
+because they are slow.
+
 ### Choosing qualification by change risk
 
 Choose checks that provide evidence proportionate to the change's risk:

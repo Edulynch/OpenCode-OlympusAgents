@@ -135,6 +135,16 @@ def markdown_section(text: str, heading: str, source: Path) -> str:
     return "\n".join(lines[start:end]).strip()
 
 
+def focused_testing_policy(root: Path) -> str:
+    """Use the one canonical testing policy in both root-agent adapters."""
+    source = root / "olympus" / "policies" / "routing.md"
+    canonical = read_text(source)
+    heading = "## TFR — risk-based focused testing"
+    if canonical.count(heading) != 1:
+        raise RenderError("TFR must have exactly one canonical routing-policy section")
+    return markdown_section(canonical, heading, source)
+
+
 def add_yaml_comment(header: str, message: str) -> str:
     if not header.startswith("---\n") or not header.endswith("\n---\n"):
         raise RenderError("OpenCode agent metadata must be a YAML frontmatter block")
@@ -184,6 +194,7 @@ def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[
         "## Target ownership and project-plane boundary",
         maintenance_policy_path,
     )
+    tfr_policy = focused_testing_policy(root)
     metadata_dir = adapter / "agent-metadata"
     prompts_dir = adapter / "agent-prompts"
     metadata_roles = {path.stem for path in metadata_dir.glob("*.md") if path.is_file()}
@@ -206,13 +217,20 @@ def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[
         model, effort = role_model(models, role, "opencode")
         values = {"opencode_model": model, "effort": effort}
         metadata = prefix_yaml_description(replace_tokens(read_text(metadata_path), values, metadata_path), identities[role], metadata_path)
+        prompt_source = read_text(prompt_path)
+        # Only the root orchestrator receives the shared testing policy.
+        if role == "kael" and prompt_source.count("{{tfr_policy}}") != 1:
+            raise RenderError("OpenCode Kael prompt must contain one TFR policy token")
+        if role != "kael" and "{{tfr_policy}}" in prompt_source:
+            raise RenderError("TFR root policy token is reserved for OpenCode Kael")
         prompt = replace_tokens(
-            read_text(prompt_path),
+            prompt_source,
             {
                 "max_children": children,
                 "max_children_word": word,
                 "max_children_title": word.title(),
                 "display_identity": identities[role],
+                "tfr_policy": tfr_policy if role == "kael" else "",
                 "maintenance_plane_policy": maintenance_policy,
                 "maintenance_target_boundary": maintenance_target_boundary,
             },
@@ -271,7 +289,15 @@ def codex_outputs(root: Path, models: dict, policies: dict, identities: dict[str
         output[root / ".codex" / "agents" / f"{role}.toml"] = f"# {GENERATED} Canonical Olympus role: olympus/roles/{role}.md.\n" + body
 
     root_source = adapter / "root.md"
-    root_prompt = replace_tokens(read_text(root_source), {"max_children": children, "max_children_word": word}, root_source)
+    root_template = read_text(root_source)
+    # The Codex root thread implements Kael's policy without a second copy.
+    if root_template.count("{{tfr_policy}}") != 1:
+        raise RenderError("Codex root prompt must contain one TFR policy token")
+    root_prompt = replace_tokens(
+        root_template,
+        {"max_children": children, "max_children_word": word, "tfr_policy": focused_testing_policy(root)},
+        root_source,
+    )
     _, remainder = root_prompt.split("\n", 1)
     root_title = f"# {identities['kael']}"
     output[root / "CODEX.md"] = f"{root_title}\n\n<!-- {GENERATED} Canonical Olympus role: olympus/roles/kael.md. -->\n{remainder}"

@@ -53,6 +53,8 @@ threads open concurrently; `.codex/config.toml` sets Codex's native cap to {{max
 Children must not spawn children or act as mini-orchestrators. Each child profile
 disables multi-agent tools. Kael schedules and owns all child work and completion.
 
+{{tfr_policy}}
+
 ## Fast path and completion
 
 For a small, deterministic task with known ownership, direct acceptance criteria,

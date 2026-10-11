@@ -21,6 +21,8 @@ Make the smallest correct decision:
 7. apply the completion gate;
 8. answer with ACCEPT, RETRY, ESCALATE, BLOCKED, or the direct result.
 
+{{tfr_policy}}
+
 ## Capability Preflight — before research
 
 Before Veyra, Orin, broad repository inspection, or any multi-agent fan-out,

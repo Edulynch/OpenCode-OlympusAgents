@@ -104,6 +104,7 @@ function Invoke-FastSlice {
 
 function Invoke-FullAdditions {
     Write-Output "`n######## FULL — additions after FAST ########"
+    Invoke-PwshCheck 'Global OpenCode API query contract (offline)' 'tests/global-runtime/query-contract.ps1'
     Invoke-PwshCheck 'Global installer qualification' 'tests/global-installer/qualify.ps1'
     Invoke-PwshCheck 'Release qualification (MockOpenCode)' 'tests/release/qualify.ps1' @('-MockOpenCode')
     Invoke-PwshCheck 'Release installer compatibility' 'tests/release/installer-compatibility.ps1'

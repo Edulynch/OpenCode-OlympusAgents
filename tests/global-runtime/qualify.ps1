@@ -27,9 +27,9 @@ $script:evidence = [ordered]@{
     qualification = 'fresh child processes; preflight opencode debug paths in isolated HOME and four XDG roots; OpenCode OPENCODE_CONFIG_DIR is config-layer-only; clean fixture; owned standalone serve processes; GET /api/agent with fixture context'
     runtime_contract = [ordered]@{
         cli_version = $null
-        agent_list_operation = 'GET /api/agent (OpenAPI agent.list); query directory is the location context'
+        agent_list_operation = 'GET /api/agent (OpenAPI agent.list); URL-encoded location[directory] selects the requested workspace'
         context_directory = $null
-        context_load = 'first location-scoped API request initializes that location; verify from its response/logs'
+        context_load = 'agent.list returns currently registered agents; HTTP success or repeated empty snapshots do not prove loader activation completed'
         standalone_process = 'qualification-owned opencode serve PID; no managed-service discovery'
         home_resolution = 'HOME and USERPROFILE point to the isolated home before each new process starts; OPENCODE_TEST_HOME is not used'
         config_resolution = 'OPENCODE_CONFIG_DIR selects the config layer only for A; XDG_CONFIG_HOME/DATA_HOME/CACHE_HOME/STATE_HOME and HOME isolate the remaining global paths in both controls'
@@ -792,7 +792,7 @@ Qualification-only minimal agent; never executed.
         $control.endpoint = $endpoint
 
         $encodedDirectory = [Uri]::EscapeDataString([IO.Path]::GetFullPath($fixture))
-        $requestUri = "$endpoint/api/agent?directory=$encodedDirectory"
+        $requestUri = "$endpoint/api/agent?location%5Bdirectory%5D=$encodedDirectory"
         $control.api_request = "GET $requestUri"
         $authorization = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("opencode:$serverPassword"))
         $handler = [Net.Http.HttpClientHandler]::new()
@@ -1021,8 +1021,11 @@ try {
     $reproducibleGlobalRosterGap = ($script:evidence.path_isolation -eq 'PASS' -and $profileFreeBoth -and
         $apiContextValidBoth -and $aMissingIds.Count -gt 0 -and $bMissingIds.Count -gt 0 -and
         -not $controlA.minimal_probe_visible -and -not $controlB.minimal_probe_visible)
+    # Two empty registration snapshots cannot distinguish slow activation from
+    # a loader fault. Without an authoritative activation-complete signal,
+    # preserve the evidence rather than promoting absence to a product GAP.
     $script:evidence.runtime_result = if ($aPass -and $bPass) { 'SUPPORTED' }
-        elseif ($reproducibleGlobalRosterGap) { 'GAP' }
+        elseif ($reproducibleGlobalRosterGap) { 'NEEDS_RUNTIME_EVIDENCE' }
         else { 'PARTIAL' }
     $script:evidence.classification = $script:evidence.runtime_result
     $script:evidence.failure = if ($aPass -and $bPass) { $null }
@@ -1033,7 +1036,7 @@ try {
     if ($aPass -and $bPass) {
         Write-Output 'OPENCODE_GLOBAL_RUNTIME_DISCOVERY: SUPPORTED (A custom config layer plus isolated HOME and XDG roots; B true XDG global config with OPENCODE_CONFIG_DIR unset; dedicated owned server PIDs; GET /api/agent with clean fixture; no model execution)'
     } elseif ($reproducibleGlobalRosterGap) {
-        Write-Output "OPENCODE_GLOBAL_RUNTIME_DISCOVERY: GAP (A missing=$($aMissingIds -join ','); B missing=$($bMissingIds -join ','); minimal probes absent; API context valid; no real-profile paths)"
+        Write-Output "OPENCODE_GLOBAL_RUNTIME_DISCOVERY: NEEDS_RUNTIME_EVIDENCE (A missing=$($aMissingIds -join ','); B missing=$($bMissingIds -join ','); loader activation completion unverified; no model execution)"
         $exitCode = 1
     } else {
         Write-Output "OPENCODE_GLOBAL_RUNTIME_DISCOVERY: PARTIAL ($($script:evidence.classification))"

@@ -127,8 +127,19 @@ V2.0.26 instance; Codex uses previously supplied global runtime PASS evidence.
 OpenCode qualification established agent registration and configuration-level
 Kael selection, **not** a model-backed conversation, universal V2 compatibility,
 or automatic replacement of a user's default. The installer intentionally
-preserves global `opencode.json` / `opencode.jsonc`; select Kael with
-`opencode --agent kael` or opt in through your own global configuration.
+preserves global `opencode.json` / `opencode.jsonc`. For interactive
+selection, start `opencode --standalone` (or `opencode` with your usual
+service) and choose visible primary **Kael** using the V2 agent list
+(**Ctrl+X**, then **A** by default) or cycle agents with **Shift+Tab**.
+These are configurable keybinds; see the [official OpenCode V2
+keybinds](https://opencode.ai/v2/docs/cli/keybinds). Alternatively, opt in
+to `"default_agent": "kael"` in your own global
+`~/.config/opencode/opencode.jsonc` for new sessions; project-local
+`opencode.jsonc` already sets Kael when the project configuration loads.
+An existing session's agent selection is not overwritten. The operator's
+V2 CLI rejected the previously documented top-level agent-selection flag;
+the keyboard instructions are documented upstream but are not claimed as
+a separately executed interactive qualification here.
 
 A historical OpenCode V2.0.20 A/B investigation returned an empty roster. The
 older diagnostic used `?directory=...` rather than `location[directory]`,

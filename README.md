@@ -167,7 +167,7 @@ Aegis is hidden and cannot be invoked automatically by Kael. Codex has no equiva
 
 Only install in **trusted repositories**. Kovan and Nox can run shell commands; task scope is **not** an OS sandbox. Olympus preserves user-owned files and refuses unsafe managed-file changes.
 
-Codex root `AGENTS.override.md` or `AGENTS.md` may override the installed `CODEX.md`. See [Issue #23](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/23).
+In Codex, Kael is the **root instructions**, not a selectable child agent. Use `/status` for the instruction-source label, `/debug-config` for config layers, and **`/subagents`** for spawned specialist threads (observed on Codex CLI 0.162.1). The separate `/agents` dashboard shows project tasks, not a verified child role by itself. A nonempty root `AGENTS.override.md` or `AGENTS.md` takes precedence over the `CODEX.md` fallback. See [Codex verification guide](docs/CODEX-COMPATIBILITY.md#verificar-kael-y-especialistas-en-codex-issue-23) and [Issue #23](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/23).
 
 [Full capability table →](docs/HARNESS-CAPABILITIES.md)
 

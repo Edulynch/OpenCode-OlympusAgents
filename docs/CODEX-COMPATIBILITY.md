@@ -10,6 +10,69 @@ limitaciones de Codex no reducen garantías Core ni implican paridad con OpenCod
 
 Según la [referencia oficial de slash commands de Codex](https://learn.chatgpt.com/docs/developer-commands?surface=cli), consultada el 2026-10-07, `/plan` activa un modo propio de Codex: no es un comando Olympus ni equivale a invocar Atlas. `/fast`, cuando está disponible y aplica, selecciona el Fast service tier nativo del modelo, no el `FAST:` contextual de Olympus. El lenguaje natural sigue siendo la superficie portable entre harnesses; Olympus no promete paridad de comandos.
 
+### Verificar Kael y especialistas en Codex (Issue #23)
+
+Use las funciones nativas antes de atribuir un fallo a Olympus o instalar
+otro sistema de observabilidad. Kael corresponde al **hilo root** de Codex:
+no es un custom agent `kael` separado.
+
+1. **Instrucciones efectivas:** en un proyecto trusted con Olympus, `/status`
+   puede mostrar `Agents.md: CODEX.md`; esto identifica la fuente presentada
+   por la CLI para la sesión observada, no demuestra por sí solo cada byte
+   originalmente cargado por una sesión histórica. `/debug-config` presenta
+   las capas de configuración habilitadas (packaged, system, user, project);
+   no es un registro de invocaciones de especialistas. En un mismo directorio,
+   `AGENTS.override.md` y `AGENTS.md` tienen prioridad sobre el fallback
+   configurado `CODEX.md`; otras capas de instrucciones pueden coexistir.
+2. **Tareas frente a subagentes:** en Codex CLI **0.162.1**, el operador observó
+   que `/agents` (plural) abre el *Agent command center* con una lista de
+   tareas del proyecto, sus estados y el detalle de la tarea seleccionada.
+   Esa pantalla **no mostró** identidad, parentesco, modelo ni resultado
+   terminal del hijo histórico Kovan. No confunda `Ready` o `Inactive`
+   de una tarea con el estado nativo de un subagente.
+3. **Hilos de especialistas:** en la CLI instalada **0.162.1**,
+   el comando observado `/subagents` abre el selector de hilos secundarios.
+   El comando `/agents` (plural) abre un panel **distinto** de tareas del
+   proyecto. Algunas referencias de Codex mencionan `/agent` (singular),
+   pero **no se verificó esa forma en esta instalación**: no la presente
+   como requisito o alias confirmado. No está demostrado que el selector
+   permita recuperar un hijo **ya terminado** de una sesión antigua.
+   Si no aparece, informe `UI_NOT_OBSERVABLE_FOR_HISTORICAL_SESSION`,
+   **no** `NO_DELEGATION`, `FAILED` ni una regresión de routing.
+
+   **Prueba real (Codex CLI 0.162.1):** el root solicitó una única tarea
+   de lectura a Veyra mediante `collaboration.spawn_agent` con
+   `agent_type: veyra` y recibió `/root/veyra_codex_visibility`.
+   Mientras trabajaba, `/subagents` mostró
+   `Main [default] (current)` y ese hijo con **IDs de hilo distintos**,
+   bajo `Sub-agents running`, inicialmente sin actividad reciente.
+   En el hilo Veyra se observó la lectura de `CODEX.md` y esta guía,
+   sin ediciones ni tests. Al finalizar, Kael reportó haber recibido
+   `FINAL_ANSWER` del **mismo hilo original** y resumió sus hallazgos.
+   La evidencia respalda delegación y entrega del resultado, pero **no**
+   muestra el modelo efectivo de Veyra, consumo facturado, ni un indicador
+   nativo independiente de resultado ya consumido por el root. El banner
+   mostraba `YOLO mode`, de modo que tampoco demuestra enforcement de
+   permisos de `olympus-project`.
+4. **Correlación comprobable:** el registro histórico de #23 contiene
+   `spawn_agent(agent_type=kovan)`, ID de hijo distinto, relación con el
+   padre, nickname **Popper**, estado terminal y el resultado original
+   visible después en el registro root. El último contexto del hijo fue
+   `gpt-6-luna / max`; eso acredita contexto de modelo, **no** consumo
+   facturado por modelo ni una señal independiente de resultado consumido.
+   No publique rollouts completos, prompts ni datos del perfil de usuario.
+
+**Límites:** `ACTIVITY_VISIBILITY = PARTIAL`; Codex no recibe el HUD
+OpenCode. `AEGIS = GAP` y `DENY = GAP`: no hay `/maintain` de Olympus
+en Codex ni permiso para simularlo. La evidencia nativa debe preceder
+cualquier afirmación de activación, estado o resultado. No hacen falta
+hooks, agentes nuevos ni más suites para documentar esta limitación.
+
+Fuentes: [comandos CLI nativos](https://learn.chatgpt.com/docs/developer-commands?surface=cli),
+[subagentes](https://learn.chatgpt.com/docs/agent-configuration/subagents),
+[instrucciones y precedencia](https://learn.chatgpt.com/docs/agent-configuration/agents-md);
+[evidencia acotada de #23](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/23).
+
 ## Clasificación
 
 - `DIRECT_MAPPING`: primitive nativa con el mismo contrato operativo básico

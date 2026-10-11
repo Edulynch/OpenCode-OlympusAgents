@@ -72,7 +72,7 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/ins
 | File installation and verification | Supported | Supported |
 | Agent discovery in runtime | **SUPPORTED** (Windows V2.0.26; isolated) | **SUPPORTED** (user-provided evidence) |
 
-OpenCode global installation preserves your existing default agent. Select Kael with `opencode --agent kael`, or opt in using your own global `default_agent` setting. Qualification covered discovery and configuration-level selection on isolated Windows/OpenCode V2.0.26; **no model-backed prompt was run**. See [capabilities](docs/HARNESS-CAPABILITIES.md) and [Issue #7](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7).
+OpenCode global installation **preserves your existing default agent**. Start `opencode --standalone` (or `opencode` with your usual service), then select the visible primary agent **Kael** from the V2 agent list (**Ctrl+X**, then **A** by default), or cycle primary agents with **Shift+Tab**. Keybinds can be customized; see the [official V2 keybinds](https://opencode.ai/v2/docs/cli/keybinds). To make Kael the default for **new sessions**, opt in by setting `"default_agent": "kael"` in your own `~/.config/opencode/opencode.jsonc`; the installer does not edit it. In a **project install**, the project `opencode.jsonc` already selects Kael when that configuration is loaded. Existing sessions retain their selected agent. Qualification covered agent discovery and config-level selection on isolated Windows/OpenCode V2.0.26; **interactive key use and a model-backed prompt were not tested**. See [capabilities](docs/HARNESS-CAPABILITIES.md) and [Issue #7](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7).
 
 ### Git worktrees (OpenCode, opt-in)
 
@@ -100,7 +100,7 @@ codex
 
 > Add a search bar to my app. Make it keyboard-accessible and run the relevant tests.
 
-Kael routes work to the team; you do not need to pick agents manually.
+Once Kael is active (automatically for project installs), it routes tasks to specialists; you do not need to pick those specialists manually.
 
 ## 🧭 Meet the Team
 

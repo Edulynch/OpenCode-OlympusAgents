@@ -179,6 +179,36 @@ try {
         $verifyAll.Text -match 'OLYMPUS_GLOBAL_VERIFY: codex' -and (Snapshot $openCodeRoot) -ceq $openBeforeVerify -and
         (Snapshot $codexHome) -ceq $codexBeforeVerify)
 
+    # Issue #46: exact generated files without the ownership manifest are not
+    # a verified global installation. Exercise each harness in fixture-owned
+    # roots and restore the original manifest bytes for later qualification.
+    foreach ($fixture in @(
+        @{ Harness='opencode'; Root=$openCodeRoot; Manifest=$openManifestPath },
+        @{ Harness='codex'; Root=$codexHome; Manifest=$codexManifestPath }
+    )) {
+        $harness = [string]$fixture.Harness
+        $manifestPath = [string]$fixture.Manifest
+        $manifestBytes = [IO.File]::ReadAllBytes($manifestPath)
+        try {
+            [IO.File]::Delete($manifestPath)
+            $beforeMissing = Snapshot $fixture.Root
+            $missing = Global-Verify $project $harness
+            $afterMissing = Snapshot $fixture.Root
+            $checkPrefix = 'GLOBAL_VERIFYONLY_' + $harness.ToUpperInvariant()
+            Check ($checkPrefix + '_MISSING_MANIFEST_REJECTED') ($missing.Code -ne 0 -and
+                $missing.Text -match 'GLOBAL_MANIFEST_MISSING' -and
+                $missing.Text -notmatch ('OLYMPUS_GLOBAL_VERIFY: ' + $harness + ' .* PASS')) (
+                "exit=$($missing.Code)`n$($missing.Text)")
+            Check ($checkPrefix + '_MISSING_MANIFEST_READONLY') ($beforeMissing -ceq $afterMissing)
+        } finally {
+            [IO.File]::WriteAllBytes($manifestPath, $manifestBytes)
+        }
+    }
+    $restoredVerify = Global-Verify $project 'all'
+    Check 'GLOBAL_VERIFYONLY_ALL_RESTORED_PASS' ($restoredVerify.Code -eq 0 -and
+        (Snapshot $openCodeRoot) -ceq $openBeforeVerify -and
+        (Snapshot $codexHome) -ceq $codexBeforeVerify)
+
     # Global update remains hash-owned and preserves both local overrides and user config.
     $openManifest.installed_version = 'v0.3.0-beta.4'
     [IO.File]::WriteAllText($openManifestPath, (($openManifest | ConvertTo-Json -Depth 20) + "`n"), $utf8)

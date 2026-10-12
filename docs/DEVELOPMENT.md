@@ -457,12 +457,7 @@ user-provided fresh-entry runtime smoke on 2026-09-30 returned
 `MAINTENANCE_AUTH: VALID` and `AEGIS_SCOPE: ACCEPTED` in about 5.5 seconds, with
 zero requested tools, file changes or child sessions. It did not qualify resume.
 
-The final user-provided runtime smoke on 2026-10-01 passed: Aegis identity,
-marker, original task scope, `MAINTENANCE_AUTH`, and `AEGIS_SCOPE` were retained;
-explicit same-child `opencode run --session <id>` continuation worked. Issue #8
-is **CLOSED**. The evidence and scope limits are recorded in
-[ISSUE-8-CHECKPOINT-RESUME.md](ISSUE-8-CHECKPOINT-RESUME.md); this audit did not
-rerun that smoke.
+The 2026-10-01 user-provided runtime smoke **passed only for its exact same-session continuation**: Aegis identity, marker, original task scope, `MAINTENANCE_AUTH`, and `AEGIS_SCOPE` were retained with `opencode run --session <id>`. It **did not test compaction**. Issue #8 was reopened on 2026-10-09 after an OpenCode v2.0.26 compaction appeared to discard the accepted authority context; it remains **OPEN/deferred**, with no fix for that observation claimed. See [ISSUE-8-CHECKPOINT-RESUME.md](ISSUE-8-CHECKPOINT-RESUME.md) for the historical scoped PASS.
 
 External work ownership is the outer lifecycle rule for work Aegis launches to fulfill the current user request: PowerShell processes, scripts/controllers, builds, tests, benchmark controllers, disposable validation and OpenCode roots created through session APIs. Normal synchronous commands whose tool call returns only on completion are already owned. **Foreground/join is mandatory**, regardless of duration or a request to run in the background: launch → track → wait/join → collect → validate → final response. Aegis briefly explains that it will wait rather than detach. Progress updates are not final responses. A launcher exit is not sufficient when subordinate work survives it; reuse the family-aware completion gate below. A reliably completing controller can own its own subordinate jobs; Aegis waits for and validates its terminal report rather than duplicating that controller's tracking. Independent external jobs can still run in parallel, provided all required jobs are joined before finalization.
 

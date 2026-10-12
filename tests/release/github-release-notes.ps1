@@ -76,8 +76,11 @@ function Assert-ReleaseNotes([string]$Body, [string]$Tag) {
             }
         }
     }
-    if ($Body -match '(?i)raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/master/install\.ps1') {
-        throw 'RELEASE_NOTES_MASTER_SOURCE: A mutable master installer is not a canonical release source.'
+    # Any executable PowerShell source on a mutable branch is disallowed, not
+    # just the top-level installer. GitHub latest-release *metadata* is allowed.
+    $mutableSource = '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/(?:master|main|refs/heads/(?:master|main))/[^\s]+?\.ps1|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/(?:master|main)/[^\s]+?\.ps1)'
+    if ($Body -match $mutableSource) {
+        throw 'RELEASE_NOTES_MASTER_SOURCE: Executable scripts cannot be downloaded from a mutable branch.'
     }
 }
 

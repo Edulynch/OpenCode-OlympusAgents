@@ -2,7 +2,7 @@
 
 **Observed:** 2026-10-01
 **OpenCode:** `v2.0.21`
-**Status:** **CLOSED** — static qualification and final human runtime smoke PASS.
+**Historical qualification:** PASS on 2026-10-01 for the observed OpenCode v2.0.21 same-session continuation. **Current Issue #8:** OPEN/deferred since 2026-10-09 following a distinct v2.0.26 compaction/authorization regression. This record does not establish that compaction is fixed.
 
 ## Confirmed runtime reproduction
 
@@ -82,7 +82,7 @@ renderer, authority, maintenance handoff and result reconciliation.
 **Static qualification:** PASS.
 **Implementation commit:** `464151c` (`fix(aegis): retain same-session maintenance authorization`).
 **Final runtime qualification:** PASS (human-observed same-session continuation; evidence below).
-**Issue #8:** **CLOSED** after the final runtime PASS.
+**Historical status:** Issue #8 was marked CLOSED after the 2026-10-01 scoped runtime PASS, before the later compaction observation reopened it.
 
 Validated affected qualifications: `python tests/maintenance-scope/qualify.py`
 (including deterministic checkpoint/resume and accepted-scope cases),
@@ -147,4 +147,4 @@ ISSUE_8_CHECKPOINT_RESUME: PASS
 ```
 
 The exact identity, marker, original scope, and accepted authorization states
-were retained in the resumed child. Issue #8 is **CLOSED**.
+were retained in the resumed child. Issue #8 was **CLOSED at this historical checkpoint** but is now **OPEN/deferred**. The recorded `OLYMPUS_DEFECT_FIXED: YES` applies only to the tested same-session continuation, not the subsequently observed compaction failure.

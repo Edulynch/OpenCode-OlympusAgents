@@ -8,6 +8,13 @@ $utf8 = [Text.UTF8Encoding]::new($false)
 
 function Read-ReleaseDocs {
     $paths = @('install.ps1', 'CHANGELOG.md', 'README.md', 'docs/ROADMAP.md', 'olympus/harnesses/capabilities.toml')
+    foreach ($action in @('install','uninstall')) {
+        foreach ($scope in @('project','global')) {
+            foreach ($harness in @('opencode','codex','all')) {
+                $paths += "$action/$scope/$harness.ps1"
+            }
+        }
+    }
     $paths += @(Get-ChildItem -LiteralPath (Join-Path $source 'docs') -Filter '*.md' -File -Recurse |
         ForEach-Object { $_.FullName.Substring($source.Length + 1).Replace('\', '/') } | Sort-Object -Unique)
     $docs = [ordered]@{}
@@ -61,6 +68,10 @@ function Get-GlobalDiscoveryState([string]$Toml, [ValidateSet('opencode', 'codex
 
 function Get-PrimaryReadmeInstallSection([string]$Readme) {
     return [regex]::Match($Readme, '(?ms)^(?<heading>##[ \t]+[^\r\n]*\bInstall[ \t]*\r?\n)(?<body>.*?)(?=^##[ \t]+|\z)')
+}
+
+function Get-PrimaryReadmeUninstallSection([string]$Readme) {
+    return [regex]::Match($Readme, '(?ms)^##[ \t]+[^\r\n]*\bUninstall[ \t]*\r?\n(?<body>.*?)(?=^##[ \t]+|\z)')
 }
 
 function Set-ReadmeInstallCommand($Docs, [string]$OldCommand, [string]$NewCommand) {
@@ -145,31 +156,52 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
     }
 
     $readme = [string]$Docs['README.md']
-    $installSection = Get-PrimaryReadmeInstallSection $readme
-    $readmeInstallInvalid = -not $installSection.Success
-    if ($installSection.Success) {
-        $installBody = $installSection.Groups['body'].Value
-        $publicCommandPattern = '^[ \t]*irm[ \t]+https://raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/master/install/(?:project|global)/(?:opencode|codex|all)\.ps1[ \t]*\|[ \t]*iex[ \t]*$'
-        $requiredEntrypoints = @(
-            'project/opencode', 'project/codex', 'project/all',
-            'global/opencode', 'global/codex', 'global/all'
-        )
-        foreach ($entrypoint in $requiredEntrypoints) {
-            $command = 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/' + $entrypoint + '.ps1 | iex'
-            if (-not [regex]::IsMatch($installBody, '(?m)^[ \t]*' + [regex]::Escape($command) + '[ \t]*\r?$')) {
-                $readmeInstallInvalid = $true
+    $publicInvalid = $false
+    $rawBase = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' + $Version + '/'
+    $publicCommandPattern = '^[ \t]*irm[ \t]+https://raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/' +
+        [regex]::Escape($Version) + '/(?:install|uninstall)/(?:project|global)/(?:opencode|codex|all)\.ps1[ \t]*\|[ \t]*iex[ \t]*$'
+    foreach ($action in @('install','uninstall')) {
+        $section = if ($action -eq 'install') {
+            Get-PrimaryReadmeInstallSection $readme
+        } else {
+            Get-PrimaryReadmeUninstallSection $readme
+        }
+        if (-not $section.Success) { $publicInvalid = $true; continue }
+        $body = $section.Groups['body'].Value
+        foreach ($scope in @('project','global')) {
+            foreach ($harness in @('opencode','codex','all')) {
+                $expected = "irm $rawBase$action/$scope/$harness.ps1 | iex"
+                if ([regex]::Matches($body,'(?m)^[ \t]*' + [regex]::Escape($expected) + '[ \t]*\r?$').Count -ne 1) {
+                    $publicInvalid = $true
+                }
             }
         }
-
-        foreach ($line in ($installBody -split '\r?\n')) {
-            if ($line -match '(?i)^[ \t]*(?:irm|iwr|invoke-restmethod|invoke-webrequest|iex|invoke-expression)\b') {
-                if (-not [regex]::IsMatch($line, $publicCommandPattern)) { $readmeInstallInvalid = $true }
+        foreach ($line in ($body -split '\r?\n')) {
+            if ($line -match '(?i)^[ \t]*(?:irm|iwr|invoke-restmethod|invoke-webrequest|iex|invoke-expression)\b' -and
+                -not [regex]::IsMatch($line, $publicCommandPattern)) {
+                $publicInvalid = $true
             }
         }
     }
     if ($readme -notmatch 'https://github\.com/Edulynch/OpenCode-OlympusAgents/releases' -or
-        $readmeInstallInvalid -or $readme -match 'v0\.4\.[012]') {
-        $errors.Add('DOC_README_VERSION_NEUTRAL_INSTALL')
+        $publicInvalid -or $readme -match 'v0\.4\.[012]') {
+        $errors.Add('DOC_README_IMMUTABLE_ENTRYPOINT_INVALID')
+    }
+
+    foreach ($action in @('install','uninstall')) {
+        foreach ($scope in @('project','global')) {
+            foreach ($harness in @('opencode','codex','all')) {
+                $relative = "$action/$scope/$harness.ps1"
+                $wrapper = [string]$Docs[$relative]
+                $launcherUrl = $rawBase + 'scripts/launch-latest.ps1'
+                $externalUrls = [regex]::Matches($wrapper, 'https://raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/[^\s]+?\.ps1')
+                if ($externalUrls.Count -ne 1 -or $externalUrls[0].Value -cne $launcherUrl -or
+                    -not $wrapper.Contains("Invoke-WebRequest -Uri '$launcherUrl' -OutFile " + '$launcher' + " -ErrorAction Stop") -or
+                    -not $wrapper.Contains("-Action '$action' -Scope '$scope' -Harness '$harness' -Target (Get-Location).Path")) {
+                    $errors.Add('DOC_WRAPPER_IMMUTABLE_SOURCE_INVALID')
+                }
+            }
+        }
     }
 
     $roadmap = [string]$Docs['docs/ROADMAP.md']
@@ -293,31 +325,48 @@ try {
     $badIdentity['install.ps1'] = $releaseIdentityRegex.Replace([string]$badIdentity['install.ps1'], "`$ReleaseVersion = 'v0.4.1'", 1)
     Assert-Rejected $badIdentity $version 'PRE_TAG' 'DOC_ACTIVE_RELEASE_IDENTITY_MISMATCH' 'REGRESSION_REJECTS_ACTIVE_IDENTITY_MISMATCH'
 
-    $projectOpenCodeCommand = 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/opencode.ps1 | iex'
+    $tagBase = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' + $version + '/'
+    $projectOpenCodeCommand = 'irm ' + $tagBase + 'install/project/opencode.ps1 | iex'
     $badMissingPublicEntrypoint = Copy-ReleaseDocs $docs
     Set-ReadmeInstallCommand $badMissingPublicEntrypoint $projectOpenCodeCommand ''
-    Assert-Rejected $badMissingPublicEntrypoint $version 'PRE_TAG' 'DOC_README_VERSION_NEUTRAL_INSTALL' 'REGRESSION_REJECTS_MISSING_PUBLIC_ENTRYPOINT_WITH_UPDATE_DUPLICATE'
+    Assert-Rejected $badMissingPublicEntrypoint $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_MISSING_PUBLIC_ENTRYPOINT'
 
     $badWrongPublicEntrypoint = Copy-ReleaseDocs $docs
-    Set-ReadmeInstallCommand $badWrongPublicEntrypoint 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/global/all.ps1 | iex' 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/all.ps1 | iex'
-    Assert-Rejected $badWrongPublicEntrypoint $version 'PRE_TAG' 'DOC_README_VERSION_NEUTRAL_INSTALL' 'REGRESSION_REJECTS_WRONG_PUBLIC_ENTRYPOINT_SCOPE'
+    Set-ReadmeInstallCommand $badWrongPublicEntrypoint ('irm ' + $tagBase + 'install/global/all.ps1 | iex') ('irm ' + $tagBase + 'install/project/all.ps1 | iex')
+    Assert-Rejected $badWrongPublicEntrypoint $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_WRONG_PUBLIC_ENTRYPOINT_SCOPE'
 
-    $badPinnedInstaller = Copy-ReleaseDocs $docs
-    $pinnedInstallerCommand = 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' + $version + '/install.ps1 | iex'
-    Set-ReadmeInstallCommand $badPinnedInstaller 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/codex.ps1 | iex' $pinnedInstallerCommand
-    Assert-Rejected $badPinnedInstaller $version 'PRE_TAG' 'DOC_README_VERSION_NEUTRAL_INSTALL' 'REGRESSION_REJECTS_PINNED_DIRECT_INSTALLER_URL'
+    $badCodexWithoutSelection = Copy-ReleaseDocs $docs
+    Set-ReadmeInstallCommand $badCodexWithoutSelection ('irm ' + $tagBase + 'install/project/codex.ps1 | iex') ('irm ' + $tagBase + 'install.ps1 | iex')
+    Assert-Rejected $badCodexWithoutSelection $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_CODEX_WITHOUT_HARNESS_SELECTION'
 
-    $badDirectInstaller = Copy-ReleaseDocs $docs
-    Set-ReadmeInstallCommand $badDirectInstaller 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/global/opencode.ps1 | iex' 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install.ps1 | iex'
-    Assert-Rejected $badDirectInstaller $version 'PRE_TAG' 'DOC_README_VERSION_NEUTRAL_INSTALL' 'REGRESSION_REJECTS_ROOT_DIRECT_INSTALLER_URL'
+    $badMutablePublic = Copy-ReleaseDocs $docs
+    Set-ReadmeInstallCommand $badMutablePublic $projectOpenCodeCommand 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/opencode.ps1 | iex'
+    Assert-Rejected $badMutablePublic $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_MUTABLE_PUBLIC_ENTRYPOINT'
+
+    $badMutableLauncher = Copy-ReleaseDocs $docs
+    $wrapper = 'install/project/opencode.ps1'
+    $badMutableLauncher[$wrapper] = ([string]$badMutableLauncher[$wrapper]).Replace(
+        '/' + $version + '/scripts/launch-latest.ps1', '/master/scripts/launch-latest.ps1')
+    Assert-Rejected $badMutableLauncher $version 'PRE_TAG' 'DOC_WRAPPER_IMMUTABLE_SOURCE_INVALID' 'REGRESSION_REJECTS_MUTABLE_WRAPPER_LAUNCHER'
+
+    $badWrongWrapperHarness = Copy-ReleaseDocs $docs
+    $wrapper = 'install/project/opencode.ps1'
+    $badWrongWrapperHarness[$wrapper] = ([string]$badWrongWrapperHarness[$wrapper]).Replace("-Harness 'opencode'","-Harness 'codex'")
+    Assert-Rejected $badWrongWrapperHarness $version 'PRE_TAG' 'DOC_WRAPPER_IMMUTABLE_SOURCE_INVALID' 'REGRESSION_REJECTS_WRONG_WRAPPER_HARNESS'
+
+    $badStaleTagLauncher = Copy-ReleaseDocs $docs
+    $wrapper = 'uninstall/global/all.ps1'
+    $badStaleTagLauncher[$wrapper] = ([string]$badStaleTagLauncher[$wrapper]).Replace(
+        '/' + $version + '/scripts/launch-latest.ps1', '/v0.4.6/scripts/launch-latest.ps1')
+    Assert-Rejected $badStaleTagLauncher $version 'PRE_TAG' 'DOC_WRAPPER_IMMUTABLE_SOURCE_INVALID' 'REGRESSION_REJECTS_STALE_LAUNCHER_TAG'
 
     $badForeignInstaller = Copy-ReleaseDocs $docs
-    Set-ReadmeInstallCommand $badForeignInstaller 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/all.ps1 | iex' 'irm https://example.invalid/install/project/all.ps1 | iex'
-    Assert-Rejected $badForeignInstaller $version 'PRE_TAG' 'DOC_README_VERSION_NEUTRAL_INSTALL' 'REGRESSION_REJECTS_FOREIGN_INSTALLER_URL'
+    Set-ReadmeInstallCommand $badForeignInstaller ('irm ' + $tagBase + 'install/project/all.ps1 | iex') 'irm https://example.invalid/install/project/all.ps1 | iex'
+    Assert-Rejected $badForeignInstaller $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_FOREIGN_INSTALLER_URL'
 
     $badExtraForeignInstaller = Copy-ReleaseDocs $docs
     Add-ReadmeInstallCommand $badExtraForeignInstaller 'irm https://example.invalid/install/project/opencode.ps1 | iex'
-    Assert-Rejected $badExtraForeignInstaller $version 'PRE_TAG' 'DOC_README_VERSION_NEUTRAL_INSTALL' 'REGRESSION_REJECTS_EXTRA_FOREIGN_INSTALLER_WITH_VALID_ENTRYPOINTS'
+    Assert-Rejected $badExtraForeignInstaller $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_EXTRA_FOREIGN_INSTALLER'
 
     Write-Output "TAG-TRANSITION-STABILITY QUALIFICATION: PASS ($version; deterministic static semantic checks; no tag or GitHub Release created)"
 } catch {

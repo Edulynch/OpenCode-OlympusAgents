@@ -356,6 +356,46 @@ try {
     Check 'R24_REQUESTED_SOURCE_VERSION_MISMATCH_FAIL' ($sourceMismatchVerify.Code -ne 0 -and
         $sourceMismatchVerify.Text -match 'OLYMPUS_VERIFY_REASON: SOURCE_VERSION_MISMATCH')
 
+    # Public wrappers (12 variants) must use tag-pinned executable sources.
+    function Test-PublicWrapperSource([string]$Content, [string]$Tag,
+        [string]$Action, [string]$Scope, [string]$Harness) {
+        $expectedLauncher = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' +
+            $Tag + '/scripts/launch-latest.ps1'
+        $urls = [regex]::Matches($Content,
+            'https://raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/[^\s]+?\.ps1')
+        return ($urls.Count -eq 1 -and $urls[0].Value -ceq $expectedLauncher -and
+            $Content.Contains("Invoke-WebRequest -Uri '$expectedLauncher' -OutFile " + '$launcher' + " -ErrorAction Stop") -and
+            $Content.Contains("-Action '$Action' -Scope '$Scope' -Harness '$Harness' -Target (Get-Location).Path"))
+    }
+
+    $wrapperIssues = @()
+    foreach ($action in @('install','uninstall')) {
+        foreach ($scope in @('project','global')) {
+            foreach ($harness in @('opencode','codex','all')) {
+                $relative = "$action/$scope/$harness.ps1"
+                $wrapperText = [IO.File]::ReadAllText((Join-Path $source ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)))
+                if (-not (Test-PublicWrapperSource $wrapperText $script:CandidateVersion $action $scope $harness)) {
+                    $wrapperIssues += $relative
+                }
+            }
+        }
+    }
+    Check 'R25_PUBLIC_WRAPPER_TAGGED_SOURCES_AND_ARGUMENTS' ($wrapperIssues.Count -eq 0) ($wrapperIssues -join ', ')
+
+    $sample = [IO.File]::ReadAllText((Join-Path $source 'install/project/codex.ps1'))
+    $badMutable = $sample.Replace('/' + $script:CandidateVersion + '/scripts/launch-latest.ps1',
+        '/master/scripts/launch-latest.ps1')
+    $badWrongHarness = $sample.Replace("-Harness 'codex'", "-Harness 'all'")
+    $badForeignSource = $sample.Replace('https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/',
+        'https://example.invalid/')
+    $badOldTag = $sample.Replace('/' + $script:CandidateVersion + '/scripts/launch-latest.ps1',
+        '/v0.4.6/scripts/launch-latest.ps1')
+    Check 'R25_PUBLIC_WRAPPER_MUTATIONS_REJECTED' (
+        -not (Test-PublicWrapperSource $badMutable $script:CandidateVersion 'install' 'project' 'codex') -and
+        -not (Test-PublicWrapperSource $badWrongHarness $script:CandidateVersion 'install' 'project' 'codex') -and
+        -not (Test-PublicWrapperSource $badForeignSource $script:CandidateVersion 'install' 'project' 'codex') -and
+        -not (Test-PublicWrapperSource $badOldTag $script:CandidateVersion 'install' 'project' 'codex'))
+
     $changelog = [IO.File]::ReadAllText((Join-Path $source 'CHANGELOG.md'))
     $notesStart = $changelog.IndexOf($script:CandidateHeading, [StringComparison]::Ordinal)
     if ($notesStart -lt 0) { throw "Release-notes section for $($script:CandidateVersion) is missing." }
@@ -387,7 +427,8 @@ try {
     Check 'R25_CAPABILITY_GAPS_NOT_OVERCLAIMED' ($releaseNotes -match 'DENY\s*=\s*GAP' -and
         $releaseNotes -match 'AEGIS\s*=\s*GAP' -and $releaseNotes -match 'ACTIVITY_VISIBILITY\s*=\s*PARTIAL/BASIC' -and
         $releaseNotes -match 'does not claim full parity' -and $releaseNotes -notmatch '(?i)Codex (?:has|provides|supports) (?:full parity|hard DENY|Aegis)')
-    Check 'R25_BETA_RELEASE_NO_MASTER_SOURCE' ($releaseNotes -notmatch '(?i)raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/master/install\.ps1' -and
+    $mutableExecutableUrl = '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/(?:master|main|refs/heads/(?:master|main))/[^\s]+?\.ps1|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/(?:master|main)/[^\s]+?\.ps1)'
+    Check 'R25_RELEASE_NO_MUTABLE_EXECUTABLE_SOURCE' ($releaseNotes -notmatch $mutableExecutableUrl -and
         $versionText -match 'archive/refs/tags/\$Version\.zip')
 
     $releaseGate = Join-Path $PSScriptRoot 'github-release-notes.ps1'
@@ -398,6 +439,12 @@ try {
         $gateDerived -match "RELEASE_NOTES_CONTRACT: $($script:CandidateRegex) PASS")
     $gateBad = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody ($releaseNotes -replace '(?s)## Verify installation.*', '') 2>&1 | Out-String)
     Check 'R26_RELEASE_GATE_REJECTS_MISSING_VERIFY' ($LASTEXITCODE -ne 0 -and $gateBad -match 'RELEASE_NOTES_VERIFY_MISSING')
+    $gateMutableWrapperBody = $releaseNotes + [Environment]::NewLine + 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/codex.ps1 | iex'
+    $gateMutableWrapper = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody $gateMutableWrapperBody 2>&1 | Out-String)
+    Check 'R26_GATE_REJECTS_MUTABLE_WRAPPER_SOURCE' ($LASTEXITCODE -ne 0 -and $gateMutableWrapper -match 'RELEASE_NOTES_MASTER_SOURCE')
+    $gateMutableLauncherBody = $releaseNotes + [Environment]::NewLine + 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/scripts/launch-latest.ps1 | iex'
+    $gateMutableLauncher = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody $gateMutableLauncherBody 2>&1 | Out-String)
+    Check 'R26_GATE_REJECTS_MUTABLE_LAUNCHER_SOURCE' ($LASTEXITCODE -ne 0 -and $gateMutableLauncher -match 'RELEASE_NOTES_MASTER_SOURCE')
     $gateWrongTag = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody ($releaseNotes.Replace("-Version '$($script:CandidateVersion)'", "-Version 'v0.3.0-beta.2'")) 2>&1 | Out-String)
     Check 'R26_RELEASE_GATE_REJECTS_TAG_MISMATCH' ($LASTEXITCODE -ne 0 -and $gateWrongTag -match 'RELEASE_NOTES_HARNESS_VERIFY_MISSING')
     $wrongHeadingBody = $releaseNotes.Replace("## $($script:CandidateVersion)", '## v0.4.1')

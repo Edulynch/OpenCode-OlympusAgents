@@ -2,7 +2,7 @@
 
 # 🏛️ Olympus Agents
 
-<img src="docs/assets/olympus-cover.webp" alt="Olympus Agents team with Kael coordinating coding specialists on Mount Olympus" width="1400">
+<img src="docs/assets/olympus-cover.png" alt="Olympus Agents team with Kael coordinating coding specialists on Mount Olympus" width="100%">
 
 **Your AI coding team for OpenCode and Codex.**
 
@@ -14,16 +14,13 @@
 
 ## 🚀 Install
 
-| Item | Details |
-|---|---|
-| System | Windows, PowerShell 7, Git |
-| Runtime | OpenCode V2, Codex CLI, or both |
-| Project install | Run at a trusted Git repository root |
-| Public source | Immutable `v0.4.7` entrypoint and second-stage launcher URLs |
-| Release selection | The launcher reads GitHub latest-release metadata, then downloads the selected release's installer from its immutable tag |
-| Exact version | Use that release's root `install.ps1` ([Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases)) |
+You’ll need **Windows, PowerShell 7, and Git**, plus **OpenCode V2**, **Codex CLI**, or both. Run a project install from the root of a **trusted Git repository**.
+
+The public commands below use the immutable `v0.4.7` entrypoint and its second-stage launcher. The launcher reads GitHub’s latest-release metadata, then downloads the installer from the selected release’s immutable tag. To install an exact version, run that release’s root `install.ps1` from the [Releases page](https://github.com/Edulynch/OpenCode-OlympusAgents/releases).
 
 ### Project install (recommended)
+
+Choose the command for the runtime you want in this repository.
 
 **OpenCode**
 
@@ -43,9 +40,11 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/ins
 irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install/project/all.ps1 | iex
 ```
 
-Run **one** command for your runtime. Installing another runtime later does not remove the first.
+Run one command for the runtime or runtimes you use. You can add another runtime later; installing it leaves the first one in place.
 
 ### Global install
+
+Use a global install to make Olympus available across your projects.
 
 **OpenCode**
 
@@ -65,18 +64,20 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/ins
 irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install/global/all.ps1 | iex
 ```
 
+Global installation supports file installation and verification in both runtimes. Runtime agent discovery has separate evidence:
+
 | Global support | OpenCode | Codex |
 |---|---|---|
 | File installation and verification | Supported | Supported |
 | Agent discovery in runtime | **SUPPORTED** (Windows V2.0.26; isolated) | **SUPPORTED** (user-provided evidence) |
 
-| OpenCode global activation | Behavior |
-|---|---|
-| Startup | Preserves your existing default agent. Run `opencode --standalone` or `opencode` with your usual service. |
-| Select Kael | Open the V2 agent list with **Ctrl+X**, then **A** (default), and select **Kael**; or cycle primary agents with **Shift+Tab**. [V2 keybinds](https://opencode.ai/v2/docs/cli/keybinds) are customizable. |
-| Optional default | To select Kael for **new sessions**, set `"default_agent": "kael"` in `~/.config/opencode/opencode.jsonc`. The installer leaves this file unchanged. |
-| Project install | The project `opencode.jsonc` selects Kael when loaded. Existing sessions keep their selected agent. |
-| Qualification | Isolated Windows/OpenCode V2.0.26 covered agent discovery and config-level selection; **interactive key use and a model-backed prompt were not tested**. See [capabilities](docs/HARNESS-CAPABILITIES.md) and [Issue #7](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7). |
+For **OpenCode**, global installation preserves your current default agent. Start with `opencode --standalone` or use your usual `opencode` service.
+
+To select Kael, open the OpenCode V2 agent list with **Ctrl+X**, then **A** (the default), and choose **Kael**. You can also cycle primary agents with **Shift+Tab**. OpenCode V2 keybindings are customizable; see [V2 keybinds](https://opencode.ai/v2/docs/cli/keybinds).
+
+If you want Kael to be the default for **new sessions**, set `"default_agent": "kael"` in `~/.config/opencode/opencode.jsonc`. The installer leaves this file unchanged. A project install selects Kael through the project’s `opencode.jsonc` when it loads; existing sessions keep their selected agent.
+
+On isolated Windows with OpenCode V2.0.26, qualification covered runtime agent discovery and config-level selection. **Interactive key use and a model-backed prompt were not tested.** See [capabilities](docs/HARNESS-CAPABILITIES.md) and [Issue #7](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7).
 
 ### Git worktrees (OpenCode, opt-in)
 
@@ -84,18 +85,29 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/ins
 pwsh -NoProfile -File "%OPENCODE_WORKTREE_BASE%\.opencode\scripts\worktree-setup.ps1"
 ```
 
-Set this under **OpenCode → Settings → Projects → Startup command**. Install Olympus in the base checkout first; preserve any existing startup command. [Worktree setup and safety →](docs/WORKTREES.md)
+Set this as the **OpenCode → Settings → Projects → Startup command**. Install Olympus in the base checkout first, and preserve any startup command you already use. [Worktree setup and safety →](docs/WORKTREES.md)
 
 ## 💬 Start Building
 
-| Runtime | Command |
-|---|---|
-| OpenCode | `opencode` |
-| Codex | `codex` |
+From your project root, start the runtime you installed:
 
-Example: `Add a search bar to my app. Make it keyboard-accessible and run the relevant tests.`
+**OpenCode**
 
-When active, Kael routes work to specialists; project installs select Kael through configuration.
+```shell
+opencode
+```
+
+**Codex**
+
+```shell
+codex
+```
+
+Then tell Kael what you want to build. For example:
+
+> “Add a search bar to my app. Make it keyboard-accessible and run the relevant tests.”
+
+When Olympus is installed for a project, its configuration selects Kael when that project loads.
 
 ## 🧭 Meet the Team
 
@@ -115,29 +127,28 @@ When active, Kael routes work to specialists; project installs select Kael throu
 
 ## ⚡ NORMAL vs FAST
 
-| Mode | Behavior |
-|---|---|
-| **NORMAL** (default) | Uses only the parallel work useful for the task |
-| **FAST** (explicit) | Runs up to four independent agents when safe; never skips checks or parallelizes dependent tasks |
+**NORMAL (default):** Kael chooses the amount of parallel work that fits the task.
 
-Example: `FAST: check these independent modules and fix the issues.`
+**FAST (explicit):** When work is safe to split, Kael can use up to four independent agents. FAST keeps the required checks and does not parallelize dependent tasks.
+
+> **Example:** “FAST: check these independent modules and fix the issues.”
 
 ## 👀 Live Activity
 
-| Runtime | Activity |
-|---|---|
-| OpenCode | Olympus HUD with read-only activity |
-| Codex | Basic, partial native activity view |
+- **OpenCode:** The Olympus HUD shows read-only activity.
+- **Codex:** Native activity is basic and partial.
 
 ## 🔧 Maintenance (OpenCode)
 
-| Work | Route |
-|---|---|
-| Normal project work, including Git and releases | Ask Kael in plain language |
-| Privileged maintenance | Explicitly ask OpenCode `/maintain <task>` to invoke hidden Aegis |
-| Codex | No equivalent Aegis capability |
+Ordinary project work, including Git and releases, stays with Kael. Ask Kael in plain language for those tasks.
 
-Aegis is never invoked automatically by Kael.
+For privileged OpenCode maintenance, explicitly run:
+
+```text
+/maintain <task>
+```
+
+This invokes hidden Aegis. Kael never invokes Aegis automatically. Codex has no equivalent Aegis capability.
 
 ## 🛡️ Compatibility & Trust
 
@@ -149,20 +160,18 @@ Aegis is never invoked automatically by Kael.
 | Aegis maintenance | Supported | GAP |
 | Activity display | Olympus HUD | Native, partial |
 
-Install only in **trusted repositories**. Kovan and Nox can run shell commands; task scope is **not an OS sandbox**. Olympus preserves user-owned files and refuses unsafe managed-file changes.
+Install only in **trusted repositories**. Kovan and Nox can run shell commands, and task scope is **not an OS sandbox**. Olympus preserves user-owned files and refuses unsafe changes to managed files.
 
-Codex CLI **0.162.1** observations:
+The following Codex CLI **0.162.1** observations distinguish root instructions from specialist threads:
 
-| Check | What it shows |
-|---|---|
-| Kael | Root instructions, not a selectable child agent |
-| `/status` | Root instruction-source label |
-| `/debug-config` | Configuration layers |
-| `/subagents` | Spawned specialist threads |
-| `/agents` | Project-task dashboard; not proof of a child role |
-| Root instructions | A nonempty `AGENTS.override.md` or `AGENTS.md` takes precedence over the `CODEX.md` fallback |
+- **Kael:** represented by root instructions, not a selectable child agent.
+- **`/status`:** shows the root instruction-source label.
+- **`/debug-config`:** shows configuration layers.
+- **`/subagents`:** lists spawned specialist threads.
+- **`/agents`:** shows the project-task dashboard; it does not prove a child role is active.
+- **Root instruction precedence:** a nonempty `AGENTS.override.md` or `AGENTS.md` takes precedence over the `CODEX.md` fallback.
 
-[Codex verification guide](docs/CODEX-COMPATIBILITY.md#verificar-kael-y-especialistas-en-codex-issue-23) · [Issue #23](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/23) · [Full capability table →](docs/HARNESS-CAPABILITIES.md)
+See the [Codex verification guide](docs/CODEX-COMPATIBILITY.md#verificar-kael-y-especialistas-en-codex-issue-23), [Issue #23](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/23), and the [full capability table](docs/HARNESS-CAPABILITIES.md).
 
 ## 🧹 Uninstall
 
@@ -186,8 +195,6 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/uni
 irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/uninstall/project/all.ps1 | iex
 ```
 
-Uninstall removes only manifest-owned files; modified managed files are protected from silent deletion.
-
 ### Global uninstall
 
 **OpenCode**
@@ -208,34 +215,29 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/uni
 irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/uninstall/global/all.ps1 | iex
 ```
 
+Uninstall removes only manifest-owned files. Modified managed files are protected from silent deletion.
+
 ## 🔄 Update
 
-| Need | Action |
-|---|---|
-| Update | Rerun the matching [install command](#-install) for the same runtime and scope; only Olympus-managed files are updated. |
-| Exact version | See [Install](#-install) for release pinning. |
+To update, rerun the matching [install command](#-install) for the same runtime and scope. Only Olympus-managed files are updated. For an exact version, follow the [release pinning guidance](#-install).
 
 ## 🆘 Troubleshooting
 
-| Problem | What to do |
-|---|---|
-| `opencode` not found | [Install OpenCode V2](https://opencode.ai/docs/) |
-| `OLYMPUS_REQUIRES_POWERSHELL_7` | Install PowerShell 7 |
-| Git target rejected | Run in the project's Git root |
-| `MANAGED_FILE_DRIFT` | Inspect your changes; [recovery guide](docs/DEVELOPMENT.md) |
-| Agents missing in a new worktree | [Enable worktree startup](docs/WORKTREES.md) |
-| Codex uses other root instructions | Check `AGENTS.override.md` / `AGENTS.md` ([Issue #23](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/23)) |
+- **`opencode` not found:** [Install OpenCode V2](https://opencode.ai/docs/).
+- **`OLYMPUS_REQUIRES_POWERSHELL_7`:** Install PowerShell 7.
+- **Git target rejected:** Run the project installer from the repository root.
+- **`MANAGED_FILE_DRIFT`:** Review your changes and follow the [recovery guide](docs/DEVELOPMENT.md).
+- **Agents missing in a new worktree:** [Enable worktree startup](docs/WORKTREES.md).
+- **Codex uses other root instructions:** Check `AGENTS.override.md` and `AGENTS.md`; see [Issue #23](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/23).
 
 ## 📚 Documentation
 
-| Guide | Contents |
-|---|---|
-| [Worktrees](docs/WORKTREES.md) | Setup, existing worktrees, conflicts |
-| [Harnesses](docs/HARNESSES.md) | OpenCode and Codex integration |
-| [Capabilities](docs/HARNESS-CAPABILITIES.md) | Exact support and known gaps |
-| [Development](docs/DEVELOPMENT.md) | Testing, permissions, release process |
-| [Roadmap](docs/ROADMAP.md) | Planned improvements |
-| [Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Changelog](CHANGELOG.md) | Versions and changes |
-| [License](LICENSE) | MIT |
+- [Worktrees](docs/WORKTREES.md) — setup, existing worktrees, and conflicts.
+- [Harnesses](docs/HARNESSES.md) — OpenCode and Codex integration.
+- [Capabilities](docs/HARNESS-CAPABILITIES.md) — exact support and known gaps.
+- [Development](docs/DEVELOPMENT.md) — testing, permissions, and release process.
+- [Roadmap](docs/ROADMAP.md) — planned improvements.
+- [Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) and [Changelog](CHANGELOG.md) — versions and changes.
+- [License](LICENSE) — MIT.
 
 Olympus is an independent orchestration system, not a fork. The specialized-team idea was informed in part by [donvito/codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).

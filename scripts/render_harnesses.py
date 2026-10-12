@@ -259,7 +259,10 @@ def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[
         if source_name == "maintain.md":
             body = replace_tokens(body, {"maintenance_plane_policy": maintenance_policy, "display_identity": identities["aegis"]}, source_path)
         elif source_name == "activity.ts":
-            body = replace_tokens(body, {"display_names": display_names}, source_path)
+            marker = "// {{display_names}}"
+            if body.count(marker) != 1:
+                raise RenderError(f"expected exactly one commented display_names marker in {source_path}")
+            body = replace_tokens(body.replace(marker, "{{display_names}}"), {"display_names": display_names}, source_path)
         output[output_path] = add_markdown_comment(body, GENERATED) if source_name.endswith(".md") else comment + body
     setup_source = adapter / "worktree-setup.ps1"
     output[root / ".opencode" / "scripts" / "worktree-setup.ps1"] = f"# {GENERATED}\n" + read_text(setup_source)

@@ -1,0 +1,54 @@
+name: Issue 46 Temporary Windows Qualification
+
+on:
+  push:
+    branches: [fix/issue46-global-verify-manifest]
+
+permissions:
+  contents: read
+
+jobs:
+  issue46:
+    name: Issue46 / Global installer
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Run existing global installer qualification
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP 'opencode') | Out-Null
+          $output = @(pwsh -NoProfile -File ./tests/global-installer/qualify.ps1 2>&1)
+          $code = $LASTEXITCODE
+          $output | ForEach-Object { Write-Output $_ }
+          if ($code -ne 0) { throw "Global qualification FAILED (exit $code)" }
+          $transcript = ($output | Out-String)
+          foreach ($marker in @(
+            'GLOBAL_VERIFYONLY_OPENCODE_MISSING_MANIFEST_REJECTED PASS',
+            'GLOBAL_VERIFYONLY_OPENCODE_MISSING_MANIFEST_READONLY PASS',
+            'GLOBAL_VERIFYONLY_CODEX_MISSING_MANIFEST_REJECTED PASS',
+            'GLOBAL_VERIFYONLY_CODEX_MISSING_MANIFEST_READONLY PASS',
+            'GLOBAL_VERIFYONLY_ALL_RESTORED_PASS PASS',
+            'GLOBAL INSTALLER QUALIFICATION: PASS'
+          )) {
+            if (-not $transcript.Contains($marker)) { throw "Missing expected check: $marker" }
+          }
+
+      - name: Confirm no working tree changes
+        shell: pwsh
+        run: |
+          $modified = @(git status --porcelain)
+          if ($LASTEXITCODE -ne 0 -or $modified.Count -gt 0) {
+            $modified | Out-Host
+            throw 'Qualification modified the source checkout'
+          }

@@ -23,7 +23,9 @@ Plan, build, test, and review without manually coordinating agents.
 | Runtime | OpenCode V2, Codex CLI, or both |
 | Project install | A trusted Git repository root |
 
-Run **one** command for your runtime. Entry scripts and their launcher are fetched from the immutable **v0.4.7** tag, not `master`. The launcher then reads GitHub's latest-release *metadata* and executes the selected release's tagged installer; it may choose a newer version when published. To install an exact version, use its tagged root `install.ps1` directly (see [Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases)).
+Run **one** command for your runtime. The entrypoint and second-stage launcher come from the immutable **v0.4.7** tag, not `master`.
+
+The launcher reads GitHub's latest-release *metadata* and downloads the selected version's installer from its own immutable tag. When a newer release becomes available, this entrypoint can select it. To install an exact version instead, use that release's root `install.ps1` directly (see [Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases)).
 
 ### Project install (recommended)
 

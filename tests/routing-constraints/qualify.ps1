@@ -57,10 +57,16 @@ try {
     $readme = Text 'README.md'
     $docs = Text 'docs/DEVELOPMENT.md'
 
+    # The user-facing README can describe normal Git routing in prose or a
+    # table. Require the actual Git/release/Kael boundary, not exact wording.
+    $maintenanceDocs = [regex]::Match(
+        $readme, '(?ms)^##[^\r\n]*Maintenance \(OpenCode\)[^\r\n]*\r?\n(?<body>.*?)(?=^##\s|\z)')
+    $normalGitRouting = $maintenanceDocs.Success -and
+        $maintenanceDocs.Groups['body'].Value -match '(?is)\b(?:ordinary|normal)\b.{0,100}\bGit\b.{0,80}\breleases?\b.{0,80}\b(?:stays|belongs)\b.{0,50}\bKael\b'
     Check 'POLICY_ORDINARY_GIT_NORMAL' ($kael -match 'Ordinary Git work in a trusted user project belongs to the normal plane' -and
         $kovan -match 'Kovan is the normal-plane Git writer for an explicitly requested operation' -and
         $aegis -match 'Kael remains the recommended normal workflow' -and
-        $readme -match 'project releases.*belongs to the normal Kael plane')
+        $normalGitRouting)
     Check 'POLICY_AEGIS_ANY_REPOSITORY' ($aegis -match 'in any repository, including ordinary user projects' -and
         $command -match 'MAINTENANCE_AUTH: VALID' -and $command -match 'AEGIS_SCOPE: ACCEPTED')
     Check 'POLICY_GIT_IMPACT_NOT_PLANE' ($kael -match '(?s)Destructive or high-impact Git\s+operations require explicit, proportionate user authorization, but still do not\s+require Aegis solely because they are Git' -and

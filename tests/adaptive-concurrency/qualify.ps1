@@ -26,13 +26,20 @@ try {
     Check AC10 ($hud -match 'active\(\)\.slice\(0, 4\)' -and $hud -match 'context\.data\.session\.status' -and $activity -match 'current\.parentID != null' -and $activity -match 'status\(session\.id\) === "running"' -and $hud -notmatch 'setInterval|setTimeout|spawn|schedule')
     $modes = [regex]::Match($readme, '(?ms)^##[^\r\n]*NORMAL vs FAST[^\r\n]*\r?\n(?<body>.*?)(?=^##\s|\z)')
     $modeDocs = $modes.Groups['body'].Value
-    Check DOC ($modes.Success -and
-        $modeDocs -match '(?is)\bNORMAL\b.{0,40}\bdefault\b' -and
-        $modeDocs -match '(?is)\bNORMAL\b.{0,140}\bonly\b.{0,80}\bparallel\b.{0,80}\buseful\b' -and
-        $modeDocs -match '(?is)\bexplicit(?:ly)?\b.{0,40}\b(?:ask|request)\b.{0,40}\bFAST\b' -and
-        $modeDocs -match '(?is)\bup to\b.{0,20}\bfour\b.{0,20}\bagents\b' -and
-        $modeDocs -match '(?is)\bFAST\b.{0,100}\b(?:does not|doesn''t|never)\s+skip\s+checks\b' -and
-        $modeDocs -match '(?is)\b(?:does not|doesn''t|never)\b.{0,70}\bdependent\s+tasks\b.{0,30}\bparallel\b')
+
+    # Match each mode's own rendered Markdown line, whether a table row or a
+    # readable paragraph. Test semantics, not one historical README phrasing.
+    $normal = [regex]::Match($modeDocs, '(?im)^[ \t]*(?:\|[ \t]*)?\*{0,2}NORMAL\b[^\r\n]*')
+    $fast = [regex]::Match($modeDocs, '(?im)^[ \t]*(?:\|[ \t]*)?\*{0,2}FAST\b[^\r\n]*')
+    $fastChecksPreserved = $fast.Value -match '(?i)\b(?:keeps?|preserves?)\b.{0,40}\b(?:required\s+)?checks\b|\b(?:does not|never)\s+skips?\s+checks\b'
+    $fastDependenciesSequential = $fast.Value -match '(?i)\b(?:does not|never)\b.{0,80}\b(?:parallelize|parallelizes|run)\b.{0,35}\bdependent\s+tasks\b'
+    Check DOC ($modes.Success -and $normal.Success -and $fast.Success -and
+        $normal.Value -match '(?i)\bdefault\b' -and
+        $normal.Value -match '(?i)\bparallel\b' -and
+        $normal.Value -match '(?i)\b(?:only|useful|fits)\b' -and
+        $fast.Value -match '(?i)\bexplicit\b' -and
+        $fast.Value -match '(?i)\bup\s+to\s+four\b.{0,30}\bagents\b' -and
+        $fastChecksPreserved -and $fastDependenciesSequential)
     Write-Output 'ADAPTIVE CONCURRENCY QUALIFICATION: PASS (static; interactive selection and fan-out pending)'
     exit 0
 } catch {

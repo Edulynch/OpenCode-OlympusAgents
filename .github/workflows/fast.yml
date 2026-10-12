@@ -1,0 +1,55 @@
+name: CI / FAST
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fast-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: FAST / Windows
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - name: Checkout (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # Maintenance Handoff compares a historical baseline commit.
+
+      - name: Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Prepare isolated FAST temp directory
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $approvedTemp = Join-Path $env:TEMP 'opencode'
+          New-Item -ItemType Directory -Force -Path $approvedTemp | Out-Null
+
+      - name: Olympus FAST (offline only)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FAST
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Confirm source checkout unchanged
+        shell: pwsh
+        run: |
+          $changes = @(git status --porcelain)
+          if ($LASTEXITCODE -ne 0) { throw 'Git status failed' }
+          if ($changes.Count -gt 0) {
+            $changes | Out-Host
+            throw 'FAST modified the source checkout'
+          }

@@ -4,13 +4,52 @@
 
 Changes after the latest published release go here.
 
-- Document Codex native root-instruction and specialist visibility (#23): distinguish `/status`, `/debug-config`, `/agent` and the observed `/agents` task dashboard, including the historical Kovan/Luna evidence and partial visibility limits. Documentation only; no agent, plugin, hook, or permission changes.
+## v0.4.7
 
-- Fix OpenCode V2 startup documentation (#36): use the documented interactive Kael agent picker or user-owned `default_agent` opt-in instead of an unsupported top-level CLI selection flag. Clarify project vs global defaults; no runtime/config, permissions, installer, or immutable release tag changes.
+### Highlights
 
-- Qualify OpenCode V2.0.26 global agent discovery on isolated Windows using the actual v0.4.6 installer: 15 managed resources, read-only VerifyOnly, active agent loader, 12 Olympus agents, two controls, and explicit Kael default selection without an LLM call. Update the canonical capability contract and docs; preserve the v0.4.6 tag and all historical versioned notes.
+- Deliver **TFR risk-based focused testing** as a canonical Olympus policy for both OpenCode and Codex: risk-based checks, conditional Nox/Vera, mandatory gates preserved, and original-result reconciliation. No additional review agent or testing tier.
+- Qualify isolated Windows/OpenCode V2.0.26 global agent discovery using the real v0.4.6 installer: 12 Olympus agents and two controls, native loader active, and configuration-level Kael selection. No other runtime/version parity is implied.
+- Fix OpenCode V2 startup documentation: select Kael in the native agent picker, or opt in to `default_agent`; do not use the unsupported top-level `--agent kael` flag.
+- Document Codex 0.162.1 root `CODEX.md` instructions and the observed native `/subagents` UI, a scoped Veyra delegation, and original-result return; preserve the distinction from `/agents` task lists.
+- Source all twelve public install/uninstall entrypoint scripts and their second-stage launcher from the **immutable v0.4.7 tag**, never from `master`. The launcher queries `releases/latest` for **metadata only**; any newer selected installer's executable code and archive are fetched from its own immutable release tag.
+- Preserve the **Dual Harness Installer** as **additive** for `-Harness opencode`, `-Harness codex`, and `-Harness all`, including `installed_harnesses` manifests, `legacy OpenCode installations`, `user-owned` file protection, `VerifyOnly`, Windows PowerShell 5.1 / PowerShell 7 launchers and **Olympus Harness Core**.
+- Clarify Issue #8's historical same-session continuation PASS (OpenCode v2.0.21) versus its later reopened compaction/authorization failure (v2.0.26), without altering historical evidence.
 
-The Issue #10 OPEN references in the versioned v0.4.0 and v0.4.2 notes below record status at those releases; they are historical.
+### Validation
+
+- Existing TFR and completion-gate changes received focused deterministic qualification during development; these static checks do not prove every live runtime outcome.
+- Historical Windows OpenCode global-loader evidence and Codex native delegation evidence predate this candidate; no new live prompt or permission-enforcement PASS is asserted.
+- Install and VerifyOnly on the immutable remote tag are release acceptance gates, separate from local-source fixtures.
+
+### Capability limits
+
+- Issue #1 (upstream OpenCode child-result correlation) remains **OPEN/deferred**. Olympus reconciliation mitigates indeterminate outcomes but does not fix upstream.
+- Issue #8 (authorization continuity after compaction) remains **OPEN/deferred** despite the earlier scoped same-session PASS; no new fix is claimed.
+- Codex `DENY = GAP`, `AEGIS = GAP`, `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; this release **does not claim full parity**.
+- A pinned `v0.4.7` public wrapper may choose a newer published installer using latest-release metadata. To fix the **installed** version instead, invoke that exact tag's root `install.ps1` directly.
+
+## Installation
+
+From a trusted Git project root, use the immutable tag. OpenCode is the default; choose Codex or both explicitly:
+
+```powershell
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install.ps1'))) -Harness codex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install.ps1'))) -Harness all
+```
+
+For project/global scope and safe uninstall, use the tagged installer's `-Scope`, `-Harness`, and `-Uninstall` parameters.
+
+## Verify installation
+
+Read-only verification with the same immutable tag and exact installed harness subset:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install.ps1'))) -Harness opencode -Version 'v0.4.7' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install.ps1'))) -Harness codex -Version 'v0.4.7' -Target (Get-Location).Path -VerifyOnly
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install.ps1'))) -Harness all -Version 'v0.4.7' -Target (Get-Location).Path -VerifyOnly
+```
 
 ## v0.4.6
 

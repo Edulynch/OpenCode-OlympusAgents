@@ -33,15 +33,16 @@ jobs:
           # PATH for this disposable job only, without changing production.
           $gitCommands = @(Get-Command git -CommandType Application)
           if ($gitCommands.Count -lt 1) { throw 'Git executable unavailable' }
-          $preferredGitDirectory = Split-Path -Parent $gitCommands[0].Source
-          $otherGitDirectories = @($gitCommands | Select-Object -Skip 1 | ForEach-Object {
-            (Split-Path -Parent $_.Source).TrimEnd([char[]]@('\','/'))
+          $primaryGitDir = Split-Path -Parent $gitCommands[0].Source
+          $otherGitDirs = @($gitCommands | Select-Object -Skip 1 | ForEach-Object {
+            Split-Path -Parent $_.Source
           })
-          $pathSeparator = [IO.Path]::PathSeparator
-          $env:PATH = (@($env:PATH -split [regex]::Escape([string]$pathSeparator) |
-            Where-Object { $_.TrimEnd([char[]]@('\','/')) -notin $otherGitDirectories -or
-              $_.TrimEnd([char[]]@('\','/')) -ieq $preferredGitDirectory }
-          ) -join $pathSeparator
+          $parts = @()
+          foreach ($element in ($env:PATH -split ';')) {
+            if ($element -in $otherGitDirs -and $element -ine $primaryGitDir) { continue }
+            $parts += $element
+          }
+          $env:PATH = $parts -join ';'
           if (@(Get-Command git -CommandType Application).Count -ne 1) {
             throw 'Unable to isolate exactly one Git executable'
           }

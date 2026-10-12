@@ -234,7 +234,7 @@ function Invoke-OneHarness([string]$SelectedHarness) {
             Fail 'GLOBAL_INSTALL_CONFLICT' 'User-owned global AGENTS.override.md takes precedence over AGENTS.md; refusing an inactive Olympus global root.'
         }
     }
-    $manifest = Read-GlobalManifest $root $SelectedHarness
+    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:$VerifyOnly
     $oldEntries = Get-ManifestEntryMap $manifest
     $newEntries = @{}
     $create = [System.Collections.Generic.List[string]]::new()

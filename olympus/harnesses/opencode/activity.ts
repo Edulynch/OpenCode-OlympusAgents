@@ -3,7 +3,7 @@ type Session = { id: string; parentID?: string | null; agent?: string; title?: s
 type Row = { id: string; agent: string; title: string }
 
 const names: Record<string, string> = {
-{{display_names}}
+// {{display_names}}
 }
 
 function label(agent?: string): string {

@@ -207,7 +207,6 @@ try {
     $pathParts = @($PSHOME) + $pathParts
     if ($Profile -in @('FAST','FULL')) {
         $approvedTempRoot = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode'
-        if (-not (Test-Path -LiteralPath $approvedTempRoot -PathType Container)) { throw 'Approved temp/opencode root is unavailable for the temporary Python command shim.' }
         $pythonShimRoot = Join-Path $approvedTempRoot ('issue11-python-' + [guid]::NewGuid().ToString('N'))
         [IO.Directory]::CreateDirectory($pythonShimRoot) | Out-Null
         $pythonCommand = '@echo off' + "`r`n" + '"' + $script:Python + '" %*' + "`r`n" + 'exit /b %ERRORLEVEL%' + "`r`n"

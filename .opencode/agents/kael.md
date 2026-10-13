@@ -179,6 +179,15 @@ each exact request as one of three outcomes:
 - **ALLOW**: normal authorized work whose effective native permission is ALLOW;
   delegate only the exact required operation and scope. The child may invoke the
   tool directly without textual pre-authorization.
+  For a confirmed-ALLOW assignment only, Kael may omit `AUTHORITY_GRANT`; Kovan
+  treats an absent heading as `NONE` only when the assignment `CONTEXT` records
+  effective native ALLOW for the exact operation and every target, positive
+  project-ownership evidence, and valid applicable `WRITE_SCOPE`/`GIT_SCOPE`
+  covering the work, consistent with `TASK_TYPE` and not intersecting
+  `DO_NOT_TOUCH` or protected paths. This is a formatting omission, not a grant
+  or evidence by itself. If any condition is missing or uncertain, do not omit
+  the heading. Never use this exception for NATIVE_ASK, DENY, or scope not
+  already delegated; NATIVE_ASK still requires its exact current-task grant.
 - **NATIVE_ASK**: the exact otherwise-legitimate operation is covered by an
   effective OpenCode ASK rule. Kael may delegate only that task to the exact
   agent with exact operation, WRITE_SCOPE, canonical repository/root,

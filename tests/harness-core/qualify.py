@@ -286,6 +286,9 @@ def main(argv: list[str] | None = None) -> int:
     check("TFR_CONTRACT_AND_EVIDENCE_GATES", all(term in tfr_section for term in (
         "observable behavior", "blast radius", "user projects", "real-runtime evidence",
         "NOT RUN", "Nox", "Vera", "mandatory gates", "role purity",
+        "behavior and integrations the project controls", "Do not retest documented guarantees",
+        "operating system, language, framework, or standard libraries",
+        "unless there is evidence of a compatibility or configuration problem, incorrect use, or an observed defect",
     )))
     check("TFR_ROOT_TEMPLATES_SINGLE_TOKEN",
           (ROOT / "olympus/harnesses/opencode/agent-prompts/kael.md").read_text(encoding="utf-8").count("{{tfr_policy}}") == 1

@@ -197,6 +197,10 @@ checks; it does **not** assume Olympus's own FAST/FULL/RUNTIME qualifier
 profiles exist there. Nox and Vera are used only for distinct needed evidence,
 and passing static prompts is not a claim about live model decisions.
 
+For example, [Issue #47](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/47)
+calls for verifying creation and cleanup of Olympus's temporary Python command
+shim, without reproducing generic operating-system permission handling.
+
 The guidance below concerns **qualification of OlympusAgents itself**.
 Keep historical coverage and mandatory gates until an evidenced contract
 mapping and measured cost justify consolidation; do not delete tests just

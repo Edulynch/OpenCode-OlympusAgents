@@ -219,6 +219,17 @@ Choose checks that provide evidence proportionate to the change's risk:
 
 FAST, FULL, and RUNTIME retain their current behavior, and these rules do not replace existing mandatory validation. RUNTIME does not replace FULL, nor FULL RUNTIME. Do not omit failures or report unrun checks as PASS. Avoid unnecessary FULL repetitions without imposing a rigid limit when material changes warrant further validation.
 
+Use the following existing checks as starting points for development validation from the source checkout root. This selection does not replace mandatory project, CI, integration, or release gates. Run affected integration checks when shared contracts or installer behavior are affected. Use an existing RUNTIME slice or native smoke when correctness depends on actual harness, process, or UI behavior; static checks alone do not establish native behavior.
+
+| Change | Recommended check |
+| --- | --- |
+| Release-facing README, changelog, or documentation contracts | `pwsh -NoProfile -File ./tests/release/tag-transition-stability.ps1` |
+| Olympus Core, renderer, or generated adapter contracts | `python3.11 -B ./scripts/render_harnesses.py check --harness all`<br>`python3.11 -B ./tests/harness-core/qualify.py --safe-root-read-only` |
+| Completion-gate policy | `pwsh -NoProfile -File ./tests/completion-gates/qualify.ps1` |
+| Activity HUD presentation logic | `node --test ./tests/activity-hud/activity.test.mjs` |
+| Codex root-instruction precedence | `pwsh -NoProfile -File ./tests/codex-instructions-precedence/qualify.ps1` |
+| Dual-harness installation or subset verification | `pwsh -NoProfile -File ./tests/release/dual-harness-installer.ps1` |
+
 ### Unified contributor profiles (Issue #11)
 
 From the source checkout root, run exactly one selected profile:

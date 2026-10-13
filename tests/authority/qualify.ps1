@@ -35,6 +35,8 @@ function Decide([string]$agent, [string]$operation, [string]$path, [string]$norm
                  [string]$repositoryRoot, $grant, [bool]$taskActive = $true,
                  [bool]$projectOwned = $true, [bool]$explicitProhibition = $false,
                  [string[]]$manifestPaths = @(), [string]$nativeDecision = 'ALLOW') {
+    # A null grant models an omitted AUTHORITY_GRANT; nativeDecision models the
+    # confirmed effective permission and normalScope the validated assignment scope.
     if ($explicitProhibition) { return [pscustomobject]@{ decision='DENY'; question=0; reason='USER_PROHIBITION' } }
     if (Is-OlympusOwned $path $manifestPaths) { return [pscustomobject]@{ decision='DENY'; question=0; reason='OLYMPUS_OWNED' } }
     if (-not $projectOwned) { return [pscustomobject]@{ decision='DENY'; question=0; reason='OWNERSHIP_UNPROVEN' } }
@@ -981,6 +983,20 @@ try {
         (Decide 'kovan' $operation 'src/cart.ts' 'src/**' $rootPath $null).decision -eq 'ALLOW' -and
         (Native-Decision $nativeRules 'edit' 'src/cart.ts') -eq 'ALLOW' -and
         (Decide 'kovan' $operation 'src/cart.ts' 'src/**' $rootPath $null).question -eq 0)
+
+    $omittedGrantAllow = Decide 'kovan' $operation 'src/cart.ts' 'src/**' $rootPath $null $true $true $false @() 'ALLOW'
+    $omittedGrantAsk = Decide 'kovan' $operation 'src/cart.ts' 'src/**' $rootPath $null $true $true $false @() 'ASK'
+    $omittedGrantDeny = Decide 'kovan' $operation 'src/cart.ts' 'src/**' $rootPath $null $true $true $false @() 'DENY'
+    $omittedGrantUnowned = Decide 'kovan' $operation 'src/cart.ts' 'src/**' $rootPath $null $true $false $false @() 'ALLOW'
+    $omittedGrantOutOfScope = Decide 'kovan' $operation 'docs/release.md' 'src/**' $rootPath $null $true $true $false @() 'ALLOW'
+    $omittedGrantProhibited = Decide 'kovan' $operation 'src/cart.ts' 'src/**' $rootPath $null $true $true $true @() 'ALLOW'
+    Check 'AUTH1B_OMITTED_GRANT_ONLY_FOR_CONFIRMED_ALLOW_OWNED_IN_SCOPE_WORK' (
+        $omittedGrantAllow.decision -eq 'ALLOW' -and $omittedGrantAsk.decision -eq 'NEED_AUTHORITY' -and
+        $omittedGrantDeny.decision -eq 'DENY' -and $omittedGrantUnowned.decision -eq 'DENY' -and
+        $omittedGrantOutOfScope.decision -eq 'NEED_AUTHORITY' -and $omittedGrantProhibited.decision -eq 'DENY' -and
+        $kael -match '(?is)confirmed-ALLOW.*?AUTHORITY_GRANT.*?absent heading as `NONE`.*?effective native ALLOW.*?ownership evidence.*?WRITE_SCOPE.*?GIT_SCOPE.*?DO_NOT_TOUCH' -and
+        $kovan -match '(?is)heading is\s+absent.*?CONTEXT.*?effective native ALLOW.*?ownership evidence.*?WRITE_SCOPE.*?GIT_SCOPE.*?DO_NOT_TOUCH' -and
+        $kovan -match '(?is)exception never applies to\s+`NATIVE_ASK`.*?exact current-task grant')
 
     $need = Decide 'kovan' $operation 'docs/release.md' 'src/**' $rootPath $null
     Check 'AUTH2_OUT_OF_SCOPE_NEED_AUTHORITY' ($need.decision -eq 'NEED_AUTHORITY' -and

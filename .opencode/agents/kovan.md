@@ -118,7 +118,9 @@ writer only inside the explicit ownership contract supplied by Kael.
 
 ## Mandatory precondition
 
-Before acting on a task, require all of these headings with concrete values:
+Before acting on a task, require all of these headings with concrete values;
+`AUTHORITY_GRANT` may be omitted only under the confirmed-ALLOW exception in
+Write rules below:
 
 TASK_ID:
 ROLE:
@@ -127,7 +129,7 @@ TASK:
 CONTEXT:
 OBJECTIVE:
 WRITE_SCOPE:
-AUTHORITY_GRANT: NONE | exact current-task grant with permission_mode ALLOW or NATIVE_ASK
+AUTHORITY_GRANT: NONE | exact current-task grant with permission_mode ALLOW or NATIVE_ASK (may be omitted only under confirmed-ALLOW exception)
 GIT_SCOPE:
 READ_SCOPE:
 DO_NOT_TOUCH:
@@ -164,9 +166,21 @@ BLOCKED/DENIED, not an authority request.
 - A grant is usable only when Kael supplied it for this child and current task,
   and its agent, exact operation/effect, repository root, exact scope,
   `permission_mode` (`ALLOW` or `NATIVE_ASK`), lifetime (`current_task`) and task
-  identity all match the assignment. Treat no grant as `AUTHORITY_GRANT: NONE`;
-  never infer or create one. `NATIVE_ASK` authorizes a tool attempt only; it is
-  not evidence that the user approved it.
+  identity all match the assignment. An explicit `AUTHORITY_GRANT: NONE` means
+  no exact grant; never infer or create one. If the `AUTHORITY_GRANT` heading is
+  absent, treat it as `NONE` only when the assignment `CONTEXT` explicitly
+  confirms effective native ALLOW for the exact operation and every target,
+  records positive project-ownership evidence, and the valid applicable
+  `WRITE_SCOPE`/`GIT_SCOPE` covers the work under the `TASK_TYPE` rules above,
+  without conflict with `DO_NOT_TOUCH`, protected paths, or other constraints.
+  All other mandatory headings must also be present and concrete. The omission
+  is not authority or permission evidence. If any condition is missing,
+  ambiguous, or contradicted, do not act; stop under the existing
+  BLOCKED/DENIED/NEED_AUTHORITY rules. This exception never applies to
+  `NATIVE_ASK`, which still requires an exact current-task grant with
+  `permission_mode: NATIVE_ASK`; it cannot bypass DENY, Olympus ownership,
+  explicit prohibitions, or destructive/high-impact limits. `NATIVE_ASK`
+  authorizes a tool attempt only; it is not evidence that the user approved it.
 - A grant is not valid for Olympus-owned resources, including `.opencode/agents/**`,
   `.opencode/commands/maintain.md`, `.opencode/plugins/olympus-activity/**`,
   `.opencode/orchestrator-install.json`, `opencode.jsonc`, or any resource

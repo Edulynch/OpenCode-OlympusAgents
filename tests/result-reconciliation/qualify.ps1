@@ -15,23 +15,26 @@ function New-Assignment([string]$id, [bool]$writer) {
     [pscustomobject]@{ id=$id; writer=$writer; consumed=$false; consumedCount=0; retries=0 }
 }
 function Reconcile($assignment, [string]$event, [bool]$childKnown, [bool]$terminal,
-                    [bool]$resultAvailable, [bool]$notStarted, [string]$outcome) {
+                    [bool]$resultAvailable, [bool]$notStarted, [string]$outcome,
+                    [bool]$acceptanceFailed=$false) {
     if ($notStarted) {
         # Only native positive pre-launch evidence may reach this branch.
-        return [pscustomobject]@{ state='CONFIRMED_NOT_STARTED'; retryEligible=$true; action='RETRY_ELIGIBLE' }
+        return [pscustomobject]@{ state='CONFIRMED_NOT_STARTED'; retryEligible=$true; correctiveEligible=$false; action='RETRY_ELIGIBLE' }
     }
     if ($childKnown -and $terminal -and $resultAvailable) {
-        if (-not $assignment.consumed) {
+        $firstConsumption = -not $assignment.consumed
+        if ($firstConsumption) {
             $assignment.consumed = $true
             $assignment.consumedCount++
             $action = if ($outcome -eq 'succeeded') { 'CONSUME_ORIGINAL' } else { 'CONFIRMED_FAILURE' }
         } else { $action = 'IGNORE_DUPLICATE' }
-        return [pscustomobject]@{ state='CONFIRMED_RESULT'; retryEligible=$false; action=$action }
+        return [pscustomobject]@{ state='CONFIRMED_RESULT'; retryEligible=$false;
+            correctiveEligible=($firstConsumption -and $acceptanceFailed); action=$action }
     }
     if ($childKnown) {
-        return [pscustomobject]@{ state='PENDING_OR_RUNNING'; retryEligible=$false; action='WAIT_ORIGINAL' }
+        return [pscustomobject]@{ state='PENDING_OR_RUNNING'; retryEligible=$false; correctiveEligible=$false; action='WAIT_ORIGINAL' }
     }
-    [pscustomobject]@{ state='COMPLETION_UNCONFIRMED'; retryEligible=$false; action='NO_RETRY' }
+    [pscustomobject]@{ state='COMPLETION_UNCONFIRMED'; retryEligible=$false; correctiveEligible=$false; action='NO_RETRY' }
 }
 function Reconcile-Restart($assignment, [string]$storedOutcome, [DateTimeOffset]$metadataAt,
                            [DateTimeOffset]$latestActivityAt, [bool]$absentFromActive,
@@ -115,6 +118,17 @@ try {
         $codexRoot -match 'never replay the\s+full mutation blindly' -and
         $codexKovan -match 'prefer native editing where available or small coherent shell batches' -and
         $codexKovan -match 'reconcile actual file effects and continue only missing bounded work, never blindly replay the full mutation')
+    Check 'RR24_LIFECYCLE_TWO_RECOVERY_PATHS' ($lifecycle -match 'Reissue the original operation only with positive evidence that it did not execute' -and
+        $lifecycle -match 'bounded corrective retry only after the original has a terminal result whose output/effects are reconciled and whose result has been consumed once' -and
+        $lifecycle -match 'material acceptance gate has failed' -and
+        $lifecycle -match 'tool or worker that succeeded at execution but failed acceptance' -and
+        $lifecycle -notmatch 'Retry only after positive evidence that the prior operation did not execute')
+    Check 'RR25_LIFECYCLE_BOUNDARIES_PRESERVED' ($lifecycle -match 'existing permissions, ownership, WRITE_SCOPE, GIT_SCOPE, and retry limits' -and
+        $lifecycle -match 'Never retry an original operation while it is live, unknown, or unreconciled' -and
+        $lifecycle -match 'Ground the correction in the identified failure and new corrective evidence or strategy' -and
+        $lifecycle -match 'repetition must be safe and duplication ruled out' -and
+        $lifecycle -match 'Preserve collected results and repeat only the affected or lost gate' -and
+        $lifecycle -match 'Destructive or high-impact repetition needs proportionate explicit authorization')
     Check 'NO_THALES_ON_ERROR' ($kael -match 'not by itself a reason to invoke Thales')
     Check 'PHASE3_INHERITS' ($kael -match 'Kael-mediated iterative evidence loops reconcile the original worker')
 
@@ -127,6 +141,7 @@ try {
     Check 'CASE_A_HISTORICAL_ORDER' ($t1.state -eq 'PENDING_OR_RUNNING' -and
         $t2.action -eq 'WAIT_ORIGINAL' -and -not $t1.retryEligible -and
         $t3.state -eq 'CONFIRMED_RESULT' -and $t3.action -eq 'CONSUME_ORIGINAL' -and
+        -not $t3.retryEligible -and -not $t3.correctiveEligible -and
         $a.retries -eq 0 -and $a.consumedCount -eq 1)
     $b = New-Assignment 'unknown-child' $false
     $unknown = Reconcile $b 'parent-output-missing' $false $false $false $false ''
@@ -135,16 +150,38 @@ try {
     $c = New-Assignment 'prelaunch-rejected-writer' $true
     $rejected = Reconcile $c 'native-prelaunch-rejection' $false $false $false $true ''
     Check 'CASE_C_NOT_STARTED' ($c.writer -and $rejected.state -eq 'CONFIRMED_NOT_STARTED' -and
-        $rejected.retryEligible -and $rejected.action -eq 'RETRY_ELIGIBLE' -and $c.retries -eq 0)
+        $rejected.retryEligible -and -not $rejected.correctiveEligible -and
+        $rejected.action -eq 'RETRY_ELIGIBLE' -and $c.retries -eq 0)
     $d = New-Assignment 'writer-indeterminate' $true
     $writer = Reconcile $d 'parent-output-missing' $true $false $false $false ''
     Check 'CASE_D_WRITER' ($writer.action -eq 'WAIT_ORIGINAL' -and -not $writer.retryEligible -and $d.retries -eq 0)
-    $again = Reconcile $a 'duplicate-original-result' $true $true $true $false 'succeeded'
-    Check 'CASE_E_DUPLICATE' ($again.action -eq 'IGNORE_DUPLICATE' -and $a.consumedCount -eq 1)
+    $again = Reconcile $a 'duplicate-original-result' $true $true $true $false 'succeeded' $true
+    Check 'CASE_E_DUPLICATE' ($again.action -eq 'IGNORE_DUPLICATE' -and
+        -not $again.retryEligible -and -not $again.correctiveEligible -and $a.consumedCount -eq 1)
     $f = New-Assignment 'failed-nox' $false
     $failure = Reconcile $f 'original-terminal-failure' $true $true $true $false 'failed'
     Check 'CASE_F_TERMINAL_FAILURE' ($failure.state -eq 'CONFIRMED_RESULT' -and
         $failure.action -eq 'CONFIRMED_FAILURE' -and $f.consumedCount -eq 1)
+    # These fixtures qualify lifecycle policy contracts; they do not simulate a production runtime.
+    $accepted = Reconcile (New-Assignment 'accepted-worker-success' $false) 'terminal-success' $true $true $true $false 'succeeded'
+    Check 'CASE_J_ACCEPTED_SUCCESS_NO_AUTOMATIC_RETRY' ($accepted.action -eq 'CONSUME_ORIGINAL' -and
+        -not $accepted.retryEligible -and -not $accepted.correctiveEligible)
+    $workerAcceptanceFailure = New-Assignment 'worker-success-acceptance-failed' $false
+    $failedAcceptance = Reconcile $workerAcceptanceFailure 'terminal-success-acceptance-failed' $true $true $true $false 'succeeded' $true
+    Check 'CASE_K_CORRECTIVE_AFTER_RECONCILED_ACCEPTANCE_FAILURE' ($failedAcceptance.state -eq 'CONFIRMED_RESULT' -and
+        $failedAcceptance.action -eq 'CONSUME_ORIGINAL' -and -not $failedAcceptance.retryEligible -and
+        $failedAcceptance.correctiveEligible -and $workerAcceptanceFailure.consumedCount -eq 1 -and
+        $workerAcceptanceFailure.retries -eq 0)
+    $runningAcceptanceFailure = Reconcile (New-Assignment 'running-acceptance-failed' $true) 'still-running' $true $false $false $false 'succeeded' $true
+    Check 'CASE_L_RUNNING_REJECTS_CORRECTIVE_RETRY' ($runningAcceptanceFailure.action -eq 'WAIT_ORIGINAL' -and
+        -not $runningAcceptanceFailure.retryEligible -and -not $runningAcceptanceFailure.correctiveEligible)
+    $unknownAcceptanceFailure = Reconcile (New-Assignment 'unknown-acceptance-failed' $false) 'unknown-original' $false $false $false $false 'succeeded' $true
+    Check 'CASE_M_UNKNOWN_REJECTS_BLIND_RETRY' ($unknownAcceptanceFailure.state -eq 'COMPLETION_UNCONFIRMED' -and
+        $unknownAcceptanceFailure.action -eq 'NO_RETRY' -and -not $unknownAcceptanceFailure.retryEligible -and
+        -not $unknownAcceptanceFailure.correctiveEligible)
+    $unreconciledAcceptanceFailure = Reconcile (New-Assignment 'terminal-result-unavailable' $false) 'terminal-result-missing' $true $true $false $false 'succeeded' $true
+    Check 'CASE_N_UNRECONCILED_RESULT_REJECTS_CORRECTIVE_RETRY' (-not $unreconciledAcceptanceFailure.retryEligible -and
+        -not $unreconciledAcceptanceFailure.correctiveEligible)
     $restart = New-Assignment 'restart-original' $false
     $metadataAt = [DateTimeOffset]::Parse('2026-09-28T10:00:00Z')
     $laterActivityAt = [DateTimeOffset]::Parse('2026-09-28T10:00:05Z')

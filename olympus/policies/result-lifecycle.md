@@ -14,7 +14,12 @@ Missing output is not failure. Seek and validate the result from the original ex
 
 ## No blind retry
 
-Never retry an unknown or live original. Retry only after positive evidence that the prior operation did not execute, the original output/effects have been reconciled, the affected gate is identified, repetition is safe, and duplication is ruled out. Preserve collected results and repeat only the lost gate. Destructive or high-impact repetition needs proportionate explicit authorization.
+Never retry an original operation while it is live, unknown, or unreconciled. Recovery has two distinct paths:
+
+- Reissue the original operation only with positive evidence that it did not execute, after reconciling its output/effects and identifying the affected gate.
+- Perform a bounded corrective retry only after the original has a terminal result whose output/effects are reconciled and whose result has been consumed once, and a material acceptance gate has failed. This includes a tool or worker that succeeded at execution but failed acceptance. Ground the correction in the identified failure and new corrective evidence or strategy; it does not authorize repeating completed original work.
+
+Both paths must stay within existing permissions, ownership, WRITE_SCOPE, GIT_SCOPE, and retry limits; repetition must be safe and duplication ruled out. Preserve collected results and repeat only the affected or lost gate. Destructive or high-impact repetition needs proportionate explicit authorization.
 
 ## Interrupted compound mutations
 

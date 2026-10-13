@@ -10,12 +10,18 @@ historical validation facts, not a comparative harness result. No interactive
 multi-agent smoke was repeated for this maintenance run. User-supplied runtime
 evidence remains identified as such rather than relabeled as task-executed.
 
+The OpenCode CLI 2.0.20 global-discovery observations below are historical.
+They predate the later Windows/OpenCode 2.0.26 acceptance and closure of
+Issue #7; see the bounded current classification below. The original
+observations and their provenance are retained; their exact cause remains
+undiagnosed.
+
 ## OpenCode evidence
 
 - The OpenCode project adapter supports explicit `/maintain` entry to the hidden
   Aegis agent, separate from Kael routing. Aegis is never a normal Kael child or
-  automatic escalation route. This does not claim global OpenCode runtime
-  discovery; that capability remains `GAP`.
+  automatic escalation route. Global OpenCode runtime discovery is separately
+  qualified below.
 - Olympus `DENY` is a native hard boundary in OpenCode agent permissions and
   the Core authority contract. It is not an ASK/approval path.
 - The passive Activity HUD reads OpenCode session state and displays active
@@ -83,7 +89,7 @@ made. No quality, speed, cost, or token conclusions are inferred without
 comparable measurements. Historical token counts below are reported only where
 the runtime recorded them; monetary cost was unavailable.
 
-## Current global-install foundation
+## Global-install foundation and historical discovery evidence
 
 The v0.4.0 tag contains this foundation. Release validation for the v0.4.0
 and v0.4.1 validation tags failed because release-facing documentation
@@ -94,7 +100,7 @@ historical facts. This evidence does not declare a harness victory.
 - The public API adds `-Scope project|global`; project remains the default. The
   existing project manifest now records `scope = project`; legacy manifests
   without scope continue to mean project.
-- OpenCode global path evidence: fresh child `opencode debug paths` resolved
+- Historical OpenCode 2.0.20 global path evidence: fresh child `opencode debug paths` resolved
   `home`, `config`, `data`, `cache`, `state`, `tmp`, and `log` inside the
   isolated HOME, XDG, and TEMP roots. `OPENCODE_CONFIG_DIR` selects a config
   layer only; the qualification does not treat it as a sandbox for the other
@@ -105,10 +111,10 @@ historical facts. This evidence does not declare a harness victory.
   source shows that `cli.debug.agents` calls `agent.list` through the default
   server connection (`Ir()` with no standalone option); its help does not offer
   `--standalone`. That command can report the managed service's roster rather
-  than the temporary config's runtime. The current standalone equivalent is
+  than the temporary config's runtime. The historical standalone diagnostic used
   `opencode api --standalone --param directory=<fixture> agent.list`, backed by
   the installed OpenAPI operation `agent.list` (`GET /api/agent`).
-- The latest `tests/global-runtime/qualify.ps1` run
+- The historical OpenCode 2.0.20 `tests/global-runtime/qualify.ps1` run
   `4b1610d3387a4afcaa8fe24336ef0362` passed the prelaunch path assertion in
   both controls with the exact same isolated HOME/XDG/TEMP roots. A set
   `OPENCODE_CONFIG_DIR` only for its config layer; B left it unset and used the
@@ -124,9 +130,10 @@ historical facts. This evidence does not declare a harness victory.
   were installed and VerifyOnly-verified, the hidden/subagent Aegis resource
   hash matched, but no Olympus agent or either temporary diagnostic marker
   appeared. No real-profile path appeared in effective paths, server output,
-  or API responses. This reproduces a global custom-agent discovery gap in CLI
-  2.0.20 after correcting the harness isolation; OpenCode global runtime is
-  **GAP** and issue #7 remains OPEN. Logs and evidence are under
+  or API responses. These CLI 2.0.20 observations were classified at the time
+  as OpenCode global runtime **GAP**, with Issue #7 still OPEN. That historical
+  classification is superseded by the later acceptance below; it does not
+  establish the cause of the empty roster. Logs and evidence are under
   `C:\Users\Public\opencode-olympus-qualification\olympus-global-runtime-4b1610d3387a4afcaa8fe24336ef0362`.
 - Codex global runtime discovery is **SUPPORTED** based on user-provided PASS
   evidence. It was accepted as supplied and not re-run during this continuation;
@@ -158,12 +165,17 @@ was collected.
 | Implementation + tests | Codex | PARTIAL | 69.7 s | 0 | 0 | 0 observed | 0 observed; no children | 0 observed | `gpt-6.1-sol` | `high` configured; not emitted by event | 84,593 input (77,824 cached), 501 output, 45 reasoning; cost unavailable | `python -m unittest` failed inside sandbox because `python` was unavailable; Aegis ran the same two fixture tests host-side and both passed. Not Kovan → Nox. |
 | Equivalent task set | OpenCode | NOT_RUN | — | — | — | — | — | — | — | — | — | No apples-to-apples result exists. |
 
-Global runtime classification: **OpenCode GAP** (both isolated controls passed
-path assertions and returned HTTP 200 for their exact fixture contexts, but
-the runtime omitted the installed Olympus custom agents after the explicit
-lazy-load diagnostic; no real-profile path was observed),
-**Codex SUPPORTED** (user-provided PASS evidence, accepted without a repeat
-smoke). See `docs/HARNESSES.md` for the per-harness evidence.
+Current global runtime classification: **OpenCode SUPPORTED — isolated Windows,
+OpenCode 2.0.26**. The operator-supplied
+[Issue #7 acceptance](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7#issuecomment-6106396436)
+records a real Olympus v0.4.6 global install, an active agent loader, 12/12
+Olympus agents plus 2/2 controls, and configuration-level Kael selection.
+[Issue #7 is CLOSED](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7#issuecomment-6106570689).
+No model-backed prompt, interactive key use, or support for other versions or
+operating systems is established by that acceptance. **Codex SUPPORTED** remains
+based on user-provided PASS evidence, accepted without a repeat smoke. See
+[HARNESSES](HARNESSES.md#global-installation-foundation-introduced-in-tagged-v040)
+for the per-harness evidence.
 
 ## Future real-task collection template
 

@@ -77,7 +77,11 @@ gaps/parcialidades explícitos, no motivos para debilitar Olympus Core.
 - **Session isolation:** thread independiente no implica workspace/worktree independiente; no permitir writers paralelos solapados.
 - **Maintenance:** Aegis y su entrada explícita se quedan en OpenCode.
 - **Drift:** `CODEX.md` y prompts TOML son outputs generados del adapter Codex. `render_harnesses.py check` detecta drift; cambiar semántica requiere modificar Core y calificar la representación.
-- **Installer/global setup:** usuarios deben confiar proyecto; no hay sincronización ni installer Codex. No cambiar `.opencode/**` ni `opencode.jsonc` para reducir ese costo.
+- **Installer/global setup:** Codex dispone de instalación project/global y
+  `VerifyOnly`, documentados en [HARNESSES](HARNESSES.md). La configuración
+  project-local requiere un proyecto trusted; no hay sincronización automática.
+  No cambiar `.opencode/**` ni `opencode.jsonc` para reducir ese costo. Los
+  resultados históricos y los GAP de DENY/Aegis permanecen sin cambios.
 - **Benchmark bias:** la evidencia runtime disponible no establece calidad/costo/velocidad comparativos ni justifica una migración entre harnesses.
 
 ## NEXT EXPERIMENTS

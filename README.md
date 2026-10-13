@@ -16,7 +16,7 @@
 
 You’ll need **Windows, PowerShell 7, and Git**, plus **OpenCode V2**, **Codex CLI**, or both. Run a project install from the root of a **trusted Git repository**.
 
-The public commands below use the immutable `v0.4.7` entrypoint and its second-stage launcher. The launcher reads GitHub’s latest-release metadata, then downloads the installer from the selected release’s immutable tag. To install an exact version, run that release’s root `install.ps1` from the [Releases page](https://github.com/Edulynch/OpenCode-OlympusAgents/releases).
+The public commands below use the immutable `v0.4.8` entrypoint and its second-stage launcher. The launcher reads GitHub’s latest-release metadata, then downloads the installer from the selected release’s immutable tag. To install an exact version, run that release’s root `install.ps1` from the [Releases page](https://github.com/Edulynch/OpenCode-OlympusAgents/releases).
 
 ### Project install (recommended)
 
@@ -25,19 +25,19 @@ Choose the command for the runtime you want in this repository.
 **OpenCode**
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install/project/opencode.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/install/project/opencode.ps1 | iex
 ```
 
 **Codex**
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install/project/codex.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/install/project/codex.ps1 | iex
 ```
 
 **OpenCode + Codex**
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install/project/all.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/install/project/all.ps1 | iex
 ```
 
 Run one command for the runtime or runtimes you use. You can add another runtime later; installing it leaves the first one in place.
@@ -49,19 +49,19 @@ Use a global install to make Olympus available across your projects.
 **OpenCode**
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install/global/opencode.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/install/global/opencode.ps1 | iex
 ```
 
 **Codex**
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install/global/codex.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/install/global/codex.ps1 | iex
 ```
 
 **OpenCode + Codex**
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/install/global/all.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/install/global/all.ps1 | iex
 ```
 
 Global installation supports file installation and verification in both runtimes. Runtime agent discovery has separate evidence:
@@ -180,19 +180,19 @@ See the [Codex verification guide](docs/CODEX-COMPATIBILITY.md#verificar-kael-y-
 **OpenCode**
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/uninstall/project/opencode.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/uninstall/project/opencode.ps1 | iex
 ```
 
 **Codex**
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/uninstall/project/codex.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/uninstall/project/codex.ps1 | iex
 ```
 
 **OpenCode + Codex**
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/uninstall/project/all.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/uninstall/project/all.ps1 | iex
 ```
 
 ### Global uninstall
@@ -200,19 +200,19 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/uni
 **OpenCode**
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/uninstall/global/opencode.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/uninstall/global/opencode.ps1 | iex
 ```
 
 **Codex**
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/uninstall/global/codex.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/uninstall/global/codex.ps1 | iex
 ```
 
 **OpenCode + Codex**
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.7/uninstall/global/all.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/uninstall/global/all.ps1 | iex
 ```
 
 Uninstall removes only manifest-owned files. Modified managed files are protected from silent deletion.

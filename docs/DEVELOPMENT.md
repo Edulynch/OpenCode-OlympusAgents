@@ -197,6 +197,10 @@ checks; it does **not** assume Olympus's own FAST/FULL/RUNTIME qualifier
 profiles exist there. Nox and Vera are used only for distinct needed evidence,
 and passing static prompts is not a claim about live model decisions.
 
+For example, [Issue #47](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/47)
+calls for verifying creation and cleanup of Olympus's temporary Python command
+shim, without reproducing generic operating-system permission handling.
+
 The guidance below concerns **qualification of OlympusAgents itself**.
 Keep historical coverage and mandatory gates until an evidenced contract
 mapping and measured cost justify consolidation; do not delete tests just
@@ -214,6 +218,17 @@ Choose checks that provide evidence proportionate to the change's risk:
 - **Failures:** fix the issue and repeat only the affected verification before widening coverage. Do not automatically rerun all of FULL after every adjustment.
 
 FAST, FULL, and RUNTIME retain their current behavior, and these rules do not replace existing mandatory validation. RUNTIME does not replace FULL, nor FULL RUNTIME. Do not omit failures or report unrun checks as PASS. Avoid unnecessary FULL repetitions without imposing a rigid limit when material changes warrant further validation.
+
+Use the following existing checks as starting points for development validation from the source checkout root. This selection does not replace mandatory project, CI, integration, or release gates. Run affected integration checks when shared contracts or installer behavior are affected. Use an existing RUNTIME slice or native smoke when correctness depends on actual harness, process, or UI behavior; static checks alone do not establish native behavior.
+
+| Change | Recommended check |
+| --- | --- |
+| Release-facing README, changelog, or documentation contracts | `pwsh -NoProfile -File ./tests/release/tag-transition-stability.ps1` |
+| Olympus Core, renderer, or generated adapter contracts | `python3.11 -B ./scripts/render_harnesses.py check --harness all`<br>`python3.11 -B ./tests/harness-core/qualify.py --safe-root-read-only` |
+| Completion-gate policy | `pwsh -NoProfile -File ./tests/completion-gates/qualify.ps1` |
+| Activity HUD presentation logic | `node --test ./tests/activity-hud/activity.test.mjs` |
+| Codex root-instruction precedence | `pwsh -NoProfile -File ./tests/codex-instructions-precedence/qualify.ps1` |
+| Dual-harness installation or subset verification | `pwsh -NoProfile -File ./tests/release/dual-harness-installer.ps1` |
 
 ### Unified contributor profiles (Issue #11)
 

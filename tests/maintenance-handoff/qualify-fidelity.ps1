@@ -214,7 +214,7 @@ DECISION: KEEP
     # J. Issue #1's missing-result rule remains separate from structured-field validation.
     $lifecycle = Text 'olympus/policies/result-lifecycle.md'
     Check 'CASE_J_ISSUE1_MISSING_RESULT_SEMANTICS' ($lifecycle -match 'Missing output is not failure' -and
-        $lifecycle -match 'do not replace it' -and $lifecycle -match 'Never retry an unknown or live original')
+        $lifecycle -match 'do not replace it' -and $lifecycle -match 'Never retry an original operation while it is live, unknown, or unreconciled')
 
     # D/M. Canonical Aegis and Kael maintenance handoff sources both state the contract.
     $maintenancePolicy = Text 'olympus/policies/maintenance-plane.md'

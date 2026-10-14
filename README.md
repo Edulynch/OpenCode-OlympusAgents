@@ -125,7 +125,7 @@ python3.11 -B -m olympus status --scope project --target "<absolute-Git-worktree
 
 Queries preserve files and resolve all twelve roles through Core and the existing renderer. `config check` checks source/output consistency; `status` reads reported installation metadata and leaves integrity, ownership and installed assignments **unverified/unknown**. Global status is blocked without discovery. Editing and installed operations are unavailable through this CLI.
 
-Windows Python and native `.cmd` smoke passed; Linux hosted validation is pending, and macOS is unverified. See the [Slice A quickstart](specs/001-portable-olympus-cli/quickstart.md) for checkout-bound launchers, interpreter selection, human/JSON results and exit codes. The CLI does not call models or install dependencies.
+Windows Python and native `.cmd` smoke passed. Linux hosted run [38644271501](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38644271501/job/116127153113) passed for PR #69; that run prepared the launcher with `chmod`, so the updated workflow still needs final CI to verify the Git-tracked executable bit without preparation. macOS **NOT VERIFIED**. See the [Slice A quickstart](specs/001-portable-olympus-cli/quickstart.md) for checkout-bound launchers, interpreter selection, human/JSON results and exit codes. The CLI does not call models or install dependencies.
 
 ## 💬 Start Building
 

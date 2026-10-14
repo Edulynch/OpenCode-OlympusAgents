@@ -73,10 +73,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Prepare executable POSIX launcher
-        shell: bash
-        run: chmod +x scripts/olympus
-
       - name: Slice A (offline read-only CLI)
         shell: bash
         run: |
@@ -89,8 +85,8 @@ jobs:
       - name: Confirm source checkout unchanged
         shell: bash
         run: |
-          # The executable bit was prepared explicitly before the query window.
-          changes=$(git -c core.filemode=false status --porcelain --untracked-files=all --ignored)
+          # Git supplies the executable bit; detect content and mode drift.
+          changes=$(git -c core.filemode=true status --porcelain --untracked-files=all --ignored)
           if [ -n "$changes" ]; then
             printf '%s\n' "$changes"
             exit 1

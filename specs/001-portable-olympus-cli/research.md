@@ -1,6 +1,6 @@
 # Research: feasibility gate y decisiones
 
-**Fecha**: 2026-10-14. **Baseline**: v0.4.9 `c30a19d…`. La investigación inicial fue read-only y luego comprobó Python/renderer/notas. **Actualización T001**: instalación normal remota y VerifyOnly de archivos Codex proyecto en Git temporal aislado, PASS; sin pruebas de CLI nueva ni agentes. Global **BLOCKED**, A **READY_FOR_IMPLEMENTATION** por R49 PASS, B **CONDICIONADA**, C **BLOCKED**.
+**Fecha**: 2026-10-14. **Baseline**: v0.4.9 `c30a19d…`. La investigación inicial fue read-only y luego comprobó Python/renderer/notas. **Actualización T001**: instalación normal remota y VerifyOnly de archivos Codex proyecto en Git temporal aislado, PASS; sin pruebas de CLI nueva ni agentes. **Cierre actual**: A **READY_FOR_FINAL_CI**, T008 PASS por el [run Linux hosted de PR #69](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38644271501/job/116127153113); ese run usó `chmod`, así que falta CI final del workflow que verifica el modo Git 100755. Global **BLOCKED**, B **CONDICIONADA**, C **BLOCKED**, macOS **NOT VERIFIED**.
 
 ## Evidencia del gate
 
@@ -114,7 +114,7 @@ La [release publicada](https://github.com/Edulynch/OpenCode-OlympusAgents/releas
 
 **Falta exacta en esa revisión, ahora resuelta por T001**: evidencia del paso 3 de [DEVELOPMENT](../../docs/DEVELOPMENT.md): fuente/URL del tag remoto inmutable v0.4.9, instalación en Git desechable y VerifyOnly posterior, con origen/versión/harness/resultados trazables. Los sustitutos locales/notas/CI no bastaban; la ejecución remota posterior aporta esa evidencia sin añadir FULL/RUNTIME, modelos o Linux installer.
 
-**Dependencias de A resueltas para tareas**: runtime Python local concreto, stdlib, fuente/renderer coherentes por E11, funciones de resolución existentes, contrato de consulta/JSON y vía Linux CI definida en plan. Tener que implementar el job/smoke no es una dependencia de arquitectura sin resolver; su ejecución es acceptance futura. A no requiere validación de TOML Kit, rollback o manifests personalizados. A **READY_FOR_TASKS** significa tareas sólo de consulta/read-only, no implementación autorizada ni acceptance Windows/Linux completada. R49 pertenece a inicio de código y el gate global pertenece a entrega completa.
+**Registro histórico de dependencias de A resueltas para tareas**: runtime Python, stdlib, fuente/renderer, funciones de resolución, contrato de consulta/JSON y vía Linux CI. En esa revisión A **READY_FOR_TASKS** significaba que las tareas read-only podían prepararse, no que estuvieran implementadas ni que Windows/Linux estuvieran aceptados. La aceptación actual está en el cierre al final de este documento; A no requiere validación de TOML Kit, rollback ni manifests personalizados.
 
 ## Ejecución autorizada de T001: resolución R49
 
@@ -130,6 +130,6 @@ La [release publicada](https://github.com/Edulynch/OpenCode-OlympusAgents/releas
 
 Este resultado satisface el gate solicitado de adquisición/instalación/verificación remota en destino aislado. No afirma runtime Codex/OpenCode, instalación OpenCode/global/Linux ni aceptación de A/B/C. La tabla de revisión anterior registra el estado histórico de evidencia faltante y queda supersedida únicamente para R49 por este cierre.
 
-## Conclusión y decisiones pendientes
+## Cierre actual y decisiones pendientes
 
-**A READY_FOR_IMPLEMENTATION** respecto de sus gates técnicos: R49 PASS y tareas A ya generadas, sin esperar B/C. T002–T009 siguen sin ejecutar. **B CONDICIONADA**, **C BLOCKED** y **global BLOCKED** mantienen sus requisitos completos. Resolver T001 no implementa funcionalidades ni concede autorización de publicación o de cambios fuera del encargo.
+**Slice A READY_FOR_FINAL_CI**: T002–T009 completadas, Windows validado y T008 PASS con el run hosted [38644271501 / job 116127153113](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38644271501/job/116127153113), success `2026-10-14T21:58:31Z`; Ubuntu 24.04, CPython 3.11.17, 20 tests (19 PASS, 1 omitido por Windows), 5.129 s, exit 0. El run usó `chmod +x` y no probó el modo original del checkout. El workflow actualizado elimina `chmod` y exige el bit 100755 con `test -x` antes/después y Git `core.filemode=true`; su CI final permanece pendiente. macOS NOT VERIFIED. **B CONDICIONADA**, **C BLOCKED** y **global BLOCKED** conservan sus requisitos completos. No se repitieron Windows ni R49.

@@ -1,10 +1,11 @@
 # Contrato propuesto de CLI
 
-**Estado**: diseño, ninguna orden nueva existe todavía. [Plan](../plan.md) separa gates: A READY_FOR_IMPLEMENTATION tras R49 PASS, B condicionada y C BLOCKED; global BLOCKED para entrega completa. [R49](../evidence/r49-20261014-c30a19d/report.md) sólo acredita distribución/instalación de archivos Codex proyecto, no nuevos comandos ni runtime. T002–T009 no se ejecutaron. A no importa editor/recovery/native_ops ni ejecuta B/C; este contrato no habilita apply ni cambia spec.
+**Estado**: la superficie de consulta de Slice A está implementada; T002–T009 están completadas. T008 pasó en el [run Linux hosted de PR #69](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38644271501/job/116127153113), que usó `chmod`; el CI final del workflow que valida el modo 100755 preservado por Git sigue pendiente. A **READY_FOR_FINAL_CI**, macOS **NOT VERIFIED**, B **CONDICIONADA**, C **BLOCKED** y el gate global **BLOCKED**. [R49](../evidence/r49-20261014-c30a19d/report.md) acredita distribución/instalación de archivos Codex proyecto, no nuevos comandos ni runtime. Las capacidades B/C siguen siendo propuestas; A no importa editor/recovery/native_ops ni ejecuta B/C. Este contrato no habilita apply ni cambia spec.
 
 ## Entrada, contexto y soporte
 
 - Inicial: `python -B -m olympus` desde el checkout confiable. Final: `olympus` mediante launcher anclado a ese checkout en PATH; Python >=3.11 explícito y sin escribir caches.
+- Linux: `scripts/olympus` conserva modo Git `100755`; el workflow verifica `test -x` antes y después de la suite y comprueba drift con `core.filemode=true`. El run hosted ya registrado pasó después de preparar el permiso con `chmod`; la validación final de checkout sin preparación queda pendiente. macOS NOT VERIFIED.
 - `--source <absolute-path>` es opción global anterior al subcomando; default de launcher es su checkout. No buscar automáticamente otro Core en el proyecto destino. Error si origen no existe, no contiene fuentes/renderer o es ambiguo.
 - Proyecto: `--scope project --target <absolute-worktree-root>`. Global: `--scope global`, usando resolución segura del motor, sin interpretar un target de proyecto como destino global. Para contexto de override global, identificarlo explícitamente sin modificarlo.
 - `--harness opencode|codex|all` selecciona representación/operación cuando aplique. Listado incluye ambos; check default all; mutaciones instaladas no usan un default silencioso.

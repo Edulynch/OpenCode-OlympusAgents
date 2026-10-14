@@ -1,0 +1,11 @@
+{
+  "tag": "v0.4.9",
+  "expected_commit": "c30a19dd410b1815f4591b204615cae0dd9e9a5f",
+  "resolved_commit": "c30a19dd410b1815f4591b204615cae0dd9e9a5f",
+  "tag_object": "a9c76fb47ae7826df57f2319a29be1397e8ff97f",
+  "published_at": "2026-10-14T05:29:18Z",
+  "draft": false,
+  "release_url": "https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.4.9",
+  "identity_api": "unauthenticated HTTPS",
+  "queried_utc": "2026-10-14T17:30:26.3871256Z"
+}

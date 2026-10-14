@@ -1,0 +1,5 @@
+{
+  "reason": "Personal OpenCode active log could not be read (sharing violation). Excluded live data/log trees from byte snapshots; configuration/cache paths retained; no runtime invoked. Neither install nor VerifyOnly had started.",
+  "result": "FAILED_BEFORE_INSTALL",
+  "stage": "pre-install snapshots"
+}

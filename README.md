@@ -110,6 +110,23 @@ pwsh -NoProfile -File "%OPENCODE_WORKTREE_BASE%\.opencode\scripts\worktree-setup
 
 Set this as the **OpenCode → Settings → Projects → Startup command**. Install Olympus in the base checkout first, and preserve any startup command you already use. [Worktree setup and safety →](docs/WORKTREES.md)
 
+## Read-only operator CLI (from a checkout)
+
+This checkout's Slice A CLI requires **Python 3.11+** and only its standard library. Run from the trusted Olympus checkout:
+
+```text
+python3.11 -B -m olympus --help
+python3.11 -B -m olympus --version
+python3.11 -B -m olympus models list
+python3.11 -B -m olympus models list --json
+python3.11 -B -m olympus config check --json
+python3.11 -B -m olympus status --scope project --target "<absolute-Git-worktree-root>" --json
+```
+
+Queries preserve files and resolve all twelve roles through Core and the existing renderer. `config check` checks source/output consistency; `status` reads reported installation metadata and leaves integrity, ownership and installed assignments **unverified/unknown**. Global status is blocked without discovery. Editing and installed operations are unavailable through this CLI.
+
+Windows Python and native `.cmd` smoke passed; Linux hosted validation is pending, and macOS is unverified. See the [Slice A quickstart](specs/001-portable-olympus-cli/quickstart.md) for checkout-bound launchers, interpreter selection, human/JSON results and exit codes. The CLI does not call models or install dependencies.
+
 ## 💬 Start Building
 
 From your project root, start the runtime you installed:

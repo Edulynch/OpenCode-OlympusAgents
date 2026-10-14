@@ -1,0 +1,5 @@
+#!/bin/sh
+# OLYMPUS_PYTHON is an optional interpreter path, not a command with arguments.
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 3
+export PYTHONDONTWRITEBYTECODE=1
+exec "${OLYMPUS_PYTHON:-python3.11}" -B "$script_dir/olympus_cli.py" "$@"

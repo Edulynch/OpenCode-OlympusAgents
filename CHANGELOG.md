@@ -4,6 +4,8 @@
 
 Changes after the latest published release go here.
 
+- Add unified interactive and direct PowerShell install/uninstall entrypoints while retaining all twelve existing wrappers and the current installer safety checks.
+
 ## v0.4.8
 
 ### Highlights

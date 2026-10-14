@@ -16,31 +16,30 @@
 
 You’ll need **Windows, PowerShell 7, and Git**, plus **OpenCode V2**, **Codex CLI**, or both. Run a project install from the root of a **trusted Git repository**.
 
-The public commands below use the immutable `v0.4.8` entrypoint and its second-stage launcher. The launcher reads GitHub’s latest-release metadata, then downloads the installer from the selected release’s immutable tag. To install an exact version, run that release’s root `install.ps1` from the [Releases page](https://github.com/Edulynch/OpenCode-OlympusAgents/releases).
+The legacy public commands below use the immutable `v0.4.8` entrypoint and its second-stage launcher. The launcher reads GitHub’s latest-release metadata, then downloads the installer from the selected release’s immutable tag. To install an exact version, run that release’s root `install.ps1` from the [Releases page](https://github.com/Edulynch/OpenCode-OlympusAgents/releases).
 
-### Two-entry interface (from a checkout)
+### Unified installer (from a checkout)
 
-The repository provides one interactive installer and one interactive uninstaller. With no arguments, each asks whether to use the current project, another project path, or global scope, then asks for OpenCode, Codex, or both. These commands run the scripts in this checkout and reuse the release launcher and installer:
+The repository provides one interactive installer. With no arguments, it asks whether to use the current project, another project path, or global scope, then asks for OpenCode, Codex, or both. This command runs the script in this checkout and reuses the release launcher and installer:
 
 ```powershell
 pwsh -NoProfile -File ./install-olympus.ps1
-pwsh -NoProfile -File ./uninstall-olympus.ps1
 ```
 
-For non-interactive use, provide a native PowerShell scope parameter and a harness:
+For non-interactive installs, provide a native PowerShell scope parameter and a harness:
 
 ```powershell
 pwsh -NoProfile -File ./install-olympus.ps1 -Project -Here -Harness all
 pwsh -NoProfile -File ./install-olympus.ps1 -ProjectPath 'C:\Repos\sample' -Harness codex
 pwsh -NoProfile -File ./install-olympus.ps1 -Global -Harness opencode
-pwsh -NoProfile -File ./uninstall-olympus.ps1 -Project -Here -Harness all
-pwsh -NoProfile -File ./uninstall-olympus.ps1 -ProjectPath 'C:\Repos\sample' -Harness codex
-pwsh -NoProfile -File ./uninstall-olympus.ps1 -Global -Harness opencode
 ```
 
-The interface uses PowerShell's declared native parameters (`-Project -Here`, `-ProjectPath`, and `-Global`) without adding a GNU-style argument parser. The immutable v0.4.8 URLs below remain as compatibility entrypoints; all twelve existing project/global and harness-specific scripts remain supported.
+The interface uses PowerShell's declared native parameters (`-Project -Here`, `-ProjectPath`, and `-Global`) without adding a GNU-style argument parser. The twelve existing immutable v0.4.8 project/global and harness-specific install and uninstall commands remain supported in the compatibility sections below.
 
-### Project install (recommended)
+<details>
+<summary>Compatibility: legacy install commands</summary>
+
+### Project install
 
 Choose the command for the runtime you want in this repository.
 
@@ -100,6 +99,8 @@ To select Kael, open the OpenCode V2 agent list with **Ctrl+X**, then **A** (the
 If you want Kael to be the default for **new sessions**, set `"default_agent": "kael"` in `~/.config/opencode/opencode.jsonc`. The installer leaves this file unchanged. A project install selects Kael through the project’s `opencode.jsonc` when it loads; existing sessions keep their selected agent.
 
 On isolated Windows with OpenCode V2.0.26, qualification covered runtime agent discovery and config-level selection. **Interactive key use and a model-backed prompt were not tested.** See [capabilities](docs/HARNESS-CAPABILITIES.md) and [Issue #7](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7).
+
+</details>
 
 ### Git worktrees (OpenCode, opt-in)
 
@@ -197,6 +198,25 @@ See the [Codex verification guide](docs/CODEX-COMPATIBILITY.md#verificar-kael-y-
 
 ## 🧹 Uninstall
 
+### Unified uninstaller (from a checkout)
+
+With no arguments, the interactive uninstaller asks whether to use the current project, another project path, or global scope, then asks for OpenCode, Codex, or both. It runs the script in this checkout:
+
+```powershell
+pwsh -NoProfile -File ./uninstall-olympus.ps1
+```
+
+For non-interactive uninstalls, provide a native PowerShell scope parameter and a harness:
+
+```powershell
+pwsh -NoProfile -File ./uninstall-olympus.ps1 -Project -Here -Harness all
+pwsh -NoProfile -File ./uninstall-olympus.ps1 -ProjectPath 'C:\Repos\sample' -Harness codex
+pwsh -NoProfile -File ./uninstall-olympus.ps1 -Global -Harness opencode
+```
+
+<details>
+<summary>Compatibility: legacy uninstall commands</summary>
+
 ### Project uninstall
 
 **OpenCode**
@@ -236,6 +256,8 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/uni
 ```powershell
 irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/uninstall/global/all.ps1 | iex
 ```
+
+</details>
 
 Uninstall removes only manifest-owned files. Modified managed files are protected from silent deletion.
 

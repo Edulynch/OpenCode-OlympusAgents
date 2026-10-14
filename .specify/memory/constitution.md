@@ -1,19 +1,3 @@
-<!--
-Temporary amendment-review scratch: remove after review.
-Constitution Sync Impact Report
-Version change: unversioned, unratified generic scaffold -> 1.0.0, first ratified adoption
-Modified principles: none; the scaffold had no ratified principles
-Added principles: I. Olympus Core Is Canonical; II. Authority Follows the Runtime;
-  III. Prefer Simple Changes Backed by Evidence; IV. Validate Proportionally to Risk;
-  V. Preserve Compatibility and Installation Integrity;
-  VI. Keep Specification, Design, Implementation, and Verification Distinct;
-  VII. Respect Scope and Use Spec Kit Proportionally
-Added sections: Compatibility and Installation Integrity; Proportional Spec-Driven Development
-Removed principles: none
-Template sync: project overrides added for specification, planning, and tasks
-Follow-up: none
--->
-
 # OpenCode-OlympusAgents Constitution
 
 ## Core Principles

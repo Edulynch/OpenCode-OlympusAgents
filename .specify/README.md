@@ -50,6 +50,26 @@ La constitución local era el scaffold genérico sin ratificar: conservaba place
 
 El resolver existente permite plantillas de proyecto en `templates/overrides/` antes de recurrir a presets, extensiones o plantillas incorporadas. Se ejecutó `scripts/powershell/resolve-template.ps1 constitution-template -Json` en modo de resolución de sólo lectura para identificar el scaffold; no se encontró `extensions.yml`. La integración local declara OpenCode en `integration.json`; la existencia de un `codex.manifest.json` por sí sola no prueba que Codex esté registrado o tenga paridad funcional. Se conservó esa configuración sin inferir soporte no documentado.
 
+## Preparar un checkout nuevo
+
+Los manifests `integrations/codex.manifest.json` y `integrations/opencode.manifest.json` registran diez rutas y hashes cada uno; no incluyen los wrappers ni prueban que estén disponibles. `integration.json` registra sólo OpenCode. Este PR regenera los wrappers localmente por checkout con Spec Kit oficial v1.1.0 (tag `v1.1.0`, commit `f1d3a4f8337ebbd3ae22760a9c12e3352b93a175`), para no copiar wrappers upstream al repositorio. Es una decisión de este PR, no una prohibición de Spec Kit de versionarlos. Véase la [referencia oficial de integraciones fijada a v1.1.0](https://github.com/github/spec-kit/blob/f1d3a4f8337ebbd3ae22760a9c12e3352b93a175/docs/reference/integrations.md).
+
+Desde la raíz del checkout, prepara los wrappers en PowerShell 7 con `uv`, Git, Python 3.11+ y el runtime del adaptador que se usará:
+
+```powershell
+uv tool install specify-cli --from git+https://github.com/github/spec-kit.git@v1.1.0
+specify version
+specify integration upgrade opencode --script ps
+specify integration install codex --script ps # opcional si se usará Codex
+specify integration status
+```
+
+`install opencode` será no-op porque `integration.json` ya lo registra; `upgrade opencode` regenera sus wrappers. `install codex` registra Codex y conserva OpenCode como predeterminado. Confirma `1.1.0` con `specify version`; los cambios locales a manifests e `integration.json` aparecen en `git diff` y no obligan a hacer commit.
+
+Como el perfil Codex trata `.opencode/` como sólo lectura, un operador debe ejecutar estos comandos desde la raíz y en terminal. No uses `--force`, `specify init --here` ni `refresh` indiscriminado: esto prepara wrappers de Spec Kit, no el bootstrap de Olympus, y no autoriza modificar Olympus Core, perfiles ni outputs productivos. Versionar wrappers sería posible con ownership y política de actualización explícitos y acceso legítimo a `.opencode/`, pero no es necesario para este PR.
+
+En la prueba aislada desde `git archive HEAD` se generaron 20 wrappers con hashes exactos de sus manifests; el estado final mostró `missing=0`, `invalid=0` y `WARNING` por 12 `shared modified` que coinciden con el baseline al normalizar CRLF a LF. Sólo cambiaron tres metadatos (`integration.json` y los manifests Codex/OpenCode, con timestamps); constitución, overrides, specs históricas, Core y outputs productivos quedaron intactos. Esto valida la CLI aislada, no los runtimes ni el workflow completo.
+
 ## Principios y referencias canónicas
 
 La constitución adopta Olympus Core como fuente canónica y define límites de adaptadores, autoridad de Kael y Aegis, controles reales del runtime, simplicidad, TFR, compatibilidad, integridad de instalaciones, evidencia y alcance autorizado. Su versión inicial ratificada es **1.0.0**, con fecha 2026-10-14; el historial indica expresamente que no había una versión constitucional ratificada previa.

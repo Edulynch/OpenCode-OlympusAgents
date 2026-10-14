@@ -6,6 +6,18 @@ Este árbol documenta retrospectivamente el producto que existe en el commit `c3
 
 La constitución vigente está en [.specify/memory/constitution.md](../.specify/memory/constitution.md). Las especificaciones anidadas son documentación retrospectiva; no se creó `feature.json`, rama ni ciclo de plan/tareas/implementación.
 
+## Numeración de nuevas features
+
+Los IDs retrospectivos `001`–`010` pertenecen al catálogo de `retrospective/v0.4.9/`; no consumen la secuencia de nuevas features. Las nuevas especificaciones van en directorios directos `specs/NNN-nombre`; `future/` sigue siendo el registro separado de propuestas. `create-new-feature.ps1` busca sólo directorios numerados directamente bajo `specs/`, y `init-options.json` selecciona `sequential`: la siguiente numeración automática es el máximo de esos directorios más uno; en el árbol actual, el primer prefijo es `001`, no `011`. El script entrega `BRANCH_NAME`, pero no crea ni cambia de rama; eso depende de un hook opcional.
+
+Comprobación de sólo lectura, con el árbol actual:
+
+```powershell
+pwsh -NoProfile -File .specify/scripts/powershell/create-new-feature.ps1 -DryRun -Json -ShortName integration-check 'Comprobar numeración sin crear feature'
+```
+
+El resultado observado fue `FEATURE_NUM=001` y `SPEC_FILE=specs/001-integration-check/spec.md`. Depende de que no haya directorios numerados directos adicionales y de no pasar `-Number`, `-Timestamp` ni una ruta por entorno.
+
 ## Catálogo de capacidades
 
 | ID | Capacidad | Área funcional | Estado de implementación v0.4.9 | Runtime aplicable | Especificación | Evidencia principal | Limitaciones |

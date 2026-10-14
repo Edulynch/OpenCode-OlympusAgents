@@ -4,7 +4,49 @@
 
 Changes after the latest published release go here.
 
-- Add unified interactive and direct PowerShell install/uninstall entrypoints while retaining all twelve existing wrappers and the current installer safety checks.
+## v0.4.9
+
+### Highlights
+
+- Promote the unified interactive and direct PowerShell installer and uninstaller as the primary interface, while retaining all twelve project/global and harness-specific compatibility entrypoints and the existing safety checks (PR #63).
+- Preserve the existing additive **Dual Harness Installer**: `-Harness opencode`, `-Harness codex`, and `-Harness all`; `installed_harnesses`; legacy OpenCode installations; user-owned file protection; the PowerShell 5.1 / PowerShell 7 launch path; and shared Olympus Harness Core. `VerifyOnly` remains read-only. This release does not claim full parity.
+
+### Validation
+
+- Deterministic local fixtures cover installer UX, release contracts, and source identity; they do not establish native OpenCode or Codex behavior.
+- Installation and `VerifyOnly` against the immutable remote source are separate release acceptance checks; local-source fixtures do not replace them.
+
+### Capability limits
+
+- OpenCode Issue #1 (child-result correlation) remains **OPEN/deferred**; Olympus reconciliation guidance does not fix the upstream behavior.
+- OpenCode Issue #8 (authorization continuity after compaction) remains **OPEN/deferred**. The earlier scoped same-session PASS did not test compaction; no fix is claimed.
+- Global OpenCode agent discovery is **SUPPORTED only for isolated Windows with OpenCode V2.0.26**, based on the recorded v0.4.6 global install, active loader, 12 Olympus agents plus two controls, and configuration-level Kael selection. No model-backed prompt or support for other versions or operating systems is established.
+- The Codex adapter classification is `SUPPORTED_WITH_DECLARED_GAPS`, based on user-provided runtime evidence accepted as supplied. Separate historical root-only metrics do not establish Kovan→Nox runtime evidence or comparative results. Codex retains `DENY = GAP`, `AEGIS = GAP`, `QUESTION_CENTRALIZATION = PARTIAL`, `RESULT_RECONCILIATION = PARTIAL`, and `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; native ASK is `ADAPTABLE`.
+- Codex `DENY = GAP` and `AEGIS = GAP`; `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; native ASK is adaptable. This release does not claim full parity.
+
+## Installation
+
+From a trusted checkout, use the unified entrypoints. For example, install both harnesses in the current project:
+
+```powershell
+pwsh -NoProfile -File ./install-olympus.ps1 -Project -Here -Harness all
+```
+
+The matching unified uninstaller is also available from the checkout:
+
+```powershell
+pwsh -NoProfile -File ./uninstall-olympus.ps1 -Project -Here -Harness all
+```
+
+## Verify installation
+
+Read-only verification against a local checkout and the selected harness subset:
+
+```powershell
+pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Version 'v0.4.9' -Target (Get-Location).Path -Scope project -Harness opencode -VerifyOnly
+pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Version 'v0.4.9' -Target (Get-Location).Path -Scope project -Harness codex -VerifyOnly
+pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Version 'v0.4.9' -Target (Get-Location).Path -Scope project -Harness all -VerifyOnly
+```
 
 ## v0.4.8
 

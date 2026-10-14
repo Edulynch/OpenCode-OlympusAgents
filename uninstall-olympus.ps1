@@ -104,7 +104,7 @@ try {
         [IO.Directory]::CreateDirectory($tempBase) | Out-Null
         $ownedLauncher = Join-Path $tempBase ('olympus-uninstall-entry-' + [guid]::NewGuid().ToString('N') + '.ps1')
         # This immutable launcher already exists; the release-specific installer it selects is pinned by its tag.
-        Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/scripts/launch-latest.ps1' -OutFile $ownedLauncher -ErrorAction Stop
+        Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.9/scripts/launch-latest.ps1' -OutFile $ownedLauncher -ErrorAction Stop
         $launcher = $ownedLauncher
     }
 

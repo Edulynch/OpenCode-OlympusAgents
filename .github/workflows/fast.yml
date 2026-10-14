@@ -53,3 +53,41 @@ jobs:
             $changes | Out-Host
             throw 'FAST modified the source checkout'
           }
+
+  slice-a-linux:
+    name: Slice A / Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+      GIT_OPTIONAL_LOCKS: '0'
+    steps:
+      - name: Checkout (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.11'
+
+      - name: Slice A (offline read-only CLI)
+        shell: bash
+        run: |
+          python -B -c 'import sys; assert sys.version_info >= (3, 11)'
+          sh -n scripts/olympus
+          test -x scripts/olympus
+          python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_a -v
+          test -x scripts/olympus
+
+      - name: Confirm source checkout unchanged
+        shell: bash
+        run: |
+          # Git supplies the executable bit; detect content and mode drift.
+          changes=$(git -c core.filemode=true status --porcelain --untracked-files=all --ignored)
+          if [ -n "$changes" ]; then
+            printf '%s\n' "$changes"
+            exit 1
+          fi

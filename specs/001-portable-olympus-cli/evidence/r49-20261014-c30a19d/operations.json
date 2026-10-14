@@ -1,0 +1,84 @@
+[
+  {
+    "exit_code": 0,
+    "arguments": [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "$ErrorActionPreference='Stop'\nif ($HOME -cne $env:USERPROFILE) { throw 'PowerShell HOME did not redirect' }\nif ([IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\\','/') -cne [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\\','/')) { throw 'Temp did not redirect' }\nif (Get-Command opencode,codex -ErrorAction SilentlyContinue) { throw 'Personal runtimes available in PATH' }\nif (@(Get-ChildItem Env: | Where-Object { $_.Name -match 'TOKEN|SECRET|PASSWORD|API_KEY|GITHUB|GH_' }).Count) { throw 'Credential environment inherited' }\n@{home=$HOME;temp=[IO.Path]::GetTempPath();runtimes_available=$false;credential_environment=$false;git=[bool](Get-Command git);pwsh=[bool](Get-Command pwsh)} | ConvertTo-Json -Compress"
+    ],
+    "ended_utc": "2026-10-14T17:44:34.8855279Z",
+    "started_utc": "2026-10-14T17:44:25.9066517Z",
+    "executable": "C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\\pwsh.exe",
+    "name": "isolation-preflight"
+  },
+  {
+    "exit_code": 0,
+    "arguments": [
+      "-C",
+      "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-r49-945379521ce94b33870c71481bd622fa\\target",
+      "init",
+      "--quiet"
+    ],
+    "ended_utc": "2026-10-14T17:44:35.0761016Z",
+    "started_utc": "2026-10-14T17:44:34.9440297Z",
+    "executable": "C:\\Program Files\\Git\\cmd\\git.exe",
+    "name": "git-init"
+  },
+  {
+    "exit_code": 0,
+    "arguments": [
+      "-C",
+      "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-r49-945379521ce94b33870c71481bd622fa\\target",
+      "rev-parse",
+      "--show-toplevel"
+    ],
+    "ended_utc": "2026-10-14T17:44:35.1760060Z",
+    "started_utc": "2026-10-14T17:44:35.0893304Z",
+    "executable": "C:\\Program Files\\Git\\cmd\\git.exe",
+    "name": "git-root"
+  },
+  {
+    "exit_code": 0,
+    "arguments": [
+      "-NoProfile",
+      "-NonInteractive",
+      "-File",
+      "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-r49-945379521ce94b33870c71481bd622fa\\download\\install.ps1",
+      "-Version",
+      "v0.4.9",
+      "-Target",
+      "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-r49-945379521ce94b33870c71481bd622fa\\target",
+      "-Scope",
+      "project",
+      "-Harness",
+      "codex"
+    ],
+    "ended_utc": "2026-10-14T17:44:53.8573734Z",
+    "started_utc": "2026-10-14T17:44:35.4252422Z",
+    "executable": "C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\\pwsh.exe",
+    "name": "install"
+  },
+  {
+    "exit_code": 0,
+    "arguments": [
+      "-NoProfile",
+      "-NonInteractive",
+      "-File",
+      "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-r49-945379521ce94b33870c71481bd622fa\\download\\install.ps1",
+      "-Version",
+      "v0.4.9",
+      "-Target",
+      "C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-r49-945379521ce94b33870c71481bd622fa\\target",
+      "-Scope",
+      "project",
+      "-Harness",
+      "codex",
+      "-VerifyOnly"
+    ],
+    "ended_utc": "2026-10-14T17:45:09.4541056Z",
+    "started_utc": "2026-10-14T17:44:55.3279919Z",
+    "executable": "C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\\pwsh.exe",
+    "name": "verify-only"
+  }
+]

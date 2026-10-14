@@ -1,0 +1,90 @@
+[
+  {
+    "sha256": "5fc9a0bf0977123bb854faa4acc311f0000bfda0363ae7f37a82c91d0173e8c7",
+    "name": "acquisition.json"
+  },
+  {
+    "sha256": "0ffcb133ae48b702d2819f65df7fb23bdcacdfa8198717687f634830d912bb87",
+    "name": "cleanup.json"
+  },
+  {
+    "sha256": "24f0747079e1f54b08c4768a676ed0c0e321455a3abfa7b5b537fad413c8d866",
+    "name": "environment.json"
+  },
+  {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "name": "git-init.stderr.log"
+  },
+  {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "name": "git-init.stdout.log"
+  },
+  {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "name": "git-root.stderr.log"
+  },
+  {
+    "sha256": "002938981f3bcfe9895b84c2632dee6b024d1e2f23baee39fab52995e73072a6",
+    "name": "git-root.stdout.log"
+  },
+  {
+    "sha256": "bbe95b9d4ec9cd90519b342b8cbc12cb9233454544a42cdf3cdb96d36edf369f",
+    "name": "identity.json"
+  },
+  {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "name": "install.stderr.log"
+  },
+  {
+    "sha256": "747589543c5211acc5cbab05b58a465522e29fae545a3a8fc0771aac14bd5276",
+    "name": "install.stdout.log"
+  },
+  {
+    "sha256": "8c8a7d913de037d83cb54035e936cd53ad8e11e3fc415d5f52944949ec739f91",
+    "name": "installed-manifest.json"
+  },
+  {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "name": "isolation-preflight.stderr.log"
+  },
+  {
+    "sha256": "82da1f7ab5033d612ea3fad59e34a23af2c2985ca4fa3e8753cc7bd2a22ca8f0",
+    "name": "isolation-preflight.stdout.log"
+  },
+  {
+    "sha256": "3d699cf97731ec4bf88f139832ae1b1083e36226b0a67bcad2364e7f38288440",
+    "name": "managed-files.json"
+  },
+  {
+    "sha256": "71a5bfc4b11fb1086e4263f050af012c34b9877f95a8a271934cc89399a16dab",
+    "name": "operations.json"
+  },
+  {
+    "sha256": "4f2c74b7b04895ea9093bc58fade28195c82c7bd157fa506d4be1a8b9812637b",
+    "name": "preflight-adjustment.json"
+  },
+  {
+    "sha256": "6b18b118942e8d243b91870a6c3a1186e70a08225c493ed678bab635615a5f4a",
+    "name": "preflight-start-failure.json"
+  },
+  {
+    "sha256": "815e884545d1dfd835792e807c2c8875cb2b79cf9e3948d10e95966493c48801",
+    "name": "report.md"
+  },
+  {
+    "sha256": "6a0ad65430a724b2a49517782211fc9b01a5a5ba5598d4067da1469362990b1e",
+    "name": "result.json"
+  },
+  {
+    "sha256": "c5fa713954da811fb4f898513abd9febe2509fd21f3adf4412624c06080d96a3",
+    "name": "snapshots-before.json"
+  },
+  {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "name": "verify-only.stderr.log"
+  },
+  {
+    "sha256": "373faa3a5e89d52c4bd25244d7bf35285446e2257d2736dc9c19ea7cc503b798",
+    "name": "verify-only.stdout.log"
+  }
+]

@@ -1,0 +1,74 @@
+[
+  {
+    "sha256": "fa7ba089a88f59f358f9ad30224b6285718d33a7c04af9f81d0dbd411a54daa1",
+    "manifest_match": true,
+    "remote_commit_match": true,
+    "path": ".codex/agents/argus.toml"
+  },
+  {
+    "sha256": "27dddcea484d8047d3f75842cdc548a1075b9280c1baf568cc29a7a23f3d420b",
+    "manifest_match": true,
+    "remote_commit_match": true,
+    "path": ".codex/agents/atlas.toml"
+  },
+  {
+    "sha256": "47cb81155093afa3459a46278e9241cc0a76f80fd9182627f7199d47f9900fa3",
+    "manifest_match": true,
+    "remote_commit_match": true,
+    "path": ".codex/agents/helios.toml"
+  },
+  {
+    "sha256": "88a2e1f57c14ef7d9902530ac686dc522d9ea6214f9dea3699894e6f1c4d84cb",
+    "manifest_match": true,
+    "remote_commit_match": true,
+    "path": ".codex/agents/kovan.toml"
+  },
+  {
+    "sha256": "64b36c483cfc978c614969471a2313c241fb07e1c14a612b46faa82599547227",
+    "manifest_match": true,
+    "remote_commit_match": true,
+    "path": ".codex/agents/nox.toml"
+  },
+  {
+    "sha256": "9e5c9a427e5a8c01fa842c611b0b3a34b35b5f043911cbfe0a339c18f7eb6868",
+    "manifest_match": true,
+    "remote_commit_match": true,
+    "path": ".codex/agents/orin.toml"
+  },
+  {
+    "sha256": "897319d5b699c03ed4689a6d7344d2fb833747c35ceeaffb44e7c6bced74f503",
+    "manifest_match": true,
+    "remote_commit_match": true,
+    "path": ".codex/agents/talos.toml"
+  },
+  {
+    "sha256": "d08e748e78e0676f1d169a642b3deacd1ba570dc8a071f3dd5585d3f573b598f",
+    "manifest_match": true,
+    "remote_commit_match": true,
+    "path": ".codex/agents/thales.toml"
+  },
+  {
+    "sha256": "d3393f995d804924fe38ff16beac0c2e5694776e7a7718f6986567e91ba5c02e",
+    "manifest_match": true,
+    "remote_commit_match": true,
+    "path": ".codex/agents/vera.toml"
+  },
+  {
+    "sha256": "c198f842b69958b94de13f85265acf2726d83d5a2d01df25b4bce886e53020dd",
+    "manifest_match": true,
+    "remote_commit_match": true,
+    "path": ".codex/agents/veyra.toml"
+  },
+  {
+    "sha256": "b1bbc0fc51ecaed0f0b0a5fb94f30e4bfacaa91e1e3fc7f63726db30d6212b68",
+    "manifest_match": true,
+    "remote_commit_match": true,
+    "path": ".codex/config.toml"
+  },
+  {
+    "sha256": "d0a896eb4c776564322fdbf7216526d0df11a7aa69db8c49de5cad8b4ef52c8e",
+    "manifest_match": true,
+    "remote_commit_match": true,
+    "path": "CODEX.md"
+  }
+]

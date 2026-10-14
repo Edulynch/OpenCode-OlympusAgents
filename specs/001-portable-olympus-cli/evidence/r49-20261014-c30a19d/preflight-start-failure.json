@@ -1,0 +1,7 @@
+{
+  "gate": "R49",
+  "temporary_root": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-r49-945379521ce94b33870c71481bd622fa",
+  "reason": "Excepción al llamar a \"Start\" con \"0\" argumentos: \"An error occurred trying to start process 'C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\\pwsh.exe C:\\Users\\BLAUTECH\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe' with working directory 'C:\\Users\\BLAUTECH\\AppData\\Local\\Temp\\olympus-r49-945379521ce94b33870c71481bd622fa\\target'. El sistema no puede encontrar el archivo especificado.\"",
+  "ended_utc": "2026-10-14T17:43:16.8411522Z",
+  "result": "BLOCKED"
+}

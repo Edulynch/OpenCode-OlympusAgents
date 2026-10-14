@@ -1,0 +1,51 @@
+{
+  "gate": "R49",
+  "result": "PASS",
+  "scope": "project",
+  "harness": "codex",
+  "tag": "v0.4.9",
+  "commit": "c30a19dd410b1815f4591b204615cae0dd9e9a5f",
+  "acquisition": "Unmodified tagged installer; normal REMOTE_ARCHIVE for install and VerifyOnly; no SourceRoot/SourceArchive",
+  "managed_files": 12,
+  "manifest_version": "v0.4.9",
+  "manifest_source_commit": "unknown",
+  "target_before_verify": {
+    "sha256": "1B8C147624C86CE764BE147CA8D00B5C4014775D81D7A136311AFFC9AD761031",
+    "records": 25
+  },
+  "target_after_verify": {
+    "sha256": "1B8C147624C86CE764BE147CA8D00B5C4014775D81D7A136311AFFC9AD761031",
+    "records": 25
+  },
+  "main_before": {
+    "sha256": "19B4B4CDDFDDA868174D0B6C5418EDE9C080C310BF6277CC428389EC7D33B87D",
+    "records": 13874
+  },
+  "main_after": {
+    "sha256": "19B4B4CDDFDDA868174D0B6C5418EDE9C080C310BF6277CC428389EC7D33B87D",
+    "records": 13874
+  },
+  "personal_before": {
+    "sha256": "CA282FF7BFD13D6704332321331071DF2CA5395FE277E893EBE04F6C19D254C1",
+    "records": 95
+  },
+  "personal_after": {
+    "sha256": "CA282FF7BFD13D6704332321331071DF2CA5395FE277E893EBE04F6C19D254C1",
+    "records": 95
+  },
+  "control_before": {
+    "sha256": "EA28FACD5F6A28F1FBBF0CF762AE5E04377C4D3FB578EBE8AD32E90BF3B003C5",
+    "records": 2
+  },
+  "control_after": {
+    "sha256": "EA28FACD5F6A28F1FBBF0CF762AE5E04377C4D3FB578EBE8AD32E90BF3B003C5",
+    "records": 2
+  },
+  "native_runtime": "NOT RUN",
+  "stub_used": false,
+  "model_calls": 0,
+  "credentials_used": false,
+  "temporary_root": "C:/Users/BLAUTECH/AppData/Local/Temp/olympus-r49-945379521ce94b33870c71481bd622fa",
+  "limitation": "Codex project file installation only, no agent/model/authentication/OpenCode/global/Linux qualification. Archive has no .git: manifest commit may be unknown; identity proven independently by all 274 source blob hashes matching remote commit tree.",
+  "ended_utc": "2026-10-14T17:45:33.7112431Z"
+}

@@ -52,35 +52,61 @@ function Assert-ReleaseNotes([string]$Body, [string]$Tag) {
     $base = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' + $Tag + '/install.ps1'
     $install = "irm $base | iex"
     $verify = "& ([scriptblock]::Create((irm '$base'))) -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
-    if (-not $installationBody.Contains($install)) {
-        throw 'RELEASE_NOTES_INSTALL_PIN_MISMATCH: Installation command must use the exact release tag.'
-    }
-    $codexInstall = "& ([scriptblock]::Create((irm '$base'))) -Harness codex"
-    $allInstall = "& ([scriptblock]::Create((irm '$base'))) -Harness all"
-    $opencodeVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness opencode -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
-    $codexVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness codex -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
-    $allVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness all -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
-    if ($Tag -ceq 'v0.3.0-beta.4') {
-        if (-not $verificationBody.Contains($verify)) {
-            throw 'RELEASE_NOTES_VERIFY_PIN_MISMATCH: Verify command must use the same exact release tag and -VerifyOnly.'
-        }
-    } else {
-        foreach ($command in @($codexInstall, $allInstall)) {
-            if (-not $installationBody.Contains($command)) {
-                throw 'RELEASE_NOTES_HARNESS_INSTALL_MISSING: Installation section must publish Codex and all-harness commands.'
-            }
-        }
-        foreach ($command in @($opencodeVerify, $codexVerify, $allVerify)) {
-            if (-not $verificationBody.Contains($command)) {
-                throw 'RELEASE_NOTES_HARNESS_VERIFY_MISSING: Verify section must publish OpenCode, Codex, and all subset checks.'
-            }
-        }
-    }
     # Any executable PowerShell source on a mutable branch is disallowed, not
-    # just the top-level installer. GitHub latest-release *metadata* is allowed.
+    # just the top-level installer. GitHub latest-release metadata is allowed.
     $mutableSource = '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/(?:master|main|refs/heads/(?:master|main))/[^\s]+?\.ps1|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/(?:master|main)/[^\s]+?\.ps1)'
     if ($Body -match $mutableSource) {
         throw 'RELEASE_NOTES_MASTER_SOURCE: Executable scripts cannot be downloaded from a mutable branch.'
+    }
+    $remoteInstallSource = '(?i)https://raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/[^\s''"`]+/install\.ps1'
+    if ($installationBody -match $remoteInstallSource -and -not $installationBody.Contains($install)) {
+        throw 'RELEASE_NOTES_INSTALL_PIN_MISMATCH: Remote installation commands must use the exact release tag.'
+    }
+    $usesRemoteInstaller = $installationBody.Contains($install)
+    if ($usesRemoteInstaller) {
+        $codexInstall = "& ([scriptblock]::Create((irm '$base'))) -Harness codex"
+        $allInstall = "& ([scriptblock]::Create((irm '$base'))) -Harness all"
+        $opencodeVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness opencode -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
+        $codexVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness codex -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
+        $allVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness all -Version '$Tag' -Target (Get-Location).Path -VerifyOnly"
+        if ($Tag -ceq 'v0.3.0-beta.4') {
+            if (-not $verificationBody.Contains($verify)) {
+                throw 'RELEASE_NOTES_VERIFY_PIN_MISMATCH: Verify command must use the same exact release tag and -VerifyOnly.'
+            }
+        } else {
+            foreach ($command in @($codexInstall, $allInstall)) {
+                if (-not $installationBody.Contains($command)) {
+                    throw 'RELEASE_NOTES_HARNESS_INSTALL_MISSING: Installation section must publish Codex and all-harness commands.'
+                }
+            }
+            foreach ($command in @($opencodeVerify, $codexVerify, $allVerify)) {
+                if (-not $verificationBody.Contains($command)) {
+                    throw 'RELEASE_NOTES_HARNESS_VERIFY_MISSING: Verify section must publish OpenCode, Codex, and all subset checks.'
+                }
+            }
+        }
+    } else {
+        # Before remote entrypoints are validated, release notes may use only
+        # the executable unified checkout commands. Keep the full scope/harness
+        # and versioned read-only verification contract in that mode.
+        $localInstall = 'pwsh -NoProfile -File ./install-olympus.ps1 -Project -Here -Harness all'
+        $localUninstall = 'pwsh -NoProfile -File ./uninstall-olympus.ps1 -Project -Here -Harness all'
+        if (-not $installationBody.Contains($localInstall) -or -not $installationBody.Contains($localUninstall)) {
+            throw 'RELEASE_NOTES_UNIFIED_ENTRYPOINT_MISSING: Installation section must include both unified checkout entrypoints.'
+        }
+        $localVerify = @(
+            "pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Version '$Tag' -Target (Get-Location).Path -Scope project -Harness opencode -VerifyOnly",
+            "pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Version '$Tag' -Target (Get-Location).Path -Scope project -Harness codex -VerifyOnly",
+            "pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Version '$Tag' -Target (Get-Location).Path -Scope project -Harness all -VerifyOnly"
+        )
+        foreach ($command in $localVerify) {
+            if (-not $verificationBody.Contains($command)) {
+                throw 'RELEASE_NOTES_HARNESS_VERIFY_MISSING: Verify section must publish local OpenCode, Codex, and all subset checks with the candidate identity.'
+            }
+        }
+        if (($installationBody + $verificationBody) -match '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/)') {
+            throw 'RELEASE_NOTES_UNVALIDATED_REMOTE_SOURCE: Remote executable examples require immutable-source validation.'
+        }
     }
 }
 

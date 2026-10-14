@@ -146,7 +146,7 @@ exit /b 0
         $remoteInstallBlock = [scriptblock]::Create([IO.File]::ReadAllText($installEntry))
         & $remoteInstallBlock -Global -Harness all
         Check 'REMOTE_INSTALL_FALLBACK_USES_EXISTING_LAUNCHER' ($global:OlympusInstallerUxLauncherUrl -eq
-            'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/scripts/launch-latest.ps1' -and
+            'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.9/scripts/launch-latest.ps1' -and
             -not (Test-Path -LiteralPath $global:OlympusInstallerUxDownloadedTo) -and
             [IO.File]::ReadAllText($dispatchLog) -match '(?i)-Action install .*?-Scope global .*?-Harness all')
 
@@ -155,7 +155,7 @@ exit /b 0
         $remoteUninstallBlock = [scriptblock]::Create([IO.File]::ReadAllText($uninstallEntry))
         & $remoteUninstallBlock -Project -Here -Harness codex
         Check 'REMOTE_UNINSTALL_FALLBACK_USES_EXISTING_LAUNCHER' ($global:OlympusInstallerUxLauncherUrl -eq
-            'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.8/scripts/launch-latest.ps1' -and
+            'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.9/scripts/launch-latest.ps1' -and
             -not (Test-Path -LiteralPath $global:OlympusInstallerUxDownloadedTo) -and
             [IO.File]::ReadAllText($dispatchLog) -match '(?i)-Action uninstall .*?-Scope project .*?-Harness codex')
 

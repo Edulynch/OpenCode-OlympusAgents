@@ -382,6 +382,32 @@ try {
     }
     Check 'R25_PUBLIC_WRAPPER_TAGGED_SOURCES_AND_ARGUMENTS' ($wrapperIssues.Count -eq 0) ($wrapperIssues -join ', ')
 
+    function Test-UnifiedEntrypointSource([string]$Content, [string]$Tag, [string]$Action) {
+        $expectedLauncher = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' +
+            $Tag + '/scripts/launch-latest.ps1'
+        $urls = [regex]::Matches($Content,
+            'https://raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/[^\s]+?\.ps1')
+        return ($urls.Count -eq 1 -and $urls[0].Value -ceq $expectedLauncher -and
+            $Content.Contains("Invoke-WebRequest -Uri '$expectedLauncher' -OutFile " + '$ownedLauncher' + " -ErrorAction Stop") -and
+            [regex]::IsMatch($Content, "(?m)^\s*'-Action',\s*'$([regex]::Escape($Action))',\s*$") -and
+            $Content.Contains("'-Harness', `$selectedHarness,") -and
+            $Content.Contains("'-Target', [IO.Path]::GetFullPath(`$target)"))
+    }
+    $unifiedEntrypointIssues = @()
+    foreach ($entry in @(@('install-olympus.ps1','install'), @('uninstall-olympus.ps1','uninstall'))) {
+        $entryText = [IO.File]::ReadAllText((Join-Path $source $entry[0]))
+        if (-not (Test-UnifiedEntrypointSource $entryText $script:CandidateVersion $entry[1])) {
+            $unifiedEntrypointIssues += $entry[0]
+        }
+    }
+    Check 'R25_UNIFIED_ENTRYPOINTS_TAGGED_SOURCE_AND_ACTION' ($unifiedEntrypointIssues.Count -eq 0) ($unifiedEntrypointIssues -join ', ')
+    $installEntryText = [IO.File]::ReadAllText((Join-Path $source 'install-olympus.ps1'))
+    $uninstallEntryText = [IO.File]::ReadAllText((Join-Path $source 'uninstall-olympus.ps1'))
+    Check 'R25_UNIFIED_ENTRYPOINT_MUTATIONS_REJECTED' (
+        -not (Test-UnifiedEntrypointSource ($installEntryText.Replace('/' + $script:CandidateVersion + '/scripts/launch-latest.ps1', '/master/scripts/launch-latest.ps1')) $script:CandidateVersion 'install') -and
+        -not (Test-UnifiedEntrypointSource ($installEntryText.Replace("'-Action', 'install',", "'-Action', 'uninstall',")) $script:CandidateVersion 'install') -and
+        -not (Test-UnifiedEntrypointSource ($uninstallEntryText.Replace("'-Action', 'uninstall',", "'-Action', 'install',")) $script:CandidateVersion 'uninstall'))
+
     $sample = [IO.File]::ReadAllText((Join-Path $source 'install/project/codex.ps1'))
     $badMutable = $sample.Replace('/' + $script:CandidateVersion + '/scripts/launch-latest.ps1',
         '/master/scripts/launch-latest.ps1')
@@ -404,21 +430,19 @@ try {
     $notesEnd = if ($nextRelease.Success) { $notesStart + $script:CandidateHeading.Length + $nextRelease.Index } else { $changelog.Length }
     if ($notesEnd -le $notesStart) { throw "Release-notes section for $($script:CandidateVersion) is unbounded." }
     $releaseNotes = $changelog.Substring($notesStart, $notesEnd - $notesStart)
-    $rawUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/install.ps1"
-    $installCommand = "irm $rawUrl | iex"
-    $codexInstall = "& ([scriptblock]::Create((irm '$rawUrl'))) -Harness codex"
-    $allInstall = "& ([scriptblock]::Create((irm '$rawUrl'))) -Harness all"
-    $opencodeVerifyCommand = "& ([scriptblock]::Create((irm '$rawUrl'))) -Harness opencode -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -VerifyOnly"
-    $codexVerifyCommand = "& ([scriptblock]::Create((irm '$rawUrl'))) -Harness codex -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -VerifyOnly"
-    $allVerifyCommand = "& ([scriptblock]::Create((irm '$rawUrl'))) -Harness all -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -VerifyOnly"
-    Check 'R25_RELEASE_NOTES_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Installation\s*$' -and $releaseNotes.Contains($installCommand))
+    $unifiedInstallCommand = 'pwsh -NoProfile -File ./install-olympus.ps1 -Project -Here -Harness all'
+    $unifiedUninstallCommand = 'pwsh -NoProfile -File ./uninstall-olympus.ps1 -Project -Here -Harness all'
+    $opencodeVerifyCommand = "pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -Scope project -Harness opencode -VerifyOnly"
+    $codexVerifyCommand = "pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -Scope project -Harness codex -VerifyOnly"
+    $allVerifyCommand = "pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -Scope project -Harness all -VerifyOnly"
+    Check 'R25_RELEASE_NOTES_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Installation\s*$' -and
+        $releaseNotes.Contains($unifiedInstallCommand) -and $releaseNotes.Contains($unifiedUninstallCommand))
     Check 'R25_RELEASE_NOTES_VERIFY_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Verify installation\s*$' -and
         $releaseNotes.Contains($opencodeVerifyCommand) -and $releaseNotes.Contains($codexVerifyCommand) -and $releaseNotes.Contains($allVerifyCommand))
-    $releaseCommands = @($installCommand,$codexInstall,$allInstall,$opencodeVerifyCommand,$codexVerifyCommand,$allVerifyCommand)
-    $unpinnedCommands = @($releaseCommands | Where-Object { -not $_.Contains("/$($script:CandidateVersion)/") })
     $verifyCommands = @($opencodeVerifyCommand,$codexVerifyCommand,$allVerifyCommand)
-    $unversionedVerifyCommands = @($verifyCommands | Where-Object { -not $_.Contains("-Version '$($script:CandidateVersion)'") })
-    Check 'R25_RELEASE_NOTES_COMMANDS_PIN_SAME_TAG' ($unpinnedCommands.Count -eq 0 -and $unversionedVerifyCommands.Count -eq 0)
+    $unversionedVerifyCommands = @($verifyCommands | Where-Object { -not $_.Contains("-Version '$($script:CandidateVersion)'") -or -not $_.Contains('-SourceRoot .') })
+    Check 'R25_RELEASE_NOTES_COMMANDS_PIN_SAME_TAG' ($unversionedVerifyCommands.Count -eq 0 -and
+        $releaseNotes -notmatch '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/)')
     $requiredHighlights = @('Dual Harness Installer','-Harness opencode','-Harness codex','-Harness all',
         'installed_harnesses','additive','legacy OpenCode installations','PowerShell 5.1','PowerShell 7','Olympus Harness Core',
         'VerifyOnly','user-owned','does not claim full parity')

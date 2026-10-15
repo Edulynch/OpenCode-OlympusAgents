@@ -82,6 +82,11 @@ jobs:
           python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_a -v
           test -x scripts/olympus
 
+      - name: Slice B lock (native Linux)
+        shell: bash
+        run: |
+          python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_b_lock -v
+
       - name: Confirm source checkout unchanged
         shell: bash
         run: |

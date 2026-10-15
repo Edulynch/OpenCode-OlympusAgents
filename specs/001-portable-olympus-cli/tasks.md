@@ -107,3 +107,18 @@ Completar tareas no autoriza commits, push, PR, publicación ni cambios fuera de
 - El workflow actualizado elimina ese paso, conserva `test -x scripts/olympus` antes y después de la suite y usa `core.filemode=true` para detectar drift de contenido y permiso. **El CI final de esa revisión está pendiente.**
 - **Estado actual de Slice A: READY_FOR_FINAL_CI.** macOS NOT VERIFIED; B CONDICIONADA; C fuera del alcance de A y BLOCKED para la experiencia completa. No se repitieron Windows ni R49.
 - Auditoría documental de evidencia R49, referencias locales no publicadas, rutas personales y reducción mínima propuesta: [integration-review.md](integration-review.md). Los originales permanecen intactos.
+
+
+---
+
+### Reconciliación de mantenimiento T010–T012 (2026-10-14)
+
+Este resultado supersede el bloqueo histórico anterior para el trabajo autorizado en esta sesión. Sólo se ejecutaron T010–T012; no se avanzó a otras tareas de Slice B.
+
+- **T010: PASS.** Añadidos únicamente los helpers privados en `olympus/source_edit.py` y los casos `slice_b_lock` en `tests/harness-core/test_cli.py`. La adquisición de edición crea exclusivamente un archivo vacío; recovery sólo abre uno existente. Windows usa `msvcrt.locking` (`LK_NBLCK`, byte 0, longitud 1), Linux usa `fcntl.flock` (`LOCK_EX | LOCK_NB`). El descriptor es no heredable. Se valida archivo regular/vacío, ausencia de enlaces/reparse/hardlinks y concordancia `(st_dev, st_ino)` descriptor/path; no se elimina ni recrea automáticamente.
+- **T011: PASS Windows local.** Fuente base `HEAD b7f8404061847a58d5e8122e4baa2fa643b69a46`; cambios locales sin commit. Intérprete real `Python 3.11.17` (`python3.11`). Comando exacto: `python3.11 -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_b_lock -v`; resultado final `Ran 10 tests ... OK (skipped=1)`, exit 0 (9 casos pasaron; un fixture se omitió). SHA-256 de `olympus/source_edit.py`: `08E66033AA27CFDFDBD72C6549EABBE582858E2834F2CCBAA47463A354434245`; `tests/harness-core/test_cli.py`: `6AB1BF93E0AC795EDF01A20DC7B7706D3EF3B8230EE3144077E8612C364EB61E`.
+- Evidencia Windows: exclusión entre procesos para edit/edit, edit/recovery y recovery/recovery mediante helpers productivos y locking del kernel; recovery contendiente no crea/inspecciona su marcador mientras el dueño mantiene el lock; identidad y archivo vacío permanecen; liberación tras `finally` por excepción y terminación abrupta con `kill()` real. Las pruebas usan exclusivamente fixtures temporales con espacios/Unicode. La prueba de enlace simbólico se omitió porque Windows devolvió `WinError 1314` (privilegio requerido); rechazo de hardlink sí pasó. No se probó explícitamente un archivo reparse point en Windows.
+- **T012: PENDING_CI.** Añadido un solo paso `Slice B lock (native Linux)` al job Linux existente en `.github/workflows/fast.yml`, después del paso A y antes del control de checkout; no se alteraron las acciones fijadas, el job Windows ni los controles A. SHA-256 del workflow: `14434858E0070768B0B0AD91C42C3580D27ACAB665C97CA22AAF492F84705772`. No existe resultado hosted consumido para este contenido porque conseguirlo requeriría publicar/cambiar el remoto, acciones no autorizadas. No se usó WSL/Docker ni CI distinto.
+- `git diff --check`: exit 0. No hay `.olympus-cli-edit.lock` ni `.olympus-cli-edit/` en el checkout; las pruebas limpiaron sus fixtures. No se cambió código producto de Slice A ni se implementó T013–T021.
+
+**G1: PENDING_CI (NOT PASS).** Windows está acreditado con la limitación de symlink indicada; Linux requiere CI hosted del contenido identificado. No se inicia T013–T021. Sin acceso a R49, FULL/RUNTIME, commit, push, PR o merge.

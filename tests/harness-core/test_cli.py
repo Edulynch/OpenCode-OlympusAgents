@@ -5,16 +5,22 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import queue
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import tomllib
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from olympus import source_edit
 
 
 def load_file(name: str, path: Path):
@@ -333,6 +339,277 @@ class SliceA(unittest.TestCase):
         self.assertTrue(os.access(ROOT / "scripts/olympus", os.X_OK), "Prepare the checkout launcher executable before tests")
         self.assertTrue(os.access(self.source / "scripts/olympus", os.X_OK))
         self.smoke_entry("posix_launcher")
+
+
+class SliceBLock(unittest.TestCase):
+    _WORKER = r'''
+import os
+import sys
+from pathlib import Path
+from olympus import source_edit
+
+source = Path(sys.argv[1])
+route = sys.argv[2]
+action = sys.argv[3]
+inspection = Path(sys.argv[4]) if sys.argv[4] else None
+lock = None
+try:
+    lock = source_edit._acquire_lock(source, create=(route == "edit"))
+except source_edit.LockBusy:
+    print("BUSY", flush=True)
+    raise SystemExit(23)
+except Exception as error:
+    print("ERROR " + type(error).__name__, flush=True)
+    raise SystemExit(24)
+
+try:
+    if route == "recover" and inspection is not None:
+        inspection.write_text("inspected", encoding="utf-8")
+    print("LOCKED", flush=True)
+    if action == "hold":
+        sys.stdin.readline()
+    elif action == "raise":
+        raise RuntimeError("fixture exception")
+except RuntimeError:
+    print("EXCEPTION", flush=True)
+    raise SystemExit(17)
+finally:
+    if lock is not None:
+        source_edit._release_lock(lock)
+'''
+
+    def setUp(self):
+        temp_root = Path(tempfile.gettempdir())
+        preferred_temp = temp_root / "opencode"
+        if preferred_temp.is_dir():
+            temp_root = preferred_temp
+        self.temporary = tempfile.TemporaryDirectory(prefix="olympus-cli-lock espacio ñ-",
+                                                     dir=temp_root)
+        self.addCleanup(self.temporary.cleanup)
+        self.sandbox = Path(self.temporary.name)
+        self.source = self.sandbox / "origen canónico ñ"
+        self.source.mkdir()
+        self.environment = os.environ.copy()
+        self.environment["PYTHONPATH"] = str(ROOT)
+        self.environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        self.environment["PYTHONUTF8"] = "1"
+
+    def _identity(self, path):
+        metadata = path.stat()
+        return metadata.st_dev, metadata.st_ino
+
+    def _prepare_existing_lock(self, source):
+        lock = source_edit._acquire_lock(source, create=True)
+        identity = source_edit._lock_identity(lock)
+        source_edit._release_lock(lock)
+        return identity
+
+    def _command(self, source, route, action, inspection=None):
+        return [sys.executable, "-B", "-c", self._WORKER, str(source), route, action,
+                str(inspection) if inspection is not None else ""]
+
+    def _spawn_owner(self, source, route="edit", inspection=None):
+        process = subprocess.Popen(self._command(source, route, "hold", inspection), cwd=ROOT,
+                                   env=self.environment, stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, encoding="utf-8", bufsize=1)
+        first_line = queue.Queue()
+        reader = threading.Thread(target=lambda: first_line.put(process.stdout.readline()), daemon=True)
+        reader.start()
+        try:
+            line = first_line.get(timeout=15)
+        except queue.Empty:
+            process.kill()
+            process.communicate(timeout=5)
+            self.fail("Lock owner did not report acquisition within 15 seconds")
+        if line.strip() != "LOCKED":
+            stdout, stderr = process.communicate(timeout=5)
+            self.fail(f"Lock owner failed: {line!r} {stdout!r} {stderr!r}")
+        return process
+
+    def _stop_owner(self, process):
+        if process.poll() is None:
+            process.stdin.write("release\n")
+            process.stdin.flush()
+            stdout, stderr = process.communicate(timeout=10)
+        else:
+            stdout, stderr = process.communicate(timeout=10)
+        self.assertEqual(0, process.returncode, (stdout, stderr))
+
+    def _try_worker(self, source, route, inspection=None):
+        return subprocess.run(self._command(source, route, "once", inspection), cwd=ROOT,
+                              env=self.environment, capture_output=True, text=True,
+                              encoding="utf-8", timeout=15, check=False)
+
+    def test_slice_b_lock_creation_is_exclusive_empty_stable_and_private(self):
+        path = self.source / ".olympus-cli-edit.lock"
+        missing_recovery = self._try_worker(self.source, "recover")
+        self.assertEqual(24, missing_recovery.returncode, missing_recovery.stdout + missing_recovery.stderr)
+        self.assertFalse(path.exists(), "Recovery must not create a missing stable lock")
+
+        lock = source_edit._acquire_lock(self.source, create=True)
+        identity = source_edit._lock_identity(lock)
+        self.assertFalse(os.get_inheritable(lock.descriptor))
+        self.assertTrue(path.is_file())
+        self.assertEqual(0, path.stat().st_size)
+        source_edit._release_lock(lock)
+
+        self.assertTrue(path.exists(), "Normal release must preserve the stable lock path")
+        self.assertEqual(identity, self._identity(path))
+        self.assertEqual(0, path.stat().st_size)
+        stable_snapshot = helpers.snapshot_outputs({path})
+        reopened = source_edit._acquire_lock(self.source, create=False)
+        self.assertEqual(identity, source_edit._lock_identity(reopened))
+        source_edit._release_lock(reopened)
+        self.assertEqual(stable_snapshot, helpers.snapshot_outputs({path}))
+
+    def test_slice_b_lock_aliases_resolve_to_one_canonical_lock(self):
+        alias = self.source.parent / self.source.name / ".." / self.source.name
+        lock = source_edit._acquire_lock(alias, create=True)
+        try:
+            self.assertEqual(self.source.resolve(), lock.path.parent)
+            identity = source_edit._lock_identity(lock)
+            with self.assertRaises(source_edit.LockBusy):
+                source_edit._acquire_lock(self.source, create=False)
+            self.assertEqual(identity, self._identity(self.source / ".olympus-cli-edit.lock"))
+        finally:
+            source_edit._release_lock(lock)
+
+    def test_slice_b_lock_rejects_symlink_paths(self):
+        link_target = self.sandbox / "external empty lock"
+        link_target.touch()
+        symlink = self.source / ".olympus-cli-edit.lock"
+        try:
+            os.symlink(link_target, symlink)
+        except (NotImplementedError, OSError) as error:
+            self.skipTest(f"Host cannot create a file symlink for the safety fixture: {error}")
+        with self.assertRaises(source_edit.LockError):
+            source_edit._acquire_lock(self.source, create=False)
+        symlink.unlink()
+
+    def test_slice_b_lock_rejects_hardlink_paths(self):
+        link_target = self.sandbox / "external empty lock"
+        link_target.touch()
+        hardlink = self.source / ".olympus-cli-edit.lock"
+        try:
+            os.link(link_target, hardlink)
+        except (NotImplementedError, OSError) as error:
+            self.skipTest(f"Host cannot create a hard-link safety fixture: {error}")
+        with self.assertRaises(source_edit.LockError):
+            source_edit._acquire_lock(self.source, create=False)
+        self.assertEqual(2, link_target.stat().st_nlink)
+
+    def test_slice_b_lock_detects_identity_contradiction_and_path_substitution(self):
+        lock = source_edit._acquire_lock(self.source, create=True)
+        path = self.source / ".olympus-cli-edit.lock"
+        identity = source_edit._lock_identity(lock)
+        with self.assertRaises(source_edit.LockIdentityError):
+            source_edit._lock_identity(lock, expected=(identity[0], identity[1] + 1))
+        source_edit._release_lock(lock)
+
+        replacement = self.source / "replacement"
+        replacement.touch()
+        replacement_identity = self._identity(replacement)
+        os.replace(replacement, path)
+        self.assertEqual(replacement_identity, self._identity(path))
+        self.assertNotEqual(identity, replacement_identity)
+        replacement_lock = source_edit._acquire_lock(self.source, create=False)
+        try:
+            with self.assertRaises(source_edit.LockIdentityError):
+                source_edit._lock_identity(replacement_lock, expected=identity)
+        finally:
+            source_edit._release_lock(replacement_lock)
+        self.assertTrue(path.exists(), "Identity failure must not unlink or recreate the substituted path")
+        self.assertEqual(replacement_identity, self._identity(path))
+
+    def test_slice_b_lock_edit_edit_contention_uses_kernel_locking(self):
+        source = self.sandbox / "edit edit"
+        source.mkdir()
+        path = source / ".olympus-cli-edit.lock"
+        owner = self._spawn_owner(source, "edit")
+        try:
+            identity = self._identity(path)
+            self.assertEqual(0, path.stat().st_size)
+            contender = self._try_worker(source, "edit")
+            self.assertEqual(23, contender.returncode, contender.stdout + contender.stderr)
+            self.assertEqual("BUSY", contender.stdout.strip())
+            self.assertEqual(identity, self._identity(path))
+            self.assertEqual(0, path.stat().st_size)
+        finally:
+            self._stop_owner(owner)
+
+    def test_slice_b_lock_edit_recover_blocks_before_batch_inspection(self):
+        source = self.sandbox / "edit recovery"
+        source.mkdir()
+        inspection = source / "batch inspection marker"
+        owner = self._spawn_owner(source, "edit")
+        try:
+            identity = self._identity(source / ".olympus-cli-edit.lock")
+            contender = self._try_worker(source, "recover", inspection)
+            self.assertEqual(23, contender.returncode, contender.stdout + contender.stderr)
+            self.assertEqual("BUSY", contender.stdout.strip())
+            self.assertFalse(inspection.exists(), "Recovery inspected its batch before acquiring the active lock")
+            self.assertEqual(identity, self._identity(source / ".olympus-cli-edit.lock"))
+        finally:
+            self._stop_owner(owner)
+
+        recovered = self._try_worker(source, "recover", inspection)
+        self.assertEqual(0, recovered.returncode, recovered.stdout + recovered.stderr)
+        self.assertEqual("inspected", inspection.read_text(encoding="utf-8"))
+        self.assertEqual(identity, self._identity(source / ".olympus-cli-edit.lock"))
+
+    def test_slice_b_lock_recover_recover_contention(self):
+        source = self.sandbox / "recovery recovery"
+        source.mkdir()
+        self._prepare_existing_lock(source)
+        owner_inspection = source / "owner inspection marker"
+        contender_inspection = source / "contender inspection marker"
+        owner = self._spawn_owner(source, "recover", owner_inspection)
+        try:
+            identity = self._identity(source / ".olympus-cli-edit.lock")
+            self.assertEqual("inspected", owner_inspection.read_text(encoding="utf-8"))
+            contender = self._try_worker(source, "recover", contender_inspection)
+            self.assertEqual(23, contender.returncode, contender.stdout + contender.stderr)
+            self.assertEqual("BUSY", contender.stdout.strip())
+            self.assertFalse(contender_inspection.exists())
+            self.assertEqual(identity, self._identity(source / ".olympus-cli-edit.lock"))
+        finally:
+            self._stop_owner(owner)
+
+    def test_slice_b_lock_releases_after_python_exception(self):
+        path = self.source / ".olympus-cli-edit.lock"
+        lock = source_edit._acquire_lock(self.source, create=True)
+        identity = source_edit._lock_identity(lock)
+        with self.assertRaisesRegex(ValueError, "fixture exception"):
+            try:
+                raise ValueError("fixture exception")
+            finally:
+                source_edit._release_lock(lock)
+        self.assertTrue(path.exists())
+        self.assertEqual(identity, self._identity(path))
+        following = source_edit._acquire_lock(self.source, create=False)
+        self.assertEqual(identity, source_edit._lock_identity(following))
+        source_edit._release_lock(following)
+
+    def test_slice_b_lock_releases_after_abrupt_process_termination(self):
+        source = self.sandbox / "abrupt termination"
+        source.mkdir()
+        path = source / ".olympus-cli-edit.lock"
+        owner = self._spawn_owner(source, "edit")
+        identity = self._identity(path)
+        owner.kill()
+        owner.wait(timeout=10)
+        owner.stdout.close()
+        owner.stderr.close()
+        owner.stdin.close()
+        self.assertNotEqual(0, owner.returncode, "Owner must be terminated rather than normally releasing")
+        self.assertEqual(identity, self._identity(path))
+
+        following = source_edit._acquire_lock(source, create=False)
+        self.assertEqual(identity, source_edit._lock_identity(following))
+        self.assertEqual(0, path.stat().st_size)
+        source_edit._release_lock(following)
+        self.assertEqual(identity, self._identity(path))
 
 
 if __name__ == "__main__":

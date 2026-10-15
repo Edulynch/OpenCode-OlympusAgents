@@ -612,5 +612,320 @@ finally:
         self.assertEqual(identity, self._identity(path))
 
 
+class SliceBModelEdit(unittest.TestCase):
+    def setUp(self):
+        temp_root = Path(tempfile.gettempdir())
+        preferred_temp = temp_root / "opencode"
+        if preferred_temp.is_dir():
+            temp_root = preferred_temp
+        self.temporary = tempfile.TemporaryDirectory(prefix="olympus-cli-model espacio ñ-",
+                                                     dir=temp_root)
+        self.addCleanup(self.temporary.cleanup)
+        self.sandbox = Path(self.temporary.name)
+        self.source = self.sandbox / "source fixture ñ"
+        shutil.copytree(ROOT / "olympus", self.source / "olympus",
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        scripts = self.source / "scripts"
+        scripts.mkdir()
+        shutil.copy2(ROOT / "scripts/render_harnesses.py", scripts / "render_harnesses.py")
+        self.renderer = load_file("slice_b_fixture_renderer", scripts / "render_harnesses.py")
+        initial_outputs = self.renderer.outputs_for(self.source, "all")
+        for path, content in initial_outputs.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content.encode("utf-8"))
+
+    def model_edit(self):
+        # Do not import TOML Kit at test-module import time; lock/A tests stay stdlib-only.
+        from olympus import model_edit
+        return model_edit
+
+    def snapshot(self):
+        paths = set(self.source.rglob("*"))
+        inventory = {
+            path.relative_to(self.source).as_posix():
+            ("directory" if path.is_dir() else "file", path.stat().st_mode,
+             path.stat().st_size, path.stat().st_mtime_ns)
+            for path in paths
+        }
+        files = {path for path in paths if path.is_file()}
+        return inventory, helpers.snapshot_outputs(files)
+
+    def rendered_candidate_outputs(self, candidate):
+        model_file = next(item for item in candidate.files
+                          if item.relative_path == "olympus/core/models.toml")
+        models, policies, capabilities, identities, roles = self.renderer.checked_sources(self.source)
+        candidate_models = tomllib.loads(model_file.new_bytes.decode("utf-8"))
+        outputs = self.renderer.opencode_outputs(self.source, candidate_models, policies, identities, roles)
+        outputs.update(self.renderer.codex_outputs(self.source, candidate_models, policies, identities, roles))
+        outputs[self.source / "docs/HARNESS-CAPABILITIES.md"] = self.renderer.capability_doc(capabilities)
+        return outputs
+
+    def assert_preview_matches_renderer(self, candidate):
+        model_file = next(item for item in candidate.files
+                          if item.relative_path == "olympus/core/models.toml")
+        rendered = self.rendered_candidate_outputs(candidate)
+        expected = {"olympus/core/models.toml"} if model_file.new_bytes != model_file.old_bytes else set()
+        for path, content in rendered.items():
+            expected_bytes = content.encode("utf-8")
+            if expected_bytes != path.read_bytes():
+                expected.add(path.relative_to(self.source).as_posix())
+        self.assertEqual(expected, set(candidate.preview["data"]["write_set"]))
+        self.assertEqual(expected, {item.relative_path for item in candidate.files})
+        by_path = {item.relative_path: item for item in candidate.files}
+        for path, content in rendered.items():
+            relative = path.relative_to(self.source).as_posix()
+            if relative in by_path:
+                self.assertEqual(content.encode("utf-8"), by_path[relative].new_bytes)
+
+    def test_slice_b_tomlkit_import_is_lazy_and_missing_dependency_blocks(self):
+        result = subprocess.run(
+            [sys.executable, "-B", "-c",
+             "import sys; from olympus import model_edit; print('tomlkit' in sys.modules)"],
+            cwd=ROOT,
+            env={**os.environ, "PYTHONPATH": str(ROOT), "PYTHONDONTWRITEBYTECODE": "1"},
+            capture_output=True, text=True, encoding="utf-8", check=False, timeout=15,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("False", result.stdout.strip())
+
+        model_edit = self.model_edit()
+        before = self.snapshot()
+        from unittest.mock import patch
+        with patch.object(model_edit.importlib, "import_module", side_effect=ImportError("fixture absent")):
+            with self.assertRaisesRegex(model_edit.ModelEditError, "tomlkit==0.13.3"):
+                model_edit._build_set_family_candidate(self.source, "sol", "new-sol", "new-codex")
+        self.assertEqual(before, self.snapshot(), "Missing optional dependency must not mutate the fixture")
+        self.assertFalse((self.source / ".olympus-cli-edit.lock").exists())
+        self.assertFalse((self.source / ".olympus-cli-edit").exists())
+
+    def test_slice_b_toml_round_trip_preserves_bytes_newlines_and_final_newline(self):
+        model_edit = self.model_edit()
+        source = (self.source / "olympus/core/models.toml").read_bytes()
+        lf = source.replace(b"\r\n", b"\n")
+        variants = {
+            "lf": lf,
+            "crlf": lf.replace(b"\n", b"\r\n"),
+            "no_final_newline": lf.rstrip(b"\n"),
+        }
+        for label, raw in variants.items():
+            with self.subTest(label=label):
+                candidate = model_edit._prepare_toml_candidate(
+                    raw, {("families", "sol", "opencode"): "openai/new-sol"}
+                )
+                self.assertEqual(raw, candidate.old_bytes)
+                self.assertEqual("openai/new-sol", tomllib.loads(candidate.new_bytes.decode("utf-8"))
+                                 ["families"]["sol"]["opencode"])
+                if label == "crlf":
+                    self.assertEqual(0, candidate.new_bytes.replace(b"\r\n", b"").count(b"\n"))
+                    self.assertTrue(candidate.new_bytes.endswith(b"\r\n"))
+                elif label == "lf":
+                    self.assertNotIn(b"\r", candidate.new_bytes)
+                    self.assertTrue(candidate.new_bytes.endswith(b"\n"))
+                else:
+                    self.assertFalse(candidate.new_bytes.endswith(b"\n"))
+
+    def test_slice_b_toml_preserves_comments_order_quoted_dotted_inline_and_string_style(self):
+        model_edit = self.model_edit()
+        raw = (
+            b"# unrelated target text: families.sol.opencode = 'fake-id'\n"
+            b"families.\"sol\".opencode = 'old-opencode' # preserve comment\n"
+            b"families.sol.codex = \"\"\"old-codex\"\"\"\n"
+            b"families.luna = { opencode = 'openai/luna', codex = \"gpt-luna\" }\n"
+            b"note = \"opencode = 'not-a-target'\"\n"
+            b"[roles.\"kael\"]\n"
+            b"family = 'sol'\n"
+            b"effort = \"\"\"high\"\"\"\n"
+            b"[roles.veyra]\n"
+            b"family = 'luna'\n"
+            b"effort = 'max'"
+        )
+        candidate = model_edit._prepare_toml_candidate(raw, {
+            ("families", "sol", "opencode"): "new-opencode",
+            ("families", "sol", "codex"): "new-codex",
+            ("families", "luna", "opencode"): "openai/new-luna",
+            ("roles", "kael", "effort"): "max",
+        })
+        self.assertEqual(b"families.\"sol\".opencode = 'new-opencode' # preserve comment\n",
+                         next(line for line in candidate.new_bytes.splitlines(keepends=True)
+                              if line.startswith(b'families."sol".opencode')))
+        self.assertIn(b'families.sol.codex = """new-codex"""\n', candidate.new_bytes)
+        self.assertIn(b"families.luna = { opencode = 'openai/new-luna', codex = \"gpt-luna\" }\n",
+                      candidate.new_bytes)
+        self.assertIn(b"note = \"opencode = 'not-a-target'\"\n", candidate.new_bytes)
+        self.assertIn(b'effort = """max"""\n', candidate.new_bytes)
+        self.assertEqual("max", tomllib.loads(candidate.new_bytes.decode("utf-8"))["roles"]["kael"]["effort"])
+
+    def test_slice_b_ids_require_full_ascii_identifier_match(self):
+        model_edit = self.model_edit()
+        for valid in ("openai/gpt-6.1-sol", "gpt-6-luna", "A1._:/-Z"):
+            with self.subTest(valid=valid):
+                self.assertEqual(valid, model_edit._validate_id(valid, "fixture ID"))
+        for invalid in ("", " starts-with-space", "ends-with-space ", "has space", "quote'", "quote\"",
+                        "back\\slash", "line\nbreak", "trailing-newline\n", "hash#", "brace{", "tab\t", "éclair"):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(model_edit.ModelEditError):
+                    model_edit._validate_id(invalid, "fixture ID")
+        with self.assertRaises(model_edit.ModelEditError):
+            model_edit._prepare_toml_candidate(
+                (self.source / "olympus/core/models.toml").read_bytes(),
+                {("families", "sol", "opencode"): "bad ID"},
+            )
+
+    def test_slice_b_toml_rejects_mixed_malformed_incompatible_and_unauthorized_edits(self):
+        model_edit = self.model_edit()
+        baseline = (self.source / "olympus/core/models.toml").read_bytes()
+        normalized = baseline.replace(b"\r\n", b"\n")
+        mixed = normalized.replace(b"\n", b"\r\n", 1)
+        with self.assertRaisesRegex(model_edit.ModelEditError, "Mixed LF/CRLF"):
+            model_edit._prepare_toml_candidate(mixed, {("families", "sol", "opencode"): "new-id"})
+        invalid_effort = baseline.replace(b'effort = "high"', b'effort = "bad\\nvalue"', 1)
+        for raw in (b"[families\n", baseline.replace(b"openai/gpt-6.1-sol", b"invalid id", 1), invalid_effort):
+            with self.subTest(raw=raw[:24]):
+                with self.assertRaises(model_edit.ModelEditError):
+                    model_edit._prepare_toml_candidate(raw, {("families", "sol", "codex"): "new-codex"})
+        for updates in (
+            {("identities", "kael", "display"): "New identity"},
+            {("families", "sol", "opencode"): 42},
+            {("roles", "unknown", "effort"): "high"},
+            {("roles", "kael", "effort"): "vendor-invented"},
+        ):
+            with self.subTest(updates=updates):
+                with self.assertRaises(model_edit.ModelEditError):
+                    model_edit._prepare_toml_candidate(baseline, updates)
+
+    def test_slice_b_family_candidate_identifies_all_roles_and_exact_renderer_outputs(self):
+        model_edit = self.model_edit()
+        before = self.snapshot()
+        candidate = model_edit._build_set_family_candidate(
+            self.source, "sol", "openai/sol-next", "codex-sol-next"
+        )
+        self.assertEqual(before, self.snapshot(), "Preview must be completely in memory")
+        self.assertEqual(["argus", "atlas", "helios", "kael", "talos", "thales"],
+                         candidate.preview["data"]["affected_roles"])
+        self.assertEqual("openai/gpt-6.1-sol", candidate.preview["data"]["roles"][0]
+                         ["models"]["opencode"]["old"])
+        rows = {row["role"]: row for row in candidate.preview["data"]["roles"]}
+        self.assertEqual("root", rows["kael"]["representation"]["codex"])
+        self.assertNotIn("aegis", rows)
+        self.assertEqual("openai/sol-next", rows["kael"]["models"]["opencode"]["new"])
+        self.assertEqual("codex-sol-next", rows["kael"]["models"]["codex"]["new"])
+        self.assertEqual(1, candidate.preview["schema_version"])
+        self.assertEqual(candidate.preview, json.loads(json.dumps(candidate.preview, ensure_ascii=False)))
+        human = model_edit._format_preview_human(candidate.preview)
+        for row in rows.values():
+            for field in ("family", "effort"):
+                self.assertIn(row[field]["old"], human)
+                self.assertIn(row[field]["new"], human)
+            for runtime in ("opencode", "codex"):
+                self.assertIn(row["models"][runtime]["old"], human)
+                self.assertIn(row["models"][runtime]["new"], human)
+        self.assert_preview_matches_renderer(candidate)
+        self.assertFalse((self.source / ".olympus-cli-edit.lock").exists())
+        self.assertFalse((self.source / ".olympus-cli-edit").exists())
+
+    def test_slice_b_specialist_candidate_preserves_other_roles_and_outputs(self):
+        model_edit = self.model_edit()
+        before = self.snapshot()
+        candidate = model_edit._build_set_role_candidate(self.source, "veyra", family="sol", effort="high")
+        self.assertEqual(before, self.snapshot())
+        self.assertEqual(["veyra"], candidate.preview["data"]["affected_roles"])
+        model_file = next(item for item in candidate.files if item.relative_path == "olympus/core/models.toml")
+        old = tomllib.loads(model_file.old_bytes.decode("utf-8"))
+        new = tomllib.loads(model_file.new_bytes.decode("utf-8"))
+        self.assertEqual("sol", new["roles"]["veyra"]["family"])
+        self.assertEqual("high", new["roles"]["veyra"]["effort"])
+        for role in set(old["roles"]) - {"veyra"}:
+            self.assertEqual(old["roles"][role], new["roles"][role])
+        self.assertEqual({"olympus/core/models.toml", ".opencode/agents/veyra.md", ".codex/agents/veyra.toml"},
+                         set(candidate.preview["data"]["write_set"]))
+        self.assert_preview_matches_renderer(candidate)
+
+    def test_slice_b_effort_only_candidate_changes_one_role_and_is_renderer_exact(self):
+        model_edit = self.model_edit()
+        candidate = model_edit._build_set_role_candidate(self.source, "thales", effort="high")
+        self.assertEqual(["thales"], candidate.preview["data"]["affected_roles"])
+        row = candidate.preview["data"]["roles"][0]
+        self.assertEqual({"old": "xhigh", "new": "high"}, row["effort"])
+        self.assertEqual(row["models"]["opencode"]["old"], row["models"]["opencode"]["new"])
+        self.assertEqual(row["models"]["codex"]["old"], row["models"]["codex"]["new"])
+        self.assert_preview_matches_renderer(candidate)
+
+    def test_slice_b_kael_root_and_aegis_codex_absence_are_preserved(self):
+        model_edit = self.model_edit()
+        kael = model_edit._build_set_role_candidate(self.source, "kael", family="luna", effort="max")
+        kael_row = kael.preview["data"]["roles"][0]
+        self.assertEqual("root", kael_row["representation"]["codex"])
+        self.assertNotIn(".codex/agents/kael.toml", kael.preview["data"]["write_set"])
+        self.assertNotIn("CODEX.md", kael.preview["data"]["write_set"])
+        self.assert_preview_matches_renderer(kael)
+
+        aegis = model_edit._build_set_role_candidate(self.source, "aegis", family="sol", effort="high")
+        aegis_row = aegis.preview["data"]["roles"][0]
+        self.assertEqual("absent", aegis_row["representation"]["codex"])
+        self.assertNotIn(".codex/agents/aegis.toml", aegis.preview["data"]["write_set"])
+        self.assert_preview_matches_renderer(aegis)
+
+    def test_slice_b_noop_has_no_files_lock_scratch_or_source_mutations(self):
+        model_edit = self.model_edit()
+        before = self.snapshot()
+        family = model_edit._build_set_family_candidate(self.source, "sol", "openai/gpt-6.1-sol", "gpt-6.1-sol")
+        role = model_edit._build_set_role_candidate(self.source, "veyra", family="luna", effort="max")
+        self.assertTrue(family.preview["data"]["no_op"])
+        self.assertEqual("no_changes", family.preview["result"])
+        self.assertEqual([], family.preview["data"]["write_set"])
+        self.assertEqual((), family.files)
+        self.assertEqual("no_changes", role.preview["result"])
+        self.assertEqual([], role.preview["data"]["write_set"])
+        self.assertEqual(before, self.snapshot())
+        self.assertFalse((self.source / ".olympus-cli-edit.lock").exists())
+        self.assertFalse((self.source / ".olympus-cli-edit").exists())
+
+    def test_slice_b_candidate_rejects_drift_missing_and_mixed_newline_outputs(self):
+        model_edit = self.model_edit()
+        drift = self.source / ".codex/agents/veyra.toml"
+        original = drift.read_bytes()
+        drift.write_bytes(original + b"# drift\n")
+        with self.assertRaisesRegex(model_edit.ModelEditError, "drift"):
+            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol", "new-codex")
+        drift.write_bytes(original)
+
+        drift.unlink()
+        with self.assertRaisesRegex(model_edit.ModelEditError, "Missing renderer resource"):
+            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol", "new-codex")
+        drift.write_bytes(original)
+
+        drift.write_bytes(original.replace(b"\n", b"\r\n", 1))
+        with self.assertRaisesRegex(model_edit.ModelEditError, "Mixed LF/CRLF"):
+            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol", "new-codex")
+
+    def test_slice_b_candidate_rejects_linked_outputs(self):
+        model_edit = self.model_edit()
+        output = self.source / ".codex/agents/veyra.toml"
+        link_target = self.sandbox / "linked-output-target"
+        link_target.write_bytes(output.read_bytes())
+        output.unlink()
+        try:
+            os.link(link_target, output)
+        except (NotImplementedError, OSError) as error:
+            output.write_bytes(link_target.read_bytes())
+            self.skipTest(f"Host cannot create a hard-link safety fixture: {error}")
+        with self.assertRaisesRegex(model_edit.ModelEditError, "Hard-linked"):
+            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol", "new-codex")
+
+    def test_slice_b_candidate_rejects_symlinked_outputs(self):
+        model_edit = self.model_edit()
+        output = self.source / ".codex/agents/veyra.toml"
+        link_target = self.sandbox / "symlink-output-target"
+        link_target.write_bytes(output.read_bytes())
+        output.unlink()
+        try:
+            os.symlink(link_target, output)
+        except (NotImplementedError, OSError) as error:
+            output.write_bytes(link_target.read_bytes())
+            self.skipTest(f"Host cannot create a symlink safety fixture: {error}")
+        with self.assertRaisesRegex(model_edit.ModelEditError, "Linked/reparse"):
+            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol", "new-codex")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,16 @@ For Olympus maintainers, contributors, installation debugging, qualification, an
 
 ## Architecture
 
-Olympus Core defines role responsibilities, model intent, routing, authority, result lifecycle, and maintenance-plane semantics. OpenCode and Codex adapters express that same Core in their native surfaces. Kael is the single conceptual ROOT ORCHESTRATOR: OpenCode represents it as its primary agent, while Codex represents it as the root thread. Aegis remains a separate privileged Olympus maintenance role, supported only through OpenCode's explicit `/maintain` entry.
+Olympus Core defines canonical role responsibilities, model intent, routing, authority, result lifecycle, and maintenance-plane semantics. OpenCode V2 is the active-development runtime; its adapter is prioritized for new capabilities. The Codex adapter preserves its frozen compatibility baseline. Sharing Core does not create a Codex-parity requirement. Kael is the single conceptual ROOT ORCHESTRATOR: OpenCode represents it as its primary agent, while Codex represents it as the root thread. All twelve canonical Core roles and their responsibilities remain intact. Aegis remains a separate privileged Olympus maintenance role, supported only through OpenCode's explicit `/maintain` entry.
+
+### Support and adapter contract — 2026-10-16
+
+- **OpenCode V2 — ACTIVE DEVELOPMENT.** Design new features, agents, commands, architectural improvements, and runtime capabilities for OpenCode first. OpenCode-only capabilities do not need Codex equivalents.
+- **Codex — FROZEN COMPATIBILITY.** Do not remove existing Codex components, installers, manifests, or uninstall protections; do not add integrations or close gaps solely for parity. Only evidenced critical Codex fixes or regressions introduced by shared-code changes are in scope, with a concrete bounded target.
+- Retain existing tests protecting shared integrity and compatibility. Do not create Codex gates for OpenCode-only capabilities. Existing Codex static/integrity and shared installer checks remain what they are; their presence is not a mandate to qualify Codex parity for new work.
+- The frozen Codex gaps are authority differences, Aegis, hard `DENY`, and observability. Do not claim verification of newer Codex versions without specific evidence.
+
+**Future contract to keep the adapters decoupled:** specify shared Core invariants separately from adapter-specific capabilities and evidence. A new OpenCode-only behavior should be designed and qualified against its OpenCode contract; a missing Codex mapping must not block it. Codex checks apply when a change actually touches shared integrity/compatibility or is an explicitly authorized critical Codex correction—not as a parity gate. This is policy guidance, not an implementation or test-suite change in this task.
 
 Kael checks feasibility and plane routing from the request **before** delegated research or planning. Explicit `/maintain` accepts its delivered task in any repository; its command entry is sufficient authorization. Ordinary user-project work, including ordinary Git administration, remains in the normal plane; Git alone is not an Aegis capability boundary. Kael does not automatically delegate to Aegis. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
 
@@ -214,10 +223,12 @@ Choose checks that provide evidence proportionate to the change's risk:
 - **Localized bugs or changes:** first run the directly affected test or qualifier. Add FAST when shared contracts may also be affected.
 - **Olympus Core, routing, authority, models, or shared policies:** use focused tests during development, FAST for contracts, and FULL as final integration validation where appropriate.
 - **Installers, bootstrap, releases, or compatibility:** run affected fixtures during development and FULL before integrating significant changes.
-- **Changes depending on actual OpenCode or Codex behavior:** run focused RUNTIME checks when needed, within declared limits and capabilities.
+- **Changes depending on actual runtime behavior:** prioritize focused OpenCode V2 RUNTIME evidence. Run Codex runtime checks only for an in-scope critical Codex correction or a shared-code regression where runtime evidence is materially needed; do not add a Codex gate for an OpenCode-only capability.
 - **Failures:** fix the issue and repeat only the affected verification before widening coverage. Do not automatically rerun all of FULL after every adjustment.
 
 FAST, FULL, and RUNTIME retain their current behavior, and these rules do not replace existing mandatory validation. RUNTIME does not replace FULL, nor FULL RUNTIME. Do not omit failures or report unrun checks as PASS. Avoid unnecessary FULL repetitions without imposing a rigid limit when material changes warrant further validation.
+
+The existing Codex checks in FAST/FULL/RUNTIME remain for their established shared-integrity, compatibility, and baseline purposes. They are not expanded to new OpenCode-only capabilities. The Codex catalog probe is not evidence that a new Codex version or runtime capability was verified.
 
 Use the following existing checks as starting points for development validation from the source checkout root. This selection does not replace mandatory project, CI, integration, or release gates. Run affected integration checks when shared contracts or installer behavior are affected. Use an existing RUNTIME slice or native smoke when correctness depends on actual harness, process, or UI behavior; static checks alone do not establish native behavior.
 

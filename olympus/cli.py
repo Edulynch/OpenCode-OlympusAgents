@@ -1,4 +1,4 @@
-"""Portable, offline, read-only Olympus commands using the canonical renderer."""
+"""Portable, offline Olympus queries and explicit source-model edits."""
 
 from __future__ import annotations
 
@@ -24,28 +24,47 @@ class Parser(argparse.ArgumentParser):
 def parser() -> Parser:
     root = Parser(
         prog="olympus",
-        description="Read-only Olympus CLI. Python 3.11+; trusted checkout; offline.",
+        description="Offline Olympus CLI. Python 3.11+; trusted checkout; no provider calls.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=("Examples:\n"
                 "  olympus models list --json\n"
+                "  olympus models set-family sol --opencode openai/new-sol --codex codex/new-sol --dry-run --json\n"
+                "  olympus agents set-model veyra --effort high --dry-run\n"
+                "  olympus config recover\n"
                 "  olympus config check\n"
                 "  olympus status --scope project --target <absolute-worktree-root>\n"
-                "Source queries do not verify installations or model availability.\n"
+                "Edits affect only the canonical source checkout; installed-target application is separate.\n"
+                "Queries do not verify installations or model availability.\n"
                 "macOS is not verified."),
         allow_abbrev=False,
     )
     root.add_argument("--source", type=Path, help="absolute trusted source checkout (before command)")
     root.add_argument("--version", action="store_true", help="show the source release version")
     commands = root.add_subparsers(dest="command", parser_class=Parser)
-    models = commands.add_parser("models", help="query canonical model assignments", allow_abbrev=False)
+    models = commands.add_parser("models", help="query or explicitly edit canonical model assignments", allow_abbrev=False)
     model_commands = models.add_subparsers(dest="action", required=True, parser_class=Parser)
     listing = model_commands.add_parser("list", help="list all twelve roles and both adapters", allow_abbrev=False)
     listing.add_argument("--json", action="store_true")
+    set_family = model_commands.add_parser("set-family", help="explicitly edit both IDs of an existing family", allow_abbrev=False)
+    set_family.add_argument("family")
+    set_family.add_argument("--opencode", required=True)
+    set_family.add_argument("--codex", required=True)
+    set_family.add_argument("--dry-run", action="store_true")
+    set_family.add_argument("--json", action="store_true", help="JSON preview; requires --dry-run")
+    agents = commands.add_parser("agents", help="edit canonical role model intent", allow_abbrev=False)
+    agent_commands = agents.add_subparsers(dest="action", required=True, parser_class=Parser)
+    set_model = agent_commands.add_parser("set-model", help="explicitly edit an existing role", allow_abbrev=False)
+    set_model.add_argument("role")
+    set_model.add_argument("--family")
+    set_model.add_argument("--effort")
+    set_model.add_argument("--dry-run", action="store_true")
+    set_model.add_argument("--json", action="store_true", help="JSON preview; requires --dry-run")
     config = commands.add_parser("config", help="check local source and generated outputs", allow_abbrev=False)
     config_commands = config.add_subparsers(dest="action", required=True, parser_class=Parser)
     check = config_commands.add_parser("check", help="compare renderer outputs without writing", allow_abbrev=False)
     check.add_argument("--harness", choices=("opencode", "codex", "all"), default="all")
     check.add_argument("--json", action="store_true")
+    config_commands.add_parser("recover", help="explicitly recover one pending source-edit batch", allow_abbrev=False)
     status = commands.add_parser("status", help="read reported installation metadata; no integrity verification", allow_abbrev=False)
     status.add_argument("--scope", choices=("project", "global"), default="project")
     status.add_argument("--target", type=Path, help="absolute Git worktree root; required for project scope")
@@ -64,6 +83,20 @@ def source_root(requested: Path | None) -> Path:
             raise CLIError(f"Invalid source: missing {source / relative}", 2)
         if not (source / relative).resolve().is_relative_to(source):
             raise CLIError(f"Source resource escapes checkout: {source / relative}", 3)
+    return source
+
+
+def recovery_source_root(requested: Path | None) -> Path:
+    """Resolve recovery's source context without preflighting models or batch state."""
+    candidate = requested if requested is not None else Path(__file__).resolve().parents[1]
+    if not candidate.is_absolute():
+        raise CLIError("--source must be an absolute trusted checkout path", 2)
+    try:
+        source = candidate.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise CLIError(f"Invalid recovery source: {candidate}", 2) from error
+    if not source.is_dir():
+        raise CLIError(f"Recovery source is not a directory: {source}", 2)
     return source
 
 
@@ -217,6 +250,141 @@ def emit(response: dict, as_json: bool) -> None:
         print(f"{issue['code']}: {issue['message']}", file=sys.stderr)
 
 
+def _model_edit_error_code(error) -> int:
+    """Keep invalid requests distinct from source/dependency conflicts."""
+    message = str(error)
+    invalid_request_prefixes = (
+        "Invalid proposed", "Invalid existing", "Unknown model family",
+        "Unknown canonical role", "Family name must", "Role must",
+        "At least one of family or effort", "Effort is not present",
+        "Proposed family", "Proposed effort", "Model family has no canonical roles",
+        "Unauthorized or missing TOML scalar path", "Only existing three-part",
+    )
+    return 2 if message.startswith(invalid_request_prefixes) else 3
+
+
+def _batch_error_code(error, source_edit, *, recovery: bool = False) -> int:
+    if isinstance(error, source_edit.BatchConflict):
+        return 3
+    if isinstance(error, source_edit.BatchBlocked):
+        message = str(error).lower()
+        if ("unconfirmed" in message or "could not be confirmed" in message
+                or "committed but post-commit" in message
+                or "cannot remove verified batch temporary" in message
+                or "cannot remove nonempty or changed batch directory" in message
+                or "cannot remove empty pending scratch" in message
+                or "pending scratch gained unenumerated resources" in message):
+            return 4
+        if recovery:
+            confirmed_blockers = (
+                "recovery requires the existing stable lock", "pending scratch",
+                "batch record", "unsupported batch", "batch read_set", "batch target",
+                "batch backup/staged", "required batch backup/staged", "missing batch resource",
+                "unsafe source-relative path", "unsafe", "cannot inspect", "cannot enumerate",
+                "cannot validate canonical renderer", "different canonical source",
+            )
+            if not any(marker in message for marker in confirmed_blockers):
+                # Recovery may have restored some targets or partially cleaned
+                # a terminal batch before an operational error. Do not flatten
+                # that outcome into a confirmed blocked/no-change result.
+                return 4
+        return 3
+    if isinstance(error, source_edit.BatchError):
+        return 1  # The transaction reports this only after a confirmed rollback.
+    if isinstance(error, source_edit.LockIdentityError):
+        return 4
+    if isinstance(error, source_edit.LockError):
+        return 3
+    return 1
+
+
+def _adopt_preview(response: dict, preview: dict) -> None:
+    response.clear()
+    response.update(preview)
+
+
+def _run_model_edit(source: Path, args, response: dict) -> int:
+    # Both modules are intentionally imported only after argparse and source
+    # context validation. TOML Kit itself remains lazy inside model_edit.
+    from . import model_edit, source_edit
+
+    try:
+        if args.command == "models":
+            candidate = model_edit._build_set_family_candidate(
+                source, args.family, args.opencode, args.codex,
+            )
+        else:
+            if args.family is None and args.effort is None:
+                raise CLIError("agents set-model requires --family and/or --effort", 2)
+            candidate = model_edit._build_set_role_candidate(
+                source, args.role, family=args.family, effort=args.effort,
+            )
+    except model_edit.ModelEditError as error:
+        raise CLIError(str(error), _model_edit_error_code(error)) from error
+
+    preview = dict(candidate.preview)
+    preview_context = dict(preview["context"])
+    if (source / ".olympus-cli-edit").exists():
+        preview_context["source_edit"] = "unconfirmed; explicit recovery required"
+    preview["context"] = preview_context
+    _adopt_preview(response, preview)
+
+    if args.dry_run:
+        if args.json:
+            print(json.dumps(response, ensure_ascii=False))
+        else:
+            print(model_edit._format_preview_human(preview))
+        return 0
+
+    # Execution is the explicit command without --dry-run. Show the exact
+    # candidate before staging or replacing any target; no extra prompt.
+    print("Execution preview (not yet applied):")
+    print(model_edit._format_preview_human(preview))
+    try:
+        prepared = source_edit._prepare_batch(candidate)
+        if prepared is None:
+            response["result"] = "no_changes"
+            print("execution: no_changes")
+            return 0
+        result = source_edit._commit_batch(prepared)
+        if result != "committed":
+            response["result"] = "unconfirmed"
+            raise CLIError(f"Batch returned unexpected execution state: {result}", 4)
+    except source_edit.BatchError as error:
+        code = _batch_error_code(error, source_edit)
+        response["result"] = {1: "failed", 3: "blocked", 4: "unconfirmed"}[code]
+        raise CLIError(str(error), code) from error
+    except source_edit.LockError as error:
+        code = _batch_error_code(error, source_edit)
+        response["result"] = "unconfirmed" if code == 4 else "blocked"
+        raise CLIError(str(error), code) from error
+    print("execution: committed")
+    return 0
+
+
+def _run_recovery(source: Path, response: dict) -> int:
+    # Recovery is stdlib-only and acquires the existing stable lock before its
+    # implementation inspects the record, backups, or targets.
+    from . import source_edit
+
+    try:
+        result = source_edit._recover_batch(source)
+    except source_edit.BatchError as error:
+        code = _batch_error_code(error, source_edit, recovery=True)
+        response["result"] = {1: "failed", 3: "blocked", 4: "unconfirmed"}[code]
+        raise CLIError(str(error), code) from error
+    except source_edit.LockError as error:
+        code = _batch_error_code(error, source_edit, recovery=True)
+        response["result"] = "unconfirmed" if code == 4 else "blocked"
+        raise CLIError(str(error), code) from error
+    response["operation"] = "config recover"
+    response["result"] = "no_changes" if result == "no_changes" else "ok"
+    response["data"] = {"recovery": result}
+    print(f"config recover: {result}")
+    print(f"source: {source}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     for stream in (sys.stdout, sys.stderr):
@@ -232,10 +400,17 @@ def main(argv: list[str] | None = None) -> int:
             raise CLIError("--version cannot be combined with a command", 2)
         if not args.version and not args.command:
             cli_parser.error("a command is required")
-        response["operation"] = "version" if args.version else " ".join(filter(None, (args.command, getattr(args, "action", None))))
-        source = source_root(args.source)
+        operation = "version" if args.version else " ".join(
+            filter(None, (args.command, getattr(args, "action", None)))
+        )
+        response["operation"] = operation
+        if operation in ("models set-family", "agents set-model") and args.json and not args.dry_run:
+            raise CLIError("--json for model edits requires --dry-run", 2)
+        if args.command == "agents" and args.action == "set-model" and args.family is None and args.effort is None:
+            raise CLIError("agents set-model requires --family and/or --effort", 2)
+        source = recovery_source_root(args.source) if operation == "config recover" else source_root(args.source)
         response["context"] = {"source": str(source), "kind": "canonical_source"}
-        if (source / ".olympus-cli-edit").exists():
+        if operation != "config recover" and (source / ".olympus-cli-edit").exists():
             response["context"]["source_edit"] = "unconfirmed; not repaired"
         if args.version:
             print(f"olympus {release_version(source)} (source: {source})")
@@ -248,12 +423,24 @@ def main(argv: list[str] | None = None) -> int:
                 response["result"] = "failed"
             emit(response, as_json)
             return 1 if response["issues"] else 0
+        if response["operation"] in ("models set-family", "agents set-model"):
+            return _run_model_edit(source, args, response)
+        if response["operation"] == "config recover":
+            return _run_recovery(source, response)
         code = installation_status(args, response)
         emit(response, as_json)
         return code
     except CLIError as error:
-        response["result"] = "blocked" if error.code == 3 else "failed"
-        response["issues"].append({"code": "invalid_arguments" if error.code == 2 else "query_failed", "message": str(error)})
+        if error.code == 3:
+            response["result"] = "blocked"
+        elif error.code == 4:
+            response["result"] = "unconfirmed"
+        else:
+            response["result"] = "failed"
+        response["issues"].append({
+            "code": "invalid_arguments" if error.code == 2 else "query_failed",
+            "message": str(error),
+        })
         emit(response, as_json)
         return error.code
     except (OSError, UnicodeError) as error:
@@ -261,6 +448,14 @@ def main(argv: list[str] | None = None) -> int:
         response["issues"].append({"code": "read_failed", "message": str(error)})
         emit(response, as_json)
         return 1
+    except KeyboardInterrupt:
+        response["result"] = "unconfirmed"
+        response["issues"].append({
+            "code": "unconfirmed",
+            "message": "Operation interrupted; inspect/recover pending source-edit state explicitly.",
+        })
+        emit(response, as_json)
+        return 4
 
 
 if __name__ == "__main__":

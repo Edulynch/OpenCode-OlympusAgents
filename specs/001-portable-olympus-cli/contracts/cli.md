@@ -1,11 +1,11 @@
 # Contrato propuesto de CLI
 
-**Estado**: la superficie de consulta de Slice A está implementada; T002–T009 están completadas. T008 pasó en el [run Linux hosted de PR #69](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38644271501/job/116127153113), que usó `chmod`; el CI final del workflow que valida el modo 100755 preservado por Git sigue pendiente. A **READY_FOR_FINAL_CI**, macOS **NOT VERIFIED**, B **CONDICIONADA**, C **BLOCKED** y el gate global **BLOCKED**. [R49](../evidence/r49-20261014-c30a19d/report.md) acredita distribución/instalación de archivos Codex proyecto, no nuevos comandos ni runtime. Las capacidades B/C siguen siendo propuestas; A no importa editor/recovery/native_ops ni ejecuta B/C. Este contrato no habilita apply ni cambia spec.
+**Estado vigente (2026-10-16)**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C y feature completa **BLOCKED**; macOS **NOT VERIFIED**. El acceptance de B cubre los comandos de edición de fuente/recovery con sus límites; no habilita `config apply` ni elimina la necesidad de autorización del operador sobre fuentes reales. Evidencia en [tasks.md](../tasks.md).
 
 ## Entrada, contexto y soporte
 
 - Inicial: `python -B -m olympus` desde el checkout confiable. Final: `olympus` mediante launcher anclado a ese checkout en PATH; Python >=3.11 explícito y sin escribir caches.
-- Linux: `scripts/olympus` conserva modo Git `100755`; el workflow verifica `test -x` antes y después de la suite y comprueba drift con `core.filemode=true`. El run hosted ya registrado pasó después de preparar el permiso con `chmod`; la validación final de checkout sin preparación queda pendiente. macOS NOT VERIFIED.
+- Linux A: launcher y contrato entregados con PR #69; la observación del run anterior que usó `chmod` y su pendiente de entonces se conservan como historia en research.md. Esta reconciliación no cambia A. Linux B está acreditada por T020; macOS NOT VERIFIED.
 - `--source <absolute-path>` es opción global anterior al subcomando; default de launcher es su checkout. No buscar automáticamente otro Core en el proyecto destino. Error si origen no existe, no contiene fuentes/renderer o es ambiguo.
 - Proyecto: `--scope project --target <absolute-worktree-root>`. Global: `--scope global`, usando resolución segura del motor, sin interpretar un target de proyecto como destino global. Para contexto de override global, identificarlo explícitamente sin modificarlo.
 - `--harness opencode|codex|all` selecciona representación/operación cuando aplique. Listado incluye ambos; check default all; mutaciones instaladas no usan un default silencioso.
@@ -22,7 +22,7 @@
 | `config check [--harness ...] [--json]` | A; validación de fuentes y drift renderer | Ninguna; comparar expected en memoria |
 | `models set-family <existing> --opencode <id> --codex <id> [--dry-run [--json]]` | B; editar los dos IDs de esa familia | Preview sin escribir; ejecución una orden explícita |
 | `agents set-model <role> [--family <existing>] [--effort <canonical-value>] [--dry-run [--json]]` | B; al menos un valor solicitado | Otros roles inalterados; preview de resolución completa |
-| `config recover` | B; rollback/cleanup de batch propio pendiente | Orden humana separada, con estado/ownership reconciliado; sin retry original |
+| `config recover` | B; rollback/cleanup de batch propio pendiente | Adquirir lock nativo estable existente antes de inspección del batch; sin dueño activo, identidad/estado/hashes/backups reconciliados; sin retry original |
 | `doctor --scope ... [--target ...] --harness ... [--json]` | C; verificar mediante motor existente | Windows cualificado, fuente local apta; read-only bloqueado si no se garantiza |
 | `config apply --scope ... [--target ...] --harness ... [--dry-run] [--json]` | C; futura actualización administrada | BLOCKED para personalizado con baseline; no llama install override ni escribe destino |
 | `install --scope ... [--target ...] --harness ... --version <release> [--dry-run]` | C; delegación de release oficial | Windows cualificado; no instala silenciosamente sources personalizados |
@@ -32,7 +32,24 @@
 
 `doctor` usa bootstrap `-Target ... -Harness ... -SourceVersion ... -VerifyOnly` para proyecto y global-install `-Harness ... -SourceVersion ... -VerifyOnly` para global, desde fuente local coherente, sin public wrapper que descargue archives. Si la versión/candidate/procedencia no puede verificarse, informa límite/fallo. No suplantar la verificación con un hash checker Python. Global OpenCode discovery existente se evalúa por evidencia; si escribe, doctor permanece bloqueado como read-only.
 
-IDs son strings sin controles ni saltos y no vacíos; no asumir disponibilidad/auth. Familias/roles de fuente. Esfuerzo inicial extraído del conjunto de esfuerzos presente en el documento canónico; no registry de esfuerzos/proveedor adicional. Aegis se puede configurar en Core, pero sólo materializa OpenCode.
+### Identificadores — contrato inicial definitivo de Slice B
+
+Todos los IDs existentes utilizados por el candidato y los IDs propuestos deben coincidir **por completo** con `[A-Za-z0-9][A-Za-z0-9._:/-]*`. No trim, normalización, matching parcial ni ancla que acepte un newline final. Primer carácter ASCII alfanumérico; los restantes sólo ASCII alfanuméricos, punto, underscore, dos puntos, slash o guion. Se aceptan los actuales conformes, incluidos `openai/gpt-6.1-sol` y `gpt-6-luna`.
+
+Vacío, comillas, backslashes, espacios, controles, saltos, `#`, braces y cualquier carácter fuera del alfabeto se rechazan con exit 2 **antes de cualquier staging o escritura, incluida creación del lock**. Un ID existente no conforme rechaza la operación B con el mismo exit 2, sin repararlo; no modifica el comportamiento read-only de A. El renderer existente no cambia. Sintaxis válida no acredita disponibilidad, soporte live ni autenticación; no consultar proveedores. Es una restricción inicial de B, no una limitación universal de OpenCode o Codex.
+
+Familias/roles de fuente. Esfuerzo inicial extraído del conjunto de esfuerzos presente en el documento canónico; no registry de esfuerzos/proveedor adicional. Aegis se puede configurar en Core, pero sólo materializa OpenCode.
+
+### Exclusión y recovery — contrato de operador
+
+- Commit y recovery B usan exclusión nativa no bloqueante sobre `.olympus-cli-edit.lock` en el origen canónico: `msvcrt.locking` Windows / `fcntl.flock` Linux. Un dueño activo devuelve blocked/exit 3 antes de inspeccionar su batch. El archivo de lock es estable y permanece vacío después del cleanup; su existencia no significa pendiente ni propietario vivo. Nunca eliminarlo/reemplazarlo/recrearlo para desbloquear.
+- Preview no crea/adquiere lock ni scratch; no-op de edición válida y sin scratch pendiente tampoco los crea. Sólo la primera edición real aceptada puede crear el archivo estable. Recovery sólo abre el existente: si falta, es inseguro o su identidad no se acredita, blocked/exit 3 sin examinar registro/backups/targets. Con lock existente adquirido y sin scratch, no_changes/exit 0 sin escrituras.
+- Scratch pendiente bloquea B en preflight incluso con lock libre o ausente, sin crear/recrear lock ni staging. `config recover` es orden humana separada; adquiere exclusión antes de leer el batch, valida identidad/registro/read-set/hashes/backups y mantiene el lock hasta rollback/cleanup o reporte de bloqueo. PID, timestamp y directorio no acreditan terminación; no auto-cleanup por antigüedad.
+- PREPARED: dejar old, restaurar sólo new mediante copia staged de backup verificado; all-new también revierte. COMMITTED: sólo limpiar tras verificar todo new. Tercer estado, modo divergente, entrada externa modificada, backup necesario inválido o identidad distinta bloquean sin overwrite; conservar evidencia. Recovery interrumpido puede repetirse sin consumir respaldos. Protocolo completo: [data-model.md](../data-model.md).
+- Coherencia y ownership acreditados permiten éxito; rollback confirmado de un cambio fallido sigue siendo fallo operacional/exit 1, no éxito de edición. Conflicto confirmado produce blocked/exit 3; efectos parciales o resultado no acreditado producen unconfirmed/exit 4 con recursos/estado concretos. Ningún resultado parcial se presenta como aplicado.
+- Se excluyen protección absoluta contra procesos externos no cooperantes, atomicidad multiarquivo visible a lectores y durabilidad absoluta ante pérdida de energía. No hay sobrescritura automática de modificaciones externas; el hash previo a os.replace no es compare-and-swap. Estas exclusiones no habilitan ignorar conflictos detectados.
+
+T019 Windows y T020 Linux acreditaron la selección integrada y el protocolo lock/recovery en ambas plataformas antes de aceptar B. Windows omitió tres fixtures symlink por `WinError 1314`; Linux pasó los tres. Fuente T020: commit `539976812d14289696dbd3824f1ae706ac2f1947`, run [38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366), job [116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025). Mantener un único scratch y registro, sin servicios ni segundo mapping; la evidencia no amplía garantías de FR-012 ni cualifica macOS.
 
 ## Salida y códigos
 

@@ -1,5 +1,25 @@
 # Olympus → Codex: compatibility matrix
 
+## Estado de soporte — 2026-10-16
+
+**Codex — FROZEN COMPATIBILITY.** Olympus conserva Codex; no se elimina ni se
+declara totalmente incompatible. Esta política congela el baseline funcional
+acreditado y documentado aquí: la fecha de esta política no verifica versiones
+Codex posteriores ni cambia las fechas, versiones o clases de evidencia de las
+observaciones históricas.
+
+No se añadirán integraciones Codex ni se cerrarán gaps exclusivamente para
+mantener paridad con OpenCode. Solo se permiten correcciones críticas de Codex o
+regresiones causadas por cambios compartidos, con alcance y evidencia concretos.
+Se conservan los componentes, instaladores, manifests y protecciones de
+desinstalación existentes, así como los tests existentes de integridad y
+compatibilidad compartidas; no se crean gates Codex para capacidades exclusivas
+de OpenCode.
+
+Los gaps congelados expresamente incluyen las diferencias de autoridad, Aegis,
+`DENY` y observabilidad. Codex no está eliminado, pero tampoco se le atribuyen
+capacidades equivalentes que no estén acreditadas.
+
 La matriz documenta el adapter Codex soportado desde Olympus Core, contra la
 documentación oficial consultada el 2026-09-29 y la evidencia runtime previa
 suministrada por el usuario para esta modularización. Los smokes aceptados no se

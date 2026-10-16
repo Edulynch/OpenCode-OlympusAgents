@@ -2,9 +2,17 @@
 
 Maintainer-facing, directional, evidence-driven and subject to validation. This is not a release promise, an implementation specification, a commitment to every proposed command, or permission to implement later phases automatically. **SHIPPED** describes delivered capabilities; **IN VALIDATION** identifies work with qualification still in progress; **PLANNED** is future work; **EXPLORATION** is an uncommitted UX idea. Qualification and review precede any promotion of status.
 
+## Support direction — 2026-10-16
+
+- **OpenCode V2 — ACTIVE DEVELOPMENT.** Prioritize it for every new feature, agent, command, architectural improvement, and runtime capability. OpenCode-only capabilities need no Codex equivalent or parity gate.
+- **Codex — FROZEN COMPATIBILITY.** Codex is neither removed nor declared wholly incompatible. Retain its existing components, installers, manifests, and uninstall protections. Do not add integrations or close gaps solely for parity; allow only evidenced critical Codex fixes or regressions caused by shared-code changes, with a concrete bounded scope.
+- Keep existing tests that protect shared integrity and compatibility. Do not add Codex gates for OpenCode-only capabilities. Do not claim newer Codex versions are verified without version-specific evidence.
+- Frozen Codex gaps include differences in **authority, Aegis, hard `DENY`, and observability**. The historical compatibility evidence and its version/date qualifications below remain intact; this policy does not promote it to evidence for newer versions.
+- The twelve canonical Olympus Core roles and their responsibilities remain intact. Runtime support status does not remove or reassign a role.
+
 ## Current foundation — SHIPPED
 
-- Harness Core, OpenCode adapter, and experimental Codex adapter are present; their declared capability differences remain explicit.
+- Harness Core, OpenCode adapter, and Codex adapter are present; OpenCode V2 is actively developed, while Codex stays at its frozen compatibility baseline and its capability differences remain explicit.
 - The dual-harness project and global installer entrypoints are published. `-Scope project` remains the default; Codex/OpenCode/All selection is supported. Global installation and agent discovery are Windows-qualified for OpenCode V2.0.26 (isolated runtime, Issue #7); no prompt execution or other runtime versions are implied.
 - Completion/reconciliation, external-work ownership, authority, and the explicit `/maintain` → Aegis maintenance entry are part of Core. OpenCode has Aegis, hard DENY, native ASK, and the passive Activity HUD. Codex DENY/Aegis remain gaps and activity visibility is basic/partial.
 - Upstream OpenCode result-correlation issue #1 remains OPEN; Olympus keeps no-blind-retry/result reconciliation. Issues #2–#6, #9 and [#10](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10) are CLOSED. Issue #8 was reopened for compaction/authorization continuity. Global discovery #7 has a Windows V2.0.26 real-install and Kael-selection acceptance PASS; historical early roster results remain in the issue thread.
@@ -18,7 +26,7 @@ Maintainer-facing, directional, evidence-driven and subject to validation. This 
 - The v0.4.0 foundation introduced one canonical Full Agent Display Identity source and derived adapters, plus the global OpenCode/Codex/All installer foundation, manifests, verification, update, safe uninstall, and non-destructive project→global migration. The corrective v0.4.2 and subsequent v0.4.3 releases preserve these capabilities and project scope as the default; project-local behavior remains backwards-compatible.
 - Historical OpenCode V2.0.20 global-runtime runs returned empty rosters; the old diagnostic used the wrong location query and lacked loader-activation confirmation. The original cause remains unknown (Issue #7), so the results are preserved as historical investigation rather than an active unsupported-capability verdict.
 - OpenCode V2.0.26 `GLOBAL_RUNTIME_DISCOVERY = SUPPORTED` on isolated Windows with the actual v0.4.6 global installer (15 resources), verified loader, 12/12 agents, 2/2 controls, and configuration-level selection of primary Kael; no LLM prompt. [Acceptance evidence](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7#issuecomment-6106396436). Codex remains `SUPPORTED` on separately supplied evidence, not rerun.
-- Codex DENY and Codex Aegis remain explicit GAPs. Research found no demonstrated hard-deny equivalent or safely enforced privileged maintenance entry; do not use prompt-only theater or weaken Core.
+- Codex DENY and Codex Aegis remain explicit frozen GAPs. Research found no demonstrated hard-deny equivalent or safely enforced privileged maintenance entry; do not use prompt-only theater or weaken Core. No parity work is planned solely to close these gaps.
 - Phase 12 cross-harness evaluation is CLOSED: [3 matched pairs and 6/6 verified executions](PHASE12-CROSS-HARNESS-RESULTS.md), with PASS for the tested functional, routing, completion, and scope invariants. Capability gaps remain; this does not establish total parity, superiority, or a harness/model winner.
 
 ## Design principles — shipped Phase 3 rules and planned refinements

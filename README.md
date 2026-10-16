@@ -4,7 +4,7 @@
 
 <img src="docs/assets/olympus-cover.png" alt="Olympus Agents team with Kael coordinating coding specialists on Mount Olympus" width="100%">
 
-**Your AI coding team for OpenCode and Codex.**
+**Your AI coding team, with active development on OpenCode V2.**
 
 [![Latest release](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) [![OpenCode V2](https://img.shields.io/badge/OpenCode-V2-f97316?style=flat-square)](https://opencode.ai/docs/) [![Windows qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](docs/HARNESSES.md) [![MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
 
@@ -14,7 +14,7 @@
 
 ## 🚀 Install
 
-You’ll need **Windows, PowerShell 7, and Git**, plus **OpenCode V2**, **Codex CLI**, or both. Run a project install from the root of a **trusted Git repository**.
+You’ll need **Windows, PowerShell 7, and Git**, plus **OpenCode V2**, **Codex CLI**, or both. OpenCode V2 is the active-development runtime; Codex remains available at its frozen compatibility baseline. Run a project install from the root of a **trusted Git repository**.
 
 The unified installer below is the primary interface. The legacy public commands remain compatible and use the immutable `v0.4.9` entrypoints and second-stage launcher. The launcher reads GitHub’s latest-release metadata, then downloads the installer from the selected release’s immutable tag. To install an exact version, run that release’s root `install.ps1` from the [Releases page](https://github.com/Edulynch/OpenCode-OlympusAgents/releases).
 
@@ -222,6 +222,8 @@ For privileged OpenCode maintenance, explicitly run:
 This invokes hidden Aegis. Kael never invokes Aegis automatically. Codex has no equivalent Aegis capability.
 
 ## 🛡️ Compatibility & Trust
+
+**Support policy (2026-10-16):** OpenCode V2 — **ACTIVE DEVELOPMENT**. Codex — **FROZEN COMPATIBILITY**: Codex is not removed or declared wholly incompatible, and its existing components, installers, manifests, and uninstall protections remain. New OpenCode capabilities do not require Codex equivalents. Codex authority, Aegis, hard `DENY`, and observability differences are frozen gaps; no new Codex version is claimed verified without version-specific evidence. See the [Codex baseline](docs/CODEX-COMPATIBILITY.md) and [roadmap](docs/ROADMAP.md).
 
 | Capability | OpenCode | Codex |
 |---|---|---|

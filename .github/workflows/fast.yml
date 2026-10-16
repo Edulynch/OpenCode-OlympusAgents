@@ -57,7 +57,7 @@ jobs:
   slice-a-linux:
     name: Slice A / Linux
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHONUTF8: '1'
@@ -73,6 +73,11 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Confirm Slice A has no TOML Kit dependency
+        shell: bash
+        run: |
+          python -B -c 'import importlib.util; assert importlib.util.find_spec("tomlkit") is None, "Slice A environment unexpectedly contains TOML Kit"'
+
       - name: Slice A (offline read-only CLI)
         shell: bash
         run: |
@@ -81,6 +86,14 @@ jobs:
           test -x scripts/olympus
           python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_a -v
           test -x scripts/olympus
+
+      - name: Slice B (integrated, isolated TOML Kit)
+        shell: bash
+        run: |
+          venv="$RUNNER_TEMP/olympus-cli-slice-b"
+          python -m venv "$venv"
+          "$venv/bin/python" -m pip install -r requirements-cli.txt
+          "$venv/bin/python" -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_b -v
 
       - name: Confirm source checkout unchanged
         shell: bash

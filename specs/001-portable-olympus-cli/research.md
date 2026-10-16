@@ -1,6 +1,6 @@
 # Research: feasibility gate y decisiones
 
-**Fecha**: 2026-10-14. **Baseline**: v0.4.9 `c30a19d…`. La investigación inicial fue read-only y luego comprobó Python/renderer/notas. **Actualización T001**: instalación normal remota y VerifyOnly de archivos Codex proyecto en Git temporal aislado, PASS; sin pruebas de CLI nueva ni agentes. **Cierre actual**: A **READY_FOR_FINAL_CI**, T008 PASS por el [run Linux hosted de PR #69](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38644271501/job/116127153113); ese run usó `chmod`, así que falta CI final del workflow que verifica el modo Git 100755. Global **BLOCKED**, B **CONDICIONADA**, C **BLOCKED**, macOS **NOT VERIFIED**.
+**Fecha del diseño**: 2026-10-14. **Baseline de diseño**: master con PR #69, `b7f8404061847a58d5e8122e4baa2fa643b69a46`. **Estado actual (2026-10-16)**: A SHIPPED; B ACEPTADA (T019 Windows, T020 Linux, G2 PASS); C y feature completa BLOCKED; macOS NOT VERIFIED. La investigación v0.4.9, T001/R49 y el cierre preintegración A se conservan como historia; no se volvió a acceder al entorno R49 retenido.
 
 ## Evidencia del gate
 
@@ -48,7 +48,7 @@ Zipapp requiere un intérprete adecuado y su extensión no proporciona por sí s
 
 **Alternatives considered**: copiar lógica de rendering produce divergencia; cambiar renderer entero para empaquetar adelanta mantenimiento innecesario; subprocess render preview viola sólo lectura. No ejecutar código desde un destino instalado como si fuera fuente confiable.
 
-## 3. TOML preservador
+## 3. TOML preservador — decisión inicial, complementada por gate B
 
 **Decision**: `tomllib` para semántica; TOML Kit sólo para editar/preview B, versión inicial investigada 0.13.3. No instalarla en esta sesión; fijar/cualificar su versión en implementación. No Poetry ni sus dependencias dev en runtime.
 
@@ -58,7 +58,7 @@ Zipapp requiere un intérprete adecuado y su extensión no proporciona por sí s
 
 **Límite**: preservar bytes/trivia fuera de valores solicitados debe comprobarse; rechazo antes de escribir si round-trip/diff no lo demuestra. No prometer toda forma TOML sin cualificación. A sigue sólo stdlib; B sin dependencia disponible termina BLOCKED.
 
-## 4. Consistencia, staging y recuperación
+## 4. Consistencia, staging y recuperación — registro histórico supersedido para B
 
 **Decision**: B condicionada a demostrar preservación/recuperación. Función privada limitada a `models.toml` + outputs cambiados del renderer que ya existen, candidatos en memoria, backups/staging de ese conjunto y un registro temporal old/new. Verificación final y rollback propio; recuperación explícita tras interrupción, sin reanudar ni auto-repair. No API genérica transaccional, recursos arbitrarios, log de eventos, backends ni reutilización como actualizador instalado C. A no requiere ni importa nada de esto.
 
@@ -66,7 +66,7 @@ Zipapp requiere un intérprete adecuado y su extensión no proporciona por sí s
 
 **Alternatives considered**: copiar todo repositorio o git stash/reset destruye aislamiento; SQLite/WAL/servicio transaccional no justifican coste; simple render posterior sin backup viola recuperación. No rollback sobre recursos con hash de terceros.
 
-**Límite de concurrencia**: hash preflight + lock entre CLI no excluye editores no cooperantes; no hay garantía universal con stdlib/Linux advisory locking. Un único escritor sobre paths afectados es condición de commit. Si la interpretación de FR-012 exige excluir cualquier escritor externo simultáneo, registrar B BLOCKED para esa garantía y resolver alcance antes de tareas B, sin editar spec silenciosamente.
+**Límite de concurrencia histórico (resuelto contractualmente por la aprobación al final)**: hash preflight + lock entre CLI no excluye editores no cooperantes; no hay garantía universal con stdlib/Linux advisory locking. Un único escritor sobre paths afectados es condición de commit. Si la interpretación de FR-012 exige excluir cualquier escritor externo simultáneo, registrar B BLOCKED para esa garantía y resolver alcance antes de tareas B, sin editar spec silenciosamente.
 
 ## 5. Aplicación a instalaciones: bloqueo concreto
 
@@ -86,7 +86,7 @@ Zipapp requiere un intérprete adecuado y su extensión no proporciona por sí s
 
 **Alternatives considered**: portar todo PowerShell ahora, WSL local, Docker y matriz macOS por aspiración contradicen alcance/economía.
 
-## 7. Pruebas y gates
+## 7. Pruebas y gates — registro de planificación inicial
 
 **Decision**: un archivo unittest nuevo en harness-core, con casos seleccionables slice_a/slice_b. A sólo consulta, CLI, JSON, cero mutaciones y compatibilidad Windows/Linux; job Linux inicial filtra slice_a. B añade edición/recuperación cuando su gate lo permita; C reutiliza suites instaladoras al desbloquearse. Los cualificadores amplios baseline no son requisito de aceptación A. Sin nuevos tiers ni FAST/FULL/RUNTIME.
 
@@ -130,6 +130,60 @@ La [release publicada](https://github.com/Edulynch/OpenCode-OlympusAgents/releas
 
 Este resultado satisface el gate solicitado de adquisición/instalación/verificación remota en destino aislado. No afirma runtime Codex/OpenCode, instalación OpenCode/global/Linux ni aceptación de A/B/C. La tabla de revisión anterior registra el estado histórico de evidencia faltante y queda supersedida únicamente para R49 por este cierre.
 
-## Cierre actual y decisiones pendientes
+## Cierre histórico preintegración PR #69 y decisiones pendientes de entonces
 
 **Slice A READY_FOR_FINAL_CI**: T002–T009 completadas, Windows validado y T008 PASS con el run hosted [38644271501 / job 116127153113](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38644271501/job/116127153113), success `2026-10-14T21:58:31Z`; Ubuntu 24.04, CPython 3.11.17, 20 tests (19 PASS, 1 omitido por Windows), 5.129 s, exit 0. El run usó `chmod +x` y no probó el modo original del checkout. El workflow actualizado elimina `chmod` y exige el bit 100755 con `test -x` antes/después y Git `core.filemode=true`; su CI final permanece pendiente. macOS NOT VERIFIED. **B CONDICIONADA**, **C BLOCKED** y **global BLOCKED** conservan sus requisitos completos. No se repitieron Windows ni R49.
+
+## Gate técnico de Slice B — evidencia previa conservada (2026-10-14)
+
+Baseline de los experimentos: `b7f8404061847a58d5e8122e4baa2fa643b69a46`, igual a master. Python 3.11.17 Windows; fixtures temporales aislados fuera del repositorio. Ninguna implementación B ni cualificación de agentes. Los originales de evidencia permanecen en el entorno temporal del gate previo, **no en el entorno R49**, y no se reejecutaron ni copiaron en esta revisión. El índice local `gate-decision.json` tiene SHA-256 `d2f433334162a10f33274aab912213ebcd853c425e5d13fa4970b5758fade8f7`; su ubicación temporal no constituye evidencia publicada portable. Este resumen conserva resultados relevantes sin introducir otro harness o archivo de evidencia en el repositorio.
+
+| Experimento previo | Resultado observado | Alcance real |
+|---|---|---|
+| TOML Kit 0.13.3 | PASS de round-trip en 15 TOML reales y variantes completas de models con LF/CRLF, sin newline final, Unicode, quoted/dotted/inline y multilínea ajena | Dependencia candidata exclusiva B; wheel sin Requires-Dist, SHA-256 `c89c649d79ee40629a9fda55f8ace8c6a1b42deb912b2a8fd8d942ddadb606b0` |
+| Sustitución string y preservación | Asignación directa normalizó comillas simples/triples; fábrica literal/multiline explícita preservó los casos. Máscaras detectaron pérdidas de comentarios, espaciado, newline y esfuerzo ajeno | PASS de vía mínima; implementar round-trip byte-identical, fábrica apropiada, máscaras y tomllib; no afirmar cualquier TOML sin comprobación |
+| Preview/renderer | PASS de ocho candidatos, ambos IDs old/new y representación Kael/Aegis; 30 outputs baseline iguales con builders; snapshots inalterados y mismo envelope humano/JSON | Sin comandos B implementados ni renderer alternativo |
+| Write-set | PASS de conjunto efectivo: sol 14 archivos incluyendo models; luna 12; especialista 3; Kael familia 4/esfuerzo 3; Aegis 2; no-op 0 | Sólo archivos existentes que cambian; fuentes ajenas/prompts/permisos/instalaciones fuera del batch |
+| Reemplazo/rollback | PASS de 15 límites de interrupción inyectada en batch 14; bytes/modos restaurados desde registro; recovery interrumpido repetible conserva backup | Primitivas y estados sobre filesystem Windows, no implementación B ni durabilidad ante pérdida eléctrica |
+| Conflictos/cleanup | PASS de bloqueo sin overwrite para tercer hash, missing target, backup corrupto/read-set modificado; COMMITTED cleanup parcial probado | Validaciones acotadas; implementación integrada NOT RUN |
+| IDs del contrato amplio anterior | BLOCKED reproducido: comillas hicieron inválidos siete outputs; backslash pudo alterar ID decodificado; delimitador # exige contrato | Motiva alfabeto aprobado sin modificar renderer; no evidencia de disponibilidad remota |
+| Carrera externa | BLOCKED reproducido: hash, escritura externa, os.replace perdió la escritura externa | Contraejemplo al CAS universal; no fallo del contrato cooperante ahora aprobado |
+| Newline mixto en output | Check textual normalizado lo aceptó; conversión ingenua alteró bytes ajenos | Rechazar antes de staging si no preservable; conservar LF/CRLF uniforme por output |
+| Slice A sin editor | PASS de seis comandos con -I -S -B e imports B/editor denegados; snapshots intactos | A sigue stdlib; futuro dispatch B debe conservar ese aislamiento |
+| Lock por descriptor Windows | PASS de msvcrt.locking: segundo dueño activo rechazado, lock disponible tras salida abrupta | Se probó una primitiva; archivo vacío, ubicación/identidad estable, cleanup integrado y Linux NOT RUN |
+
+Resultado de aquel gate: **BLOCKED** por IDs, FR-012 universal y acreditación del dueño terminal. Los PASS eran de viabilidad experimental, no aceptación de implementación. Se preservaron 362 archivos inventariados del repositorio; no se modificaron instalaciones personales ni originales R49.
+
+## Decisiones arquitectónicas aprobadas por el usuario (2026-10-14)
+
+Estas decisiones sustituyen los tres bloqueos **contractuales** anteriores, sin convertir experimentos en pruebas del producto ni ampliar C:
+
+1. **IDs B**: coincidencia completa `[A-Za-z0-9][A-Za-z0-9._:/-]*`, sin normalización, validada antes de cualquier staging/escritura. Aceptar existentes conformes; rechazar comillas/backslashes/controles/saltos y cualquier otro carácter. Restricción inicial de Slice B, no universal de runtimes ni prueba de autenticación/disponibilidad. Renderer sin cambios. Incorporada en FR-009, plan y contrato CLI.
+2. **FR-012 cooperante**: Olympus coordina commit/recovery propios por exclusión nativa; detecta conflictos observables y restaura únicamente recursos aún propios. Sin éxito parcial, overwrite de conflictos detectados ni recuperación automática sobre modificaciones externas. Fuera de garantía: procesos externos no cooperantes, vista atómica multiarquivo y durabilidad absoluta ante pérdida eléctrica; hash previo a replace no es CAS.
+3. **Lock/recovery nativos**: msvcrt.locking Windows y fcntl.flock Linux; archivo vacío estable `.olympus-cli-edit.lock` en origen canónico, fuera del scratch, jamás retirado/reemplazado por operaciones cooperantes. Descriptor/path/registro comparten identidad `(st_dev, st_ino)` verificable. Recovery abre lock existente y adquiere exclusión antes de inspeccionar el batch; si falta/es inseguro/ocupado, BLOCKED. No PID/edad/directorio como prueba, ni cleanup por antigüedad. Backups verificables y copia staged para rollback repetible. Ubicación e identidad detalladas en [data-model.md](data-model.md).
+
+El lock permanente es la adición mínima para que cleanup no libere un pathname cuyo inode sigue bloqueado en POSIX: es infraestructura vacía, no segundo registro ni historial. Su presencia no bloquea consultas ni acredita operación pendiente. Quedan explícitamente fuera de garantía la eliminación/sustitución por un actor externo no cooperante; las divergencias observables se bloquean sin intentar legitimar otra identidad. Si el filesystem no proporciona identidad verificable, no habilitar escrituras allí.
+
+Fuentes primarias del diseño, ya consultadas en el gate previo: [msvcrt.locking](https://docs.python.org/3.11/library/msvcrt.html#msvcrt.locking), [fcntl.flock](https://docs.python.org/3.11/library/fcntl.html#fcntl.flock), [os.replace](https://docs.python.org/3.11/library/os.html#os.replace), [fábrica string 0.13.3](https://raw.githubusercontent.com/python-poetry/tomlkit/0.13.3/tomlkit/api.py). Documentación de primitivas no acredita el protocolo integrado.
+
+### Historial de requisitos sustituidos
+
+- FR-009 anterior: «Antes de escribir DEBEN rechazarse roles/familias/esfuerzos fuera del contrato local soportado, IDs requeridos vacíos o inválidos según ese contrato, flags inválidos/incompatibles, contexto ambiguo y operaciones nativas no soportadas, indicando causa y corrección o límite concreto.» El contrato inicial amplio sólo exigía strings no vacíos sin controles/saltos. Se conserva como historia, supersedido por alfabeto B aprobado.
+- FR-012 anterior: «Fuente y generación DEBEN dar un resultado coherente o recuperar el estado previo de los recursos propios ante fallo, sin éxito parcial, pérdida de trabajo externo ni sobrescritura concurrente. Un impedimento externo de recuperación debe declararse bloqueado con estado real.» Su formulación universal se ajusta por aprobación explícita; no se debilita silenciosamente.
+- Diseño anterior: `.olympus-cli-edit/` exclusivo actuaba como lock; registro sin identidad nativa y requerimiento de acreditar proceso terminal sin mecanismo adoptado. Scratch sigue único, pero ahora sólo guarda el intento; la exclusión vive en descriptor del archivo estable externo al scratch. No usar registro B para C.
+
+## Gate previo a implementación (histórico, 2026-10-14)
+
+**A SHIPPED**, sin cambios de comportamiento. **B READY_FOR_TASKS**: IDs, exclusión y recovery tienen contratos coherentes aprobados; verificaciones restantes se ordenarán como trabajo previo a habilitar escrituras. **C BLOCKED** y **feature completa BLOCKED** sin cambios de alcance. macOS NOT VERIFIED.
+
+Implementación NOT RUN: coincidencia completa y rechazo sin artefactos; import lazy del editor; archivo vacío y descriptor/path/identidad; exclusión edit/edit, edit/recover, recover/recover; liberación tras excepción/terminación abrupta real en **Windows y Linux**; conflictos/registro/backups/read-set; rollback y cleanup interrumpidos repetibles; snapshots de recursos ajenos/instalaciones. Windows de la primitiva no sustituye estas pruebas y Linux no se infiere de documentación. Estrategia mínima y gates: [plan.md](plan.md).
+
+La revisión documental debe comprobar correspondencia spec/plan/model/CLI, historia versus estado vigente, referencias, alcance de cinco archivos y ausencia de cambios a tasks/código/configuraciones. Un pendiente de implementación que falle mantiene bloqueado el gate de escrituras, sin falsear READY_FOR_TASKS ni añadir un engine para aparentar más garantías. Esta sesión no instala dependencias, accede a R49 retenido, repite experimentos ni ejecuta FULL/RUNTIME; no crea ramas ni commit/push/PR.
+
+**Revisión documental ejecutada: PASS.** Correspondencia de IDs/FR-012/lock/recovery y estados vigentes revisada; referencias locales nuevas resuelven; `git diff --check` pasa. Sólo cambian los cinco documentos permitidos; los otros 357 archivos del inventario inicial conservan SHA-256, incluidos tasks.md, código, Core, outputs y evidencia R49 del repositorio. Historias A/C y requisitos funcionales distintos de FR-009/FR-012 permanecen iguales. Esta evidencia es documental; no acredita implementación ni sustituye los checks Windows/Linux NOT RUN.
+
+## Reconciliación de ejecución B (2026-10-16)
+
+La aceptación integrada T019/T020 completó G2 en Windows/Linux. Windows T019: 55 PASS, 0 FAIL, 0 ERROR y 3 SKIPPED (`WinError 1314` al crear symlink); los casos omitidos no se cuentan como PASS Windows. Linux T020: 58 PASS, 0 FAIL, 0 SKIPPED en 37.350 s, exit 0, sobre Ubuntu 24.04 / CPython 3.11.17 con TOML Kit 0.13.3. Los tres casos symlink pasaron en Linux. Fuente: commit `539976812d14289696dbd3824f1ae706ac2f1947`, PR Draft #70, run [38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366), job [116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025). El registro de [tasks.md](tasks.md) conserva resultados, checks FAST Windows/CodeQL y validación de identidad.
+
+Este gate acredita la selección de edición de fuente y recovery; no acredita Slice C ni aplicación a instalaciones. A permanece SHIPPED, C y la feature completa BLOCKED, macOS NOT VERIFIED. Se mantienen los límites FR-012: sólo coordinación cooperante, sin atomicidad visible multiarquivo ni durabilidad absoluta ante pérdida eléctrica.

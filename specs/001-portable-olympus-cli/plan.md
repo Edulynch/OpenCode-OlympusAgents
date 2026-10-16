@@ -2,11 +2,17 @@
 
 **Branch**: `001-portable-olympus-cli` | **Date**: 2026-10-14 | **Spec**: [spec.md](spec.md)  
 **Documentation Mode**: New  
-**Baseline**: producto v0.4.9, `c30a19dd410b1815f4591b204615cae0dd9e9a5f`; documentación post-PR #68 en `1900da45250ddec817a6141396e0ec1268b2dfca`.
+**Baseline**: `master` con PR #69 integrada, `b7f8404061847a58d5e8122e4baa2fa643b69a46`. Historial: producto v0.4.9 `c30a19dd410b1815f4591b204615cae0dd9e9a5f`; documentación post-PR #68 `1900da45250ddec817a6141396e0ec1268b2dfca`.
 
-**Input**: Especificación `001-portable-olympus-cli`, issue #64, constitución 1.0.0. La planificación inicial y su actualización T001/R49 son registros históricos; el cierre actual de Slice A está al inicio y la ejecución detallada en [tasks.md](tasks.md). La especificación permanece intacta.
+**Input**: Especificación, issue #64 y constitución 1.0.0. La planificación inicial, T001/R49 y el cierre preintegración A son históricos. Esta actualización documental incorpora las tres decisiones B aprobadas por el usuario y ajusta FR-009/FR-012; no genera tareas ni implementación.
 
-**Cierre actual de Slice A**: T002–T009 completadas y T008 PASS por el [run Linux hosted de PR #69](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38644271501/job/116127153113). Ese run usó `chmod`; el workflow actualizado elimina la preparación y comprueba el permiso 100755 de Git, pendiente de CI final. A está **READY_FOR_FINAL_CI**, macOS **NOT VERIFIED**, B **CONDICIONADA**, C **BLOCKED** y fuera del alcance de A. R49 conserva PASS y no se repitió.
+**Registro histórico de cierre A anterior a PR #69**: T002–T009 completadas y T008 PASS por el [run Linux hosted](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38644271501/job/116127153113). Ese run usó `chmod`; entonces quedaba CI final para comprobar el permiso Git sin preparación. Estado de entonces: A READY_FOR_FINAL_CI, B CONDICIONADA, C BLOCKED. Este registro no reabre A, hoy SHIPPED con PR #69; no se reacredita CI ni R49 en esta sesión. macOS NOT VERIFIED.
+
+**Estado vigente**: A **SHIPPED**; B **ACEPTADA** con T019 Windows, T020 Linux y G2 **PASS**; C y feature completa **BLOCKED**; macOS **NOT VERIFIED**. B permite los comandos documentados de edición de fuente, sujetos a autorización del operador para cada fuente real; no incluye instalación/aplicación C.
+
+### Reconciliación de ejecución Slice B (2026-10-16)
+
+La selección integrada T020 se ejecutó en GitHub Actions sobre el head exacto `539976812d14289696dbd3824f1ae706ac2f1947` de PR Draft #70. Run [38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366), job Linux [116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025): Ubuntu 24.04, CPython 3.11.17, TOML Kit 0.13.3, 58 PASS, 0 FAIL, 0 SKIPPED, 37.350 s, exit 0. T019 Windows: 55 PASS y 3 SKIPPED por creación de symlink denegada (`WinError 1314`); Linux pasó los tres casos. Los cuatro archivos de producto verificados para T019 (CLI, source_edit, model_edit y renderer) coinciden con el código probado por T020. El único cambio de test_cli posterior a T019 modifica dos aserciones de help en `SliceA.test_slice_a_help_version`; ese test no pertenece a la selección `-k slice_b`. Run y PR también acreditan FAST Windows y CodeQL PASS. Véase el registro terminal en [tasks.md](tasks.md).
 
 ## Summary
 
@@ -20,9 +26,9 @@ R49, prerrequisito de #64, está **PASS**: instalación de archivos y VerifyOnly
 
 ## Technical Context
 
-**Affected language/platform**: Python >=3.11 para A/B; PowerShell 7 y motores Windows existentes para operaciones nativas de C. Windows local y Linux CI para A/B; macOS NOT VERIFIED.  
-**Dependencies and integrations**: `argparse`, `tomllib`, `pathlib`, `hashlib`, `json`, `os`, `tempfile`, `subprocess`, `importlib`; TOML Kit 0.13.3 como versión inicial explícitamente investigada, a cualificar antes de adoptar. No Poetry requerido en runtime.  
-**Data and storage**: `olympus/core/models.toml` único mapping; outputs derivados existentes; metadatos temporales de recuperación de B, eliminables tras resultado reconciliado. Manifests instalados existentes no se modifican en A/B.  
+**Affected language/platform**: Python >=3.11 para A/B; PowerShell 7 y motores Windows existentes para operaciones nativas de C. B está acreditada en Windows local y Linux hosted; macOS NOT VERIFIED.
+**Dependencies and integrations**: stdlib Python (`argparse`, `tomllib`, `pathlib`, `hashlib`, `json`, `os`, `tempfile`, `subprocess`, `importlib`); sólo B carga `msvcrt` en Windows o `fcntl` en Linux para exclusión. TOML Kit 0.13.3 es la única dependencia opcional de edición/preview B, sin Poetry runtime. Recovery no exige el editor; A sigue stdlib y no importa módulos B.\
+**Data and storage**: `models.toml` sigue único mapping; outputs existentes y único scratch/registro temporal B; `.olympus-cli-edit.lock` es control vacío estable que permanece tras cleanup. B usa estos recursos sólo sobre la fuente seleccionada; manifests instalados quedan fuera de B.\
 **Existing test and verification tools**: `tests/harness-core/qualify.py --safe-root-read-only`, `tests/codex/validate_profile.py --mode static`, fixtures dual-harness/global/installer-ux; `unittest` para casos nuevos dentro de harness-core. En la baseline de planificación `.github/workflows/fast.yml` sólo tenía el job Windows; el job Linux enfocado se integró después y se documenta en [tasks.md](tasks.md).
 **Constraints and compatibility**: preservar doce roles y diferencias Codex/OpenCode; sin APIs, daemons, WSL ni nuevo framework. No modificar modelos/outputs durante planificación. Los cambios futuros en renderer/instaladores protegidos requieren el plano de mantenimiento soportado; este plan no levanta DENY.  
 **Scale or performance targets**: doce roles y treinta outputs del renderer baseline. Sin objetivo temporal/benchmark inventado.
@@ -36,14 +42,14 @@ Revisada antes y después del diseño: no se propone excepción constitucional. 
 | I. Core canónico | Resolver `checked_sources`/`role_model`; usar identidades y renderer; ningún mapping nuevo | Catálogo remoto no acreditado por configuración |
 | II. Autoridad runtime | CLI humana; sin invocar Aegis ni cambiar permisos; reconocer Kael raíz/Aegis GAP Codex | Implementación en recursos protegidos por plano de mantenimiento, no por este plan |
 | III. Simplicidad/evidencia | CLI directa, renderer sin migración, una dependencia pequeña y launchers acotados | Registro de recuperación sólo por batch, sin servicio/engine genérico |
-| IV. TFR | Matriz enfocada, suites existentes; todas las pruebas futuras NOT RUN | Native apply no probado; fixtures no lo reemplazan |
+| IV. TFR | Matriz enfocada y suites existentes; B integrada T019/T020 PASS | Native apply de C no probado; fixtures no lo reemplazan |
 | V. Integridad | Drift/hash/ownership centralizados en motores; C personalizada bloqueada | Procedencia personalizada y recuperación instalada ausentes |
-| VI. Separación | Spec intacta; hechos, propuestas y pruebas futuras distinguidos | Al revisar el plan aún no había implementación ni tasks generadas; T002–T009 se completaron después, según [tasks.md](tasks.md) |
+| VI. Separación | FR-009/FR-012 actualizados por decisión explícita; hechos, decisiones y pruebas futuras distinguidos | Al revisar el plan aún no había implementación ni tasks generadas; T002–T009 se completaron después, según [tasks.md](tasks.md) |
 | VII. Alcance | A/B/C preservadas; #66/#67 excluidos; sin FAST/FULL/RUNTIME | Gate completo BLOCKED; no afirmar producto completo |
 
 ## Design
 
-### Feasibility gate antes del diseño
+### Feasibility gate antes del diseño — registro histórico
 
 Se leyeron spec/constitución, código del renderer, helpers/manifests/instaladores, suites y workflow; se consultó documentación primaria. Una investigación Veyra read-only del límite instalado fue recibida en estado terminal y reconciliada; no se ejecutaron scripts de producto. Sólo después se ejecutó `setup-plan.ps1 -Json` para copiar la plantilla activa.
 
@@ -56,15 +62,15 @@ Se leyeron spec/constitución, código del renderer, helpers/manifests/instalado
 | Operaciones instaladoras Linux/macOS | BLOCKED / no cualificadas | Guards Windows en motores; no quitar guards ni portar instalador por esta feature |
 | Gate R49 antes de código, común por secuenciación de #64 | PASS tras ejecución T001 | Instalador/archivo del tag remoto, identidad exacta, Codex proyecto aislado, install/VerifyOnly exit 0 y huellas idénticas; reporte enlazado |
 
-En la tabla de factibilidad, PASS de viabilidad significa que existe un diseño respaldado por inspección; no representa por sí solo un smoke o aceptación ejecutada. Los resultados de ejecución actuales se enlazan en [tasks.md](tasks.md).
+La tabla anterior conserva el gate inicial, supersedido para B por las decisiones aprobadas y el gate experimental registrado en research.md. En ella, PASS de viabilidad significa que existe un diseño respaldado por inspección; no representa por sí solo un smoke o aceptación ejecutada. Los resultados de ejecución actuales se enlazan en [tasks.md](tasks.md).
 
 ### Gates independientes y dependencias reales
 
 | Gate | Estado de planificación | Dependencias reales | Condición pendiente / efecto |
 |---|---|---|---|
 | Global, experiencia completa A+B+C | BLOCKED | A/B/C aceptadas y garantías completas de spec | No declara la experiencia completa; no propaga C como dependencia de A |
-| A, consulta/CLI | READY_FOR_FINAL_CI | Python >=3.11 stdlib, fuente/renderer, contexto read-only, Windows PASS, Linux hosted PASS (T008), R49 PASS | T002–T009 completadas; CI final pendiente para validar el modo 100755 de checkout sin `chmod`; macOS NOT VERIFIED |
-| B, escritura de fuentes | CONDICIONADA | A y editor preservador cualificado; conjunto fijo fuente/outputs y recuperación | No habilitar escrituras hasta validar TOML/comments/newline, contenido ajeno, fallos y conflictos; contrato de concurrencia por resolver para esta garantía |
+| A, consulta/CLI | SHIPPED | PR #69 integrada en master; Python >=3.11 stdlib y renderer | No cambiar comportamiento ni repetir su cualificación por esta actualización B; macOS NOT VERIFIED |
+| B, escritura de fuentes | **ACEPTADA** (G2 PASS) | T019 Windows + T020 Linux hosted, código y contrato reconciliados | Comandos de fuente disponibles; autorización del operador sigue siendo necesaria para una fuente real; no implica apply |
 | C, operación instalada completa | BLOCKED | A/B, motor existente y contrato explícito de actualización personalizada | Demostrar procedencia, ownership, manifests/versiones/hash/verificador y recuperación segura; Linux nativo no cualificado |
 | R49, comenzar implementación | PASS | Requisito expreso de #64 y proceso release existente | Evidencia directa en Git desechable scope project/harness codex, sin runtime/stub ni source override; no atribuir cualificación a otros scopes |
 
@@ -95,26 +101,27 @@ El origen default de launchers es el checkout al que pertenecen; `--source` perm
 
 `tomllib` no escribe ni conserva trivia como modelo editable; no reconstruir TOML desde su dict. Evaluado stdlib-first: patch de líneas sirve al formato actual, pero necesita reconocer strings multilínea, escapes, keys dotted/quoted y comentarios para no confundir contenido ajeno. Un parser propio para cubrirlos cuesta más que una dependencia pequeña, y un regex amplio es inseguro. Elegir TOML Kit sólo para B y para sus previews; A sigue siendo stdlib. La dependencia ausente bloquea B antes de escribir, sin instalación automática.
 
-TOML Kit no exime pruebas de preservación: cargar bytes UTF-8, mantener LF/CRLF, exigir round-trip sin cambio idéntico, editar únicamente valores existentes, reparsear con `tomllib` y comparar estructura salvo los paths autorizados. Verificar que trivia/elementos ajenos no cambian; una forma no preservable se rechaza, no se normaliza. En outputs, comparar texto con el renderer y conservar convención de newline existente; sólo escribir los realmente afectados. Rechazar newline mixto ambiguo si impide mantener bytes ajenos.
+TOML Kit 0.13.3 es dependencia opcional exclusiva de edición/preview B; se importa sólo al despachar esas operaciones. Recovery usa backups y stdlib, sin exigir editor ni instalación automática. T019/T020 PASS acreditan round-trip/preservación UTF-8, LF/CRLF, estilos TOML, valores autorizados, validación semántica `tomllib`, no-op, dependencia ausente, y rechazo de forma no preservable. El renderer existente calcula los outputs afectados; no se normalizan bytes ajenos. La evidencia está detallada en [tasks.md](tasks.md).
 
-Contrato local inicial: familias/roles existentes; IDs string no vacíos y sin controles/saltos, sin probar autenticación. Esfuerzos seleccionables son los valores ya presentes en la fuente canónica cargada (`high`, `xhigh`, `max` en baseline), derivados cada vez, sin enum competidor. No anunciar todos los valores de un proveedor. Si un esfuerzo deja de figurar, no es seleccionable por esta versión; ampliar esa UX requiere evidencia/decisión de contrato, no inventar catálogo. No llamar `codex debug models` ni discovery de OpenCode en previews. Check de catálogo existente queda fuera del acceptance offline inicial.
+Contrato local inicial B: familias/roles existentes; todos los IDs utilizados del candidato y los solicitados deben coincidir completamente con `[A-Za-z0-9][A-Za-z0-9._:/-]*`, sin trim ni normalización, antes de staging o cualquier escritura, incluida creación del lock. IDs existentes conformes se aceptan; los no conformes bloquean B sin repararlos ni cambiar A. No modificar el renderer ni afirmar disponibilidad/autenticación; este alfabeto no limita universalmente OpenCode/Codex. Esfuerzos seleccionables son los valores ya presentes en la fuente canónica cargada (`high`, `xhigh`, `max` en baseline), derivados cada vez, sin enum competidor. No anunciar todos los valores de un proveedor. Si un esfuerzo deja de figurar, no es seleccionable por esta versión; ampliar esa UX requiere evidencia/decisión de contrato, no inventar catálogo. No llamar `codex debug models` ni discovery de OpenCode en previews. Check de catálogo existente queda fuera del acceptance offline inicial.
 
-### Consistencia y recuperación de B
+### Consistencia y recuperación de B — decisiones aprobadas
 
-Una edición es un batch acotado y **no** una transacción atómica multiarquivo visible para cualquier lector.
+B mantiene una función privada sobre `models.toml` y los outputs existentes que realmente cambian. No hay altas/bajas de outputs, paths arbitrarios, recursos instalados, callbacks, backends, API Transaction/Journal ni motor compartido con C. Máximo observado en baseline: 14 archivos para cambiar ambos IDs de sol; otros cambios usan el subconjunto que calcula el renderer.
 
-Esta responsabilidad empieza sólo en B y permanece condicionada a sus pruebas. Implementarla como una función privada de edición de modelos con un conjunto fijo: `models.toml` más outputs cambiados que devuelve el renderer. Todos deben existir y estar coherentes antes de escribir; no admitir altas/bajas, paths arbitrarios, recursos instalados, callbacks o backends. No crear una API genérica `Transaction`/`Journal`, un motor compartido con C, eventos de reanudación o historial. Usar un único scratch, backups de archivos cambiados y hashes old/new: la información mínima persistida para una terminación abrupta. Recovery sólo revierte ese intento o limpia un intento ya confirmado; no puede continuar una edición ni orquestar operaciones instaladas.
+El único scratch `.olympus-cli-edit/` guarda un registro PREPARED/COMMITTED y backups/staged del intento. El archivo estable `.olympus-cli-edit.lock`, junto al scratch en el origen canónico resuelto, es sólo infraestructura de exclusión; permanece después del cleanup, vacío, sin mapping ni historial. No forma parte del batch canónico ni se instala en destinos. Nunca se elimina, reemplaza, trunca o recrea como forma de liberar o renovar un lock. El protocolo detallado y la identidad están en [data-model.md](data-model.md).
 
-1. Preflight read-only: fuentes/roster/output actual coherentes, paths regulares contenidos en origen, hashes de entradas renderer y recursos actuales; construir candidato/outputs completamente en memoria. Rechazar drift, missing outputs o cambios fuera de intención.
-2. Al aceptar la orden real, crear exclusivamente el directorio `.olympus-cli-edit/` en origen como lock de operación; previews nunca lo crean. Un lock/registro previo bloquea nuevas escrituras; no se mata un PID ni se quita lock por edad.
-3. Preparar backups originales y archivos nuevos del conjunto fijo existente, en el mismo filesystem. Registrar paths relativos acotados y hashes antes/después. Terminar staging y persistir registro antes de la primera sustitución; sin copias completas del árbol ni historial ilimitado.
-4. Revalidar hashes de fuentes/outputs inmediatamente antes del batch y de cada reemplazo. Usar `os.replace` por archivo, conservar modo y newline. Hashes no iguales al snapshot bloquean; no elegir contenido de otras rutas ni hacer stash/reset/clean.
-5. Confirmar que fuentes/outputs resultantes corresponden al candidato renderer. Sólo entonces marcar batch confirmado y retirar scratch; no tocar archivos iguales. Cualquier excepción atrapable intenta restaurar sólo archivos cuyo hash aún sea el escrito por este batch.
-6. Si muere el proceso, las lecturas informan operación pendiente sin reparar. `config recover` es una orden humana explícita de rollback, no un scheduler: compara cada archivo con hash old/new; deja old, restaura new desde backup, bloquea cualquier tercer estado. Registro preparado sin escrituras se puede limpiar tras validar; registro confirmado sólo se limpia después de verificar estado new completo. No reanuda mutaciones ni fuerza archivos externos.
+1. Preflight read-only: validar argumentos/contexto, dependencia de edición, todos los IDs efectivos, fuentes/roster/drift, contención, archivos regulares sin enlaces/reparse/hardlinks y filesystem común. Scratch pendiente bloquea B antes de crear lock/staging, incluso si falta el archivo de lock; no recrearlo para desbloquear. Construir candidato/outputs completamente en memoria; conservar LF/CRLF por archivo y rechazar outputs con newline mixto no preservable. Preview no crea ni adquiere lock; edición idéntica sobre estado válido y sin scratch pendiente informa no_changes sin crear lock ni scratch.
+2. Para cambio real, abrir el lock estable sin truncar, creándolo exclusivamente sólo si todavía no existe. Adquirir exclusión no bloqueante: Windows `msvcrt.locking` sobre byte 0, longitud 1 (incluso archivo vacío); Linux `fcntl.flock` exclusivo no bloqueante. Un dueño activo produce BLOCKED sin esperar, polling o inspección de su batch. Comprobar identidad del descriptor frente al path; mantenerlo abierto y bloqueado hasta finalizar commit/rollback/cleanup.
+3. Bajo exclusión, revalidar snapshot/read-set completo y ausencia de scratch previo. Scratch pendiente bloquea una nueva edición aunque el lock esté libre: exige recovery explícito. Preparar backups y candidatos del conjunto fijo en el mismo filesystem, conservar modos y terminar staging antes de persistir PREPARED por staging + replace. Registrar identidad estable del lock y hashes old/new.
+4. Antes del batch y de cada sustitución, comprobar identidades/modos y hashes: entradas fuera del write-set deben seguir en snapshot, el target a sustituir aún old y los ya sustituidos por el intento new. Sólo después usar `os.replace` por archivo. Los hashes detectan cambios observables; **no son compare-and-swap** ni excluyen la carrera con un escritor externo que ignora el lock.
+5. Verificar bytes esperados, read-set y coherencia con el renderer antes de persistir COMMITTED. Mantener exclusión durante cleanup; retirar sólo recursos temporales propios, nunca el lock estable. Fallo atrapable mantiene exclusión e intenta rollback sólo tras validar ownership/hashes/backups; ningún resultado parcial se presenta como éxito. Si no puede reconciliarse, retener evidencia y reportar blocked/unconfirmed.
+6. `config recover` abre el lock existente, sin crearlo ni reemplazarlo. Si falta o no puede acreditarse su identidad, BLOCKED sin examinar registro/backups/recursos del batch. Tras adquirir exclusión valida identidad/registro y clasifica todos los recursos; tercero hash, recurso ausente, backup inválido o read-set externo modificado bloquean antes de restaurar. Un lock libre, PID, timestamp o directorio no prueba éxito previo: el estado se determina sólo por registro y hashes validados.
+7. PREPARED deja old y restaura new mediante una nueva copia staged del backup; nunca consume el respaldo original durante rollback. PREPARED all-new también revierte. COMMITTED sólo limpia tras validar estado new completo. Confirmar estado old coherente antes de cleanup del rollback y permitir repetir recovery interrumpido; sin reanudar la edición original ni retry automático. Scratch incompleto o evidencia insuficiente queda bloqueado, nunca se retira por antigüedad.
 
-Los hashes y exclusión detectan conflictos cooperantes y cambios observables; **no garantizan** ausencia de carrera con un editor externo que ignora el lock entre última lectura y rename. Requisito operativo: un único escritor sobre recursos afectados durante commit/recovery, consistente con sesión única de #64. Si se exige garantía frente a escritores no cooperantes, B queda bloqueada para esa garantía: stdlib/locks advisory Linux no la satisfacen; no añadir locks nativos complejos silenciosamente ni modificar FR-012 sin decisión explícita. Dejar esa limitación visible y comprobar conflictos inyectados; no afirmar linearizabilidad universal o durabilidad frente a toda pérdida eléctrica.
+El escritor único es cooperante: commit y recovery Olympus comparten exclusión nativa. T019/T020 acreditan en Windows y Linux el protocolo integrado, liberación abrupta e identidad/ubicación estable antes de aceptar B. Ningún PID/edad sustituye la adquisición del lock. La exclusión sobre el archivo de control no bloquea editores externos de modelos/outputs.
 
-Registro/estados: [data-model.md](data-model.md). Este mínimo existe por FR-012; backups en memoria solamente no cubren terminación abrupta. Si no se demuestra preservación/rollback con ese alcance fijo, mantener B condicionada; no añadir capas para poder declarar PASS. No presentar una condición de escritor único como prueba de que FR-012 excluye automáticamente terceros.
+Limitaciones aprobadas de FR-012: sin protección absoluta contra procesos no cooperantes, vista atómica multiarquivo ni durabilidad absoluta ante pérdida de energía. No sobrescribir automáticamente modificaciones externas ni conflictos detectados. Si un tercero modifica un recurso después de la última comprobación, esa carrera queda fuera de garantía; no afirmar linearizabilidad universal. Mantener estado bloqueado o sin confirmar cuando no se pueda recuperar coherencia propia. T019/T020 validan este contrato; no amplían sus límites.
 
 ### Aplicación instalada: capacidad separada bloqueada
 
@@ -130,13 +137,13 @@ C se conserva como tercera slice, con subcapacidad apply bloqueada, dentro de #6
 
 | Slice | Resultado verificable / reutilización | Archivos previstos | Dependencias | Riesgos / verificación enfocada | Bloqueo de avance |
 |---|---|---|---|---|---|
-| A — READY_FOR_FINAL_CI | Listado/JSON exacto, help/version/status/check sin escrituras; helpers renderer existentes | Entrada/cli.py, casos slice_a, job Linux y launchers | Python >=3.11, checkout confiable, renderer, R49 PASS; sin B/C | Consulta/JSON/cero mutación; Windows y Linux hosted pasaron en la evidencia registrada | T002–T009 completadas; CI final debe comprobar el permiso Git 100755 sin `chmod`; macOS NOT VERIFIED |
-| B — CONDICIONADA | Edición familia/rol preservadora y generación coherente | `model_edit.py`, función privada de escritura/recovery, casos slice_b en mismo test | A y validación de TOML Kit/preservación/recuperación | TOML/comments/newline, fallo N y conflicto; ajenos idénticos | Validaciones no ejecutadas; contrato de concurrencia no resuelto para garantías más fuertes |
+| A — SHIPPED | Consulta entregada mediante PR #69 | Archivos A existentes, sin cambios ahora | Baseline master | Evidencia A histórica conservada | No reabrir ni cambiar A por B |
+| B — ACEPTADA (G2 PASS) | Contrato de IDs, exclusión/recovery y renderer existente reconciliados | `model_edit.py`, `source_edit.py`, CLI y pruebas existentes; comandos de edición de fuente | A SHIPPED; T019 Windows + T020 Linux | Selección integrada Windows/Linux y evidencia T017–T020 | B aceptada; no incluye apply, instalaciones ni autorización implícita de fuente real |
 | C — BLOCKED | Doctor/routing reutilizables; apply no habilitado | Native routing y suites existentes; delta motor sólo después de desbloqueo | A/B, procedencia, ownership/manifests/versiones/verificador y recuperación segura | Drift/parcial all/overrides; fixtures y smoke posterior | Contrato instalado y recuperación aún no demostrados; sin éxito completo |
 
 ## Project Structure
 
-Inventario de rutas previsto durante la planificación. Los archivos de A asignados a T002–T009 ya fueron creados; B/C y otros elementos futuros siguen siendo propuestas, según el estado detallado en [tasks.md](tasks.md):
+Inventario de rutas definido durante la planificación. Los archivos de A asignados a T002–T009 ya fueron creados; Slice B está implementada y aceptada según [tasks.md](tasks.md), mientras C y otros elementos futuros siguen siendo propuestas:
 
 ```text
 olympus/core/models.toml                  fuente canónica; sin modificar ahora
@@ -148,6 +155,8 @@ olympus/__main__.py                       NUEVO: entrada módulo
 olympus/cli.py                            NUEVO: parser, resolución, consultas/presentación
 olympus/model_edit.py                     NUEVO: edición preservadora en memoria
 olympus/source_edit.py                    NUEVO: batch/recovery sólo de fuente
+.olympus-cli-edit.lock                    FUTURO: archivo estable de exclusión, nunca cleanup
+.olympus-cli-edit/                        FUTURO: único scratch de operación y registro
 olympus/native_ops.py                     NUEVO: delegación de motores, no writer instalado
 scripts/olympus_cli.py                    NUEVO: entrada anclada al checkout
 scripts/olympus                           NUEVO: launcher Linux
@@ -179,29 +188,41 @@ README.md                                ejemplos/dependencias/soporte, futura a
 ## Dependencies and Risks
 
 - Release: R49 aceptado con evidencia directa limitada a instalación de archivos Codex proyecto. No sustituir esa evidencia por FAST histórico ni ampliar su alcance a OpenCode/global/runtime de agentes.
-- Plataforma (registro histórico): el alias Microsoft Store no era el intérprete real; Python 3.11.17 devolvió exit 0. Usar un intérprete explícito y no instalarlo automáticamente. El run Linux hosted posterior pasó T008; la validación final del modo 100755 de checkout sigue pendiente.
-- TOML: la elección de TOML Kit se basa en documentación/metadata; sus garantías de bytes deben verificarse sobre fixtures antes de habilitar edición. No instalar nada en esta sesión.
-- Concurrencia: batch recuperable no ofrece snapshot multiarquivo a lectores externos ni exclusión de editores no cooperantes; requisito operativo y gate explícitos.
+- Plataforma: A SHIPPED con PR #69; conservar evidencia preintegración Python/T008/mode en research.md sin convertir su pendiente histórico en gate actual. B requiere validación propia Windows/Linux; no instalar intérprete ni depender del alias Microsoft Store.
+- TOML: TOML Kit 0.13.3 opcional para edición/preview; T019/T020 acreditan integración y preservación B. No repetir experimentos ni exigir dependencia para A/recovery.
+- Concurrencia: FR-012 ajustado por aprobación explícita; lock nativo cooperante estable y recovery bajo exclusión, acreditados por T019/T020 en Windows/Linux. Sin snapshot multiarquivo, protección absoluta contra terceros no cooperantes ni durabilidad absoluta ante pérdida eléctrica.
 - Instalada: ausencia de contrato C no se resuelve omitiendo checks/version ni rebautizando local como release. Bloqueo separado conserva alcance del issue.
 - Nativo: doctor global OpenCode llama discovery existente fuera del proyecto; cualquier escritura observada impide aceptar modo read-only y debe declararse BLOCKED, no envolverse como PASS.
 - Autoridad: modificar en el futuro fuentes/entrypoints Olympus protegidos requiere su plano de mantenimiento soportado. El plan no autoriza a Codex a escalar.
 
 ## Validation Strategy
 
-Riesgo TFR: A LOW (lectura/contexto); B MEDIUM (fuente/derivados); C HIGH (ownership/destinos). La CLI A tiene PASS Windows y PASS Linux hosted según [tasks.md](tasks.md); el modo real 100755 sin preparación requiere CI final. T001 añadió instalación real de archivos y VerifyOnly remotos aislados, PASS para R49; no pruebas de agentes ni runtime de agentes.
+Riesgo TFR: A LOW (lectura/contexto); B MEDIUM (fuente/derivados); C HIGH (ownership/destinos). A está SHIPPED en master con PR #69. Las observaciones de CI/permiso anteriores a esa integración se conservan como historia en research.md; no se reacreditan ni modifican flujos A aquí. T001 añadió instalación real de archivos y VerifyOnly remotos aislados, PASS para R49; no pruebas de agentes ni runtime de agentes.
 
 | Behavior / boundary | Check and reason | Class | Expected outcome | Executed status and evidence |
 |---|---|---|---|---|
-| A consulta/CLI/JSON | Casos `slice_a` en `test_cli.py`, dentro de harness-core; listado, ayuda/versión, estado, check, contexto inválido y JSON legible equivalente | Deterministic | Mismos doce roles/asignaciones del Core; errores útiles; ninguna operación B/C | PASS en T006/T007 y Linux hosted T008; CI final del modo checkout pendiente |
-| A ausencia de mutación | Snapshot inventario/contenido antes/después de consultas válidas/inválidas, incluido caches/scratch; reuse helpers de snapshot existentes | Deterministic | Cero creación, modificación o borrado; sin renderer write/doctor/discovery | PASS en Windows y Linux hosted; CI final del modo checkout pendiente |
-| B edición/preservación | Casos slice_b en mismo test, sin hacerlos prerrequisito A | Deterministic | Round-trip/comments/newlines, no-op y valores inválidos; ajenos idénticos | NOT RUN / CONDICIONADA |
-| B renderer/cambio real | Mismo `test_cli.py`, fixture origen; familia/rol, Kael/Aegis, hashes de no afectados y comparación con helpers renderer | Deterministic | Preview coincide con resultado; sólo campos autorizados | NOT RUN |
-| B rollback/concurrencia | Mismo test, fallo en sustitución N y proceso interrumpido; tercero hash distinto y lock activo | Simulated | Restauración propia o bloqueo sin overwrite; lectura sin reparación | NOT RUN |
-| A compatibilidad Windows/Linux | Smoke entrada read-only/launcher, CLI/JSON y paths espacios/no ASCII; Windows Python real y un job Linux Python 3.11 | Real runtime | Misma consulta/config check y cero escrituras; sin preview de edición B ni instalador C | PASS T007 Windows y T008 Linux hosted; final CI de modo 100755 pendiente |
+| A consulta/CLI/JSON | Casos `slice_a` en `test_cli.py`, dentro de harness-core; listado, ayuda/versión, estado, check, contexto inválido y JSON legible equivalente | Deterministic | Mismos doce roles/asignaciones del Core; errores útiles; ninguna operación B/C | PASS histórico T006/T007 y T008; pendiente preintegración conservado en research.md. A SHIPPED, sin nuevo gate aquí |
+| A ausencia de mutación | Snapshot inventario/contenido antes/después de consultas válidas/inválidas, incluido caches/scratch; reuse helpers de snapshot existentes | Deterministic | Cero creación, modificación o borrado; sin renderer write/doctor/discovery | PASS histórico Windows/Linux; A SHIPPED, sin nuevo gate aquí |
+| B edición/preservación | Casos slice_b en mismo test: fullmatch IDs, round-trip, máscaras, fábrica string, LF/CRLF/newline mixto, no-op y dependencia ausente | Deterministic | Rechazo previo a cualquier escritura; bytes ajenos idénticos; no-op sin lock/scratch | T019 Windows + T020 Linux PASS; G2 PASS; tres skips symlink Windows pasaron en Linux |
+| B renderer/cambio real | Mismo `test_cli.py`, fixture origen; familia/rol, Kael/Aegis, hashes de no afectados y comparación con helpers renderer | Deterministic | Preview coincide con resultado; sólo campos autorizados | T019 Windows y T020 Linux PASS en código reconciliado |
+| B rollback/concurrencia | Fallo en sustitución N/interrupción, PREPARED old/mixed/new, COMMITTED cleanup parcial, terceros hashes/read-set y backups corruptos; recovery interrumpido/repetido | Simulated | Restauración propia validada o bloqueo sin overwrite; preservar respaldos y evitar éxito parcial | T017/T019 Windows + T020 Linux PASS para la matriz integrada; límites de durabilidad/multiarquivo/no cooperantes permanecen |
+| A compatibilidad Windows/Linux | Smoke entrada read-only/launcher, CLI/JSON y paths espacios/no ASCII; Windows Python real y un job Linux Python 3.11 | Real runtime | Misma consulta/config check y cero escrituras; sin preview de edición B ni instalador C | PASS histórico T007/T008; A SHIPPED tras PR #69, sin reacreditar CI |
 | C controles de integración | Si se desbloquea: fixtures existentes dual-harness/global; UX si cambia routing; compatibility sólo si cambia wrapper | Simulated | Drift/ownership/version/override/`all` preservados y resultados reconciliados | NOT RUN / apply BLOCKED |
 | C nativo Windows | Tras desbloqueo/autorización: destino aislado, actualización personalizada y VerifyOnly/uninstall por motor | Real runtime | Procedencia distinguible y estado verificado, sin tocar usuario/otro scope | NOT RUN / apply BLOCKED |
 
-Matriz OS mínima: Windows local (A/B + routing nativo cuando corresponda), Linux hosted Python 3.11 (A/B). No matriz combinatoria por versiones, modelos, twelve roles × OS ni macOS aspiracional. El job Linux llama sólo pruebas enfocadas; no `scripts/qualify.ps1` ni perfiles FAST/FULL/RUNTIME nuevos. El workflow actual valida el modo 100755 del checkout sin `chmod`; ese cambio requiere CI final. Mantener intacto el gate Windows CI existente.
+### Criterios del gate de implementación B y estado reconciliado
+
+Los siguientes criterios se ejecutaron/reconciliaron en el `test_cli.py` existente, reutilizando snapshots/helpers, sin otro harness ni repetir suites A:
+
+- Exclusión nativa no bloqueante con archivo vacío: edit/edit, edit/recover y recover/recover; dueño activo bloquea al segundo antes de examinar el batch. Probar liberación tras excepción y terminación abrupta real del proceso en **ambas** plataformas; no sólo fixtures/PID.
+- Identidad estable: resolver alias del origen, comparar descriptor/path/registro y rechazar enlaces/reparse/hardlinks o identidad no verificable; cleanup no elimina ni reemplaza el lock. Simular intento de unlink/recreate/path sustituido y comprobar detección observable y ausencia de recuperación sobre otra identidad. No prometer exclusión frente al actor externo no cooperante que elimina el archivo de control.
+- Fallos antes de PREPARED y en cada límite del batch máximo; comprobar estados old/new, rollback exacto, backup inválido/registro incompleto, read-set cambiado, modo divergente y tercer hash. Antes del primer restore validar todo el conjunto y respaldos necesarios. Interrumpir recovery y repetirlo sin consumir backups; probar cleanup parcial PREPARED all-old/COMMITTED all-new y conservar el lock estable.
+- Snapshots de contenido/inventario/modos/mtimes: previews y rechazos de entrada no crean lock/scratch/caches; no-op de edición tampoco. Tras operación aceptada, sólo varían targets efectivos y control B documentado. Instalaciones/manifests/sentinels ajenos permanecen idénticos. Slice A sigue stdlib y no importa B/editor; edición/preview sin TOML Kit bloquea antes de escritura, recovery no depende de ella.
+- Reconstruir expected con el renderer único, verificar prompts/permisos/identidades/no afectados y representación Kael/Aegis. Probar IDs existentes conformes y rechazo de comillas, backslash, controles, saltos, espacios y otros caracteres, sin normalización ni APIs.
+
+Los checks integrados exigidos quedaron **PASS** en T019 Windows y T020 Linux; G2 abre la aceptación de Slice B, no una autorización para mutar fuentes reales. Se usó la misma versión de los cuatro archivos de producto en ambos resultados; los únicos cambios de tests tras T019 fueron aserciones de help de Slice A fuera de `-k slice_b`. No se ejecutaron FULL/RUNTIME ni se repitieron experimentos previos. Evidencia, fuente y límites: [tasks.md](tasks.md).
+
+Matriz OS mínima: Windows local (A/B + routing nativo cuando corresponda), Linux hosted Python 3.11 (A/B). No matriz combinatoria por versiones, modelos, twelve roles × OS ni macOS aspiracional. El job Linux llama sólo pruebas enfocadas; no `scripts/qualify.ps1` ni perfiles FAST/FULL/RUNTIME nuevos. El requisito histórico del workflow A sobre modo 100755 se conserva; A está SHIPPED y esta revisión no altera su workflow ni requiere repetir su cualificación. Mantener intacto el gate Windows CI existente.
 
 Para A seleccionar sólo `unittest discover -s tests/harness-core -p test_cli.py -k slice_a`. No ejecutar su cualificador completo ni el validador de perfiles Codex como acceptance de A: conservarlos como checks de integración posteriores cuando se altere su frontera o un gate existente lo exija. No nuevos requisitos de pruebas de modelos/preservación/recuperación/instalación para desbloquear A. El job Linux filtra slice_a; B se añade después bajo su gate.
 
@@ -212,7 +233,8 @@ Para A seleccionar sólo `unittest discover -s tests/harness-core -p test_cli.py
 | Addition | Concrete need | Simpler option considered and evidence |
 |---|---|---|
 | TOML Kit, una dependencia B | FR-011 exige trivia/formato; tomllib sólo parser | Regex/serializer desde dict no cumplen preservación general; no escribir parser propio |
-| Registro/backups de un batch B | FR-012 y recuperación tras terminación | Snapshot sólo en RAM pierde recovery; atomic rename aislado no cubre fuente + outputs |
+| Registro/backups de un batch B | FR-012 y recuperación tras terminación | Snapshot RAM no cubre muerte del proceso; conservar backups durante rollback repetible |
+| Lock estable + primitivas stdlib | Exclusión commit/recovery sin dos inodes cooperantes tras cleanup | Directorio/PID/edad no acreditan dueño terminal; sentinel vacío persistente sin nuevo registro |
 | Dos launchers pequeños | Mismo comando con `-B`, quoting/exit sin compiler ni asociación | Entrada `-m` sola no UX final; wheel/zipapp ahora agregan distribución de datos/motores |
 
-Sin servicio, clases de framework, engine nuevo ni matriz extensa. A sólo necesita entrada/parser/consultas, sin B/C ni placeholders. B conserva funciones privadas de edición/rollback; no generalizar. Recuperación instalada queda en C. Entrega completa sigue bloqueada; T002–T009 están completadas y A está READY_FOR_FINAL_CI con R49 PASS. La aceptación del permiso 100755 del checkout debe confirmarse en el próximo Linux CI; macOS NOT VERIFIED.
+Sin servicio, clases de framework, engine nuevo ni matriz extensa. A SHIPPED permanece sin cambios; B está ACEPTADA tras G2 PASS en Windows/Linux y se documenta en T021. C y entrega completa siguen BLOCKED; macOS NOT VERIFIED. Esta actualización sólo reconcilia estado y evidencia: no modifica código, pruebas, workflow, instalaciones o permiso de edición sobre fuentes reales.

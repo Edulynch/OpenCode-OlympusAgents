@@ -2,13 +2,19 @@
 
 **Feature Branch**: `001-portable-olympus-cli` (rama preexistente; esta sesión no crea ni cambia ramas)  
 **Created**: 2026-10-14  
-**Status**: Draft — especificación funcional; implementación y cualificación pendientes  
+**Status**: Slice A SHIPPED; Slice B READY_FOR_TASKS contractual, sin implementación; Slice C y feature completa BLOCKED\
 **Documentation Mode**: New  
-**Baseline**: `master` después del PR [#68](https://github.com/Edulynch/OpenCode-OlympusAgents/pull/68), commit `1900da45250ddec817a6141396e0ec1268b2dfca`; producto v0.4.9 en `c30a19dd410b1815f4591b204615cae0dd9e9a5f`.  
-**User Constraints**: Sólo especificación; sin implementación, planes, tareas, commits, push ni pruebas pesadas. Conservar fuentes, renderer, roles, diferencias de adaptadores y protecciones de instalación. Windows/Linux como objetivos; macOS sin cualificación acreditada. Excluir #66 y #67.  
+**Baseline**: `master` con Slice A integrada por PR [#69](https://github.com/Edulynch/OpenCode-OlympusAgents/pull/69), commit `b7f8404061847a58d5e8122e4baa2fa643b69a46`. Baseline histórico: post-PR #68 `1900da45250ddec817a6141396e0ec1268b2dfca`; producto v0.4.9 `c30a19dd410b1815f4591b204615cae0dd9e9a5f`.\
+**Restricciones de especificación inicial (históricas)**: Sólo especificación; sin implementación, planes, tareas, commits, push ni pruebas pesadas. Conservar fuentes, renderer, roles, diferencias de adaptadores y protecciones de instalación. Windows/Linux como objetivos; macOS sin cualificación acreditada. Excluir #66 y #67.\
 **Evidence Reviewed**: Issue [#64](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/64) completo, incluidos aceptación y límites de ejecución; sin comentarios al consultar el 2026-10-14. Constitución [1.0.0](../../.specify/memory/constitution.md). Plantilla activa [spec-template](../../.specify/templates/overrides/spec-template.md), resuelta mediante el stack de Spec Kit. Fuentes y documentos del baseline: [models.toml](../../olympus/core/models.toml), [identities.toml](../../olympus/core/identities.toml), [capabilities.toml](../../olympus/harnesses/capabilities.toml), [renderer](../../scripts/render_harnesses.py), [bootstrap](../../scripts/bootstrap.ps1), [instalación global](../../scripts/global-install.ps1), [desinstalación de proyecto](../../scripts/project-uninstall.ps1), [entrypoint público](../../install.ps1), [desarrollo](../../docs/DEVELOPMENT.md), [release](../../docs/RELEASE-v0.4.9.md), [compatibilidad Codex](../../docs/CODEX-COMPATIBILITY.md) y retrospectivas [001](../retrospective/v0.4.9/001-core-and-adapters/spec.md), [006](../retrospective/v0.4.9/006-public-installation-ux/spec.md) y [007](../retrospective/v0.4.9/007-managed-installation/spec.md).
 
 **Input**: Especificar `001-portable-olympus-cli`, primera nueva funcionalidad bajo Spec Kit, a partir del issue #64 y la constitución 1.0.0: consultar, configurar y aplicar asignaciones de modelos y agentes reutilizando la arquitectura existente.
+
+## Actualización contractual aprobada — Slice B (2026-10-14)
+
+El usuario aprobó las tres decisiones posteriores al feasibility gate: alfabeto inicial de IDs, ajuste explícito de FR-012 a escritores cooperantes y exclusión nativa `msvcrt.locking`/`fcntl.flock`. Esta revisión sólo actualiza estos cinco documentos; no implementa, instala dependencias ni genera tareas. A está SHIPPED por PR #69, sin cambios de comportamiento. C y la feature completa siguen BLOCKED. READY_FOR_TASKS de B habilita preparar tareas; ninguna escritura B queda habilitada hasta completar la validación de implementación Windows/Linux.
+
+El historial y los experimentos previos PASS se conservan en [research.md](research.md); no se repiten aquí. El protocolo y la identidad estable del lock se definen en [data-model.md](data-model.md). El renderer permanece sin modificaciones.
 
 ## Scope and Interpretation
 
@@ -86,9 +92,13 @@ Una persona que mantiene fuentes anticipa el efecto de un cambio y lo ejecuta co
 4. **Given** una edición de Kael o Aegis, **When** se regenera, **Then** Kael conserva su representación raíz Codex y Aegis sólo cambia su salida OpenCode, sin crearse un agente Codex.
 5. **Given** comentarios, TOML no relacionado y trabajo previo, **When** se edita, **Then** se conservan; identidades, permisos, cuerpos de prompts y outputs no afectados mantienen sus bytes.
 6. **Given** rol/familia/esfuerzo inválido, IDs requeridos ausentes, flags incompatibles, origen ambiguo, drift o conflicto, **When** se solicita editar, **Then** se rechaza antes de escribir con una explicación útil.
-7. **Given** fallo durante edición/regeneración, **When** termina la orden, **Then** conserva o recupera el estado coherente previo de sus recursos, sin sobrescribir cambios externos ni declarar render parcial exitoso. Si un cambio externo impide recuperar, informa bloqueo y estado real.
+7. **Given** fallo durante edición/regeneración bajo el contrato cooperante de FR-012, **When** termina o se recupera la operación, **Then** conserva o recupera coherencia propia sin sobrescribir conflictos externos detectados ni declarar render parcial exitoso. Un impedimento o resultado no acreditado se informa bloqueado o sin confirmar con estado real.
 8. **Given** valores solicitados idénticos a los actuales, **When** se edita, **Then** se informa ausencia de cambios sin reescrituras.
 9. **Given** instalaciones previas, **When** se editan fuentes, **Then** archivos y manifests instalados permanecen idénticos y se indica que requieren aplicación separada.
+
+10. **Given** un ID que no coincide íntegramente con el alfabeto inicial de B, **When** se solicita preview o edición, **Then** se rechaza antes de staging o escritura, sin normalizarlo ni cambiar el renderer.
+11. **Given** un dueño cooperante activo, **When** otra orden intenta commit o recovery, **Then** la adquisición nativa no bloqueante falla y la segunda orden informa bloqueo sin inspeccionar ni modificar recursos del batch ajeno.
+12. **Given** una interrupción y scratch pendiente, **When** se solicita recovery explícito, **Then** adquiere el lock estable, valida identidad/registro/hashes/backups y sólo revierte recursos propios; un tercer estado bloquea, y una nueva interrupción conserva respaldos reutilizables.
 
 ### User Story 3 - Aplicar y operar sobre una instalación explícita (Slice C; Priority: P3)
 
@@ -117,7 +127,7 @@ Una persona operadora selecciona destino/harness, diagnostica, revisa y aplica i
 - Esfuerzo no validable localmente o ID nuevo sintácticamente válido: distinguir rechazo de contrato local de disponibilidad remota desconocida; no consultar proveedores.
 - Familia con ID Codex y rol Aegis: mostrar traducción y ausencia de agente como conceptos distintos.
 - Worktree con trabajo ajeno: preservarlo sin exigir limpieza global; drift/conflicto de recursos relevantes sí bloquea.
-- Fuente/output/manifest cambia entre inspección y escritura: invalidar antes de sobrescribir; si ya hay efectos, reconciliar sólo los propios y comunicar estado.
+- Si se detecta un cambio de fuente/output/manifest entre inspección y escritura, invalidar antes de sobrescribir; si ya hay efectos, reconciliar sólo los propios y comunicar estado. En B rige FR-012: no se promete excluir cambios externos no cooperantes posteriores al último hash.
 - Rutas con espacios/no ASCII, separadores, mayúsculas y enlaces/reparse points: conservar contención y portabilidad; bloquear traversal/escape sin debilitar controles por OS.
 - Harness ausente, manifest legado o ownership ambiguo: distinguir ausencia, compatibilidad soportada y bloqueo. Aplicar no instala ni migra implícitamente.
 - Actualización global con override de proyecto: conservarlo e informar que puede prevalecer; no afirmar recarga de sesiones activas.
@@ -137,10 +147,10 @@ Una persona operadora selecciona destino/harness, diagnostica, revisa y aplica i
 - **FR-006 (B)**: Una orden explícita DEBE actualizar IDs de una familia existente, afectando exactamente sus roles actuales y conservando las asignaciones de familia y esfuerzo.
 - **FR-007 (B)**: Una orden explícita DEBE cambiar familia y/o esfuerzo de un rol existente sin reasignar ningún otro rol.
 - **FR-008 (B/C)**: Antes de mutar asignaciones DEBEN mostrarse origen, alcance, roles afectados, valores anteriores/propuestos, ambos IDs de runtime y esfuerzos. Preview y ejecución deben describir los mismos efectos si el estado no cambia; no se prescribe confirmación interactiva adicional.
-- **FR-009 (B/C)**: Antes de escribir DEBEN rechazarse roles/familias/esfuerzos fuera del contrato local soportado, IDs requeridos vacíos o inválidos según ese contrato, flags inválidos/incompatibles, contexto ambiguo y operaciones nativas no soportadas, indicando causa y corrección o límite concreto.
+- **FR-009 (B/C)**: Antes de cualquier staging o escritura DEBEN rechazarse roles/familias/esfuerzos fuera del contrato local soportado, IDs requeridos vacíos o inválidos, flags inválidos/incompatibles, contexto ambiguo y operaciones nativas no soportadas, indicando causa y corrección o límite concreto. En Slice B, cada ID existente que se use y cada ID propuesto DEBE coincidir por completo con `[A-Za-z0-9][A-Za-z0-9._:/-]*`, sin recortar ni normalizar; comillas, backslashes, controles, saltos y cualquier carácter fuera del alfabeto se rechazan. Es un contrato inicial de B, no una limitación universal de OpenCode/Codex ni prueba de disponibilidad o autenticación del proveedor.
 - **FR-010 (A/B)**: Check y edición DEBEN validar coherencia mediante lógica existente. Drift/conflicto inesperado debe fallar/bloquear sin reparación o sobrescritura implícita.
 - **FR-011 (B)**: La edición DEBE preservar comentarios, TOML no relacionado y trabajo previo. Sólo cambia valores solicitados y campos derivados; identidades, permisos, cuerpos de prompts y outputs ajenos mantienen sus bytes.
-- **FR-012 (B)**: Fuente y generación DEBEN dar un resultado coherente o recuperar el estado previo de los recursos propios ante fallo, sin éxito parcial, pérdida de trabajo externo ni sobrescritura concurrente. Un impedimento externo de recuperación debe declararse bloqueado con estado real.
+- **FR-012 (B)**: Olympus DEBE coordinar sus propias operaciones de commit y recovery mediante exclusión mutua nativa, detectar conflictos observables y recuperar únicamente recursos que continúen perteneciendo a la operación original, con hashes old/new y backups verificados. DEBE confirmar coherencia antes de declarar éxito; ante fallo recupera el estado previo propio o informa estado bloqueado o sin confirmar, sin presentar éxito parcial ni sobrescribir conflictos detectados. La recuperación adquiere exclusión antes de inspeccionar recursos del batch y puede repetirse tras interrupción sin destruir sus respaldos. No se garantiza protección absoluta frente a procesos externos que ignoran el lock, atomicidad multiarquivo visible para lectores concurrentes ni durabilidad absoluta ante pérdida de energía. No se permite sobrescritura automática de modificaciones externas; un hash previo a `os.replace` no es compare-and-swap.
 - **FR-013 (B/C)**: Una petición idéntica al estado válido actual DEBE informar ausencia de cambios sin reescrituras innecesarias.
 - **FR-014 (B/C)**: Edición de fuentes y aplicación instalada DEBEN ser operaciones separadas y explícitas. Editar deja intactos destinos; aplicar no cambia intención canónica, instala harnesses ausentes ni actualiza proyectos no seleccionados.
 - **FR-015 (C)**: Aplicar DEBE identificar origen, scope project/global, destino y OpenCode/Codex/ambos inequívocamente, respetando raíz exacta de worktree en proyecto y resolución segura global, sin exigir limpieza del trabajo ajeno.
@@ -175,7 +185,7 @@ Una persona operadora selecciona destino/harness, diagnostica, revisa y aplica i
 - **SC-002**: Salidas legible/JSON de listado, preview y diagnóstico describen el mismo estado y conjunto afectado; el 100% de las salidas JSON previstas es procesable.
 - **SC-003**: Una orden explícita completa cada edición válida de familia/rol con representaciones coherentes; cero roles ajenos se reasignan y cero permisos, identidades o cuerpos de prompts se alteran.
 - **SC-004**: El 100% de consultas/previews y rechazos previos conserva inventario/contenido; cero instalaciones cambian por editar fuentes.
-- **SC-005**: El 100% de fallos de edición definidos conserva/recupera coherencia propia o declara bloqueo externo concreto sin falso éxito ni pérdida de trabajo ajeno.
+- **SC-005**: El 100% de fallos de edición definidos dentro del contrato cooperante de FR-012 conserva/recupera coherencia propia o declara bloqueo/estado sin confirmar concreto, sin falso éxito ni sobrescritura de conflictos detectados. No se extiende a las garantías excluidas explícitamente por FR-012.
 - **SC-006**: Cada combinación scope/harness anunciada como soportada permite actualizar una instalación existente personalizada y verificarla conservando ownership, procedencia y archivos ajenos; cero destinos no seleccionados cambian. Sin demostración segura se declara bloqueo y no cuenta como aceptación de C.
 - **SC-007**: Cero resultados parciales/no confirmados se presentan como éxito conjunto; todo harness seleccionado tiene resultado reconciliado antes de afirmar aplicación completa.
 - **SC-008**: Consulta/configuración alcanza aceptación en las dos plataformas objetivo sin red ni gasto en APIs; cada operación nativa anunciada tiene evidencia propia y ninguna afirmación operativa macOS precede su cualificación.
@@ -188,7 +198,7 @@ Una persona operadora selecciona destino/harness, diagnostica, revisa y aplica i
 - Constitución 1.0.0, Core y contratos citados; la especificación no los sustituye ni amplía autoridad.
 - Renderer y fuentes de adaptadores; conservar su frontera actual sin inferir que consume todas las políticas/cuerpos de rol.
 - Motores de bootstrap/global/install/uninstall, manifests, ownership, hashes y verificadores. La aplicación de personalizaciones depende de demostrar compatibilidad con ellos.
-- Publicación y verificación de v0.4.9 antes de comenzar código según #64. Se observó el release publicado el 2026-10-14; esta sesión no ejecutó ni reacreditó gates de instalación remota/verificación. Metadata de release e integración #68 no acreditan esos resultados.
+- Publicación/verificación v0.4.9 antes de código era el gate histórico de #64; T001/R49 lo reconciliaron con evidencia limitada a instalación/verificación de archivos Codex proyecto, conservada en research.md. No se repite ni se amplía su alcance por esta actualización B; metadata por sí sola no era esa evidencia.
 - Windows local y Linux en CI alojada para cualificación posterior enfocada, sin WSL local; documentar prerrequisitos nativos según motor/plataforma sin extenderlos a consultas offline.
 - Resolver acceso al comando instalado; entrada de desarrollo no resuelve por sí sola distribución y UX final.
 
@@ -204,19 +214,19 @@ Una persona operadora selecciona destino/harness, diagnostica, revisa y aplica i
 
 ### Incertidumbres para planificación técnica
 
-1. **Comando/distribución**: decidir acceso instalado, runtime y tradeoff de distribución, evaluando primero Python 3.11+ y stdlib. Jerarquía propuesta en #64 orienta funciones; spelling, paquete y shims siguen abiertos.
-2. **TOML/recuperación de fuentes**: demostrar preservación de comentarios, detección de concurrencia y coordinación edición/regeneración recuperable, sin elegir aquí algoritmo, biblioteca o mecanismo transaccional.
+1. **Comando/distribución (incertidumbre inicial)**: plan.md registra la elección posterior de entrada/launchers ligados a checkout. A está SHIPPED; esta actualización B no cambia su contrato, distribución ni comportamiento, ni absorbe #66.
+2. **TOML/recuperación de fuentes**: contrato B resuelto por las decisiones aprobadas; quedan pruebas de implementación previas a habilitar escrituras. Conservar experimentos de preservación/recuperación y cualificar el protocolo nativo completo Windows/Linux, sin motor transaccional general.
 3. **Aplicación y metadatos**: demostrar flujo mínimo para proyecto/global y ambos harnesses compatible con ownership, hashes, versión y `VerifyOnly`, sin personalización presentada como release inmutable. Decidir si metadatos actuales bastan o se justifica un delta compatible; si exige debilitar controles, bloquear C y presentar decisión de alcance.
 4. **Fallo parcial instalado**: establecer unidad segura, recuperación posible y comportamiento ante interrupción, especialmente con ambos harnesses. No asumir atomicidad baseline ni prometer rollback universal sin evidencia.
-5. **Validación local de esfuerzos/IDs**: precisar valores validables offline reutilizando fuentes/capacidades. El renderer baseline comprueba referencias/intención no vacía, no una matriz completa de esfuerzos ni disponibilidad remota; no inventarla aquí.
+5. **Validación local de esfuerzos/IDs**: IDs de B restringidos por FR-009; esfuerzo seleccionable derivado de la fuente, sin catálogo adicional. El renderer sigue sin demostrar disponibilidad remota. Implementar y probar rechazo antes de staging, sin cambiar A ni renderer.
 6. **Operaciones nativas Linux**: identificar reutilización real, límites OS y evidencia mínima por operación. A/B Linux no obliga a anunciar instalador Linux entregado; macOS permanece desconocido.
-7. **Gate de release**: reconciliar publicación/verificación de v0.4.9 antes de código; metadata no reemplaza gates.
+7. **Gate de release (reconciliado)**: T001/R49 resolvieron el prerequisito histórico con el alcance de evidencia documentado; no reacreditar ni acceder al entorno retenido en esta revisión.
 
 No se identificó ambigüedad funcional material que impida iniciar planificación. Estas cuestiones requieren investigación técnica allí; viabilidad segura de C y gate de release condicionan implementación y cualquier declaración de producto completo.
 
-## Verification Scope
+## Verification Scope — registro de especificación inicial
 
-Sólo se revisan documentación/fuentes en esta sesión. Los checks siguientes expresan aceptación futura conforme a TFR; no son un plan generado ni pruebas ejecutadas. Reutilizar suites pertinentes y ampliar sólo por evidencia insuficiente, riesgo o gates existentes.
+En la sesión inicial sólo se revisaron documentación/fuentes. La tabla siguiente conserva ese historial previo a Slice A y al gate B; sus NOT RUN no describen el estado SHIPPED actual de A. Los checks expresaban aceptación futura conforme a TFR; no eran pruebas ejecutadas. Reutilizar suites pertinentes y ampliar sólo por evidencia insuficiente, riesgo o gates existentes.
 
 | Behavior / boundary | Evidence or focused check | Class | Status (if executed) |
 |---|---|---|---|
@@ -229,6 +239,10 @@ Sólo se revisan documentación/fuentes en esta sesión. Los checks siguientes e
 | Apply/verify/install/uninstall por plataforma declarada | Destinos aislados mediante motor/verificador existentes; no sustituir por mocks | Real runtime | NOT RUN — integración pendiente |
 
 No agregar tier ni imponer FULL/RUNTIME rutinarios. Mantener una sesión Olympus activa, sin procesos paralelos pesados/toolchains locales nuevos; no cambiar por ello el límite Core de hijos. Runtime de agentes/proveedores y soporte macOS no se acreditan por esta especificación.
+
+## Verificación vigente de Slice B
+
+La consistencia de estos contratos se revisa documentalmente. Los experimentos PASS del gate y su alcance están en [research.md](research.md). Toda aceptación de implementación B sigue NOT RUN: exclusión nativa entre edit/recover, liberación por terminación abrupta Windows/Linux, identidad estable sin unlink/recreate cooperante, recuperación repetible, hashes/read-set conflictivos y snapshots sin mutaciones ajenas. La estrategia enfocada está en [plan.md](plan.md); estos pendientes pueden convertirse en tareas previas a habilitar escrituras. No se generan tareas en esta revisión.
 
 ## Assumptions
 

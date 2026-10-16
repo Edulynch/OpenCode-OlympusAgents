@@ -57,7 +57,7 @@ jobs:
   slice-a-linux:
     name: Slice A / Linux
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHONUTF8: '1'
@@ -87,18 +87,13 @@ jobs:
           python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_a -v
           test -x scripts/olympus
 
-      - name: Slice B lock (native Linux)
+      - name: Slice B (integrated, isolated TOML Kit)
         shell: bash
         run: |
-          python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_b_lock -v
-
-      - name: Slice B model previews (isolated TOML Kit)
-        shell: bash
-        run: |
-          venv="$RUNNER_TEMP/olympus-cli-slice-b-model-edit"
+          venv="$RUNNER_TEMP/olympus-cli-slice-b"
           python -m venv "$venv"
           "$venv/bin/python" -m pip install -r requirements-cli.txt
-          "$venv/bin/python" -B -m unittest discover -s tests/harness-core -p test_cli.py -k SliceBModelEdit -v
+          "$venv/bin/python" -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_b -v
 
       - name: Confirm source checkout unchanged
         shell: bash

@@ -129,8 +129,10 @@ class SliceA(unittest.TestCase):
         self.assertEqual(0, help_result.returncode)
         for text in ("--source", "models list --json", "config check", "status --scope project", "Python 3.11+"):
             self.assertIn(text, help_result.stdout)
-        for command in ("set-family", "set-model", "recover", "apply", "doctor", "uninstall"):
-            self.assertNotIn(command, help_result.stdout)
+        for command in ("models set-family", "agents set-model", "config recover"):
+            self.assertIn(command, help_result.stdout)
+        for command in ("config apply", "doctor", "install", "uninstall"):
+            self.assertNotRegex(help_result.stdout, rf"\b{command}\b")
         version = self.query("--version")
         self.assertEqual(0, version.returncode)
         self.assertIn("olympus v0.4.9", version.stdout)

@@ -1,11 +1,11 @@
 # Contrato propuesto de CLI
 
-**Estado vigente (2026-10-14)**: A **SHIPPED** con PR #69 en master `b7f8404`; B **READY_FOR_TASKS** contractual por tres decisiones aprobadas, sin implementación; C y feature completa **BLOCKED**; macOS **NOT VERIFIED**. Evidencia histórica A/R49 y gate B en [research.md](../research.md). La revisión no cambia comandos A ni alcance C, no habilita apply/escrituras B ni declara implementado el lock. B sólo podrá escribir tras la validación enfocada Windows/Linux.
+**Estado vigente (2026-10-16)**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C y feature completa **BLOCKED**; macOS **NOT VERIFIED**. El acceptance de B cubre los comandos de edición de fuente/recovery con sus límites; no habilita `config apply` ni elimina la necesidad de autorización del operador sobre fuentes reales. Evidencia en [tasks.md](../tasks.md).
 
 ## Entrada, contexto y soporte
 
 - Inicial: `python -B -m olympus` desde el checkout confiable. Final: `olympus` mediante launcher anclado a ese checkout en PATH; Python >=3.11 explícito y sin escribir caches.
-- Linux A: launcher y contrato entregados con PR #69; la observación del run anterior que usó `chmod` y su pendiente de entonces se conservan como historia en research.md. Esta revisión no reacredita CI ni altera A. Linux B requiere validación propia; macOS NOT VERIFIED.
+- Linux A: launcher y contrato entregados con PR #69; la observación del run anterior que usó `chmod` y su pendiente de entonces se conservan como historia en research.md. Esta reconciliación no cambia A. Linux B está acreditada por T020; macOS NOT VERIFIED.
 - `--source <absolute-path>` es opción global anterior al subcomando; default de launcher es su checkout. No buscar automáticamente otro Core en el proyecto destino. Error si origen no existe, no contiene fuentes/renderer o es ambiguo.
 - Proyecto: `--scope project --target <absolute-worktree-root>`. Global: `--scope global`, usando resolución segura del motor, sin interpretar un target de proyecto como destino global. Para contexto de override global, identificarlo explícitamente sin modificarlo.
 - `--harness opencode|codex|all` selecciona representación/operación cuando aplique. Listado incluye ambos; check default all; mutaciones instaladas no usan un default silencioso.
@@ -49,7 +49,7 @@ Familias/roles de fuente. Esfuerzo inicial extraído del conjunto de esfuerzos p
 - Coherencia y ownership acreditados permiten éxito; rollback confirmado de un cambio fallido sigue siendo fallo operacional/exit 1, no éxito de edición. Conflicto confirmado produce blocked/exit 3; efectos parciales o resultado no acreditado producen unconfirmed/exit 4 con recursos/estado concretos. Ningún resultado parcial se presenta como aplicado.
 - Se excluyen protección absoluta contra procesos externos no cooperantes, atomicidad multiarquivo visible a lectores y durabilidad absoluta ante pérdida de energía. No hay sobrescritura automática de modificaciones externas; el hash previo a os.replace no es compare-and-swap. Estas exclusiones no habilitan ignorar conflictos detectados.
 
-La liberación por terminación abrupta y la identidad/cleanup del lock deben verificarse en ambas plataformas antes de habilitar escrituras. La documentación y el PASS previo de una primitiva Windows no prueban la implementación. El protocolo integrado y su liberación en Windows/Linux siguen **NOT RUN**. Mantener un único scratch y registro, sin servicios ni segundo mapping.
+T019 Windows y T020 Linux acreditaron la selección integrada y el protocolo lock/recovery en ambas plataformas antes de aceptar B. Windows omitió tres fixtures symlink por `WinError 1314`; Linux pasó los tres. Fuente T020: commit `539976812d14289696dbd3824f1ae706ac2f1947`, run [38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366), job [116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025). Mantener un único scratch y registro, sin servicios ni segundo mapping; la evidencia no amplía garantías de FR-012 ni cualifica macOS.
 
 ## Salida y códigos
 

@@ -123,9 +123,40 @@ python3.11 -B -m olympus config check --json
 python3.11 -B -m olympus status --scope project --target "<absolute-Git-worktree-root>" --json
 ```
 
-Queries preserve files and resolve all twelve roles through Core and the existing renderer. `config check` checks source/output consistency; `status` reads reported installation metadata and leaves integrity, ownership and installed assignments **unverified/unknown**. Global status is blocked without discovery. Editing and installed operations are unavailable through this CLI.
+Queries preserve files and resolve all twelve roles through Core and the existing renderer. `config check` checks source/output consistency; `status` reads reported installation metadata and leaves integrity, ownership and installed assignments **unverified/unknown**. Global status is blocked without discovery. Slice A remains read-only; Slice B adds explicit source-model editing below. Installed operations remain unavailable.
 
-Windows Python and native `.cmd` smoke passed. Linux hosted run [38644271501](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38644271501/job/116127153113) passed for PR #69; that run prepared the launcher with `chmod`, so the updated workflow still needs final CI to verify the Git-tracked executable bit without preparation. macOS **NOT VERIFIED**. See the [Slice A quickstart](specs/001-portable-olympus-cli/quickstart.md) for checkout-bound launchers, interpreter selection, human/JSON results and exit codes. The CLI does not call models or install dependencies.
+Windows Python and native `.cmd` smoke passed. Linux hosted run [38644271501](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38644271501/job/116127153113) passed for PR #69; it used `chmod` and therefore did not establish the launcher's original mode in the checkout. Final GitHub Actions Linux run [38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025) verified that `scripts/olympus` was executable before and after the tests without running `chmod`, and Git reported a clean checkout with `core.filemode=true`. Slice A is **SHIPPED** and Slice B is **ACCEPTED**. macOS **NOT VERIFIED**. See the [Slice A quickstart](specs/001-portable-olympus-cli/quickstart.md) for checkout-bound launchers, interpreter selection, human/JSON results and exit codes. The CLI does not call models or install dependencies.
+
+## Source model editing CLI (Slice B)
+
+Slice B edits the canonical `olympus/core/models.toml` in a trusted source checkout and only the existing outputs that the renderer calculates as changed. It does **not** apply edits to OpenCode/Codex installations or their manifests. Python 3.11+ is required. TOML Kit 0.13.3 is an optional, explicitly prepared dependency for B previews and edits; Slice A and `config recover` use only the standard library. The CLI never installs dependencies automatically.
+
+The baseline family IDs are Sol (`openai/gpt-6.1-sol` / `gpt-6.1-sol`) and Luna (`openai/gpt-6-luna` / `gpt-6-luna`) for OpenCode/Codex respectively. These are local configuration values, not evidence of provider availability or authentication.
+
+Activate the environment where you explicitly prepared TOML Kit as shown in the [quickstart](specs/001-portable-olympus-cli/quickstart.md); B examples below use that environment's `python`. Preview examples (no source writes):
+
+```text
+python -B -m olympus models set-family sol --opencode openai/gpt-6.1-sol-example --codex gpt-6.1-sol-example --dry-run --json
+python -B -m olympus agents set-model veyra --family luna --effort high --dry-run
+```
+
+An explicit edit omits `--dry-run`. Use a disposable copy or an otherwise explicitly authorized source checkout; do not point these examples at an installation. For PowerShell, set `$source` to that existing copy:
+
+```powershell
+$source = 'C:\Temp\olympus-source-fixture'
+python -B -m olympus --source $source models set-family sol --opencode openai/gpt-6.1-sol-example --codex gpt-6.1-sol-example
+python -B -m olympus --source $source agents set-model veyra --family luna --effort high
+```
+
+On Linux, set the same variable to an absolute disposable-checkout path and use `--source "$source"`. From the checkout, the preview commands above work on either platform. `config recover` is a separate, explicit operation for a pending source-edit batch, not an undo/retry command:
+
+```text
+python -B -m olympus --source /absolute/path/to/source-checkout config recover
+```
+
+The empty `.olympus-cli-edit.lock` is a stable cooperative lock and is deliberately retained after cleanup. `.olympus-cli-edit/` is the operation scratch; if pending, further edits block until explicit recovery validates the record and resources. The lock coordinates only cooperating Olympus operations: it does not exclude non-cooperating writers, promise atomic visibility across multiple files, or guarantee durability after power loss. Conflicts are blocked rather than overwritten. Source edits do not propagate to installed files; `config apply` (Slice C) is not implemented.
+
+Slice B acceptance is accredited on Windows and Linux for Python 3.11: Windows T019 reported 55 PASS and 3 SKIPPED because Windows could not create the symlink fixtures (`WinError 1314`); those three paths passed in the Linux run. Linux T020 ran 58 tests, all PASS, with no skips, on commit [`5399768`](https://github.com/Edulynch/OpenCode-OlympusAgents/commit/539976812d14289696dbd3824f1ae706ac2f1947), [run 38857503366 / job 116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025). macOS **NOT VERIFIED**. Slice C and the complete feature remain **BLOCKED**. See the [Slice B quickstart](specs/001-portable-olympus-cli/quickstart.md) for environment setup, recovery details and platform evidence.
 
 ## 💬 Start Building
 

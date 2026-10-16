@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-portable-olympus-cli` (rama preexistente; esta sesión no crea ni cambia ramas)  
 **Created**: 2026-10-14  
-**Status**: Slice A SHIPPED; Slice B READY_FOR_TASKS contractual, sin implementación; Slice C y feature completa BLOCKED\
+**Status**: Slice A SHIPPED; Slice B **ACEPTADA** (T019 Windows, T020 Linux, G2 PASS); Slice C y feature completa **BLOCKED**; macOS **NOT VERIFIED**.
 **Documentation Mode**: New  
 **Baseline**: `master` con Slice A integrada por PR [#69](https://github.com/Edulynch/OpenCode-OlympusAgents/pull/69), commit `b7f8404061847a58d5e8122e4baa2fa643b69a46`. Baseline histórico: post-PR #68 `1900da45250ddec817a6141396e0ec1268b2dfca`; producto v0.4.9 `c30a19dd410b1815f4591b204615cae0dd9e9a5f`.\
 **Restricciones de especificación inicial (históricas)**: Sólo especificación; sin implementación, planes, tareas, commits, push ni pruebas pesadas. Conservar fuentes, renderer, roles, diferencias de adaptadores y protecciones de instalación. Windows/Linux como objetivos; macOS sin cualificación acreditada. Excluir #66 y #67.\
@@ -10,9 +10,15 @@
 
 **Input**: Especificar `001-portable-olympus-cli`, primera nueva funcionalidad bajo Spec Kit, a partir del issue #64 y la constitución 1.0.0: consultar, configurar y aplicar asignaciones de modelos y agentes reutilizando la arquitectura existente.
 
+## Reconciliación vigente de implementación — Slice B (2026-10-16)
+
+T019 y T020 quedaron reconciliadas como PASS; G2 acredita la aceptación integrada de B en Windows y Linux. T019 Windows: 55 PASS, 0 FAIL, 0 ERROR, 3 SKIPPED por `WinError 1314` al crear fixtures symlink; los skips no cuentan como PASS Windows. T020 Linux hosted: 58 PASS, 0 FAIL, 0 SKIPPED, 37.350 s, exit 0, Ubuntu 24.04, CPython 3.11.17 y TOML Kit 0.13.3. Fuente exacta: commit `539976812d14289696dbd3824f1ae706ac2f1947`, PR Draft #70; run [38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366), job [116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025). Los tres escenarios symlink omitidos en Windows pasaron en Linux. El run cubrió la selección integrada, incluyendo snapshots, independencia A, rollback/recovery, conflictos y 15 límites; confirmó checkout fuente sin cambios. FAST Windows y CodeQL también pasaron.
+
+Esta aceptación documenta edición explícita de fuentes en B, no autorización permanente para escribir fuentes reales ni aplicación instalada. A permanece SHIPPED y sin cambios; `config apply`, Slice C y la feature completa siguen BLOCKED. Los límites cooperantes, atomicidad multiarquivo, durabilidad y macOS NOT VERIFIED permanecen vigentes. Los registros de diseño/planificación anteriores conservan su fecha y significado histórico; la reconciliación actual de tareas está en [tasks.md](tasks.md).
+
 ## Actualización contractual aprobada — Slice B (2026-10-14)
 
-El usuario aprobó las tres decisiones posteriores al feasibility gate: alfabeto inicial de IDs, ajuste explícito de FR-012 a escritores cooperantes y exclusión nativa `msvcrt.locking`/`fcntl.flock`. Esta revisión sólo actualiza estos cinco documentos; no implementa, instala dependencias ni genera tareas. A está SHIPPED por PR #69, sin cambios de comportamiento. C y la feature completa siguen BLOCKED. READY_FOR_TASKS de B habilita preparar tareas; ninguna escritura B queda habilitada hasta completar la validación de implementación Windows/Linux.
+El usuario aprobó las tres decisiones posteriores al feasibility gate: alfabeto inicial de IDs, ajuste explícito de FR-012 a escritores cooperantes y exclusión nativa `msvcrt.locking`/`fcntl.flock`. En aquella revisión (2026-10-14), se actualizaron sólo estos cinco documentos, sin implementar, instalar dependencias ni generar tareas; entonces A estaba SHIPPED y C/global seguían BLOCKED. READY_FOR_TASKS habilitaba preparar tareas, no escrituras B hasta validar Windows/Linux. Ese estado contractual histórico quedó supersedido por la reconciliación de ejecución vigente al comienzo de este archivo.
 
 El historial y los experimentos previos PASS se conservan en [research.md](research.md); no se repiten aquí. El protocolo y la identidad estable del lock se definen en [data-model.md](data-model.md). El renderer permanece sin modificaciones.
 
@@ -242,7 +248,7 @@ No agregar tier ni imponer FULL/RUNTIME rutinarios. Mantener una sesión Olympus
 
 ## Verificación vigente de Slice B
 
-La consistencia de estos contratos se revisa documentalmente. Los experimentos PASS del gate y su alcance están en [research.md](research.md). Toda aceptación de implementación B sigue NOT RUN: exclusión nativa entre edit/recover, liberación por terminación abrupta Windows/Linux, identidad estable sin unlink/recreate cooperante, recuperación repetible, hashes/read-set conflictivos y snapshots sin mutaciones ajenas. La estrategia enfocada está en [plan.md](plan.md); estos pendientes pueden convertirse en tareas previas a habilitar escrituras. No se generan tareas en esta revisión.
+El párrafo y los criterios históricos de planificación anteriores describían la fase preimplementación. La selección integrada final verificó en T019/T020 las rutas de edición/recovery, lock nativo, snapshots y conflictos en Windows/Linux; su fuente y límites están reconciliados en [tasks.md](tasks.md). G2 PASS no amplía Slice B a aplicación instalada ni cambia las exclusiones de FR-012.
 
 ## Assumptions
 

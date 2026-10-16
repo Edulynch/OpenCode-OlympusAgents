@@ -1,6 +1,6 @@
 # Data model: estado temporal de edición de fuentes
 
-**Estado vigente (2026-10-14)**: B READY_FOR_TASKS contractual, decisiones aprobadas; implementación y validación integrada NOT RUN. A SHIPPED; C y feature completa BLOCKED. Recuperación acotada de una edición, sin API transaccional ni schemas de modelos/manifests alternativos. Historial del diseño anterior y experimentos: [research.md](research.md).
+**Estado vigente (2026-10-16)**: B ACEPTADA por T019 Windows + T020 Linux, G2 PASS; A SHIPPED; C y feature completa BLOCKED; macOS NOT VERIFIED. El protocolo documentado fue validado en la selección integrada sin ampliar sus garantías cooperantes. Recuperación acotada de una edición, sin API transaccional ni schemas de modelos/manifests alternativos. Historial del diseño anterior y experimentos: [research.md](research.md) y [tasks.md](tasks.md).
 
 ## Datos en memoria
 
@@ -10,7 +10,7 @@
 - **Batch fijo**: path relativo, bytes/hashes old/new y modo previo; sólo `models.toml` y outputs existentes que realmente cambian. No altas/bajas, recursos instalados ni paths arbitrarios. No-op de edición sobre estado válido y sin scratch pendiente no crea lock/scratch.
 - **Read-set**: hashes de entradas renderer, inventario relevante y outputs actuales. Un cambio observable invalida el candidato; durante recovery los write targets sólo admiten los hashes old/new registrados, mientras entradas ajenas al write-set deben coincidir con el snapshot.
 
-## Lock nativo estable — protocolo propuesto
+## Lock nativo estable — protocolo de Slice B
 
 El origen canónico usa exactamente `source_root/.olympus-cli-edit.lock`, fuera del único scratch `source_root/.olympus-cli-edit/`. El archivo de lock es vacío y permanente: no contiene estado, modelos, PID ni segundo registro. La presencia del archivo no significa operación pendiente o dueño activo. Después de una operación puede permanecer como único artefacto de control; las consultas nunca lo crean ni modifican y no lo confunden con drift o scratch pendiente.
 
@@ -68,4 +68,4 @@ Hash old/new acredita pertenencia al estado del intento dentro del contrato loca
 
 B no modifica manifests ni destinos instalados y no reutiliza este registro como ownership de C. El schema de personalización instalada sigue no adoptado; C BLOCKED sin cambios de alcance.
 
-FR-012 excluye protección absoluta frente a procesos no cooperantes, atomicidad multiarquivo visible para lectores concurrentes y durabilidad absoluta ante pérdida de energía. No permite sobrescritura automática de trabajo externo ni éxito parcial. La primitiva Windows tuvo PASS experimental; implementación integrada, archivo vacío/identidad/cleanup y liberación abrupta en **Windows y Linux** siguen NOT RUN y deben pasar antes de habilitar escrituras. No resolver fallos añadiendo servicio, SQLite, polling permanente, gestores transaccionales o agentes.
+FR-012 excluye protección absoluta frente a procesos no cooperantes, atomicidad multiarquivo visible para lectores concurrentes y durabilidad absoluta ante pérdida de energía. No permite sobrescritura automática de trabajo externo ni éxito parcial. T019/T020 acreditan el protocolo integrado, lock vacío/identidad/recovery en Windows/Linux; tres fixtures symlink omitidos en Windows (`WinError 1314`) pasaron en Linux. La evidencia exacta es T019/T020 en [tasks.md](tasks.md) y el run T020 [38857503366 / job 116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025). No resolver fallos añadiendo servicio, SQLite, polling permanente, gestores transaccionales o agentes. macOS sigue NOT VERIFIED.

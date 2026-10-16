@@ -1,6 +1,6 @@
 # Research: feasibility gate y decisiones
 
-**Fecha**: 2026-10-14. **Baseline vigente**: master con PR #69, `b7f8404061847a58d5e8122e4baa2fa643b69a46`. **Estado vigente**: A SHIPPED; B READY_FOR_TASKS contractual; C y global BLOCKED; macOS NOT VERIFIED. La investigación inicial sobre v0.4.9, T001/R49 y el cierre preintegración A se conservan debajo como historia. Esta revisión sólo documenta decisiones B aprobadas; implementación/validación integrada NOT RUN, sin repetir experimentos ni acceder al entorno R49 retenido.
+**Fecha del diseño**: 2026-10-14. **Baseline de diseño**: master con PR #69, `b7f8404061847a58d5e8122e4baa2fa643b69a46`. **Estado actual (2026-10-16)**: A SHIPPED; B ACEPTADA (T019 Windows, T020 Linux, G2 PASS); C y feature completa BLOCKED; macOS NOT VERIFIED. La investigación v0.4.9, T001/R49 y el cierre preintegración A se conservan como historia; no se volvió a acceder al entorno R49 retenido.
 
 ## Evidencia del gate
 
@@ -172,7 +172,7 @@ Fuentes primarias del diseño, ya consultadas en el gate previo: [msvcrt.locking
 - FR-012 anterior: «Fuente y generación DEBEN dar un resultado coherente o recuperar el estado previo de los recursos propios ante fallo, sin éxito parcial, pérdida de trabajo externo ni sobrescritura concurrente. Un impedimento externo de recuperación debe declararse bloqueado con estado real.» Su formulación universal se ajusta por aprobación explícita; no se debilita silenciosamente.
 - Diseño anterior: `.olympus-cli-edit/` exclusivo actuaba como lock; registro sin identidad nativa y requerimiento de acreditar proceso terminal sin mecanismo adoptado. Scratch sigue único, pero ahora sólo guarda el intento; la exclusión vive en descriptor del archivo estable externo al scratch. No usar registro B para C.
 
-## Gate vigente y validación de implementación pendiente
+## Gate previo a implementación (histórico, 2026-10-14)
 
 **A SHIPPED**, sin cambios de comportamiento. **B READY_FOR_TASKS**: IDs, exclusión y recovery tienen contratos coherentes aprobados; verificaciones restantes se ordenarán como trabajo previo a habilitar escrituras. **C BLOCKED** y **feature completa BLOCKED** sin cambios de alcance. macOS NOT VERIFIED.
 
@@ -181,3 +181,9 @@ Implementación NOT RUN: coincidencia completa y rechazo sin artefactos; import 
 La revisión documental debe comprobar correspondencia spec/plan/model/CLI, historia versus estado vigente, referencias, alcance de cinco archivos y ausencia de cambios a tasks/código/configuraciones. Un pendiente de implementación que falle mantiene bloqueado el gate de escrituras, sin falsear READY_FOR_TASKS ni añadir un engine para aparentar más garantías. Esta sesión no instala dependencias, accede a R49 retenido, repite experimentos ni ejecuta FULL/RUNTIME; no crea ramas ni commit/push/PR.
 
 **Revisión documental ejecutada: PASS.** Correspondencia de IDs/FR-012/lock/recovery y estados vigentes revisada; referencias locales nuevas resuelven; `git diff --check` pasa. Sólo cambian los cinco documentos permitidos; los otros 357 archivos del inventario inicial conservan SHA-256, incluidos tasks.md, código, Core, outputs y evidencia R49 del repositorio. Historias A/C y requisitos funcionales distintos de FR-009/FR-012 permanecen iguales. Esta evidencia es documental; no acredita implementación ni sustituye los checks Windows/Linux NOT RUN.
+
+## Reconciliación de ejecución B (2026-10-16)
+
+La aceptación integrada T019/T020 completó G2 en Windows/Linux. Windows T019: 55 PASS, 0 FAIL, 0 ERROR y 3 SKIPPED (`WinError 1314` al crear symlink); los casos omitidos no se cuentan como PASS Windows. Linux T020: 58 PASS, 0 FAIL, 0 SKIPPED en 37.350 s, exit 0, sobre Ubuntu 24.04 / CPython 3.11.17 con TOML Kit 0.13.3. Los tres casos symlink pasaron en Linux. Fuente: commit `539976812d14289696dbd3824f1ae706ac2f1947`, PR Draft #70, run [38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366), job [116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025). El registro de [tasks.md](tasks.md) conserva resultados, checks FAST Windows/CodeQL y validación de identidad.
+
+Este gate acredita la selección de edición de fuente y recovery; no acredita Slice C ni aplicación a instalaciones. A permanece SHIPPED, C y la feature completa BLOCKED, macOS NOT VERIFIED. Se mantienen los límites FR-012: sólo coordinación cooperante, sin atomicidad visible multiarquivo ni durabilidad absoluta ante pérdida eléctrica.

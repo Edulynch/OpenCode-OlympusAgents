@@ -1,10 +1,10 @@
-# Slice A: CLI Olympus de sólo lectura
+# CLI portátil Olympus — quickstart (Slices A y B)
 
-**Slice A implementada; estado actual READY_FOR_FINAL_CI.** Windows está validado y el run Linux hosted de PR #69 pasó; ese run preparó el launcher con `chmod`, por lo que el CI final debe comprobar el permiso que conserva Git sin modificarlo. [Estado y evidencia](tasks.md). R49 conserva PASS y no se repitió. Esta guía describe exclusivamente los comandos disponibles de A; B sigue condicionada, C bloqueada y macOS NOT VERIFIED.
+**Estado vigente**: Slice A **SHIPPED**; Slice B **ACEPTADA** tras T019 Windows y T020 Linux (G2 PASS). Slice C y la feature completa **BLOCKED**; macOS **NOT VERIFIED**. La evidencia de B no habilita escrituras sobre una fuente real sin autorización del operador. [Estado y evidencia](tasks.md).
 
 ## Requisitos y contexto
 
-Python **3.11+ real**, sólo biblioteca estándar. No TOML Kit ni instalación automática de dependencias. El intérprete Windows validado fue Python 3.11.17; usa un intérprete real, no un alias Microsoft Store.
+Python **3.11+ real**. Slice A usa sólo biblioteca estándar y no carga TOML Kit. Slice B requiere TOML Kit 0.13.3, opcional y sólo para preview/edición; se prepara explícitamente en el entorno elegido. `config recover` sigue siendo stdlib-only. No hay instalación automática. El intérprete Windows validado fue Python 3.11.17; usa un intérprete real, no un alias Microsoft Store.
 
 Se necesita un checkout confiable de Olympus con fuentes y renderer. La CLI carga el renderer de ese origen; no ejecuta código encontrado en el destino. No requiere OpenCode/Codex, WSL, Docker, Node ni credenciales.
 
@@ -69,7 +69,7 @@ cd "$target_project"
 "$source_checkout/scripts/olympus" status --scope project --target "$target_project" --json
 ```
 
-El run hosted de PR #69 pasó la suite, pero usó `chmod` antes de las consultas; no demuestra por sí solo que el permiso sobreviva intacto al checkout. El workflow actualizado lo verifica sin `chmod`; su ejecución final queda pendiente. El launcher permanece ligado al checkout; no se ofrece distribución standalone ni instalación sin clonar.
+El run hosted de PR #69 pasó la suite, pero usó `chmod` antes de las consultas; no acredita el modo original del checkout. En el run final de GitHub Actions Linux [38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025), `scripts/olympus` se comprobó ejecutable antes y después de las pruebas sin ejecutar `chmod`, y el control de Git confirmó un checkout limpio con `core.filemode=true`. El launcher permanece ligado al checkout; no se ofrece distribución standalone ni instalación sin clonar.
 
 ## Salidas y límites
 
@@ -119,7 +119,7 @@ Esta consulta global devuelve BLOCKED/exit 3: A no realiza discovery ni consulta
 | 2 | Argumentos/contexto inválidos; comandos no disponibles |
 | 3 | Consulta bloqueada, incluida ubicación global sin discovery |
 
-No hay operación parcial en A que emita exit 4. Las consultas no modifican fuentes, outputs, configuraciones, manifests, permisos ni cachés. Usar -B en entradas Python; los launchers lo imponen. Scratch previo se informa sin reparar. Edición, recuperación y aplicación no se exponen en la ayuda ni se aceptan.
+Slice A no tiene operación parcial que emita exit 4: sus consultas no modifican fuentes, outputs, configuraciones, manifests, permisos ni cachés. Usar -B en entradas Python; los launchers lo imponen. Scratch previo se informa sin reparar. A sigue read-only; sus comandos no aceptan mutaciones. La edición/recovery de Slice B se documenta aparte abajo y `config apply` de Slice C no está disponible.
 
 ## Evidencia enfocada y plataformas
 
@@ -134,7 +134,96 @@ La suite existente prepara fixtures antes de cada snapshot; compara inventarios,
 | Windows, Python 3.11.17, módulo y .cmd nativo desde cwd externo; espacios/ñ, JSON, exits y cero mutaciones | PASS: 19 casos, 1 POSIX omitido, exit 0 |
 | Sintaxis POSIX revisada con Git Bash en Windows | PASS sólo de sintaxis; no evidencia Linux |
 | Linux hosted, Python 3.11 y launcher ejecutado directamente | PASS en [run 38644271501](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38644271501/job/116127153113): 20 casos, 19 PASS, 1 Windows omitido, exit 0; usó `chmod`, así que no valida el bit preservado por checkout |
-| Checkout Git con modo ejecutable 100755, sin preparación de permisos | PENDING final CI: workflow actualizado mantiene `test -x` antes/después y compara el estado con `core.filemode=true` |
+| Checkout Git con modo ejecutable 100755, sin preparación de permisos | PASS en GitHub Actions Linux [run 38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025): `test -x scripts/olympus` antes y después de las pruebas, sin ejecutar `chmod`; checkout limpio según el control de Git con `core.filemode=true` |
 | macOS | NOT VERIFIED |
 
-No se ejecutaron FAST/FULL/RUNTIME ni se repitió R49. Slice A está READY_FOR_FINAL_CI; B sigue condicionada, C fuera del alcance de A y macOS NOT VERIFIED. [Plan](plan.md), [research](research.md) y [contrato](contracts/cli.md) conservan el diseño de las tres slices; la ejecución actual está en [tasks.md](tasks.md).
+Slice A está **SHIPPED**; los comandos y su evidencia anteriores se conservan sin cambios. No se ejecutaron FULL/RUNTIME ni se repitió R49. La reconciliación de B, C y macOS se detalla a continuación y en [tasks.md](tasks.md).
+
+## Slice B — edición explícita de modelos en la fuente
+
+Las familias iniciales son Sol (`openai/gpt-6.1-sol` en OpenCode; `gpt-6.1-sol` en Codex) y Luna (`openai/gpt-6-luna`; `gpt-6-luna`). Los identificadores son intención local: la CLI no consulta proveedores ni verifica disponibilidad/autenticación.
+
+### Preparación opcional de TOML Kit
+
+La edición/preview necesita `tomlkit==0.13.3`; no se instala automáticamente ni afecta a Slice A. Ejecuta ambos ejemplos siguientes desde la raíz del checkout confiable de OlympusAgents; crean un entorno fuera del checkout y usan su intérprete para `pip install -r requirements-cli.txt`.
+
+```sh
+python3.11 -m venv /absolute/path/to/olympus-cli-venv
+/absolute/path/to/olympus-cli-venv/bin/python -m pip install -r requirements-cli.txt
+```
+
+En Windows PowerShell, la variante nativa es:
+
+```powershell
+python3.11 -m venv "$env:TEMP\olympus-cli-venv"
+& "$env:TEMP\olympus-cli-venv\Scripts\python.exe" -m pip install -r requirements-cli.txt
+```
+
+Usa después ese mismo Python 3.11+ para los comandos B. La recuperación no necesita TOML Kit.
+
+Define el ejecutable del entorno preparado para los siguientes ejemplos:
+
+```powershell
+$python = "$env:TEMP\olympus-cli-venv\Scripts\python.exe"
+```
+
+```sh
+PYTHON=/absolute/path/to/olympus-cli-venv/bin/python
+```
+
+### Previews sin escritura
+
+Desde el checkout confiable:
+
+```powershell
+& $python -B -m olympus models set-family sol --opencode openai/gpt-6.1-sol-example --codex gpt-6.1-sol-example --dry-run --json
+& $python -B -m olympus agents set-model veyra --family luna --effort high --dry-run
+```
+
+```sh
+"$PYTHON" -B -m olympus models set-family sol --opencode openai/gpt-6.1-sol-example --codex gpt-6.1-sol-example --dry-run --json
+"$PYTHON" -B -m olympus agents set-model veyra --family luna --effort high --dry-run
+```
+
+`models set-family` requiere ambos IDs; `agents set-model` acepta `--family`, `--effort` o ambos. `--json` sólo se permite junto con `--dry-run`. Los previews no crean lock ni scratch.
+
+### Edición explícita en una fuente aislada
+
+La forma de edición es la misma orden sin `--dry-run`. Para evitar cambios accidentales, prepara primero un checkout/copia descartable con Core y renderer válidos y apunta `--source` a su ruta absoluta. No ejecutes ejemplos de edición contra una instalación ni sobre modelos/outputs personales:
+
+```powershell
+$source = 'C:\Temp\olympus-source-fixture' # copia aislada ya preparada
+& $python -B -m olympus --source $source models set-family sol --opencode openai/gpt-6.1-sol-example --codex gpt-6.1-sol-example
+& $python -B -m olympus --source $source agents set-model veyra --family luna --effort high
+```
+
+En Linux, asigna `source` a la ruta absoluta de una copia aislada y usa `--source "$source"` con la misma sintaxis y `"$PYTHON"` como intérprete. La operación muestra el preview antes de escribir. Sólo cambia la intención en `olympus/core/models.toml` y los outputs existentes que realmente cambian según el renderer; no modifica manifests ni despliega los cambios a instalaciones. `config apply` pertenece a Slice C y sigue **BLOCKED/no disponible**.
+
+### Lock estable, scratch y recuperación explícita
+
+- `.olympus-cli-edit.lock` es un archivo vacío y estable que se conserva tras cleanup; no lo borres ni recrees para “liberar” una operación. Su existencia por sí sola no indica que haya un batch pendiente.
+- `.olympus-cli-edit/` contiene el scratch/registro PREPARED o COMMITTED. Si existe scratch pendiente, las nuevas ediciones bloquean incluso con el lock libre; no hay reparación, reanudación ni retry automático.
+- Sólo si hay un batch pendiente, solicita recovery explícita contra el mismo origen confiable. Recovery abre un lock existente y valida identidad, registro, hashes, read-set y backups antes de restaurar o limpiar:
+
+```powershell
+& $python -B -m olympus --source 'C:\Path\to\source-checkout' config recover
+```
+
+```sh
+"$PYTHON" -B -m olympus --source /absolute/path/to/source-checkout config recover
+```
+
+Recovery no instala TOML Kit. Lock ausente/inseguro/ocupado, identidad divergente, terceros cambios, target ausente o backup inválido bloquean y preservan evidencia; no fuerces ni elimines scratch manualmente.
+
+El protocolo coordina operaciones Olympus cooperantes y bloquea conflictos observables. No garantiza exclusión frente a escritores no cooperantes, atomicidad visible de varios archivos ni durabilidad absoluta ante pérdida eléctrica; una carrera posterior al último hash queda fuera de la garantía. Estos límites no autorizan a ignorar conflictos detectados.
+
+### Evidencia y plataforma
+
+| Gate | Resultado reconciliado |
+|---|---|
+| Windows, T019, CPython 3.11.17 | 55 PASS, 0 FAIL, 0 ERROR, 3 SKIPPED; exit 0. Los tres casos omitidos crean symlinks y Windows devolvió `WinError 1314`; no se cuentan como PASS Windows. |
+| Linux hosted, T020, Ubuntu 24.04 / CPython 3.11.17 / TOML Kit 0.13.3 | 58 PASS, 0 FAIL, 0 SKIPPED; 37.350 s, exit 0. Los tres escenarios de symlink pasaron. Fuente: commit `539976812d14289696dbd3824f1ae706ac2f1947`, run [38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366), job [116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025). |
+| G2 / Slice B | **PASS Windows/Linux**. La prueba verificó snapshots, independencia de A, rollback/recovery, conflictos y los 15 límites del write-set. El checkout fuente quedó sin cambios. |
+| macOS | **NOT VERIFIED**. |
+
+FAST Windows y CodeQL también pasaron en el PR Draft #70. No se ejecutaron pruebas durante esta reconciliación. La aceptación B no es implementación/aceptación de Slice C: C y la feature completa siguen **BLOCKED**.

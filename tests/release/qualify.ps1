@@ -86,8 +86,14 @@ function New-SourceArchive([string]$sourceRoot, [string]$tag, [string]$archivePa
     $pack = Join-Path $run ('package-' + [guid]::NewGuid().ToString('N'))
     $top = Join-Path $pack "OpenCode-OlympusAgents-$tag"
     [IO.Directory]::CreateDirectory($top) | Out-Null
-    $files = @(& git -C $sourceRoot ls-files --cached --others --exclude-standard)
+    # Keep the local archive fixture hermetic: unrelated user untracked files
+    # are not release source. Include the one in-scope new document explicitly.
+    $files = @(& git -C $sourceRoot ls-files --cached)
     if ($LASTEXITCODE -ne 0 -or $files.Count -eq 0) { throw 'GIT_FIXTURE_SOURCE_INVENTORY_FAIL' }
+    $installationGuide = 'docs/INSTALLATION.md'
+    if ((Test-Path -LiteralPath (Join-Path $sourceRoot $installationGuide) -PathType Leaf) -and $installationGuide -notin $files) {
+        $files += $installationGuide
+    }
     foreach ($relative in $files) {
         $sourceFile = Join-Path $sourceRoot $relative
         $destination = Join-Path $top $relative
@@ -177,6 +183,7 @@ try {
     $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1',$script:CandidateVersion,'v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
     if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
         Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
+        Check 'R0_TARGET_IDENTITY_V0410' ($script:CandidateVersion -ceq 'v0.4.10')
         Check 'R0_STABLE_CANDIDATE_VERSION' ($script:CandidateVersion -match '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$')
         Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
         Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
@@ -382,13 +389,17 @@ try {
     }
     Check 'R25_PUBLIC_WRAPPER_TAGGED_SOURCES_AND_ARGUMENTS' ($wrapperIssues.Count -eq 0) ($wrapperIssues -join ', ')
 
-    function Test-UnifiedEntrypointSource([string]$Content, [string]$Tag, [string]$Action) {
-        $expectedLauncher = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' +
-            $Tag + '/scripts/launch-latest.ps1'
-        $urls = [regex]::Matches($Content,
-            'https://raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/[^\s]+?\.ps1')
-        return ($urls.Count -eq 1 -and $urls[0].Value -ceq $expectedLauncher -and
-            $Content.Contains("Invoke-WebRequest -Uri '$expectedLauncher' -OutFile " + '$ownedLauncher' + " -ErrorAction Stop") -and
+    function Test-UnifiedEntrypointSource([string]$Content, [string]$Action) {
+        return ($Content.Contains('$launcherUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/scripts/launch-latest.ps1"') -and
+            $Content.Contains('https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest') -and
+            $Content.Contains("Assert-BootstrapReleaseBoolean `$release 'immutable' `$true") -and
+            $Content.Contains('LATEST_RELEASE_MUTABLE') -and
+            $Content.Contains('LATEST_RELEASE_IDENTITY_MISMATCH') -and
+            $Content.Contains('LAUNCHER_BOOTSTRAP_CONTRACT_MISSING') -and
+            $Content.Contains('no older launcher fallback is attempted') -and
+            -not $Content.Contains('/v0.4.9/scripts/launch-latest.ps1') -and
+            -not $Content.Contains('/master/scripts/launch-latest.ps1') -and
+            $Content.Contains('Invoke-WebRequest -Uri $launcherUrl -OutFile $ownedLauncher -Headers $headers -ErrorAction Stop') -and
             [regex]::IsMatch($Content, "(?m)^\s*'-Action',\s*'$([regex]::Escape($Action))',\s*$") -and
             $Content.Contains("'-Harness', `$selectedHarness,") -and
             $Content.Contains("'-Target', [IO.Path]::GetFullPath(`$target)"))
@@ -396,17 +407,17 @@ try {
     $unifiedEntrypointIssues = @()
     foreach ($entry in @(@('install-olympus.ps1','install'), @('uninstall-olympus.ps1','uninstall'))) {
         $entryText = [IO.File]::ReadAllText((Join-Path $source $entry[0]))
-        if (-not (Test-UnifiedEntrypointSource $entryText $script:CandidateVersion $entry[1])) {
+        if (-not (Test-UnifiedEntrypointSource $entryText $entry[1])) {
             $unifiedEntrypointIssues += $entry[0]
         }
     }
-    Check 'R25_UNIFIED_ENTRYPOINTS_TAGGED_SOURCE_AND_ACTION' ($unifiedEntrypointIssues.Count -eq 0) ($unifiedEntrypointIssues -join ', ')
+    Check 'R25_UNIFIED_ENTRYPOINTS_IMMUTABLE_BOOTSTRAP_AND_ACTION' ($unifiedEntrypointIssues.Count -eq 0) ($unifiedEntrypointIssues -join ', ')
     $installEntryText = [IO.File]::ReadAllText((Join-Path $source 'install-olympus.ps1'))
     $uninstallEntryText = [IO.File]::ReadAllText((Join-Path $source 'uninstall-olympus.ps1'))
     Check 'R25_UNIFIED_ENTRYPOINT_MUTATIONS_REJECTED' (
-        -not (Test-UnifiedEntrypointSource ($installEntryText.Replace('/' + $script:CandidateVersion + '/scripts/launch-latest.ps1', '/master/scripts/launch-latest.ps1')) $script:CandidateVersion 'install') -and
-        -not (Test-UnifiedEntrypointSource ($installEntryText.Replace("'-Action', 'install',", "'-Action', 'uninstall',")) $script:CandidateVersion 'install') -and
-        -not (Test-UnifiedEntrypointSource ($uninstallEntryText.Replace("'-Action', 'uninstall',", "'-Action', 'install',")) $script:CandidateVersion 'uninstall'))
+        -not (Test-UnifiedEntrypointSource ($installEntryText.Replace('/$tag/scripts/launch-latest.ps1', '/master/scripts/launch-latest.ps1')) 'install') -and
+        -not (Test-UnifiedEntrypointSource ($installEntryText.Replace("'-Action', 'install',", "'-Action', 'uninstall',")) 'install') -and
+        -not (Test-UnifiedEntrypointSource ($uninstallEntryText.Replace("'-Action', 'uninstall',", "'-Action', 'install',")) 'uninstall'))
 
     $sample = [IO.File]::ReadAllText((Join-Path $source 'install/project/codex.ps1'))
     $badMutable = $sample.Replace('/' + $script:CandidateVersion + '/scripts/launch-latest.ps1',
@@ -430,19 +441,15 @@ try {
     $notesEnd = if ($nextRelease.Success) { $notesStart + $script:CandidateHeading.Length + $nextRelease.Index } else { $changelog.Length }
     if ($notesEnd -le $notesStart) { throw "Release-notes section for $($script:CandidateVersion) is unbounded." }
     $releaseNotes = $changelog.Substring($notesStart, $notesEnd - $notesStart)
-    $unifiedInstallCommand = 'pwsh -NoProfile -File ./install-olympus.ps1 -Project -Here -Harness all'
-    $unifiedUninstallCommand = 'pwsh -NoProfile -File ./uninstall-olympus.ps1 -Project -Here -Harness all'
-    $opencodeVerifyCommand = "pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -Scope project -Harness opencode -VerifyOnly"
-    $codexVerifyCommand = "pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -Scope project -Harness codex -VerifyOnly"
-    $allVerifyCommand = "pwsh -NoProfile -File ./install.ps1 -SourceRoot . -Version '$($script:CandidateVersion)' -Target (Get-Location).Path -Scope project -Harness all -VerifyOnly"
+    $installGuideUrl = "https://github.com/Edulynch/OpenCode-OlympusAgents/blob/$($script:CandidateVersion)/docs/INSTALLATION.md"
+    $verifyGuideUrl = "$installGuideUrl#release-selection-and-safety"
     Check 'R25_RELEASE_NOTES_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Installation\s*$' -and
-        $releaseNotes.Contains($unifiedInstallCommand) -and $releaseNotes.Contains($unifiedUninstallCommand))
+        $releaseNotes.Contains($installGuideUrl) -and $releaseNotes -match '(?i)Fast Install' -and
+        $releaseNotes -match '(?i)Fast Uninstall')
     Check 'R25_RELEASE_NOTES_VERIFY_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Verify installation\s*$' -and
-        $releaseNotes.Contains($opencodeVerifyCommand) -and $releaseNotes.Contains($codexVerifyCommand) -and $releaseNotes.Contains($allVerifyCommand))
-    $verifyCommands = @($opencodeVerifyCommand,$codexVerifyCommand,$allVerifyCommand)
-    $unversionedVerifyCommands = @($verifyCommands | Where-Object { -not $_.Contains("-Version '$($script:CandidateVersion)'") -or -not $_.Contains('-SourceRoot .') })
-    Check 'R25_RELEASE_NOTES_COMMANDS_PIN_SAME_TAG' ($unversionedVerifyCommands.Count -eq 0 -and
-        $releaseNotes -notmatch '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/)')
+        $releaseNotes.Contains($verifyGuideUrl) -and $releaseNotes -match '(?i)read-only|VerifyOnly')
+    Check 'R25_RELEASE_NOTES_KEEP_COMMANDS_IN_INSTALL_GUIDE' ($releaseNotes -notmatch '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/)[^\r\n]+?\.ps1' -and
+        $releaseNotes -notmatch '(?i)\b(?:irm|iwr|Invoke-WebRequest)\b[^\r\n]*\.ps1')
     $requiredHighlights = @('Dual Harness Installer','-Harness opencode','-Harness codex','-Harness all',
         'installed_harnesses','additive','legacy OpenCode installations','PowerShell 5.1','PowerShell 7','Olympus Harness Core',
         'VerifyOnly','user-owned','does not claim full parity')
@@ -454,6 +461,178 @@ try {
     $mutableExecutableUrl = '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/(?:master|main|refs/heads/(?:master|main))/[^\s]+?\.ps1|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/(?:master|main)/[^\s]+?\.ps1)'
     Check 'R25_RELEASE_NO_MUTABLE_EXECUTABLE_SOURCE' ($releaseNotes -notmatch $mutableExecutableUrl -and
         $versionText -match 'archive/refs/tags/\$Version\.zip')
+
+    $readme = [IO.File]::ReadAllText((Join-Path $source 'README.md'))
+    $installGuide = [IO.File]::ReadAllText((Join-Path $source 'docs/INSTALLATION.md'))
+    $fastInstallUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/install-olympus.ps1"
+    $fastUninstallUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/uninstall-olympus.ps1"
+    function Get-ReadmePowerShellCodeBlocks([string]$Markdown) {
+        $blocks = [System.Collections.Generic.List[string]]::new()
+        foreach ($block in [regex]::Matches($Markdown, '(?ims)^```(?:powershell|pwsh|ps1)[ \t]*\r?\n(?<body>.*?)^```[ \t]*\r?$')) {
+            $blocks.Add($block.Groups['body'].Value)
+        }
+        return $blocks.ToArray()
+    }
+    function Get-ReadmePowerShellParse([string]$Markdown) {
+        $statements = [System.Collections.Generic.List[object]]::new()
+        $hasParseErrors = $false
+        foreach ($code in @(Get-ReadmePowerShellCodeBlocks $Markdown)) {
+            $tokens = $null
+            $parseErrors = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseInput($code, [ref]$tokens, [ref]$parseErrors)
+            if ($parseErrors.Count -gt 0) { $hasParseErrors = $true }
+            foreach ($statement in $ast.EndBlock.Statements) { $statements.Add($statement) }
+        }
+        return [pscustomobject]@{ Statements = $statements.ToArray(); HasParseErrors = $hasParseErrors }
+    }
+    function Test-ReadmeExpectedBootstrapStatement($Statement, [string]$ExpectedCommand) {
+        $tokens = $null
+        $parseErrors = $null
+        $expectedAst = [System.Management.Automation.Language.Parser]::ParseInput($ExpectedCommand, [ref]$tokens, [ref]$parseErrors)
+        if ($parseErrors.Count -gt 0 -or $expectedAst.EndBlock.Statements.Count -ne 1 -or
+            $Statement -isnot [System.Management.Automation.Language.PipelineAst]) { return $false }
+        $expectedPipeline = $expectedAst.EndBlock.Statements[0]
+        if ($expectedPipeline -isnot [System.Management.Automation.Language.PipelineAst] -or
+            $Statement.Background -or $expectedPipeline.Background -or
+            $Statement.PipelineElements.Count -ne 2 -or $expectedPipeline.PipelineElements.Count -ne 2) { return $false }
+        for ($index = 0; $index -lt 2; $index++) {
+            $actualCommand = $Statement.PipelineElements[$index]
+            $expectedCommandAst = $expectedPipeline.PipelineElements[$index]
+            if ($actualCommand -isnot [System.Management.Automation.Language.CommandAst] -or
+                $expectedCommandAst -isnot [System.Management.Automation.Language.CommandAst] -or
+                $actualCommand.GetCommandName() -cne $expectedCommandAst.GetCommandName() -or
+                $actualCommand.InvocationOperator -ne [System.Management.Automation.Language.TokenKind]::Unknown -or
+                $actualCommand.Redirections.Count -ne 0 -or
+                $actualCommand.CommandElements.Count -ne $expectedCommandAst.CommandElements.Count) { return $false }
+            for ($element = 0; $element -lt $actualCommand.CommandElements.Count; $element++) {
+                $actualValue = $actualCommand.CommandElements[$element]
+                $expectedValue = $expectedCommandAst.CommandElements[$element]
+                if ($actualValue -isnot [System.Management.Automation.Language.StringConstantExpressionAst] -or
+                    $expectedValue -isnot [System.Management.Automation.Language.StringConstantExpressionAst] -or
+                    $actualValue.Value -cne $expectedValue.Value) { return $false }
+            }
+        }
+        return $true
+    }
+    function Get-ReadmeFastSection([string]$Markdown, [string]$Heading) {
+        return [regex]::Match($Markdown,
+            '(?ims)^##[ \t]+' + [regex]::Escape($Heading) + '[ \t]*\r?\n(?<body>.*?)(?=^##[ \t]+|\z)')
+    }
+    function Test-ReadmeFastCommandContract([string]$Markdown, [string]$InstallCommand, [string]$UninstallCommand) {
+        if ([regex]::Matches($Markdown, '(?im)^##[ \t]+Fast Install[ \t]*\r?$').Count -ne 1 -or
+            [regex]::Matches($Markdown, '(?im)^##[ \t]+Fast Uninstall[ \t]*\r?$').Count -ne 1 -or
+            [regex]::Matches($Markdown, '(?im)^##[ \t]+Fast\b[^\r\n]*$').Count -ne 2) {
+            return $false
+        }
+        $installSection = Get-ReadmeFastSection $Markdown 'Fast Install'
+        $uninstallSection = Get-ReadmeFastSection $Markdown 'Fast Uninstall'
+        if (-not $installSection.Success -or -not $uninstallSection.Success) { return $false }
+        $installParsed = Get-ReadmePowerShellParse $installSection.Groups['body'].Value
+        $uninstallParsed = Get-ReadmePowerShellParse $uninstallSection.Groups['body'].Value
+        return (-not $installParsed.HasParseErrors -and -not $uninstallParsed.HasParseErrors -and
+            $installParsed.Statements.Count -eq 1 -and
+            (Test-ReadmeExpectedBootstrapStatement $installParsed.Statements[0] $InstallCommand) -and
+            $uninstallParsed.Statements.Count -eq 1 -and
+            (Test-ReadmeExpectedBootstrapStatement $uninstallParsed.Statements[0] $UninstallCommand) -and
+            [regex]::IsMatch($Markdown, '(?im)\[[^\]]+\]\(docs/INSTALLATION\.md(?:#[^)]+)?\)'))
+    }
+    function Test-ReadmeGlobalInstallerContract([string]$Markdown, [string]$InstallCommand, [string]$UninstallCommand) {
+        $parsed = Get-ReadmePowerShellParse $Markdown
+        if ($parsed.HasParseErrors) { return $false }
+        $remoteNames = '^(?:irm|iwr|curl(?:\.exe)?|wget(?:\.exe)?|invoke-restmethod|invoke-webrequest|iex|invoke-expression)$'
+        $launcherNames = '^(?:pwsh(?:\.exe)?|powershell(?:\.exe)?|start-process)$'
+        $installerPath = '(?i)(?:^|[\\/])(?:install|uninstall)(?:-olympus)?\.ps1$'
+        $installerFileMention = '(?i)(?:install|uninstall)(?:-olympus)?\.ps1\b'
+        $remoteStatements = [System.Collections.Generic.List[object]]::new()
+        $directInstallerFound = $false
+        foreach ($statement in $parsed.Statements) {
+            $commands = @($statement.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true))
+            $hasRemoteCommand = $false
+            foreach ($command in $commands) {
+                $name = [string]$command.GetCommandName()
+                if ($name -match $remoteNames) { $hasRemoteCommand = $true }
+                if (($name -match $launcherNames -and $statement.Extent.Text -match $installerFileMention) -or
+                    $name -match $installerPath) {
+                    $directInstallerFound = $true
+                }
+            }
+            if ($hasRemoteCommand) { $remoteStatements.Add($statement) }
+        }
+        if ($directInstallerFound -or $remoteStatements.Count -ne 2) { return $false }
+        $installCount = 0
+        $uninstallCount = 0
+        foreach ($statement in $remoteStatements) {
+            if (Test-ReadmeExpectedBootstrapStatement $statement $InstallCommand) { $installCount++ }
+            elseif (Test-ReadmeExpectedBootstrapStatement $statement $UninstallCommand) { $uninstallCount++ }
+            else { return $false }
+        }
+        return ($installCount -eq 1 -and $uninstallCount -eq 1)
+    }
+    $fastInstallCommand = "irm $fastInstallUrl | iex"
+    $fastUninstallCommand = "irm $fastUninstallUrl | iex"
+    Check 'R25_README_HAS_ONLY_TWO_PINNED_FAST_COMMANDS' (
+        (Test-ReadmeFastCommandContract $readme $fastInstallCommand $fastUninstallCommand) -and
+        (Test-Path -LiteralPath (Join-Path $source 'docs/INSTALLATION.md') -PathType Leaf))
+    Check 'R25_README_GLOBAL_INSTALL_COMMANDS_REMAIN_PINNED' (
+        Test-ReadmeGlobalInstallerContract $readme $fastInstallCommand $fastUninstallCommand)
+    $thirdPrimaryCommand = 'pwsh -NoProfile -File .\install-olympus.ps1 -Project -Here -Harness all'
+    $readmeWithThirdPrimaryCommand = $readme.Replace($fastInstallCommand, $fastInstallCommand + "`n" + $thirdPrimaryCommand)
+    if (-not $readmeWithThirdPrimaryCommand.Contains($thirdPrimaryCommand)) {
+        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: direct third Fast Install command was not inserted.'
+    }
+    Check 'R25_README_REJECTS_THIRD_EXECUTABLE_PRIMARY_COMMAND' (
+        -not (Test-ReadmeFastCommandContract $readmeWithThirdPrimaryCommand $fastInstallCommand $fastUninstallCommand))
+    $indirectThirdCommand = "& ([scriptblock]::Create((irm '$fastInstallUrl'))) -Global -Harness all"
+    $readmeWithIndirectThirdCommand = $readme.Replace($fastInstallCommand, $fastInstallCommand + "`n" + $indirectThirdCommand)
+    if (-not $readmeWithIndirectThirdCommand.Contains($indirectThirdCommand)) {
+        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: indirect ScriptBlock.Create command was not inserted.'
+    }
+    Check 'R25_README_REJECTS_INDIRECT_SCRIPTBLOCK_COMMAND' (
+        -not (Test-ReadmeFastCommandContract $readmeWithIndirectThirdCommand $fastInstallCommand $fastUninstallCommand))
+    $thirdBootstrapOutsideFast = $readme + "`n## Alternative setup`n`n" + '```powershell' + "`n" +
+        $fastInstallCommand + "`n" + '```' + "`n"
+    $alternativeSection = Get-ReadmeFastSection $thirdBootstrapOutsideFast 'Alternative setup'
+    if (-not $alternativeSection.Success -or
+        -not ($alternativeSection.Groups['body'].Value.Contains($fastInstallCommand))) {
+        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: third bootstrap was not placed under another heading.'
+    }
+    Check 'R25_README_REJECTS_GLOBAL_BOOTSTRAP_OUTSIDE_FAST' (
+        -not (Test-ReadmeGlobalInstallerContract $thirdBootstrapOutsideFast $fastInstallCommand $fastUninstallCommand))
+    $mutableBootstrapCommand = 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install-olympus.ps1 | iex'
+    $readmeWithMutableBootstrap = $readme.Replace($fastInstallCommand, $mutableBootstrapCommand)
+    if (-not $readmeWithMutableBootstrap.Contains($mutableBootstrapCommand)) {
+        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: mutable bootstrap command was not inserted.'
+    }
+    Check 'R25_README_REJECTS_MUTABLE_BOOTSTRAP_SOURCE' (
+        -not (Test-ReadmeFastCommandContract $readmeWithMutableBootstrap $fastInstallCommand $fastUninstallCommand))
+    $foreignBootstrapCommand = 'irm https://example.invalid/install-olympus.ps1 | iex'
+    $readmeWithForeignBootstrap = $readme.Replace($fastInstallCommand, $foreignBootstrapCommand)
+    if (-not $readmeWithForeignBootstrap.Contains($foreignBootstrapCommand)) {
+        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: foreign bootstrap command was not inserted.'
+    }
+    Check 'R25_README_REJECTS_FOREIGN_BOOTSTRAP_ENDPOINT' (
+        -not (Test-ReadmeFastCommandContract $readmeWithForeignBootstrap $fastInstallCommand $fastUninstallCommand))
+    $readmeWithDescriptions = $readme + "`n## Command references`n`nThe example ``irm $fastInstallUrl | iex`` is descriptive only; see [installer reference](https://example.invalid/install-olympus.ps1).`n`n## Commented example`n`n" +
+        '```powershell' + "`n# irm https://example.invalid/install-olympus.ps1 | iex`n" + '```' + "`n"
+    Check 'R25_README_IGNORES_PROSE_LINKS_AND_COMMENTS' (
+        (Test-ReadmeFastCommandContract $readmeWithDescriptions $fastInstallCommand $fastUninstallCommand) -and
+        (Test-ReadmeGlobalInstallerContract $readmeWithDescriptions $fastInstallCommand $fastUninstallCommand))
+    Check 'R25_INSTALLATION_GUIDE_HAS_SCOPE_HARNESS_SAFETY_AND_STATUS' (
+        $installGuide.Contains($fastInstallUrl) -and $installGuide.Contains($fastUninstallUrl) -and
+        $installGuide.Contains($script:CandidateVersion) -and
+        $installGuide.Contains('ACTIVE DEVELOPMENT') -and
+        $installGuide.Contains('FROZEN COMPATIBILITY') -and
+        $installGuide.Contains('-Project -Here') -and $installGuide.Contains('-ProjectPath') -and
+        $installGuide.Contains('-Global') -and $installGuide.Contains('opencode') -and
+        $installGuide.Contains('codex') -and $installGuide.Contains('all') -and
+        $installGuide.Contains('immutable=true') -and $installGuide.Contains('VerifyOnly'))
+    $v049Start = $changelog.IndexOf('## v0.4.9', [StringComparison]::Ordinal)
+    $afterV049 = if ($v049Start -ge 0) { $changelog.Substring($v049Start) } else { '' }
+    $v048Offset = $afterV049.IndexOf('## v0.4.8', [StringComparison]::Ordinal)
+    $v049History = if ($v048Offset -ge 0) { $afterV049.Substring(0, $v048Offset) } else { $afterV049 }
+    Check 'R25_CHANGELOG_PRESERVES_V049_HISTORY' ($v049Start -ge 0 -and
+        $v049History.Contains("-Version 'v0.4.9'") -and
+        $v049History.Contains('unified interactive and direct PowerShell installer'))
 
     $releaseGate = Join-Path $PSScriptRoot 'github-release-notes.ps1'
     $gateGood = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody $releaseNotes 2>&1 | Out-String)
@@ -469,8 +648,9 @@ try {
     $gateMutableLauncherBody = $releaseNotes + [Environment]::NewLine + 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/scripts/launch-latest.ps1 | iex'
     $gateMutableLauncher = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody $gateMutableLauncherBody 2>&1 | Out-String)
     Check 'R26_GATE_REJECTS_MUTABLE_LAUNCHER_SOURCE' ($LASTEXITCODE -ne 0 -and $gateMutableLauncher -match 'RELEASE_NOTES_MASTER_SOURCE')
-    $gateWrongTag = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody ($releaseNotes.Replace("-Version '$($script:CandidateVersion)'", "-Version 'v0.3.0-beta.2'")) 2>&1 | Out-String)
-    Check 'R26_RELEASE_GATE_REJECTS_TAG_MISMATCH' ($LASTEXITCODE -ne 0 -and $gateWrongTag -match 'RELEASE_NOTES_HARNESS_VERIFY_MISSING')
+    $gateWrongTagBody = $releaseNotes.Replace("/blob/$($script:CandidateVersion)/docs/INSTALLATION.md", '/blob/v0.3.0-beta.2/docs/INSTALLATION.md')
+    $gateWrongTag = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody $gateWrongTagBody 2>&1 | Out-String)
+    Check 'R26_RELEASE_GATE_REJECTS_TAG_MISMATCH' ($LASTEXITCODE -ne 0 -and $gateWrongTag -match 'RELEASE_NOTES_INSTALL_GUIDE_MISSING')
     $wrongHeadingBody = $releaseNotes.Replace("## $($script:CandidateVersion)", '## v0.4.1')
     $gateWrongIdentity = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody $wrongHeadingBody 2>&1 | Out-String)
     Check 'R26_RELEASE_GATE_REJECTS_ACTIVE_IDENTITY_MISMATCH' ($LASTEXITCODE -ne 0 -and
@@ -483,7 +663,7 @@ try {
     Check 'R26_RELEASE_GATE_REJECTS_UNMERGED_FOUNDATION' ($LASTEXITCODE -ne 0 -and $gateUnmergedFoundation -match 'RELEASE_NOTES_FOUNDATION_UNMERGED')
     $gateText = [IO.File]::ReadAllText($releaseGate)
     Check 'R26_GATE_READS_PUBLISHED_GITHUB_RELEASE_BODY' ($gateText -match 'gh\.Source release view' -and
-        $gateText -match 'release\.body' -and $gateText -match 'RELEASE_NOTES_INSTALL_PIN_MISMATCH' -and
+        $gateText -match 'release\.body' -and $gateText -match 'RELEASE_NOTES_EXECUTABLE_COMMANDS_MOVED' -and
         $gateText -match 'RELEASE_NOTES_HARNESS_VERIFY_MISSING')
 
     $badVersionTarget = New-Target 'bad-version'

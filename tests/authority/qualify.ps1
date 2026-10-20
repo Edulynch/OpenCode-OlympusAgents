@@ -1066,22 +1066,52 @@ try {
         }).Count -gt 0
     }).Count -eq 0
     Check 'AUTH9_CORE_AND_GENERATOR_PROTECTED_FOR_NORMAL_AGENTS' $coreProtectionValid
+    # Match scripts/bootstrap.ps1:Get-GeneratedHarnessOutputs: agent files are
+    # inventoried only in their dedicated directories, while other generated
+    # destinations are explicit. Do not recurse whole adapter trees, where
+    # unrelated project files such as SpecKit commands may also reside.
     $managedPaths = @('opencode.jsonc', 'CODEX.md', '.opencode/orchestrator-install.json',
         '.codex/orchestrator-install.json')
-    foreach ($surface in @('.opencode', '.codex')) {
-        $managedPaths += @(Get-ChildItem -LiteralPath (Join-Path $root $surface) -File -Recurse | ForEach-Object {
-            $_.FullName.Substring(([IO.Path]::GetFullPath($root).TrimEnd([char[]]@('\','/')).Length + 1)).Replace('\','/')
-        })
-    }
+    $managedPaths += @(Get-ChildItem -LiteralPath (Join-Path $root '.opencode/agents') -Filter '*.md' -File -Recurse -Force | ForEach-Object {
+        $_.FullName.Substring(([IO.Path]::GetFullPath($root).TrimEnd([char[]]@('\','/')).Length + 1)).Replace('\','/')
+    })
+    $managedPaths += @('.opencode/commands/maintain.md', '.opencode/plugins/olympus-activity/activity.ts',
+        '.opencode/plugins/olympus-activity/tui.tsx', '.opencode/scripts/worktree-setup.ps1')
+    $managedPaths += @(Get-ChildItem -LiteralPath (Join-Path $root '.codex/agents') -Filter '*.toml' -File -Recurse -Force | ForEach-Object {
+        $_.FullName.Substring(([IO.Path]::GetFullPath($root).TrimEnd([char[]]@('\','/')).Length + 1)).Replace('\','/')
+    })
+    $managedPaths += '.codex/config.toml'
     # Verify Windows paths really became repository-relative forward-slash
     # paths; a malformed path must never make the DENY assertion meaningless.
     Check 'AUTH9B_WINDOWS_MANAGED_PATH_NORMALIZED' (
         '.opencode/scripts/worktree-setup.ps1' -in $managedPaths -and
         @($managedPaths | Where-Object { $_.Contains('\') }).Count -eq 0
     )
-    Check 'AUTH9B_EVERY_INSTALLER_MANAGED_PATH_HAS_NATIVE_DENY' (@($managedPaths | Where-Object {
+    $managedPathsWithoutDeny = @($managedPaths | Where-Object {
         (Native-Decision $nativeRules 'edit' $_) -ne 'DENY'
-    }).Count -eq 0)
+    })
+    Check 'AUTH9B_EVERY_INSTALLER_MANAGED_PATH_HAS_NATIVE_DENY' ($managedPathsWithoutDeny.Count -eq 0)
+    $specKitProjectCommand = '.opencode/commands/speckit.plan.md'
+    $specKitPermission = Native-Decision $nativeRules 'edit' $specKitProjectCommand
+    Check 'AUTH9B_FOREIGN_SPECKIT_EXCLUDED_AND_NATIVE_ASK' (
+        $specKitProjectCommand -notin $managedPaths -and -not (Is-OlympusOwned $specKitProjectCommand) -and
+        $specKitPermission -eq 'ASK' -and (Classify-NewScope $specKitPermission $true) -eq 'NATIVE_ASK'
+    )
+    $missingAgentDenyRule = @($nativeRules | Where-Object {
+        $_.action -eq 'edit' -and $_.resource -eq '.opencode/agents/**' -and $_.effect -eq 'deny'
+    })
+    $nativeRulesWithoutAgentDeny = @($nativeRules | Where-Object {
+        -not ($_.action -eq 'edit' -and $_.resource -eq '.opencode/agents/**' -and $_.effect -eq 'deny')
+    })
+    $managedPathsWithoutAgentDeny = @($managedPaths | Where-Object {
+        (Native-Decision $nativeRulesWithoutAgentDeny 'edit' $_) -ne 'DENY'
+    })
+    Check 'AUTH9B_NEGATIVE_CONTROL_MISSING_MANAGED_DENY_DETECTED' (
+        $missingAgentDenyRule.Count -eq 1 -and '.opencode/agents/kovan.md' -in $managedPaths -and
+        (Native-Decision $nativeRules 'edit' '.opencode/agents/kovan.md') -eq 'DENY' -and
+        (Native-Decision $nativeRulesWithoutAgentDeny 'edit' '.opencode/agents/kovan.md') -ne 'DENY' -and
+        '.opencode/agents/kovan.md' -in $managedPathsWithoutAgentDeny
+    )
     Check 'AUTH9C_WORKTREE_HELPER_NATIVE_DENY_AND_OWNERSHIP' (
         (Native-Decision $nativeRules 'edit' '.opencode/scripts/worktree-setup.ps1') -eq 'DENY' -and
         (Is-OlympusOwned '.opencode/scripts/worktree-setup.ps1')

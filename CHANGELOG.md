@@ -4,6 +4,35 @@
 
 Changes after the latest published release go here.
 
+## v0.4.11
+
+### Highlights
+
+- Correct GitHub `published_at` handling in both Fast bootstraps and the latest-release launcher: preserve UTC-aware `DateTime`/`DateTimeOffset` values and accept valid ISO 8601 timestamps ending in `Z` or an explicit numeric `±HH:MM` offset, comparing the represented instant consistently.
+- Continue rejecting missing, incomplete, malformed, or timezone-naive timestamps, invalid or ambiguous local times, and timestamps more than five minutes in the future. Mutable, draft, prerelease, and otherwise invalid release metadata still fails closed.
+- Keep `releases/latest` as metadata selection only. The selected tag supplies the launcher, installer, and source archive; GitHub's `immutable` flag is not independent signature or cryptographic source verification.
+- Preserve managed-file ownership, hash/drift checks, user-file protections, and read-only `VerifyOnly`; no new harness or runtime capability is claimed.
+- Preserve the existing additive **Dual Harness Installer** for `-Harness opencode`, `-Harness codex`, and `-Harness all`; retain `installed_harnesses` ownership, legacy OpenCode installations, user-owned file protections, the PowerShell 5.1 / PowerShell 7 launch path, and shared Olympus Harness Core. `VerifyOnly` remains read-only. This release does not claim full parity.
+
+### Validation
+
+- Local regression fixtures exercise typed UTC values, `Z` and numeric-offset timestamps across both Fast bootstraps and the latest-release launcher, and check that invalid metadata is rejected before download or execution.
+- Local fixtures do not establish current remote GitHub metadata, remote source bytes, tag immutability, or native runtime behavior.
+
+### Capability limits
+
+- OpenCode Issue #1 (child-result correlation) remains **OPEN/deferred**; Olympus reconciliation guidance does not fix the upstream behavior.
+- OpenCode Issue #8 (authorization continuity after compaction) remains **OPEN/deferred**. The earlier scoped same-session PASS did not test compaction; no fix is claimed.
+- The Codex adapter remains `SUPPORTED_WITH_DECLARED_GAPS`: `DENY = GAP`, `AEGIS = GAP`, `QUESTION_CENTRALIZATION = PARTIAL`, `RESULT_RECONCILIATION = PARTIAL`, and `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; native ASK is `ADAPTABLE`. This release does not claim full parity.
+
+## Installation
+
+See the [v0.4.11 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.4.11/docs/INSTALLATION.md) for the pinned Fast Install and Fast Uninstall entrypoints, requirements, scope/harness selection, and safety details.
+
+## Verify installation
+
+Read-only verification examples and release-verification limits are documented in the [installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.4.11/docs/INSTALLATION.md#release-selection-identity-and-executable-source). Local fixtures do not establish published remote metadata, source bytes, tag immutability, or runtime behavior.
+
 ## v0.4.10
 
 ### Highlights

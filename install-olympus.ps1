@@ -88,6 +88,39 @@ function Assert-BootstrapReleaseBoolean([object]$Metadata, [string]$Name, [bool]
     }
 }
 
+function ConvertTo-ReleasePublishedTimestamp([object]$Value) {
+    if ($null -eq $Value) { throw 'published_at is null.' }
+    if ($Value -is [DateTimeOffset]) { return $Value }
+    if ($Value -is [DateTime]) {
+        if ($Value.Kind -eq [DateTimeKind]::Unspecified) {
+            throw 'published_at DateTime has no time-zone kind.'
+        }
+        if ($Value.Kind -eq [DateTimeKind]::Local) {
+            $localWallTime = [DateTime]::SpecifyKind($Value, [DateTimeKind]::Unspecified)
+            if ([TimeZoneInfo]::Local.IsInvalidTime($localWallTime) -or
+                [TimeZoneInfo]::Local.IsAmbiguousTime($localWallTime)) {
+                throw 'published_at DateTime has an invalid or ambiguous local time.'
+            }
+        }
+        return [DateTimeOffset]::new([DateTime]$Value)
+    }
+    if ($Value -isnot [string] -or
+        $Value -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})$') {
+        throw 'published_at must be a time-zone-aware ISO 8601 timestamp.'
+    }
+
+    $timestamp = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse(
+        $Value,
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::None,
+        [ref]$timestamp
+    )) {
+        throw 'published_at is not a valid ISO 8601 timestamp.'
+    }
+    return $timestamp
+}
+
 try {
     $scope = $null
     $target = $null
@@ -146,14 +179,14 @@ try {
         if ($tag -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') {
             throw "LATEST_RELEASE_INVALID: GitHub latest release returned malformed tag '$tag'."
         }
-        $publishedAt = [string](Get-BootstrapReleaseField $release 'published_at')
-        if ([string]::IsNullOrWhiteSpace($publishedAt)) {
+        $publishedAt = Get-BootstrapReleaseField $release 'published_at'
+        if ($null -eq $publishedAt -or ($publishedAt -is [string] -and [string]::IsNullOrWhiteSpace($publishedAt))) {
             throw 'LATEST_RELEASE_NOT_PUBLISHED: GitHub release has no published_at timestamp.'
         }
         try {
-            $publishedTimestamp = [DateTimeOffset]::Parse($publishedAt, [Globalization.CultureInfo]::InvariantCulture)
+            $publishedTimestamp = ConvertTo-ReleasePublishedTimestamp $publishedAt
         } catch {
-            throw "LATEST_RELEASE_METADATA_INVALID: published_at '$publishedAt' is not a valid timestamp."
+            throw "LATEST_RELEASE_METADATA_INVALID: published_at '$publishedAt' is not a valid time-zone-aware timestamp."
         }
         if ($publishedTimestamp -gt [DateTimeOffset]::UtcNow.AddMinutes(5)) {
             throw "LATEST_RELEASE_METADATA_INVALID: published_at '$publishedAt' is in the future."

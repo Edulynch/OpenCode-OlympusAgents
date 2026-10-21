@@ -10,7 +10,7 @@
 
 [![Latest release](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) [![OpenCode V2](https://img.shields.io/badge/OpenCode-V2-f97316?style=flat-square)](https://opencode.ai/docs/) [![Windows qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](docs/HARNESSES.md) [![MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
 
-[⚡ Install](#fast-install) · [💬 Get started](#-your-first-task) · [🧭 Meet the team](#-meet-the-team) · [🖥️ CLI Mode](#-cli-mode) · [🧹 Uninstall](#fast-uninstall)
+[⚡ Install](#fast-install) · [🚦 Modes](#-normal-vs-fast) · [💬 Get started](#-your-first-task) · [🧭 Meet the team](#-meet-the-team) · [🖥️ CLI Mode](#-cli-mode) · [🧹 Uninstall](#fast-uninstall)
 
 </div>
 
@@ -41,6 +41,12 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.10/in
 
 [Installation options and safety details](docs/INSTALLATION.md)
 
+## ⚡ NORMAL vs FAST
+
+**NORMAL (default):** Kael chooses only the specialists your task needs and uses useful parallel work when it helps. Nothing extra to type.
+
+**FAST (explicit):** Start your request with `FAST:` when it has independent parts. Kael can run up to four agents in parallel; FAST keeps required checks and does not parallelize dependent tasks.
+
 ## 💬 Your First Task
 
 After installing in your project, open OpenCode and describe what you want in everyday language.
@@ -55,43 +61,38 @@ After installing in your project, open OpenCode and describe what you want in ev
 
 ```mermaid
 flowchart LR
-    A["💡 Your idea"] --> B["🧭 Kael"]
+    A["💡 Your idea"] --> B["🧭 Kael coordinates"]
     B --> C["🔎 Explore"]
-    B --> D["🛠️ Build"]
-    B --> E["🧪 Check"]
-    C --> F["✅ Result & next steps"]
-    D --> F
-    E --> F
+    C --> D["🛠️ Build"]
+    D --> E["🧪 Check"]
+
+    E -->|Needs more context| C
+    E -->|Needs fixes| D
+    E -->|Ready| F["✅ Result & next steps"]
 ```
 
-*An example, not a fixed sequence: Kael brings in only the help each task needs.*
+*OlympusAgents works as a coordinated team: it explores the problem, builds a solution, checks the result, and iterates with focused improvements when needed. It stops when the task is complete or when a blocker needs your attention.*
 
 ## 🧭 Meet the Team
 
 Meet the twelve roles. **Kael is your main point of contact**—the others step in when their expertise is useful.
 
-| Agent | What they do | Model | Reasoning |
-|---|---|---|---|
-| 🧭 **Kael** · The Master | Coordinates the team and results | GPT-6.1 Sol | High |
-| 🔎 **Veyra** · The Explorer | Finds the information the team needs | GPT-6 Luna | Max |
-| 🏗️ **Orin** · The Architect | Designs the solution | GPT-6 Luna | Max |
-| 🗺️ **Atlas** · The Planner | Plans larger tasks when needed | GPT-6.1 Sol | High |
-| 🛠️ **Kovan** · The Coder | Writes and updates code | GPT-6 Luna | Max |
-| 🐛 **Argus** · The Bug Hunter | Tracks down tricky bugs | GPT-6.1 Sol | High |
-| 🧪 **Nox** · The Tester | Runs tests and checks behavior | GPT-6 Luna | Max |
-| ⚖️ **Vera** · The Judge | Reviews work independently | GPT-6 Luna | Max |
-| 🛡️ **Talos** · The Sentinel | Investigates security issues | GPT-6.1 Sol | High |
-| 🧠 **Thales** · The Sage | Helps with especially difficult questions | GPT-6.1 Sol | XHigh |
-| ☀️ **Helios** · The Optimizer | Suggests improvements when asked | GPT-6.1 Sol | High |
-| 🔐 **Aegis** · The Keeper | Handles explicitly requested advanced maintenance | GPT-6 Luna | Max |
+| Agent | Model / Reasoning | What they do |
+|---|---|---|
+| 🧭 **Kael** · The Master | GPT-6.1 Sol · High | Coordinates the team and results |
+| 🔎 **Veyra** · The Explorer | GPT-6 Luna · Max | Finds the information the team needs |
+| 🏗️ **Orin** · The Architect | GPT-6 Luna · Max | Designs the solution |
+| 🗺️ **Atlas** · The Planner | GPT-6.1 Sol · High | Plans larger tasks when needed |
+| 🛠️ **Kovan** · The Coder | GPT-6 Luna · Max | Writes and updates code |
+| 🐛 **Argus** · The Bug Hunter | GPT-6.1 Sol · High | Tracks down tricky bugs |
+| 🧪 **Nox** · The Tester | GPT-6 Luna · Max | Runs tests and checks behavior |
+| ⚖️ **Vera** · The Judge | GPT-6 Luna · Max | Reviews work independently |
+| 🛡️ **Talos** · The Sentinel | GPT-6.1 Sol · High | Investigates security issues |
+| 🧠 **Thales** · The Sage | GPT-6.1 Sol · XHigh | Helps with especially difficult questions |
+| ☀️ **Helios** · The Optimizer | GPT-6.1 Sol · High | Suggests improvements when asked |
+| 🔐 **Aegis** · The Keeper | GPT-6 Luna · Max | Handles explicitly requested advanced maintenance |
 
 *Model choices are included with Olympus, but availability depends on your OpenAI access. Aegis is an advanced, explicitly invoked role.*
-
-## ⚡ NORMAL vs FAST
-
-**NORMAL (default):** Kael uses only the parallel help your task needs.
-
-**FAST (explicit):** Up to four agents can help at once when appropriate; FAST keeps required checks and does not parallelize dependent tasks.
 
 ## 🖥️ CLI Mode
 

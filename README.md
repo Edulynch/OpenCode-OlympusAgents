@@ -57,20 +57,45 @@ After installing in your project, open OpenCode and describe what you want in ev
 
 > ⚡ **Move faster:** "FAST: review these independent modules, fix confirmed problems and summarize the tests."
 
-### 🪄 From idea to result
+## ✨ Special Capabilities
 
-```mermaid
-flowchart TD
-    A["💡 Your idea"] --> B["🧭 Kael coordinates"]
-    B --> C["🔎 Explore"]
-    C --> D["🛠️ Build"]
-    D --> E["🧪 Check"]
-    E -->|"Issues found · targeted corrections"| B
-    E -->|"Goals met · checks passed"| F["✅ Validated results"]
-    B -->|"Blocked · your decision needed"| G["🙋 Clear options & next steps"]
-```
+Some Olympus agents have special abilities. Here's how to use them.
 
-*OlympusAgents works as a coordinated team: it explores the problem, builds a solution, checks the result, and iterates with focused improvements when needed. It stops when the task is complete or when a blocker needs your attention.*
+### 🔐 Aegis — The Keeper
+**Privileged Operations & Advanced Maintenance**
+
+Handles tasks requiring elevated permissions beyond Kael's authority, in any project.
+
+**Explicit invocation (required):**
+> /maintain Update protected project settings while preserving existing user files.
+
+Aegis can only be activated through `/maintain`. There is no automatic or implicit invocation, and Kael cannot activate it on your behalf.
+
+### ☀️ Helios — The Optimizer
+**Performance & Efficiency**
+
+Finds worthwhile ways to make your application faster, lighter, or more efficient.
+
+**Explicit:**
+> "Ask Helios to evaluate performance improvements for my API."
+
+**Natural:**
+> "Can we make this API faster without increasing resource usage?"
+
+Kael automatically involves Helios when optimization is explicitly requested. You approve proposed improvements before implementation.
+
+### 🛡️ Talos — The Sentinel
+**Security & Protection**
+
+Investigates confirmed or strongly evidenced security vulnerabilities.
+
+**Explicit:**
+> "Ask Talos to investigate why regular users can access an admin-only endpoint."
+
+**Natural:**
+> "Regular users can delete accounts that belong to other people. Find the security issue."
+
+Kael automatically involves Talos when a serious security issue has sufficient evidence. No special command is needed.
 
 ## 🧭 Meet the Team
 

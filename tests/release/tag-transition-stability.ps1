@@ -293,19 +293,22 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
         -not (Test-GlobalReadmeInstallerContract $readme $fastInstallCommand $fastUninstallCommand)) {
         $publicInvalid = $true
     }
+    # Keep the first-time README welcoming. Release safety details belong
+    # in the linked maintainer/installation guide, not the public landing page.
+    $installationGuide = [string]$Docs['docs/INSTALLATION.md']
     $versionedBootstrapPattern = '(?i)versioned[ \t]+`?' + $versionRegex + '`?[ \t]+bootstrap'
-    $readmeReleaseContractInvalid = (
-        -not [regex]::IsMatch($readme, $versionedBootstrapPattern) -or
-        $readme -notmatch '(?i)releases/latest.{0,160}metadata.{0,160}published release.{0,80}tag' -or
-        $readme -notmatch '(?i)release metadata checks fail closed' -or
-        $readme -notmatch '(?i)GitHub.{0,60}immutability flag.{0,80}not independent cryptographic signature verification'
+    $installationGuideReleaseContractInvalid = (
+        -not [regex]::IsMatch($installationGuide, $versionedBootstrapPattern) -or
+        $installationGuide -notmatch '(?i)releases/latest.{0,160}metadata.{0,160}published release and tag' -or
+        $installationGuide -notmatch '(?i)immutable=true' -or
+        $installationGuide -notmatch '(?i)fails closed' -or
+        $installationGuide -notmatch '(?i)does not independently verify a signature'
     )
     if ($readme -notmatch 'https://github\.com/Edulynch/OpenCode-OlympusAgents/releases' -or
-        $readmeReleaseContractInvalid -or $publicInvalid) {
+        $readme -notmatch '(?i)\[[^\]]+\]\(docs/INSTALLATION\.md(?:#[^)]+)?\)' -or
+        $installationGuideReleaseContractInvalid -or $publicInvalid) {
         $errors.Add('DOC_README_IMMUTABLE_ENTRYPOINT_INVALID')
     }
-
-    $installationGuide = [string]$Docs['docs/INSTALLATION.md']
     $interactivePromptingInvalid = (
         $installationGuide -notmatch '(?i)\binteractive terminal\b[^\r\n.]*\basks for scope and harness\b' -or
         $installationGuide -notmatch '(?i)\bvalid partial selection\b[^\r\n.]*\basks only for the missing values\b'

@@ -84,6 +84,7 @@ function Invoke-FastSlice {
     Invoke-PythonCheck 'Codex static profile (no CLI/catalog probe)' 'tests/codex/validate_profile.py' @('--mode','static')
 
     $offlineSuites = @(
+        'tests/bootstrap-source-validation/qualify.ps1',
         'tests/aegis-recovery/qualify.ps1',
         'tests/adaptive-concurrency/qualify.ps1',
         'tests/completion-gates/qualify.ps1',

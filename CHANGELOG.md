@@ -4,6 +4,34 @@
 
 Changes after the latest published release go here.
 
+## v0.4.10
+
+### Highlights
+
+- Prepare the Fast Install and Fast Uninstall entrypoints and the twelve legacy install/uninstall wrappers with a consistent `v0.4.10` candidate identity.
+- Keep `releases/latest` as metadata discovery only. Reject missing, malformed, unpublished, mutable, or identity-mismatched releases before the selected release installer runs; executable acquisition remains pinned to a release tag, with no mutable-branch fallback.
+- Preserve the existing additive **Dual Harness Installer**: `-Harness opencode`, `-Harness codex`, and `-Harness all`; `installed_harnesses`; legacy OpenCode installations; user-owned file protection; the PowerShell 5.1 / PowerShell 7 launch path; and shared Olympus Harness Core. `VerifyOnly` remains read-only. This release does not claim full parity.
+- Keep OpenCode V2 in **ACTIVE DEVELOPMENT** and Codex in **FROZEN COMPATIBILITY**. No new Codex capabilities are added.
+
+### Validation
+
+- Focused local fixtures cover release identity, entrypoint routing, metadata rejection, and preservation of installation ownership and drift protections.
+- These fixtures do not establish remote GitHub release metadata, remote source bytes, release immutability, or native runtime behavior.
+
+### Capability limits
+
+- OpenCode Issue #1 (child-result correlation) remains **OPEN/deferred**; Olympus reconciliation guidance does not fix the upstream behavior.
+- OpenCode Issue #8 (authorization continuity after compaction) remains **OPEN/deferred**. The earlier scoped same-session PASS did not test compaction; no fix is claimed.
+- The Codex adapter remains `SUPPORTED_WITH_DECLARED_GAPS`: `DENY = GAP`, `AEGIS = GAP`, `QUESTION_CENTRALIZATION = PARTIAL`, `RESULT_RECONCILIATION = PARTIAL`, and `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; native ASK is `ADAPTABLE`. No new Codex version or full parity is claimed.
+
+## Installation
+
+See the [v0.4.10 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.4.10/docs/INSTALLATION.md) for the pinned Fast Install and Fast Uninstall entrypoints, requirements, scope/harness selection, and safety details.
+
+## Verify installation
+
+Read-only verification examples and release-verification limits are documented in the [installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.4.10/docs/INSTALLATION.md#release-selection-and-safety). Local fixture qualification is not evidence of published, immutable remote source.
+
 ## v0.4.9
 
 ### Highlights

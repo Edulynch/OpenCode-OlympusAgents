@@ -4,7 +4,7 @@ $launcher = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) ('olymp
 
 try {
     # Keep the public command tiny; this launcher resolves the latest release and pins actual execution to that tag.
-    Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.9/scripts/launch-latest.ps1' -OutFile $launcher -ErrorAction Stop
+    Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.10/scripts/launch-latest.ps1' -OutFile $launcher -ErrorAction Stop
     $pwsh = @(Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue)
     if ($pwsh.Count -eq 0) {
         throw 'OLYMPUS_REQUIRES_POWERSHELL_7: PowerShell 7 (pwsh) is required.'

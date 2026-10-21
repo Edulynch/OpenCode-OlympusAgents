@@ -65,14 +65,32 @@ function Write-Fixture([string]$target, [string]$relative, [string]$contents) {
 }
 
 function Has-GeneratedSurface([string]$target, [string]$harness) {
-    $adapter = Join-Path $source ('.' + $harness)
-    foreach ($file in Get-ChildItem -LiteralPath $adapter -File -Recurse) {
-        $relative = $file.FullName.Substring(([IO.Path]::GetFullPath($source).TrimEnd([char[]]@('\','/')).Length + 1)).Replace('\','/')
+    $manifestPaths = @('.opencode/orchestrator-install.json', '.codex/orchestrator-install.json')
+    $existingManifests = @($manifestPaths | Where-Object {
+        Test-Path -LiteralPath (Join-Path $target ($_ -replace '/', [IO.Path]::DirectorySeparatorChar)) -PathType Leaf
+    })
+    if ($existingManifests.Count -ne 1) { return $false }
+    $manifestPath = Join-Path $target ($existingManifests[0] -replace '/', [IO.Path]::DirectorySeparatorChar)
+    try { $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json }
+    catch { return $false }
+    if ($harness -notin @($manifest.installed_harnesses | ForEach-Object { [string]$_ })) { return $false }
+
+    # The install manifest is the generated/managed-file contract. Do not
+    # recurse the adapter directory: legitimate project files (for example,
+    # SpecKit commands) may live beside managed OpenCode outputs.
+    $managedPaths = @($manifest.managed_files | ForEach-Object { ([string]$_.path).Replace('\','/') })
+    $rootFile = if ($harness -eq 'opencode') { 'opencode.jsonc' } else { 'CODEX.md' }
+    $surfacePaths = if ($harness -eq 'opencode') {
+        @($managedPaths | Where-Object { $_.StartsWith('.opencode/', [StringComparison]::OrdinalIgnoreCase) -or $_ -ceq $rootFile })
+    } else {
+        @($managedPaths | Where-Object { $_.StartsWith('.codex/', [StringComparison]::OrdinalIgnoreCase) -or $_ -ceq $rootFile })
+    }
+    if ($surfacePaths.Count -eq 0 -or $rootFile -notin $surfacePaths) { return $false }
+    foreach ($relative in $surfacePaths) {
         $installed = Join-Path $target ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
         if (-not (Test-Path -LiteralPath $installed -PathType Leaf)) { return $false }
     }
-    $rootFile = if ($harness -eq 'opencode') { 'opencode.jsonc' } else { 'CODEX.md' }
-    return (Test-Path -LiteralPath (Join-Path $target $rootFile) -PathType Leaf)
+    return $true
 }
 
 try {
@@ -85,13 +103,23 @@ try {
 
     # A: the published one-line/default invocation remains OpenCode-only.
     $defaultTarget = New-Target 'default-opencode'
+    $specKitPath = '.opencode/commands/speckit.plan.md'
+    Write-Fixture $defaultTarget $specKitPath "user-owned SpecKit command`n"
+    $specKitFullPath = Join-Path $defaultTarget ($specKitPath -replace '/', [IO.Path]::DirectorySeparatorChar)
+    $specKitHashBefore = (Get-FileHash -LiteralPath $specKitFullPath -Algorithm SHA256).Hash
     $default = Install $defaultTarget
     $defaultManifest = Get-Content -LiteralPath (Join-Path $defaultTarget '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json
     Check 'A_DEFAULT_OPENCODE_ONLY' ($default.Code -eq 0 -and (Has-GeneratedSurface $defaultTarget 'opencode') -and
         -not (Test-Path -LiteralPath (Join-Path $defaultTarget '.codex')) -and
         $defaultManifest.scope -eq 'project' -and @($defaultManifest.installed_harnesses).Count -eq 1 -and
         $defaultManifest.installed_harnesses[0] -eq 'opencode')
-    Check 'A_DEFAULT_VERIFY_PASS' ((Verify $defaultTarget 'opencode').Code -eq 0)
+    $defaultManagedPaths = @($defaultManifest.managed_files | ForEach-Object { ([string]$_.path).Replace('\','/') })
+    $defaultVerify = Verify $defaultTarget 'opencode'
+    Check 'A_FOREIGN_SPECKIT_FILE_REMAINS_UNMANAGED' ($specKitPath -notin $defaultManagedPaths -and
+        (Test-Path -LiteralPath $specKitFullPath -PathType Leaf) -and
+        (Get-FileHash -LiteralPath $specKitFullPath -Algorithm SHA256).Hash -eq $specKitHashBefore -and
+        $defaultVerify.Code -eq 0)
+    Check 'A_DEFAULT_VERIFY_PASS' ($defaultVerify.Code -eq 0)
 
     # B: explicit OpenCode is equivalent to the default.
     $opencodeTarget = New-Target 'explicit-opencode'
@@ -230,20 +258,14 @@ try {
         $installerText -match "\[ValidateSet\('project', 'global'\)\]" -and
         $installerText -match "\[ValidateSet\('opencode', 'codex', 'all'\)\]")
     $tag = 'v9.9.9'
-    $base = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/install.ps1"
-    $defaultInstall = "irm $base | iex"
-    $codexInstall = "& ([scriptblock]::Create((irm '$base'))) -Harness codex"
-    $allInstall = "& ([scriptblock]::Create((irm '$base'))) -Harness all"
-    $defaultVerify = "& ([scriptblock]::Create((irm '$base'))) -Version '$tag' -Target (Get-Location).Path -VerifyOnly"
-    $opencodeVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness opencode -Version '$tag' -Target (Get-Location).Path -VerifyOnly"
-    $codexVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness codex -Version '$tag' -Target (Get-Location).Path -VerifyOnly"
-    $allVerify = "& ([scriptblock]::Create((irm '$base'))) -Harness all -Version '$tag' -Target (Get-Location).Path -VerifyOnly"
-    $releaseBody = "## Installation`n`n$defaultInstall`n`n$codexInstall`n`n$allInstall`n`n## Verify installation`n`n$defaultVerify`n`n$opencodeVerify`n`n$codexVerify`n`n$allVerify`n"
+    $docsUrl = "https://github.com/Edulynch/OpenCode-OlympusAgents/blob/$tag/docs/INSTALLATION.md"
+    $verifyDocsUrl = "$docsUrl#release-selection-and-safety"
+    $releaseBody = "## Installation`n`nFast Install and Fast Uninstall commands, including parameter and harness details, are documented in $docsUrl.`n`n## Verify installation`n`nRead-only VerifyOnly harness checks and safety are documented in $verifyDocsUrl.`n"
     $releaseGate = Join-Path $source 'tests/release/github-release-notes.ps1'
     $releasePass = (& pwsh -NoProfile -File $releaseGate -Version $tag -ReleaseBody $releaseBody 2>&1 | Out-String)
     Check 'M_RELEASE_CONTRACT_FUTURE_DUAL_COMMANDS' ($LASTEXITCODE -eq 0 -and $releasePass -match 'RELEASE_NOTES_CONTRACT: v9\.9\.9 PASS')
-    $releaseMissing = (& pwsh -NoProfile -File $releaseGate -Version $tag -ReleaseBody ($releaseBody.Replace($allVerify, '')) 2>&1 | Out-String)
-    Check 'M_RELEASE_CONTRACT_REJECTS_MISSING_SUBSET_VERIFY' ($LASTEXITCODE -ne 0 -and $releaseMissing -match 'RELEASE_NOTES_HARNESS_VERIFY_MISSING')
+    $releaseMissing = (& pwsh -NoProfile -File $releaseGate -Version $tag -ReleaseBody ($releaseBody.Replace($verifyDocsUrl, '')) 2>&1 | Out-String)
+    Check 'M_RELEASE_CONTRACT_REJECTS_MISSING_VERIFY_SAFETY_GUIDE' ($LASTEXITCODE -ne 0 -and $releaseMissing -match 'RELEASE_NOTES_HARNESS_VERIFY_MISSING')
     Write-Output 'DUAL-HARNESS INSTALLER QUALIFICATION: PASS (isolated local installs; no interactive harness session)'
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)

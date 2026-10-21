@@ -60,15 +60,13 @@ After installing in your project, open OpenCode and describe what you want in ev
 ### 🪄 From idea to result
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["💡 Your idea"] --> B["🧭 Kael coordinates"]
     B --> C["🔎 Explore"]
     C --> D["🛠️ Build"]
     D --> E["🧪 Check"]
-
-    E -->|Needs more context| C
-    E -->|Needs fixes| D
-    E -->|Ready| F["✅ Result & next steps"]
+    E -->|Another focused pass| B
+    E -->|Done or needs your input| F["📋 Result & next steps"]
 ```
 
 *OlympusAgents works as a coordinated team: it explores the problem, builds a solution, checks the result, and iterates with focused improvements when needed. It stops when the task is complete or when a blocker needs your attention.*
@@ -123,5 +121,3 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.10/un
 ## 📚 Learn More
 
 [Installation guide](docs/INSTALLATION.md) · [CLI Mode](specs/001-portable-olympus-cli/quickstart.md) · [Roadmap](docs/ROADMAP.md) · [Development](docs/DEVELOPMENT.md) · [Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [License](LICENSE)
-
-<sub>Olympus is an independent orchestration system, not a fork. The specialized-team idea was informed in part by [codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).</sub>

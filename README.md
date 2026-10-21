@@ -65,8 +65,9 @@ flowchart TD
     B --> C["🔎 Explore"]
     C --> D["🛠️ Build"]
     D --> E["🧪 Check"]
-    E -->|Another focused pass| B
-    E -->|Done or needs your input| F["📋 Result & next steps"]
+    E -->|"Issues found · targeted corrections"| B
+    E -->|"Goals met · checks passed"| F["✅ Validated results"]
+    B -->|"Blocked · your decision needed"| G["🙋 Clear options & next steps"]
 ```
 
 *OlympusAgents works as a coordinated team: it explores the problem, builds a solution, checks the result, and iterates with focused improvements when needed. It stops when the task is complete or when a blocker needs your attention.*

@@ -10,7 +10,7 @@
 
 [![Latest release](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) [![OpenCode V2](https://img.shields.io/badge/OpenCode-V2-f97316?style=flat-square)](https://opencode.ai/docs/) [![Windows qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](docs/HARNESSES.md) [![MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
 
-[⚡ Install](#fast-install) · [💬 Try it](#-start-building) · [🧭 Agents](#-meet-the-team) · [🖥️ CLI Mode](#️-cli-mode-in-progress) · [🧹 Uninstall](#fast-uninstall)
+[⚡ Install](#fast-install) · [💬 Try it](#-start-building) · [🧭 Agents](#-meet-the-team) · [🖥️ CLI Mode](#-cli-mode--in-progress) · [🧹 Uninstall](#fast-uninstall)
 
 </div>
 

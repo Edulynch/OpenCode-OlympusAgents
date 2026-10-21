@@ -45,8 +45,6 @@ After a successful project install, open `opencode` in that project and tell Kae
 
 > **⚡ FAST:** "FAST: review these independent modules for bugs, fix verified issues, and report test results."
 
-**NORMAL** lets Kael choose only useful parallel work. Explicit **FAST** allows up to four independent agents without skipping gates; not every request needs every specialist.
-
 ### ✨ Example: one request, a coordinated team
 
 ```mermaid
@@ -84,6 +82,12 @@ Twelve specialized roles, **one orchestration point**. These are the current Ope
 
 🎯 **OpenAI-first by design.** Olympus has been developed primarily with OpenAI models because its maintainer does not have subscriptions to other AI providers. The default mappings use OpenAI Sol/Luna IDs; they do not imply other providers have been tested or that your OpenAI account automatically has access to every model. [Canonical model mapping](olympus/core/models.toml).
 
+## ⚡ NORMAL vs FAST
+
+**NORMAL (default):** Kael chooses only useful parallel work for the task.
+
+**FAST (explicit):** Kael may use up to four independent agents, keeps required checks and does not parallelize dependent tasks.
+
 ## 🖥️ CLI Mode — In Progress
 
 A separate, portable **Olympus CLI** is being developed and refined. It is **not** yet a replacement for the public one-command installer.
@@ -108,7 +112,11 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.10/un
 
 **OpenCode V2 is the active development target.** **Codex is preserved at a frozen compatibility baseline**—not removed or discarded, but not the focus of new features. Codex lacks equivalent Aegis and native hard-DENY guarantees; see the [capability matrix](docs/HARNESS-CAPABILITIES.md) and [Codex baseline](docs/CODEX-COMPATIBILITY.md).
 
-For ordinary work, Kael coordinates within the project. Only an explicit `/maintain` invokes hidden Aegis; Kael never escalates there automatically. Codex has no equivalent Aegis capability. Run Olympus only in trusted repositories: task scope is not an OS sandbox.
+Run Olympus only in trusted repositories: task scope is not an OS sandbox.
+
+## 🔧 Maintenance (OpenCode)
+
+Ordinary Git work, including releases, stays with Kael in the normal project workflow. Only an explicit `/maintain` invokes hidden Aegis; Kael never escalates there automatically. Codex has no equivalent Aegis capability.
 
 ## 📖 Explore More
 

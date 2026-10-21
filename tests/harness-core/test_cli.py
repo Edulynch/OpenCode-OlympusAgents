@@ -23,6 +23,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from olympus import source_edit
+from olympus.cli import release_version
 
 
 def load_file(name: str, path: Path):
@@ -52,6 +53,7 @@ class SliceA(unittest.TestCase):
         for name in ("render_harnesses.py", "olympus_cli.py", "olympus", "olympus.cmd"):
             shutil.copy2(ROOT / "scripts" / name, self.source / "scripts" / name)
         shutil.copy2(ROOT / "install.ps1", self.source / "install.ps1")
+        self.source_version = release_version(self.source)
         self.renderer = load_file("fixture_renderer", self.source / "scripts/render_harnesses.py")
         self.outputs = self.renderer.outputs_for(self.source, "all")
         for path, content in self.outputs.items():
@@ -135,7 +137,7 @@ class SliceA(unittest.TestCase):
             self.assertNotRegex(help_result.stdout, rf"\b{command}\b")
         version = self.query("--version")
         self.assertEqual(0, version.returncode)
-        self.assertIn("olympus v0.4.9", version.stdout)
+        self.assertIn(f"olympus {self.source_version}", version.stdout)
         self.assertIn(str(self.source), version.stdout)
 
     def test_slice_a_models_human_json_canonical_assignments(self):
@@ -300,7 +302,8 @@ class SliceA(unittest.TestCase):
 
     def smoke_entry(self, entry):
         self.assertGreaterEqual(sys.version_info, (3, 11))
-        for arguments, expected in ((("--help",), "models list --json"), (("--version",), "olympus v0.4.9")):
+        for arguments, expected in ((("--help",), "models list --json"),
+                                    (("--version",), f"olympus {self.source_version}")):
             result = self.query(*arguments, entry=entry)
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertIn(expected, result.stdout)

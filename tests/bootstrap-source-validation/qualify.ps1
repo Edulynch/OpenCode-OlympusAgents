@@ -17,7 +17,18 @@ function Assert-Condition([bool]$Condition, [string]$Message) {
 function New-SourceFixture([string]$Name) {
     $source = Join-Path $runRoot $Name
     [IO.Directory]::CreateDirectory($source) | Out-Null
-    Copy-Item -LiteralPath (Join-Path $repoRoot '.opencode') -Destination $source -Recurse
+    $trackedOpenCodeFiles = @(& git -C $repoRoot ls-files -- '.opencode')
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to list tracked OpenCode fixture files.' }
+    foreach ($relative in $trackedOpenCodeFiles) {
+        $sourcePath = Join-Path $repoRoot $relative
+        $destinationPath = Join-Path $source $relative
+        [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destinationPath)) | Out-Null
+        Copy-Item -LiteralPath $sourcePath -Destination $destinationPath
+    }
+    $commands = Join-Path $source '.opencode/commands'
+    [IO.Directory]::CreateDirectory($commands) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $commands 'speckit.foreign.md'),
+        "# Foreign command fixture`nDeterministic unmanaged content.`n", $utf8)
     Copy-Item -LiteralPath (Join-Path $repoRoot 'opencode.jsonc') -Destination $source
     $scripts = Join-Path $source 'scripts'
     [IO.Directory]::CreateDirectory($scripts) | Out-Null

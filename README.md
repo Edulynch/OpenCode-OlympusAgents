@@ -1,52 +1,149 @@
-# Olympus Agents
+<div align="center">
 
-Olympus is an AI coding team with **OpenCode V2 in ACTIVE DEVELOPMENT** and **Codex in FROZEN COMPATIBILITY**.
+# 🏛️ Olympus Agents
 
-[![Latest release](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) [![Windows qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](docs/HARNESSES.md) [![MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
+<img src="docs/assets/olympus-cover.png" alt="Olympus Agents: Kael coordinating an AI development team on Mount Olympus" width="100%">
+
+**Your AI development team, ready for OpenCode.**
+
+*You bring the idea. Kael brings the team. You stay in control.*
+
+[![Latest release](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) [![OpenCode V2](https://img.shields.io/badge/OpenCode-V2-f97316?style=flat-square)](https://opencode.ai/docs/) [![Windows qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](docs/HARNESSES.md) [![MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
+
+[⚡ Install](#fast-install) · [🚦 Modes](#-normal-vs-fast) · [💬 Get started](#-your-first-task) · [🧭 Meet the team](#-meet-the-team) · [🖥️ CLI Mode](#-cli-mode) · [🧹 Uninstall](#fast-uninstall)
+
+</div>
+
+## ✨ Why Olympus?
+
+Instead of juggling different AI helpers, work with **one coordinated team** right inside OpenCode.
+
+- ✅ **Ready-to-use team:** agent roles and model choices are already set up.
+- ✅ **The right specialist for each task:** explore, design, code, debug or review—without calling everyone every time.
+- ✅ **Checks, not just code:** the team can test changes, review results and tell you what's still uncertain.
+- ✅ **You stay in charge:** Olympus works within your project and keeps important decisions under your control.
+
+Built mainly for **OpenAI models** because its maintainer uses OpenAI subscriptions rather than subscriptions to other AI providers. You still need your own OpenCode setup and access to the selected models; Olympus does not supply those subscriptions.
 
 ## Requirements
 
-- Windows; this installer is currently Windows-qualified.
-- PowerShell 7 (`pwsh`) available on `PATH`. Windows PowerShell 5.1 may start a command only when PowerShell 7 is also installed.
-- Git for project-scope operations; select the root of a trusted Git worktree.
-- Install OpenCode V2 and/or Codex CLI for the harnesses you intend to use.
+**Windows + PowerShell 7 + Git + OpenCode V2** with working OpenAI model access. For a project install, open PowerShell in the root of a Git project you trust. Other operating systems aren't yet qualified for this installer.
 
 ## Fast Install
 
-The URLs below start from the versioned `v0.4.10` bootstrap. That bootstrap queries GitHub's `releases/latest` metadata to select an eligible published release and tag; `v0.4.10` is not a preselected final installer version. The release metadata checks fail closed when their requirements are not met.
+**One command. No cloning Olympus. No manual agent-by-agent setup.**
+
+Paste this in PowerShell. Olympus asks where to install and which app you're using; choose **this project** and **OpenCode** to get started.
 
 ```powershell
 irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.10/install-olympus.ps1 | iex
 ```
 
+[Installation options and safety details](docs/INSTALLATION.md)
+
+## ⚡ NORMAL vs FAST
+
+**NORMAL (default):** Kael chooses only the specialists your task needs and uses useful parallel work when it helps. Nothing extra to type.
+
+**FAST (explicit):** Start your request with `FAST:` when it has independent parts. Kael can run up to four agents in parallel; FAST keeps required checks and does not parallelize dependent tasks.
+
+## 💬 Your First Task
+
+After installing in your project, open OpenCode and describe what you want in everyday language.
+
+> 📱 **Build something:** "Create a simple Flutter habit tracker with local storage and a clean first screen."
+
+> 🐛 **Fix a bug:** "Find why my API returns an error, fix the cause and check that existing behavior still works."
+
+> ⚡ **Move faster:** "FAST: review these independent modules, fix confirmed problems and summarize the tests."
+
+## ✨ Special Capabilities
+
+Some Olympus agents have special abilities. Here's how to use them.
+
+### 🔐 Aegis — The Keeper
+**Privileged Operations & Advanced Maintenance**
+
+Handles tasks requiring elevated permissions beyond Kael's authority, in any project.
+
+**Explicit invocation (required):**
+> /maintain Update protected project settings while preserving existing user files.
+
+Aegis can only be activated through `/maintain`. There is no automatic or implicit invocation, and Kael cannot activate it on your behalf.
+
+### ☀️ Helios — The Optimizer
+**Performance & Efficiency**
+
+Finds worthwhile ways to make your application faster, lighter, or more efficient.
+
+**Explicit:**
+> "Ask Helios to evaluate performance improvements for my API."
+
+**Natural:**
+> "Can we make this API faster without increasing resource usage?"
+
+Kael automatically involves Helios when optimization is explicitly requested. You approve proposed improvements before implementation.
+
+### 🛡️ Talos — The Sentinel
+**Security & Protection**
+
+Investigates confirmed or strongly evidenced security vulnerabilities.
+
+**Explicit:**
+> "Ask Talos to investigate why regular users can access an admin-only endpoint."
+
+**Natural:**
+> "Regular users can delete accounts that belong to other people. Find the security issue."
+
+Kael automatically involves Talos when a serious security issue has sufficient evidence. No special command is needed.
+
+## 🧭 Meet the Team
+
+Meet the twelve roles. **Kael is your main point of contact**—the others step in when their expertise is useful.
+
+| Agent | Model / Reasoning | What they do |
+|---|---|---|
+| 🧭 **Kael** · The Master | GPT-6.1 Sol · High | Coordinates the team and results |
+| 🔎 **Veyra** · The Explorer | GPT-6 Luna · Max | Finds the information the team needs |
+| 🏗️ **Orin** · The Architect | GPT-6 Luna · Max | Designs the solution |
+| 🗺️ **Atlas** · The Planner | GPT-6.1 Sol · High | Plans larger tasks when needed |
+| 🛠️ **Kovan** · The Coder | GPT-6 Luna · Max | Writes and updates code |
+| 🐛 **Argus** · The Bug Hunter | GPT-6.1 Sol · High | Tracks down tricky bugs |
+| 🧪 **Nox** · The Tester | GPT-6 Luna · Max | Runs tests and checks behavior |
+| ⚖️ **Vera** · The Judge | GPT-6 Luna · Max | Reviews work independently |
+| 🛡️ **Talos** · The Sentinel | GPT-6.1 Sol · High | Investigates security issues |
+| 🧠 **Thales** · The Sage | GPT-6.1 Sol · XHigh | Helps with especially difficult questions |
+| ☀️ **Helios** · The Optimizer | GPT-6.1 Sol · High | Suggests improvements when asked |
+| 🔐 **Aegis** · The Keeper | GPT-6 Luna · Max | Handles explicitly requested advanced maintenance |
+
+*Model choices are included with Olympus, but availability depends on your OpenAI access. Aegis is an advanced, explicitly invoked role.*
+
+## 🖥️ CLI Mode
+
+We're also building a simpler way to explore and manage Olympus from the command line.
+
+- ✅ See the team and its model choices.
+- ✅ Check how your setup is configured.
+- ✅ Preview and edit model choices in a trusted source copy.
+- ⬜ Manage installed setups directly from the CLI — still in development.
+- ⬜ One-command installation — final real-world checks are still underway.
+
+The CLI tools for inspecting and editing settings are available from a source checkout; the everyday installer above remains the main way to get started. [Explore CLI development](specs/001-portable-olympus-cli/quickstart.md).
+
 ## Fast Uninstall
+
+Changed your mind? Olympus includes a matching removal command designed to protect files you created yourself.
 
 ```powershell
 irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.10/uninstall-olympus.ps1 | iex
 ```
 
-The bootstrap selects a tag for its release launcher; that launcher resolves `releases/latest` again for the installer and source archive and checks installer identity before execution. GitHub's immutability flag is not independent cryptographic signature verification. See [installation, parameters, safety, and troubleshooting](docs/INSTALLATION.md).
+[Removal options and safety details](docs/INSTALLATION.md)
 
-## Project status
+## 🌱 What's next?
 
-- **OpenCode V2: ACTIVE DEVELOPMENT.**
-- **Codex: FROZEN COMPATIBILITY.** Existing support and safe uninstall behavior remain; no new Codex capabilities or parity are implied.
+**OpenCode V2** is where new Olympus features are developed. **Codex hasn't been dropped**: existing compatibility is kept, but new Codex features are on hold for now. [See supported features](docs/HARNESS-CAPABILITIES.md).
 
-## NORMAL vs FAST
+## 📚 Learn More
 
-**NORMAL (default):** Kael chooses useful, bounded parallel work for the task.
-
-**FAST (explicit):** when work is safe to split, it uses up to four agents, keeps required checks, and does not parallelize dependent tasks.
-
-## Maintenance (OpenCode)
-
-Ordinary Git work, including releases, stays with Kael in the normal project workflow. Only an explicit `/maintain` invokes hidden Aegis; Kael never escalates there automatically. Codex has no equivalent Aegis capability.
-
-## Documentation
-
-- [Installation](docs/INSTALLATION.md) — prerequisites, entrypoints, parameters, safety, and troubleshooting.
-- [Harness capabilities](docs/HARNESS-CAPABILITIES.md) · [Codex compatibility](docs/CODEX-COMPATIBILITY.md)
-- [Development](docs/DEVELOPMENT.md) · [Roadmap](docs/ROADMAP.md) · [Worktrees](docs/WORKTREES.md)
-- [Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Changelog](CHANGELOG.md) · [License](LICENSE)
-
-Olympus is an independent orchestration system, not a fork. The specialized-team idea was informed in part by [codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).
+[Installation guide](docs/INSTALLATION.md) · [CLI Mode](specs/001-portable-olympus-cli/quickstart.md) · [Roadmap](docs/ROADMAP.md) · [Development](docs/DEVELOPMENT.md) · [Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [License](LICENSE)

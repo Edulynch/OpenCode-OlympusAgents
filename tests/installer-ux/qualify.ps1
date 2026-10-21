@@ -476,7 +476,7 @@ exit /b 0
         $requirementsIndex = $readmeText.IndexOf('## Requirements', [StringComparison]::Ordinal)
         $firstCommandIndex = if ($readmeCommands.Count -gt 0) { $readmeCommands[0].Index } else { -1 }
         Check 'README_PREREQUISITES_PRECEDE_FIRST_COMMAND' ($requirementsIndex -ge 0 -and $firstCommandIndex -gt $requirementsIndex)
-        Check 'README_KEEPS_COMPACT_INSTALLATION_GUIDE_LINK' ($readmeText.Contains('[installation, parameters, safety, and troubleshooting](docs/INSTALLATION.md)'))
+        Check 'README_KEEPS_COMPACT_INSTALLATION_GUIDE_LINK' ([regex]::IsMatch($readmeText, '(?i)\[[^\]\r\n]+\]\(docs/INSTALLATION\.md(?:#[^)]+)?\)'))
 
         Check 'INSTALLATION_DOC_COVERS_INTERACTIVE_AND_PARTIAL_SELECTION' ($installationText.Contains('asks for scope and harness') -and
             $installationText.Contains('asks only for the missing values') -and $installationText.Contains('ARGUMENTS_REQUIRED'))

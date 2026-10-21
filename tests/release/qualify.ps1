@@ -183,7 +183,7 @@ try {
     $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1',$script:CandidateVersion,'v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
     if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
         Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
-        Check 'R0_TARGET_IDENTITY_V0410' ($script:CandidateVersion -ceq 'v0.4.10')
+        Check 'R0_TARGET_IDENTITY_V0411' ($script:CandidateVersion -ceq 'v0.4.11')
         Check 'R0_STABLE_CANDIDATE_VERSION' ($script:CandidateVersion -match '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$')
         Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
         Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
@@ -442,12 +442,15 @@ try {
     if ($notesEnd -le $notesStart) { throw "Release-notes section for $($script:CandidateVersion) is unbounded." }
     $releaseNotes = $changelog.Substring($notesStart, $notesEnd - $notesStart)
     $installGuideUrl = "https://github.com/Edulynch/OpenCode-OlympusAgents/blob/$($script:CandidateVersion)/docs/INSTALLATION.md"
-    $verifyGuideUrl = "$installGuideUrl#release-selection-and-safety"
+    $installGuide = [IO.File]::ReadAllText((Join-Path $source 'docs/INSTALLATION.md'))
+    $verifyGuideUrl = "$installGuideUrl#release-selection-identity-and-executable-source"
+    $verifyGuideHeadingExists = $installGuide -match '(?im)^##\s+Release selection, identity, and executable source\s*$'
     Check 'R25_RELEASE_NOTES_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Installation\s*$' -and
         $releaseNotes.Contains($installGuideUrl) -and $releaseNotes -match '(?i)Fast Install' -and
         $releaseNotes -match '(?i)Fast Uninstall')
     Check 'R25_RELEASE_NOTES_VERIFY_INSTALLATION' ($releaseNotes -match '(?im)^##\s+Verify installation\s*$' -and
-        $releaseNotes.Contains($verifyGuideUrl) -and $releaseNotes -match '(?i)read-only|VerifyOnly')
+        $releaseNotes.Contains($verifyGuideUrl) -and $verifyGuideHeadingExists -and
+        $releaseNotes -match '(?i)read-only|VerifyOnly')
     Check 'R25_RELEASE_NOTES_KEEP_COMMANDS_IN_INSTALL_GUIDE' ($releaseNotes -notmatch '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/)[^\r\n]+?\.ps1' -and
         $releaseNotes -notmatch '(?i)\b(?:irm|iwr|Invoke-WebRequest)\b[^\r\n]*\.ps1')
     $requiredHighlights = @('Dual Harness Installer','-Harness opencode','-Harness codex','-Harness all',
@@ -463,7 +466,6 @@ try {
         $versionText -match 'archive/refs/tags/\$Version\.zip')
 
     $readme = [IO.File]::ReadAllText((Join-Path $source 'README.md'))
-    $installGuide = [IO.File]::ReadAllText((Join-Path $source 'docs/INSTALLATION.md'))
     $fastInstallUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/install-olympus.ps1"
     $fastUninstallUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/uninstall-olympus.ps1"
     function Get-ReadmePowerShellCodeBlocks([string]$Markdown) {
@@ -521,7 +523,7 @@ try {
     function Test-ReadmeFastCommandContract([string]$Markdown, [string]$InstallCommand, [string]$UninstallCommand) {
         if ([regex]::Matches($Markdown, '(?im)^##[ \t]+Fast Install[ \t]*\r?$').Count -ne 1 -or
             [regex]::Matches($Markdown, '(?im)^##[ \t]+Fast Uninstall[ \t]*\r?$').Count -ne 1 -or
-            [regex]::Matches($Markdown, '(?im)^##[ \t]+Fast\b[^\r\n]*$').Count -ne 2) {
+            [regex]::Matches($Markdown, '(?im)^##[ \t]+Fast\b[^\r\n]*\r?$').Count -ne 2) {
             return $false
         }
         $installSection = Get-ReadmeFastSection $Markdown 'Fast Install'
@@ -570,6 +572,16 @@ try {
     }
     $fastInstallCommand = "irm $fastInstallUrl | iex"
     $fastUninstallCommand = "irm $fastUninstallUrl | iex"
+    $readmeWithLf = $readme.Replace("`r`n", "`n")
+    $readmeWithCrLf = $readmeWithLf.Replace("`n", "`r`n")
+    Check 'R25_README_FAST_CONTRACT_ACCEPTS_LF_AND_CRLF' (
+        (Test-ReadmeFastCommandContract $readmeWithLf $fastInstallCommand $fastUninstallCommand) -and
+        (Test-ReadmeFastCommandContract $readmeWithCrLf $fastInstallCommand $fastUninstallCommand))
+    $readmeWithExtraFastHeadingLf = $readmeWithLf + "`n## Fast Extra`n"
+    $readmeWithExtraFastHeadingCrLf = $readmeWithCrLf + "`r`n## Fast Extra`r`n"
+    Check 'R25_README_REJECTS_EXTRA_FAST_HEADING_LF_AND_CRLF' (
+        -not (Test-ReadmeFastCommandContract $readmeWithExtraFastHeadingLf $fastInstallCommand $fastUninstallCommand) -and
+        -not (Test-ReadmeFastCommandContract $readmeWithExtraFastHeadingCrLf $fastInstallCommand $fastUninstallCommand))
     Check 'R25_README_HAS_ONLY_TWO_PINNED_FAST_COMMANDS' (
         (Test-ReadmeFastCommandContract $readme $fastInstallCommand $fastUninstallCommand) -and
         (Test-Path -LiteralPath (Join-Path $source 'docs/INSTALLATION.md') -PathType Leaf))

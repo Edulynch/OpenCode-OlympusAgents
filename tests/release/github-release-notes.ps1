@@ -65,7 +65,7 @@ function Assert-ReleaseNotes([string]$Body, [string]$Tag) {
         $installationBody -notmatch '(?i)Fast Install' -or $installationBody -notmatch '(?i)Fast Uninstall') {
         throw 'RELEASE_NOTES_INSTALL_GUIDE_MISSING: Installation section must link the exact-tag installation guide and name both Fast entrypoints.'
     }
-    if (-not $verificationBody.Contains("$docsUrl#release-selection-and-safety") -or
+    if (-not $verificationBody.Contains("$docsUrl#release-selection-identity-and-executable-source") -or
         $verificationBody -notmatch '(?i)read-only|VerifyOnly') {
         throw 'RELEASE_NOTES_HARNESS_VERIFY_MISSING: Verify section must link the installation guide verification and safety details.'
     }

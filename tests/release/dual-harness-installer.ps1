@@ -259,7 +259,7 @@ try {
         $installerText -match "\[ValidateSet\('opencode', 'codex', 'all'\)\]")
     $tag = 'v9.9.9'
     $docsUrl = "https://github.com/Edulynch/OpenCode-OlympusAgents/blob/$tag/docs/INSTALLATION.md"
-    $verifyDocsUrl = "$docsUrl#release-selection-and-safety"
+    $verifyDocsUrl = "$docsUrl#release-selection-identity-and-executable-source"
     $releaseBody = "## Installation`n`nFast Install and Fast Uninstall commands, including parameter and harness details, are documented in $docsUrl.`n`n## Verify installation`n`nRead-only VerifyOnly harness checks and safety are documented in $verifyDocsUrl.`n"
     $releaseGate = Join-Path $source 'tests/release/github-release-notes.ps1'
     $releasePass = (& pwsh -NoProfile -File $releaseGate -Version $tag -ReleaseBody $releaseBody 2>&1 | Out-String)

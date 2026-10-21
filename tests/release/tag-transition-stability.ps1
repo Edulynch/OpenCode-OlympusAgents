@@ -222,7 +222,7 @@ function Add-ReadmeInstallCommand($Docs, [string]$Command) {
 function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG', 'POST_TAG')][string]$TagState) {
     $errors = [System.Collections.Generic.List[string]]::new()
     $versionRegex = [regex]::Escape($Version)
-    if ($Version -cne 'v0.4.10') { $errors.Add('DOC_TARGET_IDENTITY_NOT_V0410') }
+    if ($Version -cne 'v0.4.11') { $errors.Add('DOC_TARGET_IDENTITY_NOT_V0411') }
     if ($Version -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$') {
         $errors.Add('DOC_TARGET_NOT_STABLE_VERSION')
     }
@@ -535,8 +535,8 @@ try {
     Assert-Rejected $badIdentity $version 'PRE_TAG' 'DOC_ACTIVE_RELEASE_IDENTITY_MISMATCH' 'REGRESSION_REJECTS_ACTIVE_IDENTITY_MISMATCH'
 
     $badTargetIdentity = Copy-ReleaseDocs $docs
-    $badTargetIdentity['install.ps1'] = ([string]$badTargetIdentity['install.ps1']).Replace("[string]`$Version = '$version'", "[string]`$Version = 'v0.4.11'").Replace("`$ReleaseVersion = '$version'", "`$ReleaseVersion = 'v0.4.11'")
-    Assert-Rejected $badTargetIdentity 'v0.4.11' 'PRE_TAG' 'DOC_TARGET_IDENTITY_NOT_V0410' 'REGRESSION_REJECTS_NON_V0410_TARGET'
+    $badTargetIdentity['install.ps1'] = ([string]$badTargetIdentity['install.ps1']).Replace("[string]`$Version = '$version'", "[string]`$Version = 'v0.4.12'").Replace("`$ReleaseVersion = '$version'", "`$ReleaseVersion = 'v0.4.12'")
+    Assert-Rejected $badTargetIdentity 'v0.4.12' 'PRE_TAG' 'DOC_TARGET_IDENTITY_NOT_V0411' 'REGRESSION_REJECTS_NON_V0411_TARGET'
 
     $tagBase = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' + $version + '/'
     $fastInstallCommand = 'irm ' + $tagBase + 'install-olympus.ps1 | iex'

@@ -136,6 +136,7 @@ function Invoke-MockedLauncher([string]$Action, [string]$Scope, [string]$Harness
         $global:OlympusInstallerUxApiOrder = @()
     $global:OlympusInstallerUxMetadataUrl = $null
     $global:OlympusInstallerUxLauncherFixtureMode = $true
+    $global:LASTEXITCODE = 0
     $launcherScript = [scriptblock]::Create([IO.File]::ReadAllText((Join-Path $script:source 'scripts/launch-latest.ps1')))
     $text = ''
     try {
@@ -147,6 +148,45 @@ function Invoke-MockedLauncher([string]$Action, [string]$Scope, [string]$Harness
     } finally {
         $global:OlympusInstallerUxLauncherFixtureMode = $false
     }
+}
+
+function Invoke-MockedBootstrap([string]$Action, [object]$PublishedAt, [bool]$Immutable = $true,
+    [bool]$Draft = $false, [bool]$Prerelease = $false) {
+    $global:OlympusInstallerUxRelease = [pscustomobject]@{
+        tag_name = 'v9.8.7'; immutable = $Immutable; draft = $Draft; prerelease = $Prerelease; published_at = $PublishedAt
+    }
+    $global:OlympusInstallerUxApiOrder = @()
+    $global:OlympusInstallerUxRemoteBootstrapMode = $true
+    $entry = if ($Action -eq 'install') { $script:installEntry } else { $script:uninstallEntry }
+    $entryScript = [scriptblock]::Create([IO.File]::ReadAllText($entry))
+    $global:LASTEXITCODE = 0
+    $text = ''
+    $code = 0
+    try {
+        $text = (& $entryScript -Global -Harness all 2>&1 | Out-String)
+        if ($LASTEXITCODE -ne 0) { $code = 1 }
+    } catch {
+        $text += $_.Exception.Message
+        $code = 1
+    } finally {
+        $global:OlympusInstallerUxRemoteBootstrapMode = $false
+    }
+    return [pscustomobject]@{ Code = $code; Text = $text; ApiOrder = ($global:OlympusInstallerUxApiOrder -join ',') }
+}
+
+function Invoke-IsolatedPublishedTimestampConverter([string]$ScriptPath, [object]$Value) {
+    $tokens = $null
+    $parseErrors = $null
+    $ast = [Management.Automation.Language.Parser]::ParseFile($ScriptPath, [ref]$tokens, [ref]$parseErrors)
+    if ($parseErrors.Count -gt 0) { throw "TIMESTAMP_FIXTURE_PARSE_FAILED: $ScriptPath" }
+    $converter = $ast.Find({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -ceq 'ConvertTo-ReleasePublishedTimestamp'
+    }, $false)
+    if ($null -eq $converter) { throw "TIMESTAMP_CONVERTER_MISSING: $ScriptPath" }
+    $runner = [scriptblock]::Create($converter.Extent.Text + "`nConvertTo-ReleasePublishedTimestamp `$args[0]")
+    return & $runner $Value
 }
 
 try {
@@ -316,6 +356,115 @@ exit /b 0
             $global:OlympusInstallerUxLauncherUrl -eq $null -and
             [IO.File]::ReadAllText($dispatchLog) -ceq $dispatchBeforeMutableBootstrap)
 
+        # Exercise all three affected release-selection scripts with typed and
+        # zoned values. ConvertFrom-Json mirrors the DateTime kinds produced by
+        # PowerShell's JSON path without changing the machine's time zone.
+        $stableInstant = [DateTimeOffset]::Parse('2026-10-01T12:00:00Z', [Globalization.CultureInfo]::InvariantCulture)
+        $issueTimestamp = '2026-10-21T05:29:57Z'
+        $issueDateTimeUtc = [DateTime]::Parse($issueTimestamp, [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind)
+        $issueOffsetTimestamp = '2026-10-21T08:29:57+03:00'
+        foreach ($timestampScript in @($installEntry, $uninstallEntry, (Join-Path $source 'scripts/launch-latest.ps1'))) {
+            $convertedUtcDateTime = Invoke-IsolatedPublishedTimestampConverter $timestampScript $issueDateTimeUtc
+            $convertedOffsetObject = Invoke-IsolatedPublishedTimestampConverter $timestampScript ([DateTimeOffset]$issueDateTimeUtc)
+            $convertedUtcString = Invoke-IsolatedPublishedTimestampConverter $timestampScript $issueTimestamp
+            $convertedOffsetString = Invoke-IsolatedPublishedTimestampConverter $timestampScript $issueOffsetTimestamp
+            Check ("ISOLATED_UTC_TYPED_TIMESTAMP_PRESERVED_{0}" -f (Split-Path -Leaf $timestampScript)) (
+                $convertedUtcDateTime -is [DateTimeOffset] -and
+                $convertedUtcDateTime.UtcDateTime.Ticks -eq $issueDateTimeUtc.Ticks -and
+                $convertedUtcDateTime.Offset -eq [TimeSpan]::Zero)
+            Check ("ISOLATED_DATETIMEOFFSET_PRESERVED_{0}" -f (Split-Path -Leaf $timestampScript)) (
+                $convertedOffsetObject -is [DateTimeOffset] -and
+                $convertedOffsetObject.UtcDateTime.Ticks -eq $issueDateTimeUtc.Ticks)
+            Check ("ISOLATED_ISO_Z_STRING_PRESERVED_{0}" -f (Split-Path -Leaf $timestampScript)) (
+                $convertedUtcString.UtcDateTime.Ticks -eq $issueDateTimeUtc.Ticks)
+            Check ("ISOLATED_ISO_OFFSET_STRING_PRESERVED_{0}" -f (Split-Path -Leaf $timestampScript)) (
+                $convertedOffsetString.UtcDateTime.Ticks -eq $issueDateTimeUtc.Ticks)
+        }
+        # Simulate zone-less DateTimeOffset reparsing under several local-zone
+        # offsets without changing the host's operating-system time zone.
+        foreach ($zoneCase in @(
+            [pscustomobject]@{ Id = 'UTC'; Zone = 'UTC' },
+            [pscustomobject]@{ Id = 'PACIFIC'; Zone = 'Pacific Standard Time' },
+            [pscustomobject]@{ Id = 'CENTRAL_EUROPE'; Zone = 'W. Europe Standard Time' },
+            [pscustomobject]@{ Id = 'TOKYO'; Zone = 'Tokyo Standard Time' }
+        )) {
+            $simulatedSystemZone = [TimeZoneInfo]::FindSystemTimeZoneById($zoneCase.Zone)
+            $wallClockWithoutKind = [DateTime]::SpecifyKind($issueDateTimeUtc, [DateTimeKind]::Unspecified)
+            $legacyInterpretation = [DateTimeOffset]::new($wallClockWithoutKind,
+                $simulatedSystemZone.GetUtcOffset($wallClockWithoutKind))
+            $legacyChangedInstant = $legacyInterpretation.UtcDateTime.Ticks -ne $issueDateTimeUtc.Ticks
+            $shouldChangeLegacyInstant = $simulatedSystemZone.GetUtcOffset($wallClockWithoutKind) -ne [TimeSpan]::Zero
+            Check ("LEGACY_LOCAL_ZONE_INTERPRETATION_{0}" -f $zoneCase.Id) ($legacyChangedInstant -eq $shouldChangeLegacyInstant)
+            foreach ($timestampScript in @($installEntry, $uninstallEntry, (Join-Path $source 'scripts/launch-latest.ps1'))) {
+                $fixedInZone = Invoke-IsolatedPublishedTimestampConverter $timestampScript $issueDateTimeUtc
+                Check ("FIXED_TYPED_UTC_INSTANT_INDEPENDENT_OF_{0}_{1}" -f $zoneCase.Id, (Split-Path -Leaf $timestampScript)) (
+                    $fixedInZone.UtcDateTime.Ticks -eq $issueDateTimeUtc.Ticks)
+            }
+        }
+        $utcDateTime = [DateTime]::Parse('2026-10-01T12:00:00Z', [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind)
+        $offsetDateTimeOffset = $stableInstant.ToOffset([TimeSpan]::FromHours(2))
+        $nearLimitTimestamp = [DateTimeOffset]::UtcNow.AddMinutes(4).ToString('o')
+        $sameInstantFromJson = foreach ($isoTimestamp in @(
+            '2026-10-01T12:00:00Z',
+            '2026-10-01T15:00:00+03:00',
+            '2026-10-01T05:00:00-07:00'
+        )) {
+            ('{"published_at":"' + $isoTimestamp + '"}' | ConvertFrom-Json).published_at
+        }
+        $validTimestampCases = @(
+            [pscustomobject]@{ Id = 'DATETIME_UTC'; Value = $utcDateTime; ExpectedUtc = '2026-10-01T12:00:00' },
+            [pscustomobject]@{ Id = 'DATETIMEOFFSET'; Value = $offsetDateTimeOffset; ExpectedUtc = '2026-10-01T12:00:00' },
+            [pscustomobject]@{ Id = 'ISO_UTC_STRING'; Value = '2026-10-01T12:00:00Z'; ExpectedUtc = '2026-10-01T12:00:00' },
+            [pscustomobject]@{ Id = 'ISO_OFFSET_STRING'; Value = '2026-10-01T14:00:00+02:00'; ExpectedUtc = '2026-10-01T12:00:00' },
+            [pscustomobject]@{ Id = 'JSON_UTC_DATETIME'; Value = $sameInstantFromJson[0]; ExpectedUtc = '2026-10-01T12:00:00' },
+            [pscustomobject]@{ Id = 'JSON_PLUS_THREE_OFFSET_DATETIME'; Value = $sameInstantFromJson[1]; ExpectedUtc = '2026-10-01T12:00:00' },
+            [pscustomobject]@{ Id = 'JSON_MINUS_SEVEN_OFFSET_DATETIME'; Value = $sameInstantFromJson[2]; ExpectedUtc = '2026-10-01T12:00:00' },
+            [pscustomobject]@{ Id = 'FUTURE_WITHIN_FIVE_MINUTES'; Value = $nearLimitTimestamp; ExpectedUtc = $null }
+        )
+        foreach ($entrypointAction in @('install', 'uninstall')) {
+            foreach ($timestampCase in $validTimestampCases) {
+                $bootstrapTimestamp = Invoke-MockedBootstrap $entrypointAction $timestampCase.Value
+                Check ("BOOTSTRAP_{0}_{1}_ACCEPTED" -f $entrypointAction.ToUpperInvariant(), $timestampCase.Id) (
+                    $bootstrapTimestamp.Code -eq 0 -and $bootstrapTimestamp.ApiOrder -ceq 'release-metadata,launcher-download' -and
+                    [IO.File]::ReadAllText($dispatchLog) -match ("-Action {0}" -f $entrypointAction))
+            }
+        }
+
+        $invalidTimestampCases = @(
+            [pscustomobject]@{ Id = 'INVALID'; Value = 'not-a-date' },
+            [pscustomobject]@{ Id = 'ZONELESS'; Value = '2026-10-01T12:00:00' },
+            [pscustomobject]@{ Id = 'UNSPECIFIED_DATETIME'; Value = [DateTime]::SpecifyKind(
+                [DateTime]::Parse('2026-10-01T12:00:00', [Globalization.CultureInfo]::InvariantCulture),
+                [DateTimeKind]::Unspecified) },
+            [pscustomobject]@{ Id = 'CLEARLY_FUTURE'; Value = [DateTimeOffset]::UtcNow.AddMinutes(10) }
+        )
+        foreach ($entrypointAction in @('install', 'uninstall')) {
+            foreach ($timestampCase in $invalidTimestampCases) {
+                $dispatchBeforeInvalidTimestamp = [IO.File]::ReadAllText($dispatchLog)
+                $bootstrapTimestamp = Invoke-MockedBootstrap $entrypointAction $timestampCase.Value
+                Check ("BOOTSTRAP_{0}_{1}_REJECTED_BEFORE_DOWNLOAD_OR_EXECUTION" -f $entrypointAction.ToUpperInvariant(), $timestampCase.Id) (
+                    $bootstrapTimestamp.Code -ne 0 -and
+                    $bootstrapTimestamp.Text -match 'LATEST_RELEASE_METADATA_INVALID' -and
+                    $bootstrapTimestamp.ApiOrder -ceq 'release-metadata' -and
+                    [IO.File]::ReadAllText($dispatchLog) -ceq $dispatchBeforeInvalidTimestamp)
+            }
+            foreach ($invalidReleaseFlags in @(
+                [pscustomobject]@{ Id = 'MUTABLE'; Immutable = $false; Draft = $false; Prerelease = $false; Expected = 'LATEST_RELEASE_MUTABLE' },
+                [pscustomobject]@{ Id = 'DRAFT'; Immutable = $true; Draft = $true; Prerelease = $false; Expected = 'LATEST_RELEASE_NOT_PUBLISHED' },
+                [pscustomobject]@{ Id = 'PRERELEASE'; Immutable = $true; Draft = $false; Prerelease = $true; Expected = 'LATEST_RELEASE_NOT_PUBLISHED' }
+            )) {
+                $dispatchBeforeInvalidReleaseFlags = [IO.File]::ReadAllText($dispatchLog)
+                $invalidFlagsResult = Invoke-MockedBootstrap $entrypointAction $utcDateTime `
+                    $invalidReleaseFlags.Immutable $invalidReleaseFlags.Draft $invalidReleaseFlags.Prerelease
+                Check ("BOOTSTRAP_{0}_{1}_REJECTED" -f $entrypointAction.ToUpperInvariant(), $invalidReleaseFlags.Id) (
+                    $invalidFlagsResult.Code -ne 0 -and $invalidFlagsResult.Text -match $invalidReleaseFlags.Expected -and
+                    $invalidFlagsResult.ApiOrder -ceq 'release-metadata' -and
+                    [IO.File]::ReadAllText($dispatchLog) -ceq $dispatchBeforeInvalidReleaseFlags)
+            }
+        }
+
         $escapedMockBin = $mockBin.Replace("'", "''")
         $escapedInstallEntry = $installEntry.Replace("'", "''")
         $nativeCommand = '$env:PATH = ' + "'$escapedMockBin'" + ' + [IO.Path]::PathSeparator + $env:PATH; & ' +
@@ -404,6 +553,22 @@ exit /b 0
             $uninstallDispatch -match "-Version $releaseTag" -and $uninstallDispatch -match '-Uninstall' -and
             $validUninstall.Text -match "OLYMPUS_RELEASE_EXECUTING: tag=$releaseTag")
 
+        $global:OlympusInstallerUxInstallerText = "[string]`$Version = '$releaseTag'`n`$ReleaseVersion = '$releaseTag'`n scripts/project-uninstall.ps1`n"
+        foreach ($timestampCase in $validTimestampCases) {
+            $global:OlympusInstallerUxRelease = [pscustomobject]@{
+                tag_name = $releaseTag; immutable = $true; draft = $false; prerelease = $false; published_at = $timestampCase.Value
+            }
+            $timestampLaunch = Invoke-MockedLauncher 'install' 'project' 'opencode' $hereTarget
+            $selectedTimestampIsUtc = if ($timestampCase.ExpectedUtc) {
+                $timestampLaunch.Text -match ("published_at={0}(?:\.\d+)?\+00:00" -f $timestampCase.ExpectedUtc)
+            } else {
+                $timestampLaunch.Text -match 'OLYMPUS_RELEASE_SELECTED:'
+            }
+            Check ("LAUNCHER_{0}_ACCEPTED_WITH_UTC_INSTANT" -f $timestampCase.Id) (
+                $timestampLaunch.Code -eq 0 -and $selectedTimestampIsUtc -and
+                $global:OlympusInstallerUxInstallerDownloadCount -eq 1)
+        }
+
         $baselineDispatch = [IO.File]::ReadAllText($dispatchLog)
         $metadataFailures = @(
             [pscustomobject]@{
@@ -427,8 +592,29 @@ exit /b 0
                 Expected = 'LATEST_RELEASE_NOT_PUBLISHED'
             },
             [pscustomobject]@{
+                Id = 'LAUNCHER_REJECTS_PRERELEASE'
+                Release = [pscustomobject]@{ tag_name=$releaseTag; immutable=$true; draft=$false; prerelease=$true; published_at=$publishedAt }
+                Expected = 'LATEST_RELEASE_NOT_PUBLISHED'
+            },
+            [pscustomobject]@{
                 Id = 'LAUNCHER_REJECTS_INVALID_PUBLISHED_TIMESTAMP'
                 Release = [pscustomobject]@{ tag_name=$releaseTag; immutable=$true; draft=$false; prerelease=$false; published_at='not-a-date' }
+                Expected = 'LATEST_RELEASE_METADATA_INVALID'
+            },
+            [pscustomobject]@{
+                Id = 'LAUNCHER_REJECTS_ZONELESS_PUBLISHED_TIMESTAMP'
+                Release = [pscustomobject]@{ tag_name=$releaseTag; immutable=$true; draft=$false; prerelease=$false; published_at='2026-10-01T12:00:00' }
+                Expected = 'LATEST_RELEASE_METADATA_INVALID'
+            },
+            [pscustomobject]@{
+                Id = 'LAUNCHER_REJECTS_UNSPECIFIED_DATETIME'
+                Release = [pscustomobject]@{ tag_name=$releaseTag; immutable=$true; draft=$false; prerelease=$false; published_at=[DateTime]::SpecifyKind(
+                    [DateTime]::Parse('2026-10-01T12:00:00', [Globalization.CultureInfo]::InvariantCulture), [DateTimeKind]::Unspecified) }
+                Expected = 'LATEST_RELEASE_METADATA_INVALID'
+            },
+            [pscustomobject]@{
+                Id = 'LAUNCHER_REJECTS_CLEARLY_FUTURE_PUBLISHED_TIMESTAMP'
+                Release = [pscustomobject]@{ tag_name=$releaseTag; immutable=$true; draft=$false; prerelease=$false; published_at=[DateTimeOffset]::UtcNow.AddMinutes(10) }
                 Expected = 'LATEST_RELEASE_METADATA_INVALID'
             },
             [pscustomobject]@{

@@ -6,11 +6,9 @@ param(
     [Parameter(ParameterSetName = 'ProjectHere')]
     [switch]$Here,
     [Parameter(ParameterSetName = 'ProjectPath')]
-    [ValidateNotNullOrEmpty()]
     [string]$ProjectPath,
     [Parameter(ParameterSetName = 'Global')]
     [switch]$Global,
-    [ValidateSet('opencode', 'codex', 'all')]
     [string]$Harness
 )
 
@@ -126,6 +124,9 @@ try {
     $target = $null
     $needsScope = $true
     if ($PSBoundParameters.ContainsKey('ProjectPath')) {
+        if ([string]::IsNullOrEmpty($ProjectPath)) {
+            throw 'ARGUMENTS_INVALID: -ProjectPath must not be empty.'
+        }
         $scope = 'project'
         $target = $ProjectPath
         $needsScope = $false
@@ -146,6 +147,9 @@ try {
     }
 
     $needsHarness = -not $PSBoundParameters.ContainsKey('Harness')
+    if (-not $needsHarness -and $Harness -notin @('opencode', 'codex', 'all')) {
+        throw 'ARGUMENTS_INVALID: -Harness must be opencode, codex, or all.'
+    }
     if ($needsScope -or $needsHarness) { Assert-InteractiveInput }
 
     if ($needsScope) {

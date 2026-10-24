@@ -18,8 +18,11 @@ $global:OlympusInstallerUxLauncherFixtureMode = $false
 $global:OlympusInstallerUxRemoteBootstrapMode = $false
 $global:OlympusInstallerUxApiOrder = @()
 
-function Check([string]$id, [bool]$condition) {
-    if (-not $condition) { throw "$id FAIL" }
+function Check([string]$id, [bool]$condition, [string]$evidence = '') {
+    if (-not $condition) {
+        if ($evidence) { throw "$id FAIL`n$evidence" }
+        throw "$id FAIL"
+    }
     Write-Output "$id PASS"
 }
 
@@ -30,6 +33,27 @@ function Invoke-MockedEntry([string]$Entry, [hashtable]$Parameters, [string[]]$A
     return [pscustomobject]@{
         Text = [IO.File]::ReadAllText($script:dispatchLog)
         Prompts = $global:OlympusInstallerUxReadHostCalls
+    }
+}
+
+function Invoke-IexMockedEntry([string]$Entry, [string[]]$Answers = @()) {
+    $global:OlympusInstallerUxReadHostAnswers = @($Answers)
+    $global:OlympusInstallerUxReadHostCalls = 0
+    $global:OlympusInstallerUxRelease = [pscustomobject]@{
+        tag_name = 'v9.8.7'; immutable = $true; draft = $false; prerelease = $false; published_at = '2026-10-01T12:00:00Z'
+    }
+    $global:OlympusInstallerUxLaunchSource = Join-Path $script:source 'scripts/launch-latest.ps1'
+    $global:OlympusInstallerUxRemoteBootstrapMode = $true
+    $global:LASTEXITCODE = 0
+    $text = ''
+    try {
+        $text = (Invoke-Expression ([IO.File]::ReadAllText($Entry)) 2>&1 | Out-String)
+        return [pscustomobject]@{ Text = $text; Code = $LASTEXITCODE; Prompts = $global:OlympusInstallerUxReadHostCalls }
+    } catch {
+        $text += $_.Exception.Message
+        return [pscustomobject]@{ Text = $text; Code = 1; Prompts = $global:OlympusInstallerUxReadHostCalls }
+    } finally {
+        $global:OlympusInstallerUxRemoteBootstrapMode = $false
     }
 }
 
@@ -234,6 +258,18 @@ exit /b 0
         Check 'PARTIAL_INSTALL_PATH_WITH_SPACES_PROMPTS_HARNESS_ONLY' ($partialPathInstall.Prompts -eq 1 -and
             $partialPathInstall.Text -match '(?i)-Action install .*?-Scope project .*?-Harness opencode' -and
             $partialPathInstall.Text.Contains($otherTarget))
+
+        foreach ($entry in @(
+            [pscustomobject]@{ Id = 'IEX_INTERACTIVE_INSTALL'; Path = $installEntry; Action = 'install' },
+            [pscustomobject]@{ Id = 'IEX_INTERACTIVE_UNINSTALL'; Path = $uninstallEntry; Action = 'uninstall' }
+        )) {
+            $iexEntry = Invoke-IexMockedEntry -Entry $entry.Path -Answers @('1', '1')
+            Check ($entry.Id + '_OPTIONAL_PROJECTPATH_DOES_NOT_BLOCK') ($iexEntry.Code -eq 0 -and
+                $iexEntry.Prompts -eq 2 -and
+                [IO.File]::ReadAllText($dispatchLog) -match ("(?i)-Action {0} .*?-Scope project .*?-Harness opencode" -f $entry.Action) -and
+                [IO.File]::ReadAllText($dispatchLog).Contains($hereTarget)) (
+                    "code=$($iexEntry.Code), prompts=$($iexEntry.Prompts), text=$($iexEntry.Text), dispatch=$([IO.File]::ReadAllText($dispatchLog))")
+        }
 
         $partialHarnessInstall = Invoke-MockedEntry -Entry $installEntry -Parameters @{ Harness = 'all' } -Answers @('1')
         Check 'PARTIAL_INSTALL_HARNESS_PROMPTS_SCOPE_ONLY' ($partialHarnessInstall.Prompts -eq 1 -and
@@ -505,7 +541,11 @@ exit /b 0
         $lastDispatch = [IO.File]::ReadAllText($dispatchLog)
         $invalidCases = @(
             [pscustomobject]@{ Id = 'INCOMPLETE_PROJECT_SCOPE_REJECTED'; Entry = $installEntry; Parameters = @{ Project = $true; Harness = 'all' } },
-            [pscustomobject]@{ Id = 'FALSE_GLOBAL_SELECTION_REJECTED'; Entry = $uninstallEntry; Parameters = @{ Global = $false; Harness = 'all' } }
+            [pscustomobject]@{ Id = 'FALSE_GLOBAL_SELECTION_REJECTED'; Entry = $uninstallEntry; Parameters = @{ Global = $false; Harness = 'all' } },
+            [pscustomobject]@{ Id = 'EMPTY_INSTALL_PROJECT_PATH_REJECTED'; Entry = $installEntry; Parameters = @{ ProjectPath = ''; Harness = 'all' } },
+            [pscustomobject]@{ Id = 'EMPTY_UNINSTALL_PROJECT_PATH_REJECTED'; Entry = $uninstallEntry; Parameters = @{ ProjectPath = ''; Harness = 'all' } },
+            [pscustomobject]@{ Id = 'INVALID_INSTALL_HARNESS_REJECTED'; Entry = $installEntry; Parameters = @{ Project = $true; Here = $true; Harness = 'invalid' } },
+            [pscustomobject]@{ Id = 'INVALID_UNINSTALL_HARNESS_REJECTED'; Entry = $uninstallEntry; Parameters = @{ Project = $true; Here = $true; Harness = 'invalid' } }
         )
         foreach ($entry in $invalidCases) {
             $failed = $false

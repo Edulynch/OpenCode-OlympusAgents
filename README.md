@@ -13,16 +13,16 @@ Olympus is an AI coding team with **OpenCode V2 in ACTIVE DEVELOPMENT** and **Co
 
 ## Fast Install
 
-The URLs below start from the versioned `v0.4.11` bootstrap. That bootstrap queries GitHub's `releases/latest` metadata to select an eligible published release and tag; `v0.4.11` is not a preselected final installer version. The release metadata checks fail closed when their requirements are not met.
+The URLs below start from the versioned `v0.4.12` bootstrap. That bootstrap queries GitHub's `releases/latest` metadata to select an eligible published release and tag; `v0.4.12` is not a preselected final installer version. The release metadata checks fail closed when their requirements are not met.
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/install-olympus.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.12/install-olympus.ps1 | iex
 ```
 
 ## Fast Uninstall
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/uninstall-olympus.ps1 | iex
+irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.12/uninstall-olympus.ps1 | iex
 ```
 
 The bootstrap selects a tag for its release launcher; that launcher resolves `releases/latest` again for the installer and source archive and checks installer identity before execution. GitHub's immutability flag is not independent cryptographic signature verification. See [installation, parameters, safety, and troubleshooting](docs/INSTALLATION.md).

@@ -4,6 +4,34 @@
 
 Changes after the latest published release go here.
 
+## v0.4.12
+
+### Highlights
+
+- Fix optional `-ProjectPath` and `-Harness` validation in the public install and uninstall entrypoints when invoked through `Invoke-Expression` (`IEX`); interactive prompts and direct argument validation remain covered.
+- Prepare exact-tag Fast Install and Fast Uninstall bootstrap URLs. The URL pins the bootstrap source only: each bootstrap consults `releases/latest` metadata to select an eligible published release and tag, so it does not pin the installed version.
+- Preserve release-metadata rejection, tag and installer identity checks, project/global scope selection, Git worktree-root checks, ownership manifests, managed-file hash/drift protection, safe uninstall of unchanged manifest-owned resources, and read-only `VerifyOnly` behavior.
+- Preserve the additive **Dual Harness Installer** for `-Harness opencode`, `-Harness codex`, and `-Harness all`, `installed_harnesses`, legacy OpenCode installations, PowerShell 5.1 / PowerShell 7 launch compatibility, user-owned file protection, and shared Olympus Harness Core. `VerifyOnly` remains read-only; this release does not claim full parity.
+
+### Validation
+
+- Local candidate checks exercise release identity, the twelve wrapper sources, public entrypoint argument flows, release-note and README contracts, tag-transition stability, and installer ownership/security regressions using isolated fixtures.
+- Local candidate qualification is not acceptance of a published v0.4.12 source: it does not establish that public source exists, remote bytes or GitHub metadata, a published integrity signature, or native runtime behavior.
+
+### Capability limits
+
+- The installer is Windows-qualified only and requires PowerShell 7; project-scope operations require Git and a trusted Git worktree root. Static installation does not establish runtime discovery on every runtime or version.
+- OpenCode V2 remains in **ACTIVE DEVELOPMENT**; Codex remains in **FROZEN COMPATIBILITY**. Codex retains `DENY = GAP`, `AEGIS = GAP`, and `ACTIVITY_VISIBILITY = PARTIAL/BASIC`; this release does not claim full parity.
+- OpenCode Issue #1 (child-result correlation) and Issue #8 (authorization continuity after compaction) remain **OPEN/deferred**; no upstream or compaction fix is claimed. GitHub's `immutable` metadata is not independent cryptographic signature verification.
+
+## Installation
+
+See the [v0.4.12 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.4.12/docs/INSTALLATION.md) for the Fast Install and Fast Uninstall entrypoints, scope and harness selection, requirements, and safety details.
+
+## Verify installation
+
+Read-only `VerifyOnly` instructions and release-source verification limits are documented in the [installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.4.12/docs/INSTALLATION.md#release-selection-identity-and-executable-source). Local candidate fixtures do not establish remote source availability or native runtime behavior.
+
 ## v0.4.11
 
 ### Highlights

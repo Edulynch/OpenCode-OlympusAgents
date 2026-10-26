@@ -125,6 +125,10 @@ def repository_root(requested: Path | None) -> Path:
 
 
 def current_files(root: Path, staging: Path) -> int:
+    try:
+        root = root.resolve(strict=True)
+    except OSError:
+        raise GateError("The Git worktree root could not be resolved.") from None
     result = quiet_run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=root)
     if result.returncode != 0:
         raise GateError("Git could not enumerate tracked and non-ignored untracked files.")

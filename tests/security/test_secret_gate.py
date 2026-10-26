@@ -17,6 +17,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 import secret_gate  # noqa: E402
+import check_docs  # noqa: E402
 
 
 class SecretGateTests(unittest.TestCase):
@@ -92,6 +93,14 @@ class SecretGateTests(unittest.TestCase):
             status, findings = secret_gate.scan_files(self.binary, staged, cwd=self.repo, config=self.config, ignore_file=self.ignore_file)
         self.assertEqual((status, findings), (0, 0))
 
+    def test_current_files_accepts_a_canonical_nested_path_alias(self) -> None:
+        nested = self.repo / "nested"
+        nested.mkdir()
+        alias = nested / ".."
+        with tempfile.TemporaryDirectory(prefix="olympus-gitleaks-alias-stage-") as stage_name:
+            count = secret_gate.current_files(alias, Path(stage_name))
+        self.assertGreater(count, 0)
+
     def test_canary_in_removed_commit_is_detected_by_history_scan(self) -> None:
         canary = self.canary()
         target = self.repo / "historical.txt"
@@ -128,6 +137,27 @@ class SecretGateTests(unittest.TestCase):
                 with self.assertRaisesRegex(secret_gate.GateError, "SHA-256"):
                     secret_gate.ensure_binary(Path(directory))
             self.assertEqual(list(Path(directory).iterdir()), [])
+
+
+class DocumentationLinkGateTests(unittest.TestCase):
+    def test_only_the_six_known_history_attachments_are_notices(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="olympus-doc-link-test-") as temporary:
+            root = Path(temporary)
+            report = root / "specs" / "001-portable-olympus-cli" / "evidence" / "r49-20261014-c30a19d" / "report.md"
+            report.parent.mkdir(parents=True)
+            source_name = "specs/001-portable-olympus-cli/evidence/r49-20261014-c30a19d/report.md"
+            attachments = sorted(target for source, target in check_docs.KNOWN_UNVERSIONED_ATTACHMENTS if source == source_name)
+            self.assertEqual(len(attachments), 6)
+            for target in attachments:
+                (report.parent / target).write_text("synthetic empty attachment\n", encoding="utf-8")
+            refs = " ".join(f"[historical]({target})" for target in attachments)
+            # The seventh missing target is in the same evidence report and must fail.
+            report.write_text(f"{refs} [new file](newly-missing.json)\n", encoding="utf-8")
+            with mock.patch.object(check_docs, "ROOT", root):
+                failures, notices = check_docs.check_links([report])
+        self.assertEqual(len(notices), 6)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("missing local link target", failures[0])
 
 
 if __name__ == "__main__":

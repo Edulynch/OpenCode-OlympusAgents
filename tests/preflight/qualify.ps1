@@ -18,9 +18,17 @@ function Section([string]$Text, [string]$Heading) {
     if (-not $match.Success) { throw "Missing section: $Heading" }
     return $match.Groups[1].Value
 }
+function Frontmatter([string]$Text) {
+    $match = [regex]::Match($Text, '\A---\r?\n(?<frontmatter>.*?)\r?\n---[ \t]*(?:\r?\n|\z)', [Text.RegularExpressions.RegexOptions]::Singleline)
+    if (-not $match.Success) { throw 'Generated agent metadata frontmatter is missing or malformed' }
+    return $match.Groups['frontmatter'].Value
+}
 
 try {
     $preflight = Section $kael 'Capability Preflight — before research'
+    $authority = Section $kael 'Task-scoped Authority Grants and native permission outcomes'
+    $kaelMetadata = Frontmatter $kael
+    $noxMetadata = Frontmatter $nox
     $discovery = Section $kael 'Task-scoped, progressive discovery'
     $admin = Section $aegis 'Administrative fast path'
     $mission = Section $kael 'Mission and routing'
@@ -33,6 +41,31 @@ try {
     Check PREFLIGHT ($preflight -match 'actual outcome' -and $preflight -match 'required capabilities' -and
         $preflight -match 'known Olympus' -and $preflight -match 'is any repository discovery needed' -and
         $preflight -match 'not a research phase')
+    Check CAPABILITY_ROUTE_ORDER ($preflight -match 'INTENT → REQUIRED_CAPABILITY → ROLE →\s+EFFECTIVE_AUTHORITY → NATIVE_ROUTE → EXECUTE/BLOCK' -and
+        $preflight -match 'Kael''s own `shell: deny` applies to Kael''s\s+direct shell use' -and
+        $preflight -match 'by itself it does not establish that an authorized specialist\s+route is unavailable')
+    Check SPECIALIST_ROUTE ($preflight -match 'read-only `git status --short` to\s+Nox as one bounded child assignment' -and
+        $preflight -match '`SCOPE: read-only git status --short`\s+and `REPOSITORY_ROOT: <the identified trusted repository root>`' -and
+        $preflight -match 'Reconcile and consume that original child''s terminal result' -and
+        $preflight -match 'including\s+its directly observed command outcome' -and
+        $preflight -match 'an absent\s+or unresolved result does not authorize a retry' -and
+        $preflight -match 'scoped tests\s+to Nox and\s+implementation or explicitly authorized Git mutations to Kovan' -and
+        $preflight -match 'Check whether native delegation is actually available to this session' -and
+        $preflight -match 'allowlist or role definition alone does not prove' -and
+        $preflight -match 'exact scope, and\s+child-result reconciliation lifecycle')
+    Check DELEGATION_BLOCKERS ($preflight -match 'BLOCKED_DELEGATION_UNAVAILABLE' -and
+        $preflight -match 'Do not claim an\s+attempt that did not happen' -and
+        $preflight -match 'A user prohibition or effective native DENY means\s+do not invoke' -and
+        $preflight -match 'rejection or cancellation means stop without a\s+retry or role substitution' -and
+        $preflight -match 'Trivial requests still use the direct-answer path with zero children')
+    Check NATIVE_ASK_PRESERVED ($preflight -match 'For effective native ASK, preserve the\s+exact current-task grant' -and
+        $authority -match 'effective OpenCode ASK rule' -and
+        $authority -match '(?s)permission_mode: NATIVE_ASK.*?lifetime: current_task' -and
+        $authority -match 'exact current-task grant' -and
+        $authority -match 'Native ASK is the human-consent point' -and
+        $authority -match 'do not send a duplicate Kael\s+QUESTION' -and
+        $authority -match 'rejection/cancellation stops it with no retry or\s+bypass' -and
+        $authority -match 'If denied, keep work stopped')
     Check NO_DELEGATION ($preflight -match 'Do not invoke Veyra to decide\s+whether Olympus has permission' -and
         $preflight -match 'Orin to decide the plane' -and
         $preflight -match 'inspect the project\s+to confirm an already-known boundary')
@@ -50,6 +83,11 @@ try {
         $aegis -match 'The permitted entry is user → `/maintain` → Aegis' -and
         $handoff -match 'cannot invoke or' -and $handoff -match 'delegate to Aegis' -and
         $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: aegis\s*\r?\n\s*effect: allow')
+    Check KAEL_NATIVE_PERMISSION ($kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
+        $kaelMetadata -match '(?m)^  - action: subagent\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
+        $kaelMetadata -match '(?m)^  - action: subagent\r?\n    resource: nox\r?\n    effect: allow(?:\r?\n|$)')
+    Check NOX_NATIVE_SHELL ($noxMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: allow(?:\r?\n|$)' -and
+        $nox -match 'Source-read-only trusted-project validation specialist with practical shell')
 
     # Controlled small fixture: localized cart target, related test, unrelated auth module.
     Check FIXTURE ((Test-Path (Join-Path $fixture 'src/cart.ts')) -and
@@ -77,7 +115,7 @@ try {
         $kael -match 'model: "openai/gpt-6.1-sol#high"' -and
         $aegis -match 'model: openai/gpt-6-luna#max' -and
         $kael -notmatch 'Luna Fast|project-context\.json' -and $aegis -notmatch 'project-context\.json')
-    Write-Output 'PREFLIGHT / SCOPED DISCOVERY QUALIFICATION: PASS (static policy + fixture only; interactive sequencing and child counts NOT VERIFIED)'
+    Write-Output 'PREFLIGHT / SCOPED DISCOVERY QUALIFICATION: PASS (static policy contracts + fixture only; no live delegation or native permission behavior executed)'
     exit 0
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)

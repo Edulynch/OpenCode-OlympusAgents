@@ -1,4 +1,4 @@
-# Olympus Agents
+# 🏛️ Olympus Agents
 
 Olympus is an AI coding team with **OpenCode V2 in ACTIVE DEVELOPMENT** and **Codex in FROZEN COMPATIBILITY**.
 
@@ -27,24 +27,25 @@ irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.12/un
 
 The bootstrap selects a tag for its release launcher; that launcher resolves `releases/latest` again for the installer and source archive and checks installer identity before execution. GitHub's immutability flag is not independent cryptographic signature verification. See [installation, parameters, safety, and troubleshooting](docs/INSTALLATION.md).
 
-## Project status
+## 📌 Project status
 
 - **OpenCode V2: ACTIVE DEVELOPMENT.**
 - **Codex: FROZEN COMPATIBILITY.** Existing support and safe uninstall behavior remain; no new Codex capabilities or parity are implied.
 
-## NORMAL vs FAST
+## 🧭 NORMAL vs FAST
 
 **NORMAL (default):** Kael chooses useful, bounded parallel work for the task.
 
 **FAST (explicit):** when work is safe to split, it uses up to four agents, keeps required checks, and does not parallelize dependent tasks.
 
-## Maintenance (OpenCode)
+## 🛠️ Maintenance (OpenCode)
 
 Ordinary Git work, including releases, stays with Kael in the normal project workflow. Only an explicit `/maintain` invokes hidden Aegis; Kael never escalates there automatically. Codex has no equivalent Aegis capability.
 
-## Documentation
+## 📚 Documentation
 
 - [Installation](docs/INSTALLATION.md) — prerequisites, entrypoints, parameters, safety, and troubleshooting.
+- [Documentation index](docs/README.md) — canonical sources, current guides, and historical records.
 - [Harness capabilities](docs/HARNESS-CAPABILITIES.md) · [Codex compatibility](docs/CODEX-COMPATIBILITY.md)
 - [Development](docs/DEVELOPMENT.md) · [Roadmap](docs/ROADMAP.md) · [Worktrees](docs/WORKTREES.md)
 - [Releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Changelog](CHANGELOG.md) · [License](LICENSE)

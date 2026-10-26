@@ -2,6 +2,16 @@
 
 Esta guía registra la auditoría documental de Spec Kit realizada contra OlympusAgents **v0.4.9**, la línea base funcional local indicada para esta actualización. La constitución aplicable está en [memory/constitution.md](memory/constitution.md). Los overrides de plantillas están en [templates/overrides/](templates/overrides/); las cinco plantillas originales se conservan en `templates/`.
 
+## Decisión de versión — 2026-10-26
+
+**Decisión: KEEP_PINNED — Spec Kit 1.1.0.** La CLI instalada informa `1.1.0`; `.specify/integration.json` registra OpenCode como única integración activa y los manifests Codex/OpenCode indican `1.1.0`. Los wrappers de skills/comandos Codex presentes en el checkout no registran una integración Codex activa. El método documentado de preparación instala el CLI desde el tag versionado `v1.1.0` con `uv`.
+
+La [última versión estable consultada](https://github.com/github/spec-kit/releases/tag/v1.2.3), publicada el 2026-10-22, incluye mejoras de rutas PowerShell, salida JSON, despacho/propiedad de archivos, integración y workflows. La [guía oficial de upgrade](https://github.com/github/spec-kit/blob/v1.2.3/docs/upgrade.md) y `specify self check`/`specify self upgrade --dry-run --tag v1.2.3` se consultaron sin aplicar cambios. No se encontró una corrección que resuelva un defecto demostrado en Olympus ni una función necesaria para los flujos locales actuales; el beneficio observado no justifica regenerar los recursos de integración ni volver a validar en este cambio las personalizaciones de constitución y overrides. No se afirma compatibilidad runtime con 1.2.3.
+
+La comprobación local de 1.1.0 quedó satisfecha sin reescrituras: 32 rutas de manifests presentes; 20 wrappers con hashes exactos y las otras 12 rutas compartidas coincidentes después de normalizar CRLF/LF; cero rutas ausentes o inválidas y cero diferencias de contenido. Los seis scripts PowerShell pasaron análisis AST, los tres overrides resolvieron desde Spec Kit, `create-new-feature -DryRun -Json` devolvió `FEATURE_NUM=002`, y self-check/dry-run finalizaron correctamente sin mutaciones. La ejecución runtime de OpenCode y Codex queda **NOT RUN**; Codex continúa registrado solo como wrappers, no como integración activa.
+
+Se conserva 1.1.0 y sus personalizaciones, sin ejecutar `integration upgrade`, `--force`, `refresh` ni `init --here`. Revisar de nuevo la versión de forma ligera durante la preparación de releases o trimestralmente, y antes si Spec Kit cambia los mecanismos de integración usados aquí. Toda actualización debe ensayarse por tag en un checkout aislado, revisar el diff completo y repetir las comprobaciones de manifests y overrides antes de modificar este checkout.
+
 ## Inventario inicial
 
 Al inicio de la auditoría se encontraron estos 21 archivos bajo `.specify`:

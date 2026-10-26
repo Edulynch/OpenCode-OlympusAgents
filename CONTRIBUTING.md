@@ -27,7 +27,8 @@ Thanks for helping keep the framework reliable and approachable. Small, focused 
 
 | Change | Minimum useful validation |
 | --- | --- |
-| Documentation, badges, images | Review rendered content, links, `git diff --check`, and the relevant existing documentation qualifier when commands/contracts change |
+| Documentation, badges, images | Review rendered content, `python -B scripts/check_docs.py`, `git diff --check`, and the relevant existing documentation qualifier when commands/contracts change |
+| Security-sensitive repository content | Run `python -B -m unittest discover -s tests/security -p 'test_secret_gate.py' -v`, then `python -B scripts/secret_gate.py --base origin/master` (or select another reachable base explicitly) |
 | Localized defect | A focused regression in its existing suite |
 | Shared Olympus contract or policy | Focused checks plus `FAST` |
 | Significant installer/release/compatibility work | Relevant installer fixtures and `FULL` before integration |
@@ -40,6 +41,8 @@ pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FAST
 ```
 
 GitHub Actions also runs FAST for pull requests targeting `master`. FULL and RUNTIME are deliberately separate and are not CI defaults. See [the testing guidance](docs/DEVELOPMENT.md#choosing-qualification-by-change-risk).
+
+The security workflow runs the same documentation and secret checks on pull requests, pushes to `master`, and manual runs. The Gitleaks gate downloads and verifies its pinned open-source CLI on each explicit invocation; it has no required Git hook and never publishes a report. See [the scanner and evidence-handling contract](SECURITY.md#secret-scanning-and-handling-evidence).
 
 ## Pull request checklist
 

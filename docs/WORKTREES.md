@@ -12,7 +12,7 @@ Olympus is installed separately in each project checkout. A new Git worktree doe
 
 ## 1. Install in the base checkout
 
-Run the [OpenCode project installer](../README.md#project-install-recommended) and confirm it completed successfully.
+Run the [Fast Install command](../README.md#fast-install) and confirm it completed successfully.
 
 ## 2. Enable automatic setup for new worktrees
 
@@ -65,4 +65,4 @@ Saving the startup command is explicit consent for OpenCode to execute the local
 
 The helper addresses missing project-local Olympus resources. It does **not** prove universal runtime behavior or fix every prompt cancellation.
 
-[Back to quick start →](../README.md#-install)
+[Back to quick start →](../README.md#fast-install)

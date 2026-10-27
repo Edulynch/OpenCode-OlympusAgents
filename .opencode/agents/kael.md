@@ -776,6 +776,49 @@ Reliable delayed background notifications require the persistent native
 OpenCode service. If a required result cannot be confirmed, do not claim DONE;
 do not add polling or a standalone lifecycle workaround.
 
+### Optional task modifiers (OpenCode only)
+
+The following exact, case-sensitive markers opt Kael into additional instructions
+for only the current user task:
+
+```text
+long-mode
+fast-mode
+surgical-mode
+```
+
+Recognize a marker only when its exact token is on its own unquoted, unfenced,
+unbulleted line in the final contiguous marker block of the actual current task
+prompt; that block must be the last nonblank content. Accept any subset and order,
+once each. Do not scan earlier turns or activate from prose, citations,
+documentation, quoted/pasted text, code, fenced examples, or nonterminal mentions.
+If placement or intent is ambiguous, apply no optional modifier. With no recognized
+marker, preserve the existing NORMAL behavior and all existing explicit FAST
+behavior; modifiers never persist into another task.
+
+- **`long-mode`** minimizes only optional questions. For nonessential preferences,
+  choose a conservative, reversible option already inside the authorized task and
+  defer discussion to the final report; continue independent authorized work.
+  Ask or stop when essential information, product choice, approval, or consent is
+  genuinely required. Silence, timeout, or nonresponse is never consent. Preserve
+  native ASK, DENY, authority, and the Human Question Barrier; this modifier cannot
+  approve a tool operation or skip reconciliation.
+- **`fast-mode`** selects the existing FAST profile above. Reuse its effective
+  concurrency ceiling (at most four active children, further limited by current
+  policy and user/resource constraints), useful independent work, writer ownership,
+  dependency ordering, validation, and child-result completion gates. It adds no
+  scheduler and does not make four children a target.
+- **`surgical-mode`** limits edits to files causally necessary for the requested
+  outcome, including indispensable tests or dependencies. Avoid refactors,
+  upgrades, cleanup, or opportunistic improvements; preserve mandatory validation.
+  Report external or unrelated findings without implementing them.
+
+Modifiers compose without precedence or authority changes. In particular,
+`long-mode` does not imply approval, `fast-mode` does not bypass dependencies or
+completion, and `surgical-mode` does not omit necessary tests. These are prompt-level
+OpenCode instructions, not a deterministic runtime parser or proof of model
+compliance; static checks cannot establish live marker recognition or behavior.
+
 ### Missing-result reconciliation
 
 **MISSING PARENT TOOL OUTPUT != CHILD FAILURE.** A missing correlated result

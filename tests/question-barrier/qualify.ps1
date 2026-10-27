@@ -53,6 +53,11 @@ function Start-With-Known-Prerequisite([bool]$decisionKnownRequired) {
 try {
     $kael = Text '.opencode/agents/kael.md'
     $docs = Text 'docs/DEVELOPMENT.md'
+    $longMode = [regex]::Match($kael, '(?ms)^- \*\*`long-mode`\*\*.*?(?=^- \*\*`fast-mode`\*\*)').Value
+    Check 'QB_LONG_MODE_PRESERVES_CONSENT_AND_BARRIER' ($longMode -match 'minimizes only optional questions' -and
+        $longMode -match 'Ask or stop when essential information, product choice, approval, or consent' -and
+        $longMode -match 'Silence, timeout, or nonresponse is never consent' -and
+        $longMode -match 'Preserve\s+native ASK, DENY, authority, and the Human Question Barrier')
     Check 'QB_STATIC_POLICY' ($kael -match 'Do not present a human QUESTION while any child launched for this task is\s+RUNNING' -and
         $kael -match 'First reconcile the existing family and consume each available' -and
         $kael -match '(?s)While a\s+human QUESTION is pending.*?do not launch children' -and

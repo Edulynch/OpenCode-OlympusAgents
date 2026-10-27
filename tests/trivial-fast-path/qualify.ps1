@@ -83,6 +83,7 @@ try {
     $kael = Text '.opencode/agents/kael.md'
     $docs = Text 'docs/DEVELOPMENT.md'
     $section = [regex]::Match($kael, '(?ms)^## Trivial task / authority fast path\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
+    $surgicalMode = [regex]::Match($kael, '(?ms)^- \*\*`surgical-mode`\*\* (?<body>.*?)(?=^\nModifiers compose)').Groups['body'].Value
 
     Check 'FAST_POLICY_SPECIALIST_VALUE' ($section -match 'Specialist value must exceed orchestration cost' -and
         $section -match 'do not launch Veyra' -and $section -match 'do not launch Nox' -and
@@ -113,6 +114,11 @@ try {
         $section -match 'eligible write' -and $section -match 'actual objective')
     Check 'FAST_POLICY_TRIVIAL_COMPLETION_GATE' ($kael -match 'TRIVIAL FAST-PATH CHANGE: one scoped implementer plus lightweight direct Master Orchestrator validation' -and
         $kael -match 'no separate tester/reviewer unless the user requests review')
+    Check 'SURGICAL_MODE_MINIMUM_SCOPE_WITH_TESTS' ($surgicalMode -match 'files causally necessary' -and
+        $surgicalMode -match 'including indispensable tests or dependencies' -and
+        $surgicalMode -match 'Avoid refactors,\s+upgrades, cleanup, or opportunistic improvements' -and
+        $surgicalMode -match 'preserve mandatory validation' -and
+        $surgicalMode -match 'Report external or unrelated findings without implementing them')
 
     # A small, deterministic write has exactly one writer child and no specialist stages.
     $single = Invoke-FastPath (New-Task)

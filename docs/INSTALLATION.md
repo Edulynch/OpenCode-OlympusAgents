@@ -11,12 +11,14 @@ OpenCode V2 is in **ACTIVE DEVELOPMENT**. Codex is in **FROZEN COMPATIBILITY**: 
 
 ## The two public Fast entrypoints
 
-The public command URLs below start from the versioned `v0.4.12` bootstrap scripts. That version identifies the bootstrap source only; it does **not** preselect the final release installer tag. Each bootstrap consults GitHub's `releases/latest` metadata to select a published release and tag that passes its checks.
+The public commands below use the versioned `v0.4.11` bootstrap from the published, immutable [release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.4.11), whose tag points to commit `b82086d386e5c5077d9568e0d5a4ec2b3c3b46ff`. The pinned tag identifies the bootstrap source only; it does **not** preselect the final release installer tag. Each bootstrap consults GitHub's `releases/latest` metadata to select a published release and tag that passes its checks. The v0.4.12 work in this repository is a candidate, not the source of these public commands.
 
 ```powershell
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.12/install-olympus.ps1 | iex
-irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.12/uninstall-olympus.ps1 | iex
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/install-olympus.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/uninstall-olympus.ps1')))
 ```
+
+Invoke the downloaded script block with `&` as shown. Piping these published scripts through `iex` fails during parameter binding because their optional `ProjectPath` parameter has a `ValidateNotNullOrEmpty` attribute.
 
 When run in an interactive terminal with no selection parameters, either entrypoint asks for scope and harness. A valid partial selection asks only for the missing values. For example, `-Global` asks only for a harness, while `-Harness codex` asks only for scope. If all required values are supplied, the command runs without prompting and is suitable for non-interactive use. If a required value is missing and interactive input is unavailable, it exits with `ARGUMENTS_REQUIRED` instead of waiting for input.
 
@@ -33,8 +35,8 @@ When run in an interactive terminal with no selection parameters, either entrypo
 The examples below fetch the public bootstrap text, then invoke it with explicit parameters. Run the `-Project -Here` examples from the project root. The project-path target intentionally contains spaces.
 
 ```powershell
-$install = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.12/install-olympus.ps1'))
-$uninstall = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.12/uninstall-olympus.ps1'))
+$install = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/install-olympus.ps1'))
+$uninstall = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/uninstall-olympus.ps1'))
 
 # Install OpenCode in the current project, Codex in a project path, or both globally.
 & $install -Project -Here -Harness opencode
@@ -53,7 +55,7 @@ The twelve legacy install/uninstall wrappers remain for compatibility at `instal
 
 ## Release selection, identity, and executable source
 
-1. The versioned Fast command first runs its `v0.4.12` bootstrap source. The bootstrap requests `https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest` and validates the returned release metadata: `immutable=true`, `draft=false`, `prerelease=false`, a valid Olympus tag, and a published timestamp. The returned `tag_name` selects the tag used to download that release's `scripts/launch-latest.ps1`.
+1. The versioned Fast command first runs its `v0.4.11` bootstrap source, pinned to published GitHub Release [v0.4.11](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.4.11) (tag commit `b82086d386e5c5077d9568e0d5a4ec2b3c3b46ff`). GitHub reports `published_at=2026-10-21T19:17:41Z`, `draft=false`, `prerelease=false`, and `immutable=true`; the published release record—not tag existence alone—is the provenance evidence. The bootstrap requests `https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest` and validates the returned release metadata: `immutable=true`, `draft=false`, `prerelease=false`, a valid Olympus tag, and a published timestamp. The returned `tag_name` selects the tag used to download that release's `scripts/launch-latest.ps1`.
 2. That release launcher also requests `releases/latest` and validates the response. Its returned tag selects the `install.ps1` download and the exact tag archive subsequently requested by the installer. The selected installer must identify itself with matching version and release markers, and the archive/source identity is checked before installation proceeds. A missing, malformed, mutable, unpublished, or mismatched source fails closed; there is no mutable-branch or older-launcher fallback.
 3. These checks distinguish release selection and tag identity from cryptographic integrity. GitHub's `immutable` field is a platform assertion; the installer does not independently verify a signature or a published SHA-256 for the downloaded executable code. The bootstrap and later downloaded scripts are executable code, not merely release metadata.
 
@@ -62,7 +64,7 @@ The following is the **remote published-release flow**: it downloads the version
 Run both PowerShell 7 blocks in the same session. The first downloads and displays the entrypoint without executing it; the second is an explicitly separate execution step.
 
 ```powershell
-$uri = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.12/install-olympus.ps1'
+$uri = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/install-olympus.ps1'
 $inspectionDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ('olympus-bootstrap-inspection-' + [guid]::NewGuid().ToString('N'))
 if (Test-Path -LiteralPath $inspectionDirectory) {
     throw 'The generated inspection directory already exists; start again with a new GUID.'

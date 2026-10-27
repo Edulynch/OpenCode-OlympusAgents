@@ -83,7 +83,7 @@ try {
     $kael = Text '.opencode/agents/kael.md'
     $docs = Text 'docs/DEVELOPMENT.md'
     $section = [regex]::Match($kael, '(?ms)^## Trivial task / authority fast path\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
-    $surgicalMode = [regex]::Match($kael, '(?ms)^- \*\*`surgical-mode`\*\* (?<body>.*?)(?=^\nModifiers compose)').Groups['body'].Value
+    $surgicalMode = [regex]::Match($kael, '(?ms)^- \*\*`surgical-mode`\*\* (?<body>.*?)(?=^[ \t]*\r?\nModifiers compose)').Groups['body'].Value
 
     Check 'FAST_POLICY_SPECIALIST_VALUE' ($section -match 'Specialist value must exceed orchestration cost' -and
         $section -match 'do not launch Veyra' -and $section -match 'do not launch Nox' -and

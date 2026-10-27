@@ -697,8 +697,17 @@ exit /b 0
 
         $readmeText = [IO.File]::ReadAllText((Join-Path $script:source 'README.md'))
         $installationText = [IO.File]::ReadAllText((Join-Path $script:source 'docs/INSTALLATION.md'))
-        $readmeCommands = [regex]::Matches($readmeText, '(?im)^irm https://raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/v[^/]+/(?:install|uninstall)-olympus\.ps1 \| iex\s*$')
-        Check 'README_HAS_EXACTLY_TWO_PUBLIC_COMMANDS' ($readmeCommands.Count -eq 2)
+        $expectedPublicCommands = @(
+            "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/install-olympus.ps1')))"
+            "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/uninstall-olympus.ps1')))"
+        )
+        $expectedPublicCommandPattern = '^(?:' + [regex]::Escape($expectedPublicCommands[0]) + '|' + [regex]::Escape($expectedPublicCommands[1]) + ')$'
+        $readmeCommands = @([regex]::Matches($readmeText, '(?im)^.*$') | Where-Object { $_.Value.Trim() -match $expectedPublicCommandPattern })
+        Check 'README_HAS_EXACTLY_TWO_PUBLIC_COMMANDS' ($readmeCommands.Count -eq 2 -and
+            $readmeCommands[0].Value.Trim() -ceq $expectedPublicCommands[0] -and
+            $readmeCommands[1].Value.Trim() -ceq $expectedPublicCommands[1] -and
+            -not $readmeText.Contains('/v0.4.12/install-olympus.ps1') -and
+            -not $readmeText.Contains('/v0.4.12/uninstall-olympus.ps1'))
         $requirementsIndex = $readmeText.IndexOf('## Requirements', [StringComparison]::Ordinal)
         $firstCommandIndex = if ($readmeCommands.Count -gt 0) { $readmeCommands[0].Index } else { -1 }
         Check 'README_PREREQUISITES_PRECEDE_FIRST_COMMAND' ($requirementsIndex -ge 0 -and $firstCommandIndex -gt $requirementsIndex)
@@ -706,6 +715,10 @@ exit /b 0
 
         Check 'INSTALLATION_DOC_COVERS_INTERACTIVE_AND_PARTIAL_SELECTION' ($installationText.Contains('asks for scope and harness') -and
             $installationText.Contains('asks only for the missing values') -and $installationText.Contains('ARGUMENTS_REQUIRED'))
+        Check 'INSTALLATION_DOC_COVERS_PUBLISHED_BOOTSTRAP_INVOCATION' (
+            $installationText.Contains($expectedPublicCommands[0]) -and
+            $installationText.Contains($expectedPublicCommands[1]) -and
+            $installationText.Contains('ValidateNotNullOrEmpty'))
         Check 'INSTALLATION_DOC_HAS_ALL_HARNESSES_AND_SPACED_PATHS' ($installationText.Contains('-Harness opencode') -and
             $installationText.Contains('-Harness codex') -and $installationText.Contains('-Harness all') -and
             $installationText.Contains('C:\Users\Ada Lovelace\source\Sample Project'))

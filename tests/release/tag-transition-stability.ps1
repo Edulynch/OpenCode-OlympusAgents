@@ -125,28 +125,11 @@ function Test-ExpectedFastBootstrapStatement($Statement, [string]$ExpectedComman
     $expectedAst = [System.Management.Automation.Language.Parser]::ParseInput($ExpectedCommand, [ref]$tokens, [ref]$parseErrors)
     if ($parseErrors.Count -gt 0 -or $expectedAst.EndBlock.Statements.Count -ne 1 -or
         $Statement -isnot [System.Management.Automation.Language.PipelineAst]) { return $false }
-    $expectedPipeline = $expectedAst.EndBlock.Statements[0]
-    if ($expectedPipeline -isnot [System.Management.Automation.Language.PipelineAst] -or
-        $Statement.Background -or $expectedPipeline.Background -or
-        $Statement.PipelineElements.Count -ne 2 -or $expectedPipeline.PipelineElements.Count -ne 2) { return $false }
-    for ($index = 0; $index -lt 2; $index++) {
-        $actualCommand = $Statement.PipelineElements[$index]
-        $expectedCommandAst = $expectedPipeline.PipelineElements[$index]
-        if ($actualCommand -isnot [System.Management.Automation.Language.CommandAst] -or
-            $expectedCommandAst -isnot [System.Management.Automation.Language.CommandAst] -or
-            $actualCommand.GetCommandName() -cne $expectedCommandAst.GetCommandName() -or
-            $actualCommand.InvocationOperator -ne [System.Management.Automation.Language.TokenKind]::Unknown -or
-            $actualCommand.Redirections.Count -ne 0 -or
-            $actualCommand.CommandElements.Count -ne $expectedCommandAst.CommandElements.Count) { return $false }
-        for ($element = 0; $element -lt $actualCommand.CommandElements.Count; $element++) {
-            $actualValue = $actualCommand.CommandElements[$element]
-            $expectedValue = $expectedCommandAst.CommandElements[$element]
-            if ($actualValue -isnot [System.Management.Automation.Language.StringConstantExpressionAst] -or
-                $expectedValue -isnot [System.Management.Automation.Language.StringConstantExpressionAst] -or
-                $actualValue.Value -cne $expectedValue.Value) { return $false }
-        }
-    }
-    return $true
+    $expectedStatement = $expectedAst.EndBlock.Statements[0]
+    return ($Statement -is [System.Management.Automation.Language.PipelineAst] -and
+        $expectedStatement -is [System.Management.Automation.Language.PipelineAst] -and
+        -not $Statement.Background -and -not $expectedStatement.Background -and
+        $Statement.Extent.Text.Trim() -ceq $expectedStatement.Extent.Text.Trim())
 }
 
 function Test-GlobalReadmeInstallerContract([string]$Markdown, [string]$InstallCommand, [string]$UninstallCommand) {
@@ -222,6 +205,8 @@ function Add-ReadmeInstallCommand($Docs, [string]$Command) {
 function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG', 'POST_TAG')][string]$TagState) {
     $errors = [System.Collections.Generic.List[string]]::new()
     $versionRegex = [regex]::Escape($Version)
+    $bootstrapVersion = 'v0.4.11'
+    $bootstrapVersionRegex = [regex]::Escape($bootstrapVersion)
     if ($Version -cne 'v0.4.12') { $errors.Add('DOC_TARGET_IDENTITY_NOT_V0412') }
     if ($Version -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$') {
         $errors.Add('DOC_TARGET_NOT_STABLE_VERSION')
@@ -283,8 +268,9 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
     $readme = [string]$Docs['README.md']
     $publicInvalid = $false
     $rawBase = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' + $Version + '/'
-    $fastInstallCommand = 'irm ' + $rawBase + 'install-olympus.ps1 | iex'
-    $fastUninstallCommand = 'irm ' + $rawBase + 'uninstall-olympus.ps1 | iex'
+    $bootstrapBase = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' + $bootstrapVersion + '/'
+    $fastInstallCommand = "& ([scriptblock]::Create((irm '$($bootstrapBase)install-olympus.ps1')))"
+    $fastUninstallCommand = "& ([scriptblock]::Create((irm '$($bootstrapBase)uninstall-olympus.ps1')))"
     if ([regex]::Matches($readme, '(?m)^##[ \t]+Fast Install[ \t]*\r?$').Count -ne 1 -or
         [regex]::Matches($readme, '(?m)^##[ \t]+Fast Uninstall[ \t]*\r?$').Count -ne 1) {
         $publicInvalid = $true
@@ -293,9 +279,13 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
         -not (Test-GlobalReadmeInstallerContract $readme $fastInstallCommand $fastUninstallCommand)) {
         $publicInvalid = $true
     }
-    $versionedBootstrapPattern = '(?i)versioned[ \t]+`?' + $versionRegex + '`?[ \t]+bootstrap'
+    $versionedBootstrapPattern = '(?i)versioned[ \t]+`?' + $bootstrapVersionRegex + '`?[ \t]+bootstrap'
     $readmeReleaseContractInvalid = (
         -not [regex]::IsMatch($readme, $versionedBootstrapPattern) -or
+        -not $readme.Contains('https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/' + $bootstrapVersion) -or
+        -not $readme.Contains('published, immutable') -or
+        $readme.Contains('/' + $Version + '/install-olympus.ps1') -or
+        $readme.Contains('/' + $Version + '/uninstall-olympus.ps1') -or
         $readme -notmatch '(?i)releases/latest.{0,160}metadata.{0,160}published release.{0,80}tag' -or
         $readme -notmatch '(?i)release metadata checks fail closed' -or
         $readme -notmatch '(?i)GitHub.{0,60}immutability flag.{0,80}not independent cryptographic signature verification'
@@ -347,6 +337,12 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
     $releasePrerequisiteInvalid = (
         -not $installationGuide.Contains($fastInstallCommand) -or
         -not $installationGuide.Contains($fastUninstallCommand) -or
+        -not $installationGuide.Contains('releases/tag/' + $bootstrapVersion) -or
+        -not $installationGuide.Contains('b82086d386e5c5077d9568e0d5a4ec2b3c3b46ff') -or
+        -not $installationGuide.Contains('published_at=2026-10-21T19:17:41Z') -or
+        -not $installationGuide.Contains('ValidateNotNullOrEmpty') -or
+        $installationGuide.Contains('/' + $Version + '/install-olympus.ps1') -or
+        $installationGuide.Contains('/' + $Version + '/uninstall-olympus.ps1') -or
         $installationGuide -notmatch '(?i)https://api\.github\.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest' -or
         $installationGuide -notmatch '(?i)\bimmutable\s*=\s*true\b' -or
         $installationGuide -notmatch '(?i)\bdraft\s*=\s*false\b' -or
@@ -539,8 +535,9 @@ try {
     Assert-Rejected $badTargetIdentity 'v0.4.11' 'PRE_TAG' 'DOC_TARGET_IDENTITY_NOT_V0412' 'REGRESSION_REJECTS_NON_V0412_TARGET'
 
     $tagBase = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' + $version + '/'
-    $fastInstallCommand = 'irm ' + $tagBase + 'install-olympus.ps1 | iex'
-    $fastUninstallCommand = 'irm ' + $tagBase + 'uninstall-olympus.ps1 | iex'
+    $bootstrapBase = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/'
+    $fastInstallCommand = "& ([scriptblock]::Create((irm '$($bootstrapBase)install-olympus.ps1')))"
+    $fastUninstallCommand = "& ([scriptblock]::Create((irm '$($bootstrapBase)uninstall-olympus.ps1')))"
     $badMissingPublicEntrypoint = Copy-ReleaseDocs $docs
     Set-ReadmeInstallCommand $badMissingPublicEntrypoint $fastInstallCommand ''
     Assert-Rejected $badMissingPublicEntrypoint $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_MISSING_PUBLIC_ENTRYPOINT'
@@ -555,12 +552,30 @@ try {
     Assert-Rejected $badCodexWithoutSelection $version 'PRE_TAG' 'DOC_WRAPPER_IMMUTABLE_SOURCE_INVALID' 'REGRESSION_REJECTS_CODEX_WITHOUT_HARNESS_SELECTION'
 
     $badMutablePublic = Copy-ReleaseDocs $docs
-    Set-ReadmeInstallCommand $badMutablePublic $fastInstallCommand 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install-olympus.ps1 | iex'
+    $mutableBootstrapCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install-olympus.ps1')))"
+    Set-ReadmeInstallCommand $badMutablePublic $fastInstallCommand $mutableBootstrapCommand
     Assert-Rejected $badMutablePublic $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_MUTABLE_PUBLIC_ENTRYPOINT'
 
     $badObsoletePublic = Copy-ReleaseDocs $docs
-    Set-ReadmeInstallCommand $badObsoletePublic $fastInstallCommand 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.9/install-olympus.ps1 | iex'
+    $obsoleteBootstrapCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.9/install-olympus.ps1')))"
+    Set-ReadmeInstallCommand $badObsoletePublic $fastInstallCommand $obsoleteBootstrapCommand
     Assert-Rejected $badObsoletePublic $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_OBSOLETE_PUBLIC_ENTRYPOINT'
+
+    $badCandidateBootstrap = Copy-ReleaseDocs $docs
+    $candidateBootstrapCommand = "& ([scriptblock]::Create((irm '$($tagBase)install-olympus.ps1')))"
+    Set-ReadmeInstallCommand $badCandidateBootstrap $fastInstallCommand $candidateBootstrapCommand
+    Assert-Rejected $badCandidateBootstrap $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_CANDIDATE_AS_PUBLIC_BOOTSTRAP'
+
+    $badLegacyIex = Copy-ReleaseDocs $docs
+    $legacyIexCommand = "irm $($bootstrapBase)install-olympus.ps1 | iex"
+    Set-ReadmeInstallCommand $badLegacyIex $fastInstallCommand $legacyIexCommand
+    Assert-Rejected $badLegacyIex $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_PUBLISHED_BOOTSTRAP_IEX_INVOCATION'
+
+    $badCandidateBootstrapDescription = Copy-ReleaseDocs $docs
+    $badCandidateBootstrapDescription['README.md'] = ([string]$badCandidateBootstrapDescription['README.md']).Replace(
+        'versioned `v0.4.11` bootstrap', 'versioned `v0.4.12` bootstrap').Replace(
+        '/releases/tag/v0.4.11', '/releases/tag/v0.4.12')
+    Assert-Rejected $badCandidateBootstrapDescription $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_CANDIDATE_BOOTSTRAP_PROVENANCE_CLAIM'
 
     $badMutableLauncher = Copy-ReleaseDocs $docs
     $wrapper = 'install/project/opencode.ps1'
@@ -596,7 +611,8 @@ try {
     Assert-Rejected $badStaleTagLauncher $version 'PRE_TAG' 'DOC_WRAPPER_IMMUTABLE_SOURCE_INVALID' 'REGRESSION_REJECTS_STALE_LAUNCHER_TAG'
 
     $badForeignInstaller = Copy-ReleaseDocs $docs
-    Set-ReadmeInstallCommand $badForeignInstaller $fastInstallCommand 'irm https://example.invalid/install-olympus.ps1 | iex'
+    $foreignBootstrapCommand = "& ([scriptblock]::Create((irm 'https://example.invalid/install-olympus.ps1')))"
+    Set-ReadmeInstallCommand $badForeignInstaller $fastInstallCommand $foreignBootstrapCommand
     Assert-Rejected $badForeignInstaller $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_FOREIGN_INSTALLER_URL'
 
     $badExtraForeignInstaller = Copy-ReleaseDocs $docs

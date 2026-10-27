@@ -466,8 +466,9 @@ try {
         $versionText -match 'archive/refs/tags/\$Version\.zip')
 
     $readme = [IO.File]::ReadAllText((Join-Path $source 'README.md'))
-    $fastInstallUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/install-olympus.ps1"
-    $fastUninstallUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/uninstall-olympus.ps1"
+    $publicBootstrapVersion = 'v0.4.11'
+    $fastInstallUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$publicBootstrapVersion/install-olympus.ps1"
+    $fastUninstallUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$publicBootstrapVersion/uninstall-olympus.ps1"
     function Get-ReadmePowerShellCodeBlocks([string]$Markdown) {
         $blocks = [System.Collections.Generic.List[string]]::new()
         foreach ($block in [regex]::Matches($Markdown, '(?ims)^```(?:powershell|pwsh|ps1)[ \t]*\r?\n(?<body>.*?)^```[ \t]*\r?$')) {
@@ -493,28 +494,11 @@ try {
         $expectedAst = [System.Management.Automation.Language.Parser]::ParseInput($ExpectedCommand, [ref]$tokens, [ref]$parseErrors)
         if ($parseErrors.Count -gt 0 -or $expectedAst.EndBlock.Statements.Count -ne 1 -or
             $Statement -isnot [System.Management.Automation.Language.PipelineAst]) { return $false }
-        $expectedPipeline = $expectedAst.EndBlock.Statements[0]
-        if ($expectedPipeline -isnot [System.Management.Automation.Language.PipelineAst] -or
-            $Statement.Background -or $expectedPipeline.Background -or
-            $Statement.PipelineElements.Count -ne 2 -or $expectedPipeline.PipelineElements.Count -ne 2) { return $false }
-        for ($index = 0; $index -lt 2; $index++) {
-            $actualCommand = $Statement.PipelineElements[$index]
-            $expectedCommandAst = $expectedPipeline.PipelineElements[$index]
-            if ($actualCommand -isnot [System.Management.Automation.Language.CommandAst] -or
-                $expectedCommandAst -isnot [System.Management.Automation.Language.CommandAst] -or
-                $actualCommand.GetCommandName() -cne $expectedCommandAst.GetCommandName() -or
-                $actualCommand.InvocationOperator -ne [System.Management.Automation.Language.TokenKind]::Unknown -or
-                $actualCommand.Redirections.Count -ne 0 -or
-                $actualCommand.CommandElements.Count -ne $expectedCommandAst.CommandElements.Count) { return $false }
-            for ($element = 0; $element -lt $actualCommand.CommandElements.Count; $element++) {
-                $actualValue = $actualCommand.CommandElements[$element]
-                $expectedValue = $expectedCommandAst.CommandElements[$element]
-                if ($actualValue -isnot [System.Management.Automation.Language.StringConstantExpressionAst] -or
-                    $expectedValue -isnot [System.Management.Automation.Language.StringConstantExpressionAst] -or
-                    $actualValue.Value -cne $expectedValue.Value) { return $false }
-            }
-        }
-        return $true
+        $expectedStatement = $expectedAst.EndBlock.Statements[0]
+        return ($Statement -is [System.Management.Automation.Language.PipelineAst] -and
+            $expectedStatement -is [System.Management.Automation.Language.PipelineAst] -and
+            -not $Statement.Background -and -not $expectedStatement.Background -and
+            $Statement.Extent.Text.Trim() -ceq $expectedStatement.Extent.Text.Trim())
     }
     function Get-ReadmeFastSection([string]$Markdown, [string]$Heading) {
         return [regex]::Match($Markdown,
@@ -570,13 +554,17 @@ try {
         }
         return ($installCount -eq 1 -and $uninstallCount -eq 1)
     }
-    $fastInstallCommand = "irm $fastInstallUrl | iex"
-    $fastUninstallCommand = "irm $fastUninstallUrl | iex"
+    $fastInstallCommand = "& ([scriptblock]::Create((irm '$fastInstallUrl')))"
+    $fastUninstallCommand = "& ([scriptblock]::Create((irm '$fastUninstallUrl')))"
     $readmeWithLf = $readme.Replace("`r`n", "`n")
     $readmeWithCrLf = $readmeWithLf.Replace("`n", "`r`n")
     Check 'R25_README_FAST_CONTRACT_ACCEPTS_LF_AND_CRLF' (
         (Test-ReadmeFastCommandContract $readmeWithLf $fastInstallCommand $fastUninstallCommand) -and
-        (Test-ReadmeFastCommandContract $readmeWithCrLf $fastInstallCommand $fastUninstallCommand))
+        (Test-ReadmeFastCommandContract $readmeWithCrLf $fastInstallCommand $fastUninstallCommand) -and
+        $readme.Contains('releases/tag/' + $publicBootstrapVersion) -and
+        $readme.Contains('published, immutable') -and
+        -not $readme.Contains('/' + $script:CandidateVersion + '/install-olympus.ps1') -and
+        -not $readme.Contains('/' + $script:CandidateVersion + '/uninstall-olympus.ps1'))
     $readmeWithExtraFastHeadingLf = $readmeWithLf + "`n## Fast Extra`n"
     $readmeWithExtraFastHeadingCrLf = $readmeWithCrLf + "`r`n## Fast Extra`r`n"
     Check 'R25_README_REJECTS_EXTRA_FAST_HEADING_LF_AND_CRLF' (
@@ -610,14 +598,28 @@ try {
     }
     Check 'R25_README_REJECTS_GLOBAL_BOOTSTRAP_OUTSIDE_FAST' (
         -not (Test-ReadmeGlobalInstallerContract $thirdBootstrapOutsideFast $fastInstallCommand $fastUninstallCommand))
-    $mutableBootstrapCommand = 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install-olympus.ps1 | iex'
+    $mutableBootstrapCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install-olympus.ps1')))"
     $readmeWithMutableBootstrap = $readme.Replace($fastInstallCommand, $mutableBootstrapCommand)
     if (-not $readmeWithMutableBootstrap.Contains($mutableBootstrapCommand)) {
         throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: mutable bootstrap command was not inserted.'
     }
     Check 'R25_README_REJECTS_MUTABLE_BOOTSTRAP_SOURCE' (
         -not (Test-ReadmeFastCommandContract $readmeWithMutableBootstrap $fastInstallCommand $fastUninstallCommand))
-    $foreignBootstrapCommand = 'irm https://example.invalid/install-olympus.ps1 | iex'
+    $candidateBootstrapCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/install-olympus.ps1')))"
+    $readmeWithCandidateBootstrap = $readme.Replace($fastInstallCommand, $candidateBootstrapCommand)
+    if (-not $readmeWithCandidateBootstrap.Contains($candidateBootstrapCommand)) {
+        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: candidate bootstrap command was not inserted.'
+    }
+    Check 'R25_README_REJECTS_UNPUBLISHED_CANDIDATE_BOOTSTRAP' (
+        -not (Test-ReadmeFastCommandContract $readmeWithCandidateBootstrap $fastInstallCommand $fastUninstallCommand))
+    $legacyIexCommand = "irm $fastInstallUrl | iex"
+    $readmeWithLegacyIex = $readme.Replace($fastInstallCommand, $legacyIexCommand)
+    if (-not $readmeWithLegacyIex.Contains($legacyIexCommand)) {
+        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: legacy IEX command was not inserted.'
+    }
+    Check 'R25_README_REJECTS_PUBLISHED_LEGACY_IEX_INVOCATION' (
+        -not (Test-ReadmeFastCommandContract $readmeWithLegacyIex $fastInstallCommand $fastUninstallCommand))
+    $foreignBootstrapCommand = "& ([scriptblock]::Create((irm 'https://example.invalid/install-olympus.ps1')))"
     $readmeWithForeignBootstrap = $readme.Replace($fastInstallCommand, $foreignBootstrapCommand)
     if (-not $readmeWithForeignBootstrap.Contains($foreignBootstrapCommand)) {
         throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: foreign bootstrap command was not inserted.'
@@ -632,6 +634,11 @@ try {
     Check 'R25_INSTALLATION_GUIDE_HAS_SCOPE_HARNESS_SAFETY_AND_STATUS' (
         $installGuide.Contains($fastInstallUrl) -and $installGuide.Contains($fastUninstallUrl) -and
         $installGuide.Contains($script:CandidateVersion) -and
+        $installGuide.Contains('releases/tag/' + $publicBootstrapVersion) -and
+        $installGuide.Contains('immutable=true') -and
+        $installGuide.Contains('ValidateNotNullOrEmpty') -and
+        -not $installGuide.Contains('/' + $script:CandidateVersion + '/install-olympus.ps1') -and
+        -not $installGuide.Contains('/' + $script:CandidateVersion + '/uninstall-olympus.ps1') -and
         $installGuide.Contains('ACTIVE DEVELOPMENT') -and
         $installGuide.Contains('FROZEN COMPATIBILITY') -and
         $installGuide.Contains('-Project -Here') -and $installGuide.Contains('-ProjectPath') -and

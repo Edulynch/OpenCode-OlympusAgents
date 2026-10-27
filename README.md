@@ -38,7 +38,9 @@ The bootstrap selects a tag for its release launcher; that launcher resolves `re
 
 **FAST (explicit):** when work is safe to split, it uses up to four agents, keeps required checks, and does not parallelize dependent tasks.
 
-### Optional OpenCode task modifiers
+### Optional OpenCode task modifiers (experimental; opt-in)
+
+> **Experimental — Kael/OpenCode V2 only.** These are task-scoped **prompt markers**, not OpenCode slash commands, CLI commands, or built-in runtime flags. A small controlled A/B test confirmed task completion but **did not establish causal improvements** from the modifiers ([evidence in #92](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/92#issuecomment-6440098753)).
 
 Append any combination of the exact standalone lines `long-mode`, `fast-mode`, and
 `surgical-mode` at the end of the task prompt. They apply only to that task; ordinary

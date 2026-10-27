@@ -27,7 +27,7 @@ Maintainer-facing, directional, evidence-driven and subject to validation. This 
 - Historical OpenCode V2.0.20 global-runtime runs returned empty rosters; the old diagnostic used the wrong location query and lacked loader-activation confirmation. The original cause remains unknown (Issue #7), so the results are preserved as historical investigation rather than an active unsupported-capability verdict.
 - OpenCode V2.0.26 `GLOBAL_RUNTIME_DISCOVERY = SUPPORTED` on isolated Windows with the actual v0.4.6 global installer (15 resources), verified loader, 12/12 agents, 2/2 controls, and configuration-level selection of primary Kael; no LLM prompt. [Acceptance evidence](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7#issuecomment-6106396436). Codex remains `SUPPORTED` on separately supplied evidence, not rerun.
 - Codex DENY and Codex Aegis remain explicit frozen GAPs. Research found no demonstrated hard-deny equivalent or safely enforced privileged maintenance entry; do not use prompt-only theater or weaken Core. No parity work is planned solely to close these gaps.
-- Phase 12 cross-harness evaluation is CLOSED: [3 matched pairs and 6/6 verified executions](PHASE12-CROSS-HARNESS-RESULTS.md), with PASS for the tested functional, routing, completion, and scope invariants. Capability gaps remain; this does not establish total parity, superiority, or a harness/model winner.
+- Phase 12 cross-harness evaluation is CLOSED: [3 matched pairs and 6/6 verified executions](history/PHASE12-CROSS-HARNESS-RESULTS.md), with PASS for the tested functional, routing, completion, and scope invariants. Capability gaps remain; this does not establish total parity, superiority, or a harness/model winner.
 
 ## Design principles — shipped Phase 3 rules and planned refinements
 
@@ -94,7 +94,7 @@ Phase 10 evaluated `/power`, `/plan`, `/performance` and `/fast`; none provides 
 | 9 — Aegis evolution | **SHIPPED on OpenCode; Codex GAP** | Hidden Aegis on Luna Max accepts the explicit `/maintain` command's task declaration immediately, without repository ownership/provenance admission; preserves Kael/child denials, task scope, and result reconciliation. |
 | 10 — Command UX | **CLOSED** | `/power`, `/plan`, `/performance` and `/fast` were evaluated and dropped: no exclusive capability; natural language and routing remain primary, with `/maintain` retained for its explicit privileged authority boundary. |
 | 11 — Integrated Routing Qualification | **SHIPPED** | [Closure evidence](../tests/phase11-integrated-routing/baseline.md): qualification is complete with no pending native cases. Case I remains guided PARTIAL; Argus/Thales same-session follow-up runtime coverage was NOT_EXERCISED. These are non-blocking limits, not evidence that every runtime path was exercised. |
-| 12 — Cross-harness evaluation | **CLOSED** | [Results](PHASE12-CROSS-HARNESS-RESULTS.md): 3 matched pairs / 6 verified executions; PASS for tested invariants only. Capability limitations remain; no total parity, superiority, or winner is claimed. |
+| 12 — Cross-harness evaluation | **CLOSED** | [Results](history/PHASE12-CROSS-HARNESS-RESULTS.md): 3 matched pairs / 6 verified executions; PASS for tested invariants only. Capability limitations remain; no total parity, superiority, or winner is claimed. |
 
 ### Phase 3 topology and live qualification — SHIPPED
 

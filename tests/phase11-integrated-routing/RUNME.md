@@ -200,7 +200,7 @@ no file changes. Behavior/security/safety/role purity and negative Argus control
 are PASS; Talos activation, routing, and fresh-root acceptance are FAIL. The
 qualification artifact validator passes only the evidence reconciliation; it
 does not turn this product route into a pass. See
-`docs/DEFECT-PHASE11-CASE-E-ROUTING.md` for the bounded rule-gap record.
+`docs/history/DEFECT-PHASE11-CASE-E-ROUTING.md` for the bounded rule-gap record.
 
 E1 remains an immutable failed historical attempt; the evidence does not
 authorize replay or rewrite of that root. E2 below is the later, separate

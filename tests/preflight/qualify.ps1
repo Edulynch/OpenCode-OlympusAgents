@@ -100,6 +100,13 @@ try {
     Check PROGRESSIVE ($discovery -match 'Level 0:' -and $discovery -match 'Level 2:' -and
         $discovery -match 'Level 3:' -and $discovery -match 'Widen only if' -and
         $discovery -match 'observed evidence shows broader impact')
+    Check RESEARCH_PROPORTIONALITY ($discovery -match 'Before widening research or delegating an adjacent conceptual or external\s+consultation' -and
+        $discovery -match 'goal-relevant uncertainty it would resolve and what\s+decision, hypothesis, or verification could change' -and
+        $discovery -match 'Start with the closest\s+observed behavior, code, and evidence' -and
+        $discovery -match 'Deepen only when evidence shows a\s+dependency, technical contradiction, persistent failure, material risk,\s+security or permission condition \(including an observed access-denied result\),\s+a required gate, or the user explicitly asks for the investigation' -and
+        $discovery -match 'consult\s+relevant technical documentation when it can\s+resolve such uncertainty' -and
+        $discovery -match 'Stop when evidence is sufficient to act or conclude' -and
+        $discovery -match 'Keep this judgment silent for trivial tasks')
     Check BROAD_ALLOWED ($discovery -match 'Refactor authentication across\s+all services' -and
         $discovery -match 'audit these 40 independent\s+modules' -and $discovery -match 'repository-wide analysis')
     # Admitted Olympus Git work uses administrative rather than source-first policy.

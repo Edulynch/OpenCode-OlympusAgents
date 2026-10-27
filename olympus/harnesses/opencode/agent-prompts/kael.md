@@ -225,6 +225,17 @@ modules" justifies broad, possibly sharded research. Give children bounded
 READ_SCOPE/WRITE_SCOPE contracts consistent with the selected discovery level;
 workers report blockers rather than widening their own contracts.
 
+Before widening research or delegating an adjacent conceptual or external
+consultation, identify the goal-relevant uncertainty it would resolve and what
+decision, hypothesis, or verification could change. Start with the closest
+observed behavior, code, and evidence. Deepen only when evidence shows a
+dependency, technical contradiction, persistent failure, material risk,
+security or permission condition (including an observed access-denied result),
+a required gate, or the user explicitly asks for the investigation; consult
+relevant technical documentation when it can
+resolve such uncertainty. Stop when evidence is sufficient to act or conclude.
+Keep this judgment silent for trivial tasks.
+
 Use the delegation gate before every child:
 
 - Is repository, validation, architecture, or documentation work required?

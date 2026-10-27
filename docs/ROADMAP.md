@@ -9,6 +9,7 @@ Maintainer-facing, directional, evidence-driven and subject to validation. This 
 - Keep existing tests that protect shared integrity and compatibility. Do not add Codex gates for OpenCode-only capabilities. Do not claim newer Codex versions are verified without version-specific evidence.
 - Frozen Codex gaps include differences in **authority, Aegis, hard `DENY`, and observability**. The historical compatibility evidence and its version/date qualifications below remain intact; this policy does not promote it to evidence for newer versions.
 - The twelve canonical Olympus Core roles and their responsibilities remain intact. Runtime support status does not remove or reassign a role.
+- Kael's three optional execution modifiers are OpenCode-only and task-scoped: terminal standalone `long-mode`, `fast-mode`, and `surgical-mode` lines. `fast-mode` reuses existing FAST; no parser, scheduler, model, permission, or Codex change is introduced. Prompt instructions can define marker placement, but static checks do not prove live model recognition or compliance.
 
 ## Current foundation — SHIPPED
 
@@ -28,6 +29,42 @@ Maintainer-facing, directional, evidence-driven and subject to validation. This 
 - OpenCode V2.0.26 `GLOBAL_RUNTIME_DISCOVERY = SUPPORTED` on isolated Windows with the actual v0.4.6 global installer (15 resources), verified loader, 12/12 agents, 2/2 controls, and configuration-level selection of primary Kael; no LLM prompt. [Acceptance evidence](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7#issuecomment-6106396436). Codex remains `SUPPORTED` on separately supplied evidence, not rerun.
 - Codex DENY and Codex Aegis remain explicit frozen GAPs. Research found no demonstrated hard-deny equivalent or safely enforced privileged maintenance entry; do not use prompt-only theater or weaken Core. No parity work is planned solely to close these gaps.
 - Phase 12 cross-harness evaluation is CLOSED: [3 matched pairs and 6/6 verified executions](history/PHASE12-CROSS-HARNESS-RESULTS.md), with PASS for the tested functional, routing, completion, and scope invariants. Capability gaps remain; this does not establish total parity, superiority, or a harness/model winner.
+
+## Scope and backlog reconciliation — Issues #73 and #75
+
+Olympus coordinates technical execution, routes only useful specialists, reconciles
+their results, and reports evidence. The runtime remains responsible for tools,
+sessions, permissions, and process behavior. Kael reuses the completed Capability
+Preflight (#74) and TFR (#34) contracts; neither requires a second capability system
+or a blanket test campaign. Codex remains FROZEN COMPATIBILITY. Product requirements,
+feature priority, and acceptance decisions remain with each project owner. Flutter on
+Android and 2D games with Flame are priorities, not exclusions: web support remains,
+and projects need not install every optional device, game, or web tool.
+
+| Disposition | Reconciled scope |
+|---|---|
+| **KEEP** | Kael's coordination, authority checks, useful specialists, dependency management, result reconciliation, and truthful completion; runtime-owned tools, sessions, and permissions. |
+| **REDUCE** | Unnecessary specialist fan-out, mandatory all-role workflows, broad tool-suite installation, and blanket validation. Use only the smallest useful roles and TFR-proportionate checks; preserve applicable project and CI gates. |
+| **DEFER** | Product feature implementation and the proposed mobile/game pilot below. The 70–80% useful-work target is an objective to measure, not a demonstrated capability. No product scope or acceptance decision is made here. |
+| **REUSE** | Completed #74 Capability Preflight, completed #34 TFR, current Question Barrier/FAST/completion policies, and the target project's authorized runtime/tooling. Do not create parallel mechanisms. |
+
+Evidence boundary: Preflight, TFR, FAST, native permissions, and session/result handling
+are existing contracts with their documented qualification limits. The three Kael
+modifiers are prompt instructions available in the OpenCode adapter; this change has
+static contract evidence only, not live marker-recognition evidence. The pilot is
+proposed, not performed, and no autonomy percentage is claimed.
+
+### Future pilot proposal — not executed in this maintenance
+
+Use a small, project-owner-approved Flutter/Android vertical slice: for example, a
+single checklist item's completion toggle in a demo app. The owner must decide the
+feature and acceptance criteria before implementation. A future authorized pilot
+would use Preflight to establish the permitted project/device route, capture the
+focused test plus observable emulator/device evidence required by TFR, and record
+accepted outcome, elapsed time, human interventions, avoidable handoffs, and rework
+against a simple baseline. Missing device/tool capability is reported honestly; the
+whole tool suite is not a prerequisite. This is a proposal only: no app, game, or
+pilot was started here.
 
 ## Design principles — shipped Phase 3 rules and planned refinements
 

@@ -24,6 +24,28 @@ try {
         $kael -match 'overlapping Git\s+mutations on the same repository/ref conflict')
     Check AC9 ($kael -match '## Diagnostic Gate' -and $kael -match 'default limit is one Thales consultation' -and $kael -match 'materially new evidence' -and $kael -match 'FAST never overrides.*Thales Diagnostic Gate')
     Check AC10 ($hud -match 'active\(\)\.slice\(0, 4\)' -and $hud -match 'context\.data\.session\.status' -and $activity -match 'current\.parentID != null' -and $activity -match 'status\(session\.id\) === "running"' -and $hud -notmatch 'setInterval|setTimeout|spawn|schedule')
+    $modifierSection = [regex]::Match($kael, '(?ms)^### Optional task modifiers \(OpenCode only\)\r?\n(?<body>.*?)(?=^## |^### |\z)')
+    $modifierBody = $modifierSection.Groups['body'].Value
+    Check 'MODE_TERMINAL_MARKER_CONTRACT' ($modifierSection.Success -and
+        $modifierBody -match 'exact, case-sensitive markers' -and
+        $modifierBody -match 'own unquoted, unfenced,\s+unbulleted line' -and
+        $modifierBody -match 'final contiguous marker block' -and
+        $modifierBody -match 'last nonblank content' -and
+        $modifierBody -match 'any subset and order' -and
+        $modifierBody -match 'prose, citations,\s+documentation, quoted/pasted text, code, fenced examples')
+    Check 'MODE_COMBINATIONS_AND_ORDERS' ($modifierBody -match 'any subset and order' -and
+        $modifierBody -match 'Modifiers compose without precedence or authority changes' -and
+        $modifierBody -match 'long-mode` does not imply approval' -and
+        $modifierBody -match 'fast-mode` does not bypass dependencies or\s+completion' -and
+        $modifierBody -match 'surgical-mode` does not omit necessary tests')
+    Check 'MODE_ORDINARY_MENTIONS_DO_NOT_ACTIVATE' ($modifierBody -match 'Do not scan earlier turns or activate from prose, citations,\s+documentation, quoted/pasted text, code, fenced examples, or nonterminal mentions' -and
+        $modifierBody -match 'If placement or intent is ambiguous, apply no optional modifier')
+    Check 'MODE_NORMAL_FALLBACK_AND_NO_PERSISTENCE' ($modifierBody -match 'If placement or intent is ambiguous, apply no optional modifier' -and
+        $modifierBody -match 'preserve the existing NORMAL behavior' -and $modifierBody -match 'never persist into another task')
+    Check 'MODE_FAST_REUSES_POLICY' ($modifierBody -match '`fast-mode`\*\* selects the existing FAST profile' -and
+        $modifierBody -match 'effective\s+concurrency ceiling' -and $modifierBody -match 'at most four active children' -and
+        $modifierBody -match 'writer ownership' -and $modifierBody -match 'dependency ordering' -and
+        $modifierBody -match 'completion gates' -and $modifierBody -match 'adds no\s+scheduler')
     $modes = [regex]::Match($readme, '(?ms)^##[^\r\n]*NORMAL vs FAST[^\r\n]*\r?\n(?<body>.*?)(?=^##\s|\z)')
     $modeDocs = $modes.Groups['body'].Value
 
@@ -40,6 +62,8 @@ try {
         $fast.Value -match '(?i)\bexplicit\b' -and
         $fast.Value -match '(?i)\bup\s+to\s+four\b.{0,30}\bagents\b' -and
         $fastChecksPreserved -and $fastDependenciesSequential)
+    Check 'MODE_DOCS_OPEN_CODE_AND_MARKERS' ($readme -match '(?s)Optional OpenCode task modifiers.*?`long-mode`.*?`fast-mode`.*?`surgical-mode`' -and
+        $readme -match 'not a parser or a runtime guarantee')
     Write-Output 'ADAPTIVE CONCURRENCY QUALIFICATION: PASS (static; interactive selection and fan-out pending)'
     exit 0
 } catch {

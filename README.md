@@ -38,6 +38,23 @@ The bootstrap selects a tag for its release launcher; that launcher resolves `re
 
 **FAST (explicit):** when work is safe to split, it uses up to four agents, keeps required checks, and does not parallelize dependent tasks.
 
+### Optional OpenCode task modifiers
+
+Append any combination of the exact standalone lines `long-mode`, `fast-mode`, and
+`surgical-mode` at the end of the task prompt. They apply only to that task; ordinary
+mentions, quotations, code, and documentation do not activate them. `long-mode`
+reduces optional questions without implying consent; `fast-mode` reuses the existing
+FAST policy; `surgical-mode` avoids unrelated edits while retaining needed tests.
+Without a marker, existing NORMAL/explicit FAST behavior is unchanged. These are
+Kael prompt instructions, not a parser or a runtime guarantee.
+
+Olympus coordinates and reconciles work; OpenCode retains tools, sessions, processes,
+and permissions. Kael uses only specialists that add value. Capability Preflight and
+risk-based focused testing reuse existing contracts. Product decisions and acceptance
+criteria belong to the project owner. Current product direction prioritizes Flutter
+on Android and 2D games with Flame while retaining web support; Olympus does not require
+the entire tools suite to be installed.
+
 ## 🛠️ Maintenance (OpenCode)
 
 Ordinary Git work, including releases, stays with Kael in the normal project workflow. Only an explicit `/maintain` invokes hidden Aegis; Kael never escalates there automatically. Codex has no equivalent Aegis capability.

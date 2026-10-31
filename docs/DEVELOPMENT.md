@@ -217,16 +217,21 @@ because they are slow.
 
 ### Choosing qualification by change risk
 
-Choose checks that provide evidence proportionate to the change's risk:
+Choose checks that provide evidence proportionate to the change's risk, affected
+surface, available evidence, and acceptance criteria. Do not run FULL by default;
+begin with the smallest focused check that establishes the changed contract.
 
 - **Documentation-only changes:** review the content and run `git diff --check`. Do not run FULL or RUNTIME by default.
 - **Localized bugs or changes:** first run the directly affected test or qualifier. Add FAST when shared contracts may also be affected.
-- **Olympus Core, routing, authority, models, or shared policies:** use focused tests during development, FAST for contracts, and FULL as final integration validation where appropriate.
-- **Installers, bootstrap, releases, or compatibility:** run affected fixtures during development and FULL before integrating significant changes.
+- **Olympus Core, routing, authority, models, or shared policies:** use focused tests during development; add FAST for affected shared contracts. Use FULL only when cross-layer impact, insufficient narrower evidence, or an existing mandatory gate justifies it.
+- **Installers, bootstrap, releases, or compatibility:** run affected fixtures during development. Use FULL only when change risk is material, impact is shared/cross-layer, narrower evidence is insufficient, or an existing mandatory integration/release gate requires it. Installer/bootstrap work alone does not make FULL mandatory.
 - **Changes depending on actual runtime behavior:** prioritize focused OpenCode V2 RUNTIME evidence. Run Codex runtime checks only for an in-scope critical Codex correction or a shared-code regression where runtime evidence is materially needed; do not add a Codex gate for an OpenCode-only capability.
 - **Failures:** fix the issue and repeat only the affected verification before widening coverage. Do not automatically rerun all of FULL after every adjustment.
+- **Evidence reuse:** reuse a recorded result when it proves the same acceptance criterion and the relevant source revision/working-tree state, configuration, dependencies, and runtime conditions remain applicable. Evidence does not expire solely with age; mark it stale when a relevant input changed or applicability/scope cannot be established. Use revision/diff/context evidence rather than repeating hashes unless integrity or ownership specifically requires them. Unknown evidence is not PASS.
+- **External-provider boundaries:** Olympus qualification covers Olympus-controlled components and declared integration behavior. Respect each user's stated economic and authentication constraints; do not impose global prohibitions on API keys or paid providers, and do not change authentication without authorization. Do not investigate a user's subscriptions, billing, external entitlements, or authentication settings absent a specific authorized need. Classify `BLOCKED_PROVIDER_ENVIRONMENT` only when observable evidence shows a blocking failure originates outside the integration contract OlympusAgents controls; defects in OlympusAgents' own integration remain product defects.
+- **Non-blocking diagnostics and time:** keep auxiliary-harness failures separate from product outcomes, insufficient evidence, and real security blockers; one does not automatically invalidate another. Whenever duration is collected or reported, record `TECHNICAL_EXECUTION_TIME` (active tool/process execution, excluding waiting and coordination) and `TOTAL_ORCHESTRATION_TIME` (task start through validated completion, including waiting and coordination) separately. Mark unobserved values unavailable; do not infer them.
 
-FAST, FULL, and RUNTIME retain their current behavior, and these rules do not replace existing mandatory validation. RUNTIME does not replace FULL, nor FULL RUNTIME. Do not omit failures or report unrun checks as PASS. Avoid unnecessary FULL repetitions without imposing a rigid limit when material changes warrant further validation.
+FAST, FULL, and RUNTIME retain their current behavior, and these rules do not replace existing mandatory validation. RUNTIME does not replace FULL, nor FULL RUNTIME. Do not omit failures or report unrun checks as PASS. Avoid unnecessary FULL repetitions without imposing a rigid limit when material changes warrant further validation. Present the relevant diff and evidence for human review at the end; add no separate automated review stage unless required or justified by risk.
 
 The existing Codex checks in FAST/FULL/RUNTIME remain for their established shared-integrity, compatibility, and baseline purposes. They are not expanded to new OpenCode-only capabilities. The Codex catalog probe is not evidence that a new Codex version or runtime capability was verified.
 

@@ -290,6 +290,42 @@ def main(argv: list[str] | None = None) -> int:
         "operating system, language, framework, or standard libraries",
         "unless there is evidence of a compatibility or configuration problem, incorrect use, or an observed defect",
     )))
+    check("TFR_RISK_BASED_VERIFICATION_BUDGET", all(term in tfr_section for term in (
+        "verification budget", "change risk", "affected surface", "available evidence",
+        "acceptance criteria", "FULL suites are not the default",
+    )))
+    check("TFR_EVIDENCE_REUSE_AND_EXPIRY", all(term in tfr_section for term in (
+        "Evidence reuse", "Historical evidence is not expired merely because it is old",
+        "its applicability cannot be established", "never infer PASS", "do not require hashes by default",
+    )))
+    check("TFR_SCOPE_OWNERSHIP_AND_PROVIDER_BLOCK", all(term in tfr_section for term in (
+        "Olympus scope ownership", "Respect each user's stated economic and authentication constraints",
+        "do not impose global prohibitions on API keys or paid providers",
+        "do not change authentication without authorization",
+        "Do not investigate a user's subscriptions, billing, external entitlements, or authentication settings absent a specific authorized need",
+        "only when observable evidence shows a blocking failure originates outside the integration contract OlympusAgents controls",
+        "defects in OlympusAgents' own integration remain product defects",
+    )))
+    check("TFR_NON_BLOCKING_DIAGNOSTICS", all(term in tfr_section for term in (
+        "Non-blocking diagnostics", "does not invalidate an independently successful functional check",
+        "genuine security blocker", "UNKNOWN is never PASS",
+    )))
+    check("TFR_ORCHESTRATION_AND_TIMING", all(term in tfr_section for term in (
+        "one coherent implementation block", "focused validation", "human review",
+        "`TECHNICAL_EXECUTION_TIME`", "`TOTAL_ORCHESTRATION_TIME`", "do not infer timings",
+    )))
+    development = (ROOT / "docs" / "DEVELOPMENT.md").read_text(encoding="utf-8")
+    check("OLYMPUS_QUALIFICATION_BUDGET_PARITY", all(term in development for term in (
+        "Do not run FULL by default", "Evidence reuse", "BLOCKED_PROVIDER_ENVIRONMENT",
+        "`TECHNICAL_EXECUTION_TIME`", "`TOTAL_ORCHESTRATION_TIME`",
+        "Installers, bootstrap, releases, or compatibility",
+        "Use FULL only when change risk is material, impact is shared/cross-layer, narrower evidence is insufficient, or an existing mandatory integration/release gate requires it",
+        "Installer/bootstrap work alone does not make FULL mandatory",
+        "do not impose global prohibitions on API keys or paid providers",
+        "do not change authentication without authorization",
+        "only when observable evidence shows a blocking failure originates outside the integration contract OlympusAgents controls",
+        "defects in OlympusAgents' own integration remain product defects",
+    )))
     check("TFR_ROOT_TEMPLATES_SINGLE_TOKEN",
           (ROOT / "olympus/harnesses/opencode/agent-prompts/kael.md").read_text(encoding="utf-8").count("{{tfr_policy}}") == 1
           and (ROOT / "olympus/harnesses/codex/root.md").read_text(encoding="utf-8").count("{{tfr_policy}}") == 1)

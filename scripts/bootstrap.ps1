@@ -30,6 +30,14 @@ $InstalledHarnesses = @()
 $ExistingEntries = @()
 $AllContent = [ordered]@{}
 $Retired = @()
+$writerLock = $null
+$manifestPathSnapshot = $null
+$manifestHashSnapshot = $null
+$PathComparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+    [StringComparison]::OrdinalIgnoreCase
+} else {
+    [StringComparison]::Ordinal
+}
 if ($SourceVersion -cne 'local' -and $SourceVersion -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') {
     throw 'SOURCE_VERSION_INVALID: Expected an Olympus SemVer release or local.'
 }
@@ -47,7 +55,7 @@ $ReparseTagCache = @{}
 function Normalize-Path([string]$Path) {
     $full = [IO.Path]::GetFullPath($Path)
     $root = [IO.Path]::GetPathRoot($full)
-    if (-not [string]::Equals($full, $root, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not [string]::Equals($full, $root, $PathComparison)) {
         $full = $full.TrimEnd([char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar))
     }
     return $full
@@ -85,17 +93,29 @@ function Resolve-PhysicalPath([string]$Path) {
             $current = Join-Path $current ($remaining -join [IO.Path]::DirectorySeparatorChar)
             break
         }
-        if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) {
-            $tag = Get-ReparseTag $next
-            if (($tag -band [uint32]0x20000000) -ne 0) {
+        $isLink = [bool]($entry.Attributes -band [IO.FileAttributes]::ReparsePoint)
+        if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT -and
+            $null -ne $entry.PSObject.Properties['LinkTarget'] -and $entry.LinkTarget) {
+            $isLink = $true
+        }
+        if ($isLink) {
+            if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
                 try { $resolved = $entry.ResolveLinkTarget($true) }
-                catch { throw ('REPARSE_PATH_UNVERIFIABLE: cannot resolve ' + $next + ': ' + $_.Exception.Message) }
-                if ($null -eq $resolved) { throw ('REPARSE_PATH_UNVERIFIABLE: no redirect target for ' + $next) }
+                catch { throw ('SYMLINK_PATH_UNVERIFIABLE: cannot resolve ' + $next + ': ' + $_.Exception.Message) }
+                if ($null -eq $resolved) { throw ('SYMLINK_PATH_UNVERIFIABLE: no target for ' + $next) }
                 $current = Normalize-Path $resolved.FullName
             } else {
-                # Cloud Files and other non-name-surrogate reparse tags annotate files;
-                # they do not redirect path traversal.
-                $current = Normalize-Path $entry.FullName
+                $tag = Get-ReparseTag $next
+                if (($tag -band [uint32]0x20000000) -ne 0) {
+                    try { $resolved = $entry.ResolveLinkTarget($true) }
+                    catch { throw ('REPARSE_PATH_UNVERIFIABLE: cannot resolve ' + $next + ': ' + $_.Exception.Message) }
+                    if ($null -eq $resolved) { throw ('REPARSE_PATH_UNVERIFIABLE: no redirect target for ' + $next) }
+                    $current = Normalize-Path $resolved.FullName
+                } else {
+                    # Cloud Files and other non-name-surrogate reparse tags annotate files;
+                    # they do not redirect path traversal.
+                    $current = Normalize-Path $entry.FullName
+                }
             }
         } else {
             $current = Normalize-Path $entry.FullName
@@ -107,9 +127,9 @@ function Resolve-PhysicalPath([string]$Path) {
 function Path-Is-Within([string]$Candidate, [string]$Base, [switch]$AllowEqual) {
     $candidatePath = Resolve-PhysicalPath $Candidate
     $basePath = Resolve-PhysicalPath $Base
-    if ([string]::Equals($candidatePath, $basePath, [StringComparison]::OrdinalIgnoreCase)) { return [bool]$AllowEqual }
+    if ([string]::Equals($candidatePath, $basePath, $PathComparison)) { return [bool]$AllowEqual }
     $prefix = if ($basePath.EndsWith([IO.Path]::DirectorySeparatorChar)) { $basePath } else { $basePath + [IO.Path]::DirectorySeparatorChar }
-    return $candidatePath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
+    return $candidatePath.StartsWith($prefix, $PathComparison)
 }
 
 function Canonical-Dir([string]$Path) {
@@ -126,6 +146,13 @@ function Sha-Bytes([byte[]]$Bytes) {
 }
 function Sha-Text([string]$Text) { Sha-Bytes $Utf8NoBom.GetBytes($Text) }
 function Sha-File([string]$Path) { Sha-Bytes ([IO.File]::ReadAllBytes($Path)) }
+
+function Get-ManifestPropertyNames($Manifest) {
+    if ($Manifest -is [System.Collections.IDictionary]) {
+        return @($Manifest.Keys | ForEach-Object { [string]$_ })
+    }
+    return @($Manifest.PSObject.Properties | ForEach-Object Name)
+}
 
 function Write-Text([string]$Path, [string]$Content) {
     $parent = Split-Path -Parent $Path
@@ -214,18 +241,18 @@ function Assert-Target([string]$Raw) {
     if (-not [IO.Path]::IsPathFullyQualified($Raw)) { Fail "UNSAFE_TARGET" "Target must be absolute." }
     $target = Canonical-Dir $Raw
     $root = [IO.Path]::GetPathRoot($target).TrimEnd([char[]]@('\','/'))
-    if ([string]::Equals($target, $root, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if ([string]::Equals($target, $root, $PathComparison)) {
         Fail "UNSAFE_TARGET" "Filesystem root is not allowed."
     }
     $homes = @($HOME, [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)) |
         Where-Object { $_ } | ForEach-Object { Resolve-PhysicalPath $_ }
-    if ($homes | Where-Object { [string]::Equals($_, $target, [System.StringComparison]::OrdinalIgnoreCase) }) {
+    if ($homes | Where-Object { [string]::Equals($_, $target, $PathComparison) }) {
         Fail "UNSAFE_TARGET" "User home/profile is not allowed."
     }
     $gitRootRaw = (& git -C $target rev-parse --show-toplevel 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $gitRootRaw) { Fail "TARGET_NOT_GIT" "Target must be a Git worktree." }
     $gitRoot = Canonical-Dir $gitRootRaw
-    if (-not [string]::Equals($target, $gitRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if (-not [string]::Equals($target, $gitRoot, $PathComparison)) {
         Fail "TARGET_NOT_GIT_ROOT" "Use the worktree root: $gitRoot"
     }
     foreach ($surface in @('.opencode', '.codex')) {
@@ -265,13 +292,58 @@ function Read-Manifest([string]$Repo) {
     if (-not $hasOpenCode -and -not $hasCodex) { return $null }
     $script:CurrentManifestRel = if ($hasOpenCode) { $OpenCodeManifestRel } else { $CodexManifestRel }
     $path = if ($hasOpenCode) { $opencodePath } else { $codexPath }
-    try { return ([IO.File]::ReadAllText($path) | ConvertFrom-Json -Depth 100) }
+    try { $manifest = [IO.File]::ReadAllText($path) | ConvertFrom-Json -AsHashtable -Depth 100 }
     catch { Fail 'INSTALL_CONFLICT' 'Invalid existing install manifest.' }
+    # schema_version remains 1. Provenance is optional metadata, never ownership;
+    # validate its envelope while leaving each harness-specific object opaque.
+    [void](Get-HarnessProvenance $manifest)
+    return $manifest
+}
+
+function Get-HarnessProvenance($Manifest) {
+    # JSON object keys are case-sensitive. Preserve opaque future harness names
+    # exactly instead of collapsing keys that differ only by case.
+    $result = [System.Collections.Specialized.OrderedDictionary]::new([StringComparer]::Ordinal)
+    if ($null -eq $Manifest) { return $result }
+    $manifestProperties = @(Get-ManifestPropertyNames $Manifest)
+    if ('harness_provenance' -notin $manifestProperties) { return $result }
+
+    $provenance = $Manifest.harness_provenance
+    if ($null -eq $provenance -or
+        ($provenance -isnot [System.Management.Automation.PSCustomObject] -and
+         $provenance -isnot [System.Collections.IDictionary])) {
+        Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'harness_provenance must be an object keyed by harness.'
+    }
+    $properties = if ($provenance -is [System.Collections.IDictionary]) {
+        @($provenance.Keys | ForEach-Object { [pscustomobject]@{ Name=[string]$_; Value=$provenance[$_] } })
+    } else {
+        @($provenance.PSObject.Properties)
+    }
+    foreach ($property in $properties) {
+        $name = [string]$property.Name
+        $value = $property.Value
+        if ([string]::IsNullOrWhiteSpace($name) -or
+            ($value -isnot [System.Management.Automation.PSCustomObject] -and
+             $value -isnot [System.Collections.IDictionary])) {
+            Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Each harness_provenance entry must be a non-empty keyed object.'
+        }
+        $result[$name] = $value
+    }
+    return $result
+}
+
+function Get-RetainedHarnessProvenance($Manifest, [string[]]$ReplacedHarnesses) {
+    $retained = [System.Collections.Specialized.OrderedDictionary]::new([StringComparer]::Ordinal)
+    $provenance = Get-HarnessProvenance $Manifest
+    foreach ($name in $provenance.Keys) {
+        if ($name -cnotin $ReplacedHarnesses) { $retained[$name] = $provenance[$name] }
+    }
+    return $retained
 }
 
 function Get-ManifestHarnesses($Manifest) {
     if ($null -eq $Manifest) { return @() }
-    $properties = @($Manifest.PSObject.Properties | ForEach-Object Name)
+    $properties = @(Get-ManifestPropertyNames $Manifest)
     if ('installed_harnesses' -in $properties) {
         $values = @($Manifest.installed_harnesses | ForEach-Object { ([string]$_).ToLowerInvariant() })
         if ($values.Count -eq 0 -or @($values | Where-Object { $_ -notin @('opencode', 'codex') }).Count -gt 0 -or
@@ -330,7 +402,7 @@ function Assert-Managed([string]$Repo, $Manifest) {
     if ($Manifest.schema_version -ne 1 -or $null -eq $Manifest.managed_files) {
         Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Unsupported manifest schema or missing managed_files.'
     }
-    $scopeProperties = @($Manifest.PSObject.Properties | ForEach-Object Name)
+    $scopeProperties = @(Get-ManifestPropertyNames $Manifest)
     if ('scope' -in $scopeProperties -and [string]$Manifest.scope -cne 'project') {
         Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Project bootstrap cannot adopt a non-project Olympus manifest.'
     }
@@ -547,11 +619,11 @@ function Detect-Project([string]$Repo) {
     }
 }
 
-function Manifest-Text($Detection, $Content, [string]$Version) {
+function Manifest-Text($Detection, $Content, [string]$Version, $ExistingManifest) {
     $files = foreach ($p in @($Content.Keys | Sort-Object)) { [ordered]@{ path=$p; sha256=Sha-Text ([string]$Content[$p]) } }
     $commit = (& git -C $SourceRoot rev-parse HEAD 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $commit) { $commit = "unknown" }
-    ([ordered]@{
+    $record = [ordered]@{
         schema_version = 1
         scope = 'project'
         installed_version = $Version
@@ -561,7 +633,10 @@ function Manifest-Text($Detection, $Content, [string]$Version) {
         detected_stacks = @($Detection.Stacks)
         package_manager = $Detection.PackageManager
         validation_commands = @($Detection.ValidationCommands)
-    } | ConvertTo-Json -Depth 20) + "`n"
+    }
+    $retainedProvenance = Get-RetainedHarnessProvenance $ExistingManifest $SelectedHarnesses
+    if ($retainedProvenance.Count -gt 0) { $record['harness_provenance'] = $retainedProvenance }
+    ($record | ConvertTo-Json -Depth 100) + "`n"
 }
 
 function Plan([string]$Repo, $Content, [string]$ManifestText, [string[]]$Retired) {
@@ -684,7 +759,7 @@ function Assert-InstalledHarness([string]$Repo, $Manifest) {
     if ($Manifest.schema_version -ne 1 -or $null -eq $Manifest.managed_files) {
         Fail 'MANAGED_FILE_MISMATCH' 'Olympus install manifest schema or managed file set is unsupported.'
     }
-    $manifestProperties = @($Manifest.PSObject.Properties | ForEach-Object Name)
+    $manifestProperties = @(Get-ManifestPropertyNames $Manifest)
     if ('scope' -in $manifestProperties -and [string]$Manifest.scope -cne 'project') {
         Fail 'MANAGED_FILE_MISMATCH' 'VerifyOnly project target does not contain a project-scope Olympus manifest.'
     }
@@ -745,6 +820,11 @@ try {
     if (-not (Has-Cmd 'git')) { Fail 'GIT_UNAVAILABLE' 'git is required.' }
     $Repo = Assert-Target $Target
     $manifest = Read-Manifest $Repo
+    $manifestPathSnapshot = $CurrentManifestRel
+    if ($null -ne $manifest) {
+        $manifestPathSnapshot = $CurrentManifestRel
+        $manifestHashSnapshot = Sha-File (Join-Path $Repo ($CurrentManifestRel -replace '/', [IO.Path]::DirectorySeparatorChar))
+    }
     $inventoryHarnesses = @($SelectedHarnesses)
     if (-not $VerifyOnly -and $null -ne $manifest) {
         foreach ($harness in (Get-ManifestHarnesses $manifest)) {
@@ -818,7 +898,7 @@ try {
         }
     }
     foreach ($p in $Managed) { $AllContent[$p] = [string]$ManagedContent[$p] }
-    $manifestText = Manifest-Text $detection $AllContent $SourceVersion
+    $manifestText = Manifest-Text $detection $AllContent $SourceVersion $manifest
     $plan = Plan $Repo $AllContent $manifestText $Retired
 
     if ($DryRun) {
@@ -827,11 +907,46 @@ try {
     }
 
     if (-not $plan.Creates.Count -and -not $plan.Updates.Count -and -not $plan.Removes.Count) {
-        if ('opencode' -in $SelectedHarnesses) { Validate-Install $Repo }
+        # A no-op stays target-read-only: runtime discovery may initialize local
+        # integrations, so do not call it when there is nothing to install.
         Report $Repo $detection $plan "NO_CHANGES" $Version $ModelCheck
         exit 0
     }
 
+    # Complete all read-only rejection checks before creating/acquiring the
+    # stable lock. Re-read critical target state under the lock before writing.
+    . (Join-Path $PSScriptRoot 'target-writer-lock.ps1')
+    $writerLock = Enter-OlympusTargetWriterLock $Repo
+    $revalidatedManifest = Read-Manifest $Repo
+    if ($CurrentManifestRel -cne $manifestPathSnapshot) {
+        Fail 'TARGET_CHANGED' 'Project manifest location changed after preflight.'
+    }
+    if ($null -ne $revalidatedManifest) {
+        $revalidatedManifestHash = Sha-File (Join-Path $Repo ($CurrentManifestRel -replace '/', [IO.Path]::DirectorySeparatorChar))
+        if ($revalidatedManifestHash -cne $manifestHashSnapshot) {
+            Fail 'TARGET_CHANGED' 'Project manifest changed after preflight.'
+        }
+    } elseif ($null -ne $manifestHashSnapshot) {
+        Fail 'TARGET_CHANGED' 'Project manifest disappeared after preflight.'
+    }
+    $manifest = $revalidatedManifest
+    $revalidatedRetired = @(Assert-Managed $Repo $manifest)
+    $ExistingHarnesses = @($script:ExistingHarnesses)
+    $InstalledHarnesses = @(@('opencode', 'codex') | Where-Object { $_ -in @($ExistingHarnesses + $SelectedHarnesses) })
+    $Retired = if ('opencode' -in $SelectedHarnesses) { @($revalidatedRetired) } else { @() }
+    Assert-No-Conflicts $Repo $manifest $ManagedContent
+    Assert-Install-Destinations $Repo
+    $manifestDestination = Join-Path $Repo ($ManifestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
+    if ((Test-Path -LiteralPath $manifestDestination) -and $CurrentManifestRel -cne $ManifestRel) {
+        Fail 'INSTALL_CONFLICT' "Install manifest destination exists without ownership metadata: $ManifestRel"
+    }
+    $revalidatedPlan = Plan $Repo $AllContent $manifestText $Retired
+    if (($revalidatedPlan.Creates -join "`n") -cne ($plan.Creates -join "`n") -or
+        ($revalidatedPlan.Updates -join "`n") -cne ($plan.Updates -join "`n") -or
+        ($revalidatedPlan.Removes -join "`n") -cne ($plan.Removes -join "`n")) {
+        Fail 'TARGET_CHANGED' 'Project destinations changed after preflight.'
+    }
+    if ($null -ne $writerLock) { Assert-OlympusTargetWriterLock $writerLock }
     foreach ($p in $Managed) {
         $full = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         Write-Text $full ([string]$ManagedContent[$p])
@@ -872,4 +987,7 @@ catch {
     }
     Write-Error $_.Exception.Message
     exit 1
+}
+finally {
+    if ($null -ne $writerLock) { Exit-OlympusTargetWriterLock $writerLock }
 }

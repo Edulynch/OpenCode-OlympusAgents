@@ -105,3 +105,99 @@ jobs:
             printf '%s\n' "$changes"
             exit 1
           fi
+
+  c2-3-writer-compat:
+    name: C2.3 writer compatibility / ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows
+            runner: windows-2025
+          - platform: Linux
+            runner: ubuntu-24.04
+          - platform: macOS
+            runner: macos-15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+      GIT_OPTIONAL_LOCKS: '0'
+    steps:
+      - name: Checkout (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Verify actual Python and PowerShell versions
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python --version
+          $pythonVersion = & python -c 'import sys; print("{}.{}.{}".format(*sys.version_info[:3])); raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'
+          if ($LASTEXITCODE -ne 0) { throw 'C2.3 requires Python 3.11 or newer.' }
+          Write-Output "C2.3 Python actual: $pythonVersion"
+
+          pwsh --version
+          $powerShellVersion = & pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot query the installed PowerShell version.' }
+          $parsedPowerShellVersion = [version]($powerShellVersion | Select-Object -Last 1)
+          if ($parsedPowerShellVersion.Major -lt 7) { throw "C2.3 requires PowerShell 7+: $powerShellVersion" }
+          Write-Output "C2.3 PowerShell actual: $powerShellVersion"
+
+          $tempRoot = & python -c 'import tempfile; print(tempfile.gettempdir())'
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot locate the native temporary filesystem.' }
+          New-Item -ItemType Directory -Force -Path (Join-Path $tempRoot 'opencode') | Out-Null
+
+      - name: Run every required C2.3 test on native filesystem
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $testOutput = @(& python -B -m unittest discover -s tests/harness-core -p test_writer_compat.py -k slice_c2_3 -v 2>&1)
+          $testExitCode = $LASTEXITCODE
+          $testOutput | Out-Host
+          if ($testExitCode -ne 0) { exit $testExitCode }
+          $transcript = $testOutput -join "`n"
+          if ($transcript -notmatch '(?m)^Ran 11 tests in ') {
+            throw 'C2.3 qualification did not execute all 11 required tests.'
+          }
+          if ($env:RUNNER_OS -eq 'Windows') {
+            if ($transcript -match 'skipped' -and
+                ($transcript -notmatch 'test_slice_c2_3_writer_lock_rejects_symlink_lockfile.*skipped' -or
+                 $transcript -notmatch '(?m)^OK \(skipped=1\)$')) {
+              throw 'Windows may skip only the symlink fixture when host privileges prohibit creating it.'
+            }
+            if ($transcript -notmatch '(?m)^OK(?: \(skipped=1\))?$') {
+              throw 'C2.3 Windows test result is incomplete.'
+            }
+          } else {
+            if ($transcript -match 'skipped' -or $transcript -notmatch '(?m)^OK$') {
+              throw 'Linux and macOS must execute every C2.3 test without skips.'
+            }
+          }
+
+          $previewOutput = @(& python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_c2_3 -v 2>&1)
+          $previewExitCode = $LASTEXITCODE
+          $previewOutput | Out-Host
+          if ($previewExitCode -ne 0) { exit $previewExitCode }
+          $previewTranscript = $previewOutput -join "`n"
+          if ($previewTranscript -notmatch '(?m)^Ran 1 test in ' -or
+              $previewTranscript -notmatch '(?m)^OK$') {
+            throw 'C2.3 CLI preview and disabled --execute regression did not pass.'
+          }
+
+      - name: Confirm source checkout unchanged
+        shell: pwsh
+        run: |
+          $changes = @(git status --porcelain --untracked-files=all)
+          if ($LASTEXITCODE -ne 0) { throw 'Git status failed' }
+          if ($changes.Count -gt 0) {
+            $changes | Out-Host
+            throw 'C2.3 qualification modified the source checkout'
+          }

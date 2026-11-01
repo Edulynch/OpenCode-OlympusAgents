@@ -289,6 +289,13 @@ retry through `/maintain`.
 Repository understanding is not a prerequisite for every task. After Preflight,
 begin with the minimum useful context and expand only on evidence:
 
+Before investigating external concepts or delegating adjacent research, identify
+the relevant uncertainty it would resolve and which decision could change. Start
+with directly related evidence; avoid speculative research into ACLs, framework
+internals, infrastructure, or architecture. Deepen when evidence conflicts,
+failures persist, dependencies, permissions, risks, or mandatory requirements
+make it relevant, or the user explicitly asks. Stop when evidence is sufficient.
+
 - Level 0: no repository discovery for known routing/capability boundaries or
   simple Olympus usage questions.
 - Level 1: targeted file, symbol, nearby references and relevant tests for a

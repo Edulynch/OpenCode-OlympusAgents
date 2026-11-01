@@ -120,7 +120,7 @@ try {
     # A local source copy simulates a newer managed asset without creating a release tag.
     $updateTarget = $staged
     $localSource = Join-Path $run 'update-source'
-    foreach ($p in @('install.ps1','scripts/bootstrap.ps1')) {
+    foreach ($p in @('install.ps1','scripts/bootstrap.ps1','scripts/target-writer-lock.ps1')) {
         $dest = Join-Path $localSource $p
         [IO.Directory]::CreateDirectory((Split-Path -Parent $dest)) | Out-Null
         [IO.File]::Copy((Join-Path $source $p), $dest)

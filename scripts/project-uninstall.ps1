@@ -13,6 +13,12 @@ $ErrorActionPreference = 'Stop'
 $Utf8NoBom = [Text.UTF8Encoding]::new($false)
 $OpenCodeManifestRel = '.opencode/orchestrator-install.json'
 $CodexManifestRel = '.codex/orchestrator-install.json'
+$writerLock = $null
+$pathComparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+    [StringComparison]::OrdinalIgnoreCase
+} else {
+    [StringComparison]::Ordinal
+}
 
 function Fail([string]$Code, [string]$Message) {
     throw ($Code + ': ' + $Message)
@@ -32,7 +38,7 @@ function Resolve-ManagedPath([string]$Repo, [string]$Relative) {
     $base = [IO.Path]::GetFullPath($Repo).TrimEnd([char[]]@('\','/'))
     $full = [IO.Path]::GetFullPath((Join-Path $base ($relativePath -replace '/', [IO.Path]::DirectorySeparatorChar)))
     $prefix = $base + [IO.Path]::DirectorySeparatorChar
-    if (-not $full.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not $full.StartsWith($prefix, $pathComparison)) {
         Fail 'PROJECT_PATH_UNSAFE' "Managed path escapes the project root: $Relative"
     }
 
@@ -57,6 +63,13 @@ function Get-FileHashText([string]$Path) {
     }
 }
 
+function Get-ManifestPropertyNames($Manifest) {
+    if ($Manifest -is [System.Collections.IDictionary]) {
+        return @($Manifest.Keys | ForEach-Object { [string]$_ })
+    }
+    return @($Manifest.PSObject.Properties | ForEach-Object Name)
+}
+
 function Get-PathHarness([string]$Relative) {
     $path = Normalize-Relative $Relative
     if ($path -ceq 'opencode.jsonc' -or $path.StartsWith('.opencode/', [StringComparison]::OrdinalIgnoreCase)) {
@@ -69,7 +82,7 @@ function Get-PathHarness([string]$Relative) {
 }
 
 function Get-InstalledHarnesses($Manifest) {
-    $properties = @($Manifest.PSObject.Properties | ForEach-Object Name)
+    $properties = @(Get-ManifestPropertyNames $Manifest)
     if ('installed_harnesses' -notin $properties) {
         # Older project manifests were OpenCode-only before the dual-harness inventory existed.
         return @('opencode')
@@ -82,6 +95,43 @@ function Get-InstalledHarnesses($Manifest) {
         Fail 'PROJECT_MANIFEST_INVALID' 'installed_harnesses is empty, duplicated, or unsupported.'
     }
     return @($values)
+}
+
+function Get-HarnessProvenance($Manifest) {
+    # JSON object keys are case-sensitive. Preserve opaque future harness names
+    # exactly instead of collapsing keys that differ only by case.
+    $result = [System.Collections.Specialized.OrderedDictionary]::new([StringComparer]::Ordinal)
+    $properties = @(Get-ManifestPropertyNames $Manifest)
+    if ('harness_provenance' -notin $properties) { return $result }
+
+    # Schema 1 may omit provenance. When present it is opaque per-harness
+    # metadata, not ownership evidence; preserve entries outside the selection.
+    $provenance = if ($Manifest -is [System.Collections.IDictionary]) {
+        $Manifest['harness_provenance']
+    } else {
+        $Manifest.harness_provenance
+    }
+    if ($null -eq $provenance -or
+        ($provenance -isnot [System.Management.Automation.PSCustomObject] -and
+         $provenance -isnot [System.Collections.IDictionary])) {
+        Fail 'PROJECT_MANIFEST_INVALID' 'harness_provenance must be an object keyed by harness.'
+    }
+    $entries = if ($provenance -is [System.Collections.IDictionary]) {
+        @($provenance.Keys | ForEach-Object { [pscustomobject]@{ Name=[string]$_; Value=$provenance[$_] } })
+    } else {
+        @($provenance.PSObject.Properties)
+    }
+    foreach ($entry in $entries) {
+        $name = [string]$entry.Name
+        $value = $entry.Value
+        if ([string]::IsNullOrWhiteSpace($name) -or
+            ($value -isnot [System.Management.Automation.PSCustomObject] -and
+             $value -isnot [System.Collections.IDictionary])) {
+            Fail 'PROJECT_MANIFEST_INVALID' 'Each harness_provenance entry must be a non-empty keyed object.'
+        }
+        $result[$name] = $value
+    }
+    return $result
 }
 
 function Read-ProjectManifest([string]$Repo) {
@@ -99,7 +149,7 @@ function Read-ProjectManifest([string]$Repo) {
 
     $path = if ($hasOpenCode) { $openCodePath } else { $codexPath }
     try {
-        $manifest = [IO.File]::ReadAllText($path) | ConvertFrom-Json -Depth 100
+        $manifest = [IO.File]::ReadAllText($path) | ConvertFrom-Json -AsHashtable -Depth 100
     } catch {
         Fail 'PROJECT_MANIFEST_INVALID' 'Olympus project manifest is invalid JSON.'
     }
@@ -107,18 +157,16 @@ function Read-ProjectManifest([string]$Repo) {
     if ($manifest.schema_version -ne 1 -or $null -eq $manifest.managed_files) {
         Fail 'PROJECT_MANIFEST_INVALID' 'Unsupported project manifest schema or missing managed_files.'
     }
-    $properties = @($manifest.PSObject.Properties | ForEach-Object Name)
+    $properties = @(Get-ManifestPropertyNames $manifest)
     if ('scope' -in $properties -and [string]$manifest.scope -cne 'project') {
         Fail 'PROJECT_MANIFEST_INVALID' 'Manifest does not describe a project-scope installation.'
     }
+    [void](Get-HarnessProvenance $manifest)
 
     return [pscustomobject]@{ Path = $path; Manifest = $manifest }
 }
 
 try {
-    if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
-        Fail 'PLATFORM_UNQUALIFIED' 'Project uninstall is Windows-qualified only.'
-    }
     if (-not [IO.Path]::IsPathFullyQualified($Target)) {
         Fail 'UNSAFE_TARGET' 'Target must be an absolute project-root path.'
     }
@@ -131,11 +179,12 @@ try {
         Fail 'UNSAFE_TARGET' 'Target must be an existing Git project root.'
     }
     if (-not [string]::Equals([IO.Path]::GetFullPath($gitRoot).TrimEnd([char[]]@('\','/')),
-        [IO.Path]::GetFullPath($repo).TrimEnd([char[]]@('\','/')), [StringComparison]::OrdinalIgnoreCase)) {
+        [IO.Path]::GetFullPath($repo).TrimEnd([char[]]@('\','/')), $pathComparison)) {
         Fail 'UNSAFE_TARGET' 'Target must be the Git project root, not a nested directory.'
     }
 
     $state = Read-ProjectManifest $repo
+    $manifestHashSnapshot = Get-FileHashText $state.Path
     $manifest = $state.Manifest
     $installed = @(Get-InstalledHarnesses $manifest)
     $selected = if ($Harness -eq 'all') { @($installed) } else { @($Harness) }
@@ -193,13 +242,36 @@ try {
     if ($remainingHarnesses.Count -gt 0) {
         $nextManifestRel = if ('opencode' -in $remainingHarnesses) { $OpenCodeManifestRel } else { $CodexManifestRel }
         $nextManifestPath = Resolve-ManagedPath $repo $nextManifestRel
-        if (-not [string]::Equals($nextManifestPath, $state.Path, [StringComparison]::OrdinalIgnoreCase) -and
+        if (-not [string]::Equals($nextManifestPath, $state.Path, $pathComparison) -and
             (Test-Path -LiteralPath $nextManifestPath)) {
             Fail 'PROJECT_MANIFEST_CONFLICT' "Next manifest location already exists: $nextManifestRel"
         }
     }
 
-    # All drift and destination checks finish before the first destructive operation.
+    # All read-only rejection checks finish before acquiring the stable lock.
+    # Revalidate the manifest and managed bytes under that lock before writing.
+    . (Join-Path $PSScriptRoot 'target-writer-lock.ps1')
+    $writerLock = Enter-OlympusTargetWriterLock $repo
+    $revalidatedState = Read-ProjectManifest $repo
+    if (-not [string]::Equals($revalidatedState.Path, $state.Path, $pathComparison) -or
+        (Get-FileHashText $revalidatedState.Path) -cne $manifestHashSnapshot) {
+        Fail 'TARGET_CHANGED' 'Project manifest changed after preflight.'
+    }
+    foreach ($item in $validated) {
+        $currentFull = Resolve-ManagedPath $repo $item.Relative
+        if (-not [string]::Equals($currentFull, $item.Full, $pathComparison) -or
+            -not (Test-Path -LiteralPath $currentFull -PathType Leaf) -or
+            (Get-FileHashText $currentFull) -cne ([string]$item.Entry.sha256).ToLowerInvariant()) {
+            Fail 'TARGET_CHANGED' "Managed file changed after preflight: $($item.Relative)"
+        }
+    }
+    if ($null -ne $nextManifestPath -and
+        -not [string]::Equals($nextManifestPath, $state.Path, $pathComparison) -and
+        (Test-Path -LiteralPath $nextManifestPath)) {
+        Fail 'PROJECT_MANIFEST_CONFLICT' 'Next manifest destination appeared after preflight.'
+    }
+
+    Assert-OlympusTargetWriterLock $writerLock
     foreach ($item in $remove) {
         [IO.File]::Delete($item.Full)
         Write-Output "REMOVED: $($item.Relative)"
@@ -208,13 +280,24 @@ try {
     if ($remainingHarnesses.Count -eq 0) {
         [IO.File]::Delete($state.Path)
     } else {
-        $properties = @($manifest.PSObject.Properties | ForEach-Object Name)
+        $properties = @(Get-ManifestPropertyNames $manifest)
         if ('installed_harnesses' -in $properties) {
-            $manifest.installed_harnesses = @($remainingHarnesses)
+            $manifest['installed_harnesses'] = @($remainingHarnesses)
         } else {
-            $manifest | Add-Member -NotePropertyName installed_harnesses -NotePropertyValue @($remainingHarnesses)
+            $manifest['installed_harnesses'] = @($remainingHarnesses)
         }
-        $manifest.managed_files = @($keep | ForEach-Object { $_.Entry })
+        $manifest['managed_files'] = @($keep | ForEach-Object { $_.Entry })
+        if ('harness_provenance' -in $properties) {
+            $provenance = Get-HarnessProvenance $manifest
+            foreach ($name in @($provenance.Keys)) {
+                if ($name -cin $selected) { $provenance.Remove($name) }
+            }
+            if ($provenance.Count -gt 0) {
+                $manifest['harness_provenance'] = $provenance
+            } else {
+                [void]$manifest.Remove('harness_provenance')
+            }
+        }
         $manifestText = ($manifest | ConvertTo-Json -Depth 100) + [Environment]::NewLine
 
         $parent = Split-Path -Parent $nextManifestPath
@@ -222,7 +305,7 @@ try {
             [IO.Directory]::CreateDirectory($parent) | Out-Null
         }
         [IO.File]::WriteAllText($nextManifestPath, $manifestText, $Utf8NoBom)
-        if (-not [string]::Equals($nextManifestPath, $state.Path, [StringComparison]::OrdinalIgnoreCase)) {
+        if (-not [string]::Equals($nextManifestPath, $state.Path, $pathComparison)) {
             [IO.File]::Delete($state.Path)
         }
     }
@@ -231,4 +314,6 @@ try {
 } catch {
     Write-Error $_.Exception.Message
     exit 1
+} finally {
+    if ($null -ne $writerLock) { Exit-OlympusTargetWriterLock $writerLock }
 }

@@ -617,8 +617,9 @@ function Invoke-IsolatedAuthorityRuntime {
         $canonicalSources = Join-Path $root 'olympus'
         $rendererSource = Join-Path $root 'scripts/render_harnesses.py'
         $bootstrapSource = Join-Path $root 'scripts/bootstrap.ps1'
+        $writerLockSource = Join-Path $root 'scripts/target-writer-lock.ps1'
         $mockSource = Join-Path $root 'tests/release/fixtures/opencode.ps1'
-        foreach ($sourcePath in @($canonicalSources,$rendererSource,$bootstrapSource,$mockSource)) {
+        foreach ($sourcePath in @($canonicalSources,$rendererSource,$bootstrapSource,$writerLockSource,$mockSource)) {
             if (-not (Test-Path -LiteralPath $sourcePath)) { throw ('AUTHORITY_RUNTIME_SETUP_FAILED: required local source is missing: ' + $sourcePath) }
         }
         Copy-Item -LiteralPath $canonicalSources -Destination (Join-Path $sourceRoot 'olympus') -Recurse -Force -ErrorAction Stop
@@ -626,6 +627,7 @@ function Invoke-IsolatedAuthorityRuntime {
         [IO.Directory]::CreateDirectory($stagedScripts) | Out-Null
         Copy-Item -LiteralPath $rendererSource -Destination (Join-Path $stagedScripts 'render_harnesses.py') -Force -ErrorAction Stop
         Copy-Item -LiteralPath $bootstrapSource -Destination (Join-Path $stagedScripts 'bootstrap.ps1') -Force -ErrorAction Stop
+        Copy-Item -LiteralPath $writerLockSource -Destination (Join-Path $stagedScripts 'target-writer-lock.ps1') -Force -ErrorAction Stop
         Copy-Item -LiteralPath $mockSource -Destination (Join-Path $mockBin 'opencode-fixture.ps1') -Force -ErrorAction Stop
 
         $pwsh = Join-Path $PSHOME 'pwsh.exe'

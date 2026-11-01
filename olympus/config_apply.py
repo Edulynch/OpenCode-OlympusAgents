@@ -27,6 +27,7 @@ from .install_manifest import (
 
 
 _SHA256 = re.compile(r"[0-9a-fA-F]{64}")
+_MAX_MANIFEST_BYTES = 2_000_000
 _REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 _OPEN_CODE_FOREIGN_CONFIGS = (
     "opencode.json",
@@ -140,7 +141,7 @@ def _lstat_target_path(target: Path, relative: str) -> tuple[Path | None, os.sta
     return current, metadata, None
 
 
-def _read_target_file(target: Path, relative: str) -> tuple[bytes | None, str | None]:
+def _read_target_file(target: Path, relative: str, *, max_bytes: int | None = None) -> tuple[bytes | None, str | None]:
     path, before, issue = _lstat_target_path(target, relative)
     if issue:
         return None, issue
@@ -162,7 +163,7 @@ def _read_target_file(target: Path, relative: str) -> tuple[bytes | None, str | 
             return None, f"Managed target identity changed during preview: {relative}"
         with os.fdopen(descriptor, "rb") as stream:
             descriptor = None
-            raw = stream.read()
+            raw = stream.read() if max_bytes is None else stream.read(max_bytes + 1)
             after = os.fstat(stream.fileno())
         path_after, after_path, path_issue = _lstat_target_path(target, relative)
         if path_issue or after_path is None or path_after != path:
@@ -196,7 +197,7 @@ def _manifest_record(target: Path) -> tuple[ProjectManifest | None, bytes | None
     present: list[Path] = []
     raw_by_path: dict[Path, bytes] = {}
     for relative, path in zip(MANIFEST_PATHS, paths):
-        raw, issue = _read_target_file(target, relative)
+        raw, issue = _read_target_file(target, relative, max_bytes=_MAX_MANIFEST_BYTES)
         if issue:
             blockers.append({"code": "unsafe_manifest", "message": issue, "path": relative})
         elif raw is not None:
@@ -216,7 +217,7 @@ def _manifest_record(target: Path) -> tuple[ProjectManifest | None, bytes | None
         }]
     path = present[0]
     raw = raw_by_path[path]
-    if len(raw) > 2_000_000:
+    if len(raw) > _MAX_MANIFEST_BYTES:
         return None, None, [{
             "code": "manifest_too_large",
             "message": "Project install manifest exceeds the 2 MB read-only preview limit.",

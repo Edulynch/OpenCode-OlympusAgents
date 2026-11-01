@@ -16,13 +16,14 @@ import threading
 import tomllib
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from olympus import source_edit
+from olympus import config_apply, source_edit
 from olympus.cli import release_version
 
 
@@ -364,6 +365,50 @@ class SliceA(unittest.TestCase):
         self.assertEqual("blocked", response["result"])
         self.assertEqual([], response["data"]["changes"])
         self.assertIn("managed_file_drift", {item["code"] for item in response["issues"]})
+
+    def test_slice_c_oversized_manifest_read_is_bounded_and_preview_is_read_only(self):
+        limit = 2_000_000
+        manifest_path = self.create_managed_install(("opencode",))
+        manifest_path.write_bytes(b"x" * (limit * 2))
+        reads = []
+        original_fdopen = os.fdopen
+
+        class ReadProbe:
+            def __init__(self, stream):
+                self.stream = stream
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc_info):
+                return self.stream.__exit__(*exc_info)
+
+            def read(self, size=-1):
+                raw = self.stream.read(size)
+                reads.append((size, len(raw)))
+                return raw
+
+            def fileno(self):
+                return self.stream.fileno()
+
+        def tracked_fdopen(*args, **kwargs):
+            return ReadProbe(original_fdopen(*args, **kwargs))
+
+        before = self.snapshot()
+        with mock.patch("olympus.config_apply.os.fdopen", side_effect=tracked_fdopen):
+            record, raw, blockers = config_apply._manifest_record(self.target)
+        self.assertEqual(before, self.snapshot())
+        self.assertIsNone(record)
+        self.assertIsNone(raw)
+        self.assertIn("manifest_too_large", {item["code"] for item in blockers})
+        self.assertEqual([(limit + 1, limit + 1)], reads)
+
+        response = self.json_query(*self.config_apply_arguments(), code=3)
+        self.assertEqual("blocked", response["result"])
+        self.assertTrue(response["data"]["preview_only"])
+        self.assertFalse(response["data"]["apply_available"])
+        self.assertEqual([], response["data"]["changes"])
+        self.assertIn("manifest_too_large", {item["code"] for item in response["issues"]})
 
     def test_slice_c_preview_refuses_absent_install_or_harness_and_foreign_config(self):
         response = self.json_query(*self.config_apply_arguments(), code=3)

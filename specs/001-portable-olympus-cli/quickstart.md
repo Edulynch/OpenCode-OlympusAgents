@@ -256,4 +256,4 @@ El protocolo coordina operaciones Olympus cooperantes y bloquea conflictos obser
 | G2 / Slice B | **PASS Windows/Linux**. La prueba verificó snapshots, independencia de A, rollback/recovery, conflictos y los 15 límites del write-set. El checkout fuente quedó sin cambios. |
 | macOS | **NOT VERIFIED**. |
 
-FAST Windows y CodeQL también pasaron en el PR Draft #70. Slice C1 se validó con pruebas focalizadas locales; no es evidencia Linux/macOS ni implementación de la escritura C. Resto de C y la feature completa siguen **BLOCKED**.
+FAST Windows y CodeQL también pasaron en el PR Draft #70. Slice C1: Windows 6/6 **PASS** (evidencia local previa) y Linux 6/6 **PASS** en GitHub Actions [run 41310141414](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/41310141414), commit `a09cdeb934804f4a6c86d1e998f930ccb0be6f70`; macOS **UNVERIFIED**. FULL y runtime interactivo **NOT_RUN**. Resto de C y la feature completa siguen **BLOCKED**.

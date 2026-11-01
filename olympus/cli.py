@@ -1,4 +1,4 @@
-"""Portable, offline Olympus queries and explicit source-model edits."""
+"""Portable, offline Olympus queries and explicit configuration previews/edits."""
 
 from __future__ import annotations
 
@@ -32,8 +32,9 @@ def parser() -> Parser:
                 "  olympus agents set-model veyra --effort high --dry-run\n"
                 "  olympus config recover\n"
                 "  olympus config check\n"
+                "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --dry-run\n"
                 "  olympus status --scope project --target <absolute-worktree-root>\n"
-                "Edits affect only the canonical source checkout; installed-target application is separate.\n"
+                "Source edits affect only the canonical checkout; config apply is preview-only in this slice.\n"
                 "Queries do not verify installations or model availability.\n"
                 "macOS is not verified."),
         allow_abbrev=False,
@@ -64,6 +65,14 @@ def parser() -> Parser:
     check = config_commands.add_parser("check", help="compare renderer outputs without writing", allow_abbrev=False)
     check.add_argument("--harness", choices=("opencode", "codex", "all"), default="all")
     check.add_argument("--json", action="store_true")
+    apply = config_commands.add_parser(
+        "apply", help="preview changes to an existing project installation (dry-run only)", allow_abbrev=False,
+    )
+    apply.add_argument("--scope", choices=("project", "global"), required=True)
+    apply.add_argument("--target", type=Path, required=True, help="absolute existing Git worktree root")
+    apply.add_argument("--harness", choices=("opencode", "codex", "all"), required=True)
+    apply.add_argument("--dry-run", action="store_true", required=True, help="required; no target writes are implemented")
+    apply.add_argument("--json", action="store_true", help="emit a single JSON preview")
     config_commands.add_parser("recover", help="explicitly recover one pending source-edit batch", allow_abbrev=False)
     status = commands.add_parser("status", help="read reported installation metadata; no integrity verification", allow_abbrev=False)
     status.add_argument("--scope", choices=("project", "global"), default="project")
@@ -170,6 +179,8 @@ def source_query(source: Path, operation: str, harness: str) -> tuple[dict, list
 
 
 def installation_status(args, response: dict) -> int:
+    from .install_manifest import ManifestError, manifest_paths, manifest_present, read_project_manifest
+
     response["context"].update({"kind": "installation_metadata", "scope": args.scope,
                                 "harness": args.harness})
     response["data"] = {"installed_harnesses": [], "integrity": "unverified",
@@ -186,8 +197,8 @@ def installation_status(args, response: dict) -> int:
     if not target.is_dir() or not ((target / ".git").is_dir() or (target / ".git").is_file()):
         raise CLIError(f"Target must be a Git worktree root with a .git marker: {target}", 2)
     response["context"]["target"] = str(target)
-    manifests = [target / f".{harness}" / "orchestrator-install.json" for harness in ("opencode", "codex")]
-    present = [path for path in manifests if path.exists() or path.is_symlink()]
+    manifests = manifest_paths(target)
+    present = [path for path in manifests if manifest_present(path)]
     if not present:
         response["result"] = "absent"
         response["data"]["installation_state"] = "absent"
@@ -196,33 +207,24 @@ def installation_status(args, response: dict) -> int:
     if len(present) != 1:
         response["data"]["installation_state"] = "contradictory"
         raise CLIError("Both project manifest locations exist; reported ownership metadata is ambiguous", 3)
-    path = present[0]
-    if not path.resolve().is_relative_to(target):
-        raise CLIError(f"Manifest escapes the selected target: {path}", 3)
     response["data"]["installation_state"] = "invalid"
     try:
-        manifest = json.loads(path.read_text(encoding="utf-8-sig"))
-    except (json.JSONDecodeError, UnicodeError, OSError) as error:
-        raise CLIError(f"Cannot read installation metadata at {path}: {error}") from error
-    if not isinstance(manifest, dict) or type(manifest.get("schema_version")) is not int or manifest["schema_version"] != 1 or not isinstance(manifest.get("managed_files"), list):
-        raise CLIError(f"Unsupported manifest schema or managed_files at {path}")
-    if manifest.get("scope", "project") != "project":
-        raise CLIError(f"Contradictory project manifest scope at {path}", 3)
-    # Existing project engines recognize older OpenCode-only metadata without inventory.
-    installed = manifest.get("installed_harnesses", ["opencode"])
-    if not isinstance(installed, list) or not installed or any(value not in ("opencode", "codex") for value in installed) or len(installed) != len(set(installed)):
-        raise CLIError(f"Invalid installed_harnesses metadata at {path}")
-    expected_location = manifests[0] if "opencode" in installed else manifests[1]
-    if path != expected_location:
-        raise CLIError(f"Manifest location contradicts its reported harness inventory: {path}", 3)
-    version = manifest.get("installed_version", "unknown")
-    commit = manifest.get("installed_from_commit", "unknown")
-    if not isinstance(version, str) or not version or not isinstance(commit, str):
-        raise CLIError(f"Invalid recorded release metadata at {path}")
+        record = read_project_manifest(target)
+    except ManifestError as error:
+        if error.code == "contradictory":
+            response["data"]["installation_state"] = "contradictory"
+        raise CLIError(str(error), 3 if error.blocked else 1) from error
+    if record is None:
+        response["result"] = "absent"
+        response["data"]["installation_state"] = "absent"
+        return 0
+    installed = list(record.installed_harnesses)
+    response["data"]["manifests"] = [str(record.path)]
     response["data"].update({"installation_state": "reported", "installed_harnesses": installed,
-                             "recorded_version": version, "recorded_source_commit": commit,
+                             "recorded_version": record.installed_version,
+                             "recorded_source_commit": record.installed_from_commit,
                              "evidence": "reported_manifest",
-                             "metadata_format": "legacy" if "installed_harnesses" not in manifest else "current"})
+                             "metadata_format": record.metadata_format})
     selected = ("opencode", "codex") if args.harness == "all" else (args.harness,)
     response["data"]["harnesses"] = {name: "reported" if name in installed else "absent" for name in selected}
     if not any(name in installed for name in selected):
@@ -427,6 +429,19 @@ def main(argv: list[str] | None = None) -> int:
             return _run_model_edit(source, args, response)
         if response["operation"] == "config recover":
             return _run_recovery(source, response)
+        if response["operation"] == "config apply":
+            from . import config_apply
+
+            code = config_apply.preview(
+                source,
+                args,
+                response,
+                source_query=source_query,
+                load_renderer=load_renderer,
+                release_version=release_version,
+            )
+            config_apply.emit_preview(response, as_json)
+            return code
         code = installation_status(args, response)
         emit(response, as_json)
         return code

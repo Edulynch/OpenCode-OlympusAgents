@@ -16,13 +16,14 @@ import threading
 import tomllib
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from olympus import source_edit
+from olympus import config_apply, source_edit
 from olympus.cli import release_version
 
 
@@ -45,8 +46,8 @@ class SliceA(unittest.TestCase):
         self.source = self.sandbox / "source espacio ñ"
         self.target = self.sandbox / "target espacio ñ"
         self.target.mkdir()
-        # A simulated worktree marker is sufficient for metadata-only status.
-        (self.target / ".git").mkdir()
+        subprocess.run(["git", "init", "--quiet", str(self.target)], check=True,
+                       capture_output=True, text=True, encoding="utf-8", timeout=15)
         shutil.copytree(ROOT / "olympus", self.source / "olympus",
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         (self.source / "scripts").mkdir()
@@ -126,6 +127,36 @@ class SliceA(unittest.TestCase):
         path.write_text(json.dumps(data), encoding="utf-8")
         return path
 
+    def create_managed_install(self, harnesses=("opencode",), version="v0.4.11"):
+        entries = []
+        for harness in harnesses:
+            for path, content in self.renderer.outputs_for(self.source, harness).items():
+                relative = path.relative_to(self.source).as_posix()
+                if not (relative.startswith(f".{harness}/") or relative in ("opencode.jsonc", "CODEX.md")):
+                    continue
+                raw = content.encode("utf-8")
+                destination = self.target / Path(relative)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(raw)
+                entries.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest()})
+        manifest = {
+            "schema_version": 1,
+            "scope": "project",
+            "installed_version": version,
+            "installed_from_commit": "fixture-commit",
+            "installed_harnesses": list(harnesses),
+            "managed_files": sorted(entries, key=lambda item: item["path"]),
+        }
+        folder = ".opencode" if "opencode" in harnesses else ".codex"
+        manifest_path = self.target / folder / "orchestrator-install.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        return manifest_path
+
+    def config_apply_arguments(self, harness="opencode", target=None):
+        return ("config", "apply", "--scope", "project", "--target", str(target or self.target),
+                "--harness", harness, "--dry-run")
+
     def test_slice_a_help_version(self):
         help_result = self.query("--help")
         self.assertEqual(0, help_result.returncode)
@@ -133,8 +164,12 @@ class SliceA(unittest.TestCase):
             self.assertIn(text, help_result.stdout)
         for command in ("models set-family", "agents set-model", "config recover"):
             self.assertIn(command, help_result.stdout)
-        for command in ("config apply", "doctor", "install", "uninstall"):
+        for command in ("doctor", "install", "uninstall"):
             self.assertNotRegex(help_result.stdout, rf"\b{command}\b")
+        self.assertIn("config apply --scope project", help_result.stdout)
+        apply_help = self.query("config", "apply", "--help")
+        self.assertIn("--dry-run", apply_help.stdout)
+        self.assertIn("required", apply_help.stdout)
         version = self.query("--version")
         self.assertEqual(0, version.returncode)
         self.assertIn(f"olympus {self.source_version}", version.stdout)
@@ -292,6 +327,131 @@ class SliceA(unittest.TestCase):
         (scratch / "unconfirmed.txt").write_text("unrelated pending state", encoding="utf-8")
         response = self.json_query("models", "list")
         self.assertIn("unconfirmed", response["context"]["source_edit"])
+
+    def test_slice_c_preview_lists_updates_and_preserves_other_harness_without_writes(self):
+        manifest_path = self.create_managed_install(("opencode", "codex"))
+        old_path = self.target / ".opencode/agents/kael.md"
+        old_bytes = b"previous managed OpenCode configuration\n"
+        old_path.write_bytes(old_bytes)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        entry = next(item for item in manifest["managed_files"] if item["path"] == ".opencode/agents/kael.md")
+        entry["sha256"] = hashlib.sha256(old_bytes).hexdigest()
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+
+        response = self.json_query(*self.config_apply_arguments("opencode"))
+        self.assertEqual("ok", response["result"])
+        self.assertFalse(response["data"]["apply_available"])
+        self.assertEqual("ready", response["data"]["preview_state"])
+        self.assertEqual("managed_paths_and_hashes_match", response["data"]["manifest"]["ownership"])
+        changed = {item["path"]: item for item in response["data"]["changes"]}
+        self.assertIn(".opencode/agents/kael.md", changed)
+        self.assertEqual("update", changed[".opencode/agents/kael.md"]["action"])
+        self.assertTrue(response["data"]["unchanged"])
+        codex_paths = {item["path"] for item in response["data"]["preserved"]["resources"]}
+        self.assertIn("CODEX.md", codex_paths)
+        self.assertEqual(["codex"], response["data"]["preserved"]["harnesses"])
+
+        human = self.query(*self.config_apply_arguments("opencode"))
+        self.assertEqual(0, human.returncode, human.stderr)
+        self.assertIn("resources_to_update:", human.stdout)
+        self.assertIn(".opencode/agents/kael.md", human.stdout)
+        self.assertIn("no target writes", human.stdout)
+
+    def test_slice_c_preview_blocks_manifest_hash_drift_and_writes_nothing(self):
+        self.create_managed_install(("opencode",))
+        path = self.target / ".opencode/agents/kael.md"
+        path.write_bytes(path.read_bytes() + b"user edit\n")
+        response = self.json_query(*self.config_apply_arguments(), code=3)
+        self.assertEqual("blocked", response["result"])
+        self.assertEqual([], response["data"]["changes"])
+        self.assertIn("managed_file_drift", {item["code"] for item in response["issues"]})
+
+    def test_slice_c_oversized_manifest_read_is_bounded_and_preview_is_read_only(self):
+        limit = 2_000_000
+        manifest_path = self.create_managed_install(("opencode",))
+        manifest_path.write_bytes(b"x" * (limit * 2))
+        reads = []
+        original_fdopen = os.fdopen
+
+        class ReadProbe:
+            def __init__(self, stream):
+                self.stream = stream
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc_info):
+                return self.stream.__exit__(*exc_info)
+
+            def read(self, size=-1):
+                raw = self.stream.read(size)
+                reads.append((size, len(raw)))
+                return raw
+
+            def fileno(self):
+                return self.stream.fileno()
+
+        def tracked_fdopen(*args, **kwargs):
+            return ReadProbe(original_fdopen(*args, **kwargs))
+
+        before = self.snapshot()
+        with mock.patch("olympus.config_apply.os.fdopen", side_effect=tracked_fdopen):
+            record, raw, blockers = config_apply._manifest_record(self.target)
+        self.assertEqual(before, self.snapshot())
+        self.assertIsNone(record)
+        self.assertIsNone(raw)
+        self.assertIn("manifest_too_large", {item["code"] for item in blockers})
+        self.assertEqual([(limit + 1, limit + 1)], reads)
+
+        response = self.json_query(*self.config_apply_arguments(), code=3)
+        self.assertEqual("blocked", response["result"])
+        self.assertTrue(response["data"]["preview_only"])
+        self.assertFalse(response["data"]["apply_available"])
+        self.assertEqual([], response["data"]["changes"])
+        self.assertIn("manifest_too_large", {item["code"] for item in response["issues"]})
+
+    def test_slice_c_preview_refuses_absent_install_or_harness_and_foreign_config(self):
+        response = self.json_query(*self.config_apply_arguments(), code=3)
+        self.assertIn("manifest_missing", {item["code"] for item in response["issues"]})
+
+        self.create_managed_install(("opencode",))
+        response = self.json_query(*self.config_apply_arguments("all"), code=3)
+        self.assertIn("harness_not_installed", {item["code"] for item in response["issues"]})
+
+        (self.target / "opencode.json").write_text("user config\n", encoding="utf-8")
+        response = self.json_query(*self.config_apply_arguments(), code=3)
+        self.assertIn("unowned_destination_conflict", {item["code"] for item in response["issues"]})
+
+    def test_slice_c_codex_only_preview_and_invalid_manifest_are_safe(self):
+        manifest_path = self.create_managed_install(("codex",), version=self.source_version)
+        response = self.json_query(*self.config_apply_arguments("codex"))
+        self.assertEqual("no_changes", response["result"])
+        self.assertEqual(["codex"], response["data"]["installed_harnesses"])
+        self.assertEqual([], response["data"]["preserved"]["harnesses"])
+
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["scope"] = "global"
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        response = self.json_query(*self.config_apply_arguments("codex"), code=3)
+        self.assertEqual("invalid_manifest", response["issues"][0]["code"])
+
+    def test_slice_c_preview_rejects_non_root_and_incoherent_source_without_writes(self):
+        child = self.target / "child"
+        child.mkdir()
+        response = self.json_query(*self.config_apply_arguments(target=child), code=2)
+        self.assertEqual("invalid_target", response["issues"][0]["code"])
+
+        self.create_managed_install(("opencode",))
+        generated = self.source / ".opencode/agents/kael.md"
+        generated.write_text(generated.read_text(encoding="utf-8") + "source drift\n", encoding="utf-8")
+        response = self.json_query(*self.config_apply_arguments(), code=3)
+        self.assertIn("source_output_drift", {item["code"] for item in response["issues"]})
+
+    def test_slice_c_apply_without_dry_run_is_not_an_execution_path(self):
+        arguments = ("config", "apply", "--scope", "project", "--target", str(self.target),
+                     "--harness", "opencode", "--json")
+        response = self.json_query(*arguments, code=2)
+        self.assertEqual("failed", response["result"])
 
     def test_slice_a_explicit_source_and_python_launcher(self):
         response = self.json_query("--source", str(self.source), "models", "list", entry="python_launcher")
@@ -2257,7 +2417,8 @@ raise SystemExit(main(sys.argv[1:]))
         before = self._file_snapshot()
         help_result = self._run("--help")
         self.assertEqual(0, help_result.returncode, help_result.stderr)
-        for command in ("set-family", "set-model", "recover", "installed-target application is separate"):
+        # La ayuda debe identificar que config apply ofrece un preview, sin habilitar escrituras.
+        for command in ("set-family", "set-model", "recover", "config apply is preview-only in this slice"):
             self.assertIn(command, help_result.stdout)
         self.assertEqual(before, self._file_snapshot())
         cases = (

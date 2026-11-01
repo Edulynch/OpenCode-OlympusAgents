@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-portable-olympus-cli` (rama preexistente; esta sesión no crea ni cambia ramas)  
 **Created**: 2026-10-14  
-**Status**: Slice A SHIPPED; Slice B **ACEPTADA** (T019 Windows, T020 Linux, G2 PASS); Slice C y feature completa **BLOCKED**; macOS **NOT VERIFIED**.
+**Status (2026-10-31)**: Slice A SHIPPED; Slice B **ACEPTADA** (T019 Windows, T020 Linux, G2 PASS); Slice C1 implementa sólo preview read-only project; escritura/resto de Slice C y feature completa **BLOCKED**; macOS **NOT VERIFIED**.
 **Documentation Mode**: New  
 **Baseline**: `master` con Slice A integrada por PR [#69](https://github.com/Edulynch/OpenCode-OlympusAgents/pull/69), commit `b7f8404061847a58d5e8122e4baa2fa643b69a46`. Baseline histórico: post-PR #68 `1900da45250ddec817a6141396e0ec1268b2dfca`; producto v0.4.9 `c30a19dd410b1815f4591b204615cae0dd9e9a5f`.\
 **Restricciones de especificación inicial (históricas)**: Sólo especificación; sin implementación, planes, tareas, commits, push ni pruebas pesadas. Conservar fuentes, renderer, roles, diferencias de adaptadores y protecciones de instalación. Windows/Linux como objetivos; macOS sin cualificación acreditada. Excluir #66 y #67.\
@@ -14,7 +14,7 @@
 
 T019 y T020 quedaron reconciliadas como PASS; G2 acredita la aceptación integrada de B en Windows y Linux. T019 Windows: 55 PASS, 0 FAIL, 0 ERROR, 3 SKIPPED por `WinError 1314` al crear fixtures symlink; los skips no cuentan como PASS Windows. T020 Linux hosted: 58 PASS, 0 FAIL, 0 SKIPPED, 37.350 s, exit 0, Ubuntu 24.04, CPython 3.11.17 y TOML Kit 0.13.3. Fuente exacta: commit `539976812d14289696dbd3824f1ae706ac2f1947`, PR Draft #70; run [38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366), job [116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025). Los tres escenarios symlink omitidos en Windows pasaron en Linux. El run cubrió la selección integrada, incluyendo snapshots, independencia A, rollback/recovery, conflictos y 15 límites; confirmó checkout fuente sin cambios. FAST Windows y CodeQL también pasaron.
 
-Esta aceptación documenta edición explícita de fuentes en B, no autorización permanente para escribir fuentes reales ni aplicación instalada. A permanece SHIPPED y sin cambios; `config apply`, Slice C y la feature completa siguen BLOCKED. Los límites cooperantes, atomicidad multiarquivo, durabilidad y macOS NOT VERIFIED permanecen vigentes. Los registros de diseño/planificación anteriores conservan su fecha y significado histórico; la reconciliación actual de tareas está en [tasks.md](tasks.md).
+La aceptación de B documenta edición explícita de fuentes, no autorización permanente para escribir fuentes reales ni aplicación instalada. A permanece SHIPPED y sin cambios. C1 sólo informa un delta para un manifest project existente y sus recursos administrados; no ofrece fase de escritura, global, instalación de harnesses ausentes, verificación runtime ni provenance personalizada. Los límites cooperantes, atomicidad multiarquivo, durabilidad y macOS NOT VERIFIED permanecen vigentes. Los registros de diseño/planificación anteriores conservan su fecha y significado histórico; la reconciliación A/B permanece en [tasks.md](tasks.md).
 
 ## Actualización contractual aprobada — Slice B (2026-10-14)
 

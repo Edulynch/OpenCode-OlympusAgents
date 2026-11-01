@@ -1,6 +1,6 @@
-# CLI portátil Olympus — quickstart (Slices A y B)
+# CLI portátil Olympus — quickstart (Slices A, B y C1)
 
-**Estado vigente**: Slice A **SHIPPED**; Slice B **ACEPTADA** tras T019 Windows y T020 Linux (G2 PASS). Slice C y la feature completa **BLOCKED**; macOS **NOT VERIFIED**. La evidencia de B no habilita escrituras sobre una fuente real sin autorización del operador. [Estado y evidencia](tasks.md).
+**Estado vigente**: Slice A **SHIPPED**; Slice B **ACEPTADA** tras T019 Windows y T020 Linux (G2 PASS). Slice C1 añade preview read-only de `config apply` sólo para instalaciones project existentes; la fase de escritura, resto de C y la feature completa siguen **BLOCKED**. macOS **NOT VERIFIED**. La evidencia de B no habilita escrituras sobre una fuente real. [Estado y evidencia histórica de A/B](tasks.md).
 
 ## Requisitos y contexto
 
@@ -21,6 +21,7 @@ python3.11 -B -m olympus models list
 python3.11 -B -m olympus models list --json
 python3.11 -B -m olympus config check
 python3.11 -B -m olympus config check --harness codex --json
+python3.11 -B -m olympus config apply --scope project --target /path/to/existing-project --harness opencode --dry-run
 ```
 
 El listado presenta doce roles, identidad, familia, esfuerzo y ambos IDs desde Core. OpenCode representa doce agentes; Codex tiene diez especialistas, Kael como raíz y Aegis ausente. Un ID Codex de Aegis no equivale a un agente instalado. Check compara outputs del renderer en memoria; --harness admite opencode, codex y all (default). No regenera ni repara archivos.
@@ -119,7 +120,36 @@ Esta consulta global devuelve BLOCKED/exit 3: A no realiza discovery ni consulta
 | 2 | Argumentos/contexto inválidos; comandos no disponibles |
 | 3 | Consulta bloqueada, incluida ubicación global sin discovery |
 
-Slice A no tiene operación parcial que emita exit 4: sus consultas no modifican fuentes, outputs, configuraciones, manifests, permisos ni cachés. Usar -B en entradas Python; los launchers lo imponen. Scratch previo se informa sin reparar. A sigue read-only; sus comandos no aceptan mutaciones. La edición/recovery de Slice B se documenta aparte abajo y `config apply` de Slice C no está disponible.
+Slice A no tiene operación parcial que emita exit 4: sus consultas no modifican fuentes, outputs, configuraciones, manifests, permisos ni cachés. Usar -B en entradas Python; los launchers lo imponen. Scratch previo se informa sin reparar. A sigue read-only; la edición/recovery de Slice B se documenta aparte abajo. `config apply` sólo está disponible como preview C1 read-only descrito en su sección; su escritura no está disponible.
+
+### Preview de actualización de una instalación project existente (Slice C1)
+
+El preview requiere una instalación existente con un único manifest project válido,
+el harness seleccionado ya instalado y todos los recursos administrados intactos
+según sus hashes. Comprueba que la raíz indicada es exactamente una raíz Git,
+que la fuente genera outputs coherentes y que no hay destinos OpenCode en conflicto.
+Muestra archivos que cambiarían, archivos iguales y harnesses no seleccionados que
+permanecerían intactos. Un manifest ausente/ambiguo, inventario no soportado, drift,
+enlaces o conflicto bloquean el preview. No instala harnesses, no consulta runtimes
+ni proveedores y no escribe archivos, manifests, caches o permisos. La ejecución
+de escritura de `config apply` sigue sin implementarse; `apply_available` siempre
+es `false`.
+
+Ejemplo en PowerShell desde el checkout de Olympus, usando un proyecto existente:
+
+```powershell
+$sourceCheckout = (Get-Location).Path
+$targetProject = 'D:\Repos\sample project'
+$env:OLYMPUS_PYTHON = (Get-Command python3.11 -CommandType Application | Select-Object -First 1).Source
+& "$sourceCheckout\scripts\olympus.cmd" config apply --scope project --target $targetProject --harness opencode --dry-run --json
+$LASTEXITCODE
+```
+
+Para una instalación dual, selecciona `--harness all`; si un harness no figura en
+el manifest, el preview se bloquea en vez de instalarlo. `--json` emite un único
+documento con `changes`, `unchanged`, `preserved`, verificaciones y conflictos.
+Un preview exitoso sólo describe el estado observado; no habilita ni ejecuta
+aplicación.
 
 ## Evidencia enfocada y plataformas
 
@@ -197,7 +227,7 @@ $source = 'C:\Temp\olympus-source-fixture' # copia aislada ya preparada
 & $python -B -m olympus --source $source agents set-model veyra --family luna --effort high
 ```
 
-En Linux, asigna `source` a la ruta absoluta de una copia aislada y usa `--source "$source"` con la misma sintaxis y `"$PYTHON"` como intérprete. La operación muestra el preview antes de escribir. Sólo cambia la intención en `olympus/core/models.toml` y los outputs existentes que realmente cambian según el renderer; no modifica manifests ni despliega los cambios a instalaciones. `config apply` pertenece a Slice C y sigue **BLOCKED/no disponible**.
+En Linux, asigna `source` a la ruta absoluta de una copia aislada y usa `--source "$source"` con la misma sintaxis y `"$PYTHON"` como intérprete. La operación muestra el preview antes de escribir. Sólo cambia la intención en `olympus/core/models.toml` y los outputs existentes que realmente cambian según el renderer; no modifica manifests ni despliega los cambios a instalaciones. El preview C1 de `config apply` está documentado arriba; la escritura de destino permanece **BLOCKED/no disponible**.
 
 ### Lock estable, scratch y recuperación explícita
 
@@ -226,4 +256,4 @@ El protocolo coordina operaciones Olympus cooperantes y bloquea conflictos obser
 | G2 / Slice B | **PASS Windows/Linux**. La prueba verificó snapshots, independencia de A, rollback/recovery, conflictos y los 15 límites del write-set. El checkout fuente quedó sin cambios. |
 | macOS | **NOT VERIFIED**. |
 
-FAST Windows y CodeQL también pasaron en el PR Draft #70. No se ejecutaron pruebas durante esta reconciliación. La aceptación B no es implementación/aceptación de Slice C: C y la feature completa siguen **BLOCKED**.
+FAST Windows y CodeQL también pasaron en el PR Draft #70. Slice C1 se validó con pruebas focalizadas locales; no es evidencia Linux/macOS ni implementación de la escritura C. Resto de C y la feature completa siguen **BLOCKED**.

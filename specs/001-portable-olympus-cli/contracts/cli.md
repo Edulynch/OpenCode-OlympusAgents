@@ -1,6 +1,6 @@
 # Contrato propuesto de CLI
 
-**Estado vigente (2026-10-16)**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C y feature completa **BLOCKED**; macOS **NOT VERIFIED**. El acceptance de B cubre los comandos de edición de fuente/recovery con sus límites; no habilita `config apply` ni elimina la necesidad de autorización del operador sobre fuentes reales. Evidencia en [tasks.md](../tasks.md).
+**Estado vigente (2026-10-31)**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C1 ofrece sólo preview read-only para instalaciones project existentes; escritura de `config apply`, resto de C y feature completa siguen **BLOCKED**; macOS **NOT VERIFIED**. La aceptación B no autoriza por sí sola escrituras en instalaciones.
 
 ## Entrada, contexto y soporte
 
@@ -24,7 +24,7 @@
 | `agents set-model <role> [--family <existing>] [--effort <canonical-value>] [--dry-run [--json]]` | B; al menos un valor solicitado | Otros roles inalterados; preview de resolución completa |
 | `config recover` | B; rollback/cleanup de batch propio pendiente | Adquirir lock nativo estable existente antes de inspección del batch; sin dueño activo, identidad/estado/hashes/backups reconciliados; sin retry original |
 | `doctor --scope ... [--target ...] --harness ... [--json]` | C; verificar mediante motor existente | Windows cualificado, fuente local apta; read-only bloqueado si no se garantiza |
-| `config apply --scope ... [--target ...] --harness ... [--dry-run] [--json]` | C; futura actualización administrada | BLOCKED para personalizado con baseline; no llama install override ni escribe destino |
+| `config apply --scope project --target <root> --harness ... --dry-run [--json]` | C1; preview read-only de recursos de una instalación existente | Exige manifiesto válido y hashes sin drift; no instala harnesses ausentes, no llama bootstrap/install, y la fase de escritura sigue bloqueada |
 | `install --scope ... [--target ...] --harness ... --version <release> [--dry-run]` | C; delegación de release oficial | Windows cualificado; no instala silenciosamente sources personalizados |
 | `uninstall --scope ... [--target ...] --harness ...` | C; delegación de retiro administrado | Windows cualificado, ownership/hash del motor |
 
@@ -60,7 +60,7 @@ JSON de comando permitido es un documento único en stdout; diagnósticos de pro
 - Listado: `data.roles` con `role`, `identity`, `family`, `effort`, `models.opencode`, `models.codex`, y representación de cada harness (`agent`, `root`, `absent`).
 - Preview: affected roles, old/new intención/resolución, recursos cambiantes relativos y bloqueos; no tabla de mappings persistente.
 - Estado/doctor: installed harnesses, scope, versión registrada, integridad y soporte/evidencia disponible. Cuando no puede conocerse una asignación instalada segura, informar unknown, no copiar la asignación del source como si estuviese aplicada.
-- Bloqueo apply: contexto solicitado y razones, plan de escritura ausente; no simular un preview de actualización que el motor aún no soporta.
+- Preview C1: delta de archivos renderizados sólo después de validar raíz, manifiesto, inventario y hashes; conflictos bloquean el plan. No se calcula/escribe un manifest nuevo y `apply_available=false`; no presentar esta salida como permiso o ejecución de escritura.
 
 | Exit | Significado |
 |---|---|

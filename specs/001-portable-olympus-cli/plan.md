@@ -123,9 +123,11 @@ El escritor único es cooperante: commit y recovery Olympus comparten exclusión
 
 Limitaciones aprobadas de FR-012: sin protección absoluta contra procesos no cooperantes, vista atómica multiarquivo ni durabilidad absoluta ante pérdida de energía. No sobrescribir automáticamente modificaciones externas ni conflictos detectados. Si un tercero modifica un recurso después de la última comprobación, esa carrera queda fuera de garantía; no afirmar linearizabilidad universal. Mantener estado bloqueado o sin confirmar cuando no se pueda recuperar coherencia propia. T019/T020 validan este contrato; no amplían sus límites.
 
-### Aplicación instalada: capacidad separada bloqueada
+### Aplicación instalada: preview C1 entregado; escritura aún bloqueada
 
-No implementar `config apply` usando `install.ps1 -SourceRoot` como contrato soportado. Tampoco Python debe abrir/agregar/modificar directamente `.opencode`, `.codex` o manifests del destino.
+**Actualización 2026-10-31:** `olympus config apply --scope project --target ... --harness ... --dry-run` ofrece un preview Python/stdlib read-only para una instalación existente con inventario del renderer actual. Reutiliza el renderer y el parser compartido del manifest; exige raíz Git, manifest único, selección ya instalada, inventario exacto y hashes intactos. No llama bootstrap/install, no inspecciona runtimes/proveedores, no escribe y siempre reporta `apply_available=false`. Es una primera comprobación, no la ruta de aplicación instalada aprobada.
+
+La prohibición previa de usar `install.ps1 -SourceRoot` como contrato soportado sigue vigente. Python sólo lee los paths explícitos necesarios para este preview; no agrega/modifica `.opencode`, `.codex` ni manifests del destino.
 
 Hechos concretos: el motor consume outputs ya generados junto al script, valida hashes/ownership y preserva drift al rechazarlo. Sin embargo, registra versión/commit sin distinguir cambios locales, escribe antes de manifest sin recovery y bootstrap exige IDs fijos Sol/Luna para OpenCode. Linux tiene guards y rutas Windows; `all` global procesa dos harnesses independientemente.
 

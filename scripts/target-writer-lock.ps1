@@ -51,7 +51,7 @@ public static class OlympusTargetWriterLockFileInfo
     private static extern int FLock(int descriptor, int operation);
 
     [DllImport("libc", EntryPoint = "open", CharSet = CharSet.Ansi, SetLastError = true)]
-    private static extern int Open(string path, int flags, uint mode);
+    private static extern int OpenExisting(string path, int flags);
 
     private sealed class UnixStat
     {
@@ -143,14 +143,59 @@ public static class OlympusTargetWriterLockFileInfo
 
         int flags;
         if (isLinux)
-            flags = 2 | 64 | 2048 | 131072 | 524288; // O_RDWR|O_CREAT|O_NONBLOCK|O_NOFOLLOW|O_CLOEXEC
+            flags = 2 | 2048 | 131072 | 524288; // O_RDWR|O_NONBLOCK|O_NOFOLLOW|O_CLOEXEC
         else
-            flags = 2 | 4 | 256 | 512 | 16777216; // O_RDWR|O_NONBLOCK|O_NOFOLLOW|O_CREAT|O_CLOEXEC
+            flags = 2 | 4 | 256 | 16777216; // O_RDWR|O_NONBLOCK|O_NOFOLLOW|O_CLOEXEC
 
-        int descriptor = Open(path, flags, 384); // mode 0600; never truncate or replace an existing stable lock.
-        if (descriptor < 0)
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "Cannot open the stable Unix lock file.");
+        // Existing locks are opened without O_CREAT and without a mode argument.
+        // In particular, do not call variadic open(path, flags, mode) from
+        // managed code: Darwin arm64 does not use the ordinary fixed-argument
+        // ABI for variadic arguments, and a bad mode can create an inaccessible
+        // stable file. Create missing locks through FileStreamOptions instead;
+        // UnixCreateMode is applied atomically by the runtime during O_EXCL
+        // creation, not by chmod after the file becomes visible.
+        int descriptor = OpenExisting(path, flags);
+        if (descriptor >= 0)
+            return WrapUnixDescriptor(descriptor);
 
+        int openError = Marshal.GetLastWin32Error();
+        if (openError != 2) // ENOENT: only a missing path may be created.
+            throw new Win32Exception(openError, "Cannot open the stable Unix lock file.");
+
+        var options = new FileStreamOptions {
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.ReadWrite,
+            Share = FileShare.ReadWrite,
+            UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+        };
+        try
+        {
+            return new FileStream(path, options);
+        }
+        catch (Exception createError) when
+            (createError is IOException || createError is UnauthorizedAccessException)
+        {
+            // Another writer may have won the create-new race. Re-inspect and
+            // open only a safe regular file with O_NOFOLLOW; never replace it.
+            IntPtr current = Marshal.AllocHGlobal(256);
+            try
+            {
+                if (LStat(path, current) != 0)
+                    throw;
+                ValidateUnixStat(ReadUnixStat(current), path);
+            }
+            finally { Marshal.FreeHGlobal(current); }
+
+            descriptor = OpenExisting(path, flags);
+            if (descriptor >= 0)
+                return WrapUnixDescriptor(descriptor);
+            throw new Win32Exception(
+                Marshal.GetLastWin32Error(), "Cannot open the stable Unix lock after a create race.");
+        }
+    }
+
+    private static FileStream WrapUnixDescriptor(int descriptor)
+    {
         SafeFileHandle handle = new SafeFileHandle(new IntPtr(descriptor), true);
         try { return new FileStream(handle, System.IO.FileAccess.ReadWrite); }
         catch { handle.Dispose(); throw; }

@@ -164,8 +164,8 @@ jobs:
           $testOutput | Out-Host
           if ($testExitCode -ne 0) { exit $testExitCode }
           $transcript = $testOutput -join "`n"
-          if ($transcript -notmatch '(?m)^Ran 11 tests in ') {
-            throw 'C2.3 qualification did not execute all 11 required tests.'
+          if ($transcript -notmatch '(?m)^Ran 13 tests in ') {
+            throw 'C2.3 qualification did not execute all 13 required tests.'
           }
           if ($env:RUNNER_OS -eq 'Windows') {
             if ($transcript -match 'skipped' -and

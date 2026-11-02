@@ -273,22 +273,28 @@ try {
             if alias_target is None:
                 self.skipTest("SKIPPED: no distinct Windows 8.3 short-path alias is available")
         elif sys.platform == "darwin":
-            canonical_target = self.target.resolve()
+            lexical_target = Path(os.path.abspath(self.target))
+            var = Path("/var")
             private_var = Path("/private/var")
-            if not canonical_target.is_relative_to(private_var):
-                self.skipTest("SKIPPED: temporary target has no /var to /private/var alias")
-            alias_target = Path("/var") / canonical_target.relative_to(private_var)
-            try:
-                if not alias_target.samefile(self.target):
-                    self.skipTest("SKIPPED: /var path is not a distinct alias of the target")
-            except OSError:
-                self.skipTest("SKIPPED: /var alias cannot be verified for the temporary target")
+            alias_target = None
+            if lexical_target == var or lexical_target.is_relative_to(var):
+                alias_target = private_var / lexical_target.relative_to(var)
+            elif lexical_target == private_var or lexical_target.is_relative_to(private_var):
+                alias_target = var / lexical_target.relative_to(private_var)
+            if alias_target is None or not alias_target.exists() or not alias_target.samefile(self.target):
+                # Keep canonical-alias coverage even on a host whose temporary
+                # volume does not expose the conventional /var alias.
+                alias_target = self.sandbox / "target alias"
+                os.symlink(self.target, alias_target, target_is_directory=True)
         else:
-            self.skipTest("SKIPPED: this host exposes no supported canonical target alias")
+            # Linux has no portable /var-style alias. A directory symlink
+            # exercises the same resolve-before-containment contract.
+            alias_target = self.sandbox / "target alias"
+            os.symlink(self.target, alias_target, target_is_directory=True)
 
         self.assertNotEqual(
-            os.path.normcase(os.path.abspath(str(alias_target))),
-            os.path.normcase(os.path.abspath(str(self.target))),
+            os.path.normcase(str(alias_target)),
+            os.path.normcase(str(self.target)),
             "Canonical-alias coverage requires a path distinct from the original target",
         )
         self.assertTrue(alias_target.samefile(self.target),
@@ -335,9 +341,15 @@ try {
         lock_path = self.target / ".olympus-cli-edit.lock"
         self.assertFalse(lock_path.exists())
         powershell_owner = self.start_powershell_owner()
-        self.assertTrue(lock_path.is_file(), "PowerShell must create an initially absent lock")
-        self.assertEqual(0, lock_path.stat().st_size)
         try:
+            self.assertTrue(lock_path.is_file(), "PowerShell must create an initially absent lock")
+            self.assertEqual(0, lock_path.stat().st_size)
+            if os.name != "nt":
+                mode = lock_path.stat().st_mode & 0o777
+                self.assertEqual(0o600, mode & 0o600,
+                                 "A Unix lock created by PowerShell must remain owner-readable/writable")
+                self.assertEqual(0, mode & 0o077,
+                                 "A Unix stable lock must not grant group/other permissions")
             with self.assertRaises(source_edit.LockBusy):
                 source_edit._acquire_lock(self.target, create=False)
         finally:

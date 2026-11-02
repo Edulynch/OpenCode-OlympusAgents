@@ -20,7 +20,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from olympus import source_edit
-from olympus.install_manifest import ManifestError, parse_project_manifest
+from olympus.install_manifest import (
+    MANIFEST_PATHS,
+    ManifestError,
+    parse_project_manifest,
+    read_project_manifest,
+)
 
 
 class SliceC2_3WriterCompatibility(unittest.TestCase):
@@ -81,6 +86,49 @@ try {
         return subprocess.run([self.pwsh, "-NoProfile", "-File", str(script), *map(str, arguments)],
                               cwd=ROOT, env=self.environment, capture_output=True, text=True,
                               encoding="utf-8", timeout=timeout, check=False)
+
+    @staticmethod
+    def windows_short_path_alias(path):
+        import ctypes
+
+        short_path = ctypes.create_unicode_buffer(32768)
+        get_short_path_name = ctypes.windll.kernel32.GetShortPathNameW
+        get_short_path_name.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32]
+        get_short_path_name.restype = ctypes.c_uint32
+        short_length = get_short_path_name(str(path), short_path, len(short_path))
+        if not short_length or short_length >= len(short_path):
+            return None
+
+        candidate = Path(short_path.value)
+        if os.path.normcase(os.path.abspath(str(candidate))) == os.path.normcase(
+                os.path.abspath(str(path))):
+            return None
+        try:
+            if not candidate.samefile(path):
+                return None
+        except OSError:
+            return None
+        return candidate
+
+    def assert_manifest_provenance_via_target(self, target, provenance):
+        manifest_path = self.target / MANIFEST_PATHS[0]
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest = {
+            "schema_version": 1,
+            "scope": "project",
+            "installed_harnesses": ["opencode"],
+            "installed_version": "local",
+            "installed_from_commit": "fixture-commit",
+            "managed_files": [],
+            "harness_provenance": provenance,
+        }
+        payload = json.dumps(manifest).encode("utf-8")
+        manifest_path.write_bytes(payload)
+
+        alias_manifest = target / MANIFEST_PATHS[0]
+        parsed = parse_project_manifest(target, alias_manifest, payload)
+        self.assertEqual(provenance, parsed.data["harness_provenance"])
+        self.assertEqual(provenance, read_project_manifest(target).data["harness_provenance"])
 
     def snapshot_target(self, *, omit_lock=False):
         snapshot = {}
@@ -209,15 +257,95 @@ try {
         self.assertEqual(1, parsed.data["schema_version"])
         self.assertEqual(provenance, parsed.data["harness_provenance"])
 
+        manifest_path.write_text(json.dumps(current), encoding="utf-8")
+        self.assertEqual(provenance, read_project_manifest(self.target).data["harness_provenance"])
+        manifest_path.unlink()
+
         for invalid in ("not-an-object", {"opencode": "not-an-object"}):
             with self.subTest(invalid=invalid), self.assertRaises(ManifestError):
                 parse_project_manifest(
                     self.target, manifest_path,
                     json.dumps({**base, "harness_provenance": invalid}).encode("utf-8"))
 
+    def test_slice_c2_3_manifest_provenance_accepts_canonical_target_alias(self):
+        if os.name == "nt":
+            alias_target = self.windows_short_path_alias(self.target)
+            if alias_target is None:
+                self.skipTest("SKIPPED: no distinct Windows 8.3 short-path alias is available")
+        elif sys.platform == "darwin":
+            canonical_target = self.target.resolve()
+            private_var = Path("/private/var")
+            if not canonical_target.is_relative_to(private_var):
+                self.skipTest("SKIPPED: temporary target has no /var to /private/var alias")
+            alias_target = Path("/var") / canonical_target.relative_to(private_var)
+            try:
+                if not alias_target.samefile(self.target):
+                    self.skipTest("SKIPPED: /var path is not a distinct alias of the target")
+            except OSError:
+                self.skipTest("SKIPPED: /var alias cannot be verified for the temporary target")
+        else:
+            self.skipTest("SKIPPED: this host exposes no supported canonical target alias")
+
+        self.assertNotEqual(
+            os.path.normcase(os.path.abspath(str(alias_target))),
+            os.path.normcase(os.path.abspath(str(self.target))),
+            "Canonical-alias coverage requires a path distinct from the original target",
+        )
+        self.assertTrue(alias_target.samefile(self.target),
+                        "Canonical alias must resolve to the original target")
+        provenance = {"opencode": {"kind": "custom", "source_digest": "a" * 64}}
+        self.assert_manifest_provenance_via_target(alias_target, provenance)
+
+    def test_slice_c2_3_manifest_rejects_symlink_escape(self):
+        manifest_path = self.target / MANIFEST_PATHS[0]
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        outside_manifest = self.sandbox / "outside-manifest.json"
+        outside_manifest.write_text(json.dumps({
+            "schema_version": 1,
+            "scope": "project",
+            "installed_harnesses": ["opencode"],
+            "installed_version": "local",
+            "installed_from_commit": "fixture-commit",
+            "managed_files": [],
+            "harness_provenance": {"opencode": {"kind": "custom"}},
+        }), encoding="utf-8")
+        try:
+            os.symlink(outside_manifest, manifest_path)
+        except (OSError, NotImplementedError) as error:
+            if os.name == "nt":
+                self.skipTest(f"SKIPPED: Windows cannot create symlink safety fixture: {error}")
+            raise
+
+        try:
+            for operation in (
+                lambda: parse_project_manifest(
+                    self.target, manifest_path, outside_manifest.read_bytes()),
+                lambda: read_project_manifest(self.target),
+            ):
+                with self.subTest(operation=operation.__name__), self.assertRaises(ManifestError) as escaped:
+                    operation()
+                self.assertEqual("escaped", escaped.exception.code)
+                self.assertTrue(escaped.exception.blocked)
+        finally:
+            manifest_path.unlink(missing_ok=True)
+
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
     def test_slice_c2_3_python_powershell_lock_interoperability_and_crash_release(self):
         # Both implementations contend on source_edit's stable OS-native lock.
+        lock_path = self.target / ".olympus-cli-edit.lock"
+        self.assertFalse(lock_path.exists())
+        powershell_owner = self.start_powershell_owner()
+        self.assertTrue(lock_path.is_file(), "PowerShell must create an initially absent lock")
+        self.assertEqual(0, lock_path.stat().st_size)
+        try:
+            with self.assertRaises(source_edit.LockBusy):
+                source_edit._acquire_lock(self.target, create=False)
+        finally:
+            self.stop_owner(powershell_owner, abrupt=True)
+
+        python_after_initial_lock_crash = source_edit._acquire_lock(self.target, create=False)
+        source_edit._release_lock(python_after_initial_lock_crash)
+
         python_owner = self.start_python_owner()
         try:
             contender = self.run_ps(self.ps_lock_script, self.helper, self.target, "try")
@@ -276,6 +404,7 @@ try {
             "OpenCode": {"opaque": "preserve-distinct-harness-key"},
         }
         manifest_path = self.create_managed_install(provenance=provenance)
+        self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
         before_verify = self.snapshot_target()
         verify = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
                              "-Harness", "codex", "-VerifyOnly")
@@ -284,6 +413,7 @@ try {
         self.assertFalse((self.target / ".olympus-cli-edit.lock").exists(),
                          "VerifyOnly must not create a target writer lock")
         self.assertEqual(before_verify, self.snapshot_target())
+        self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
 
         install = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
                               "-Harness", "codex")
@@ -329,6 +459,15 @@ try {
         old_manifest = self.create_managed_install(provenance=provenance)
         sentinel = self.target / "unmanaged.txt"
         sentinel.write_text("user-owned\n", encoding="utf-8")
+        nested = self.target / "nested-project-path"
+        nested.mkdir()
+        before_nested_rejection = self.snapshot_target()
+        nested_result = self.run_ps(ROOT / "scripts/project-uninstall.ps1", "-Target", nested,
+                                     "-Harness", "opencode")
+        self.assertNotEqual(0, nested_result.returncode)
+        self.assertIn("UNSAFE_TARGET", nested_result.stdout + nested_result.stderr)
+        self.assertEqual(before_nested_rejection, self.snapshot_target())
+
         result = self.run_ps(ROOT / "scripts/project-uninstall.ps1", "-Target", self.target,
                              "-Harness", "opencode")
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)

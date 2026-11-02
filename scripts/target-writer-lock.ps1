@@ -145,7 +145,7 @@ public static class OlympusTargetWriterLockFileInfo
         if (isLinux)
             flags = 2 | 64 | 2048 | 131072 | 524288; // O_RDWR|O_CREAT|O_NONBLOCK|O_NOFOLLOW|O_CLOEXEC
         else
-            flags = 2 | 4 | 256 | 16777216; // O_RDWR|O_NONBLOCK|O_NOFOLLOW|O_CREAT|O_CLOEXEC
+            flags = 2 | 4 | 256 | 512 | 16777216; // O_RDWR|O_NONBLOCK|O_NOFOLLOW|O_CREAT|O_CLOEXEC
 
         int descriptor = Open(path, flags, 384); // mode 0600; never truncate or replace an existing stable lock.
         if (descriptor < 0)

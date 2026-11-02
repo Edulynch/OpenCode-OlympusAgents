@@ -178,8 +178,14 @@ try {
     if ($LASTEXITCODE -ne 0 -or -not $gitRoot) {
         Fail 'UNSAFE_TARGET' 'Target must be an existing Git project root.'
     }
-    if (-not [string]::Equals([IO.Path]::GetFullPath($gitRoot).TrimEnd([char[]]@('\','/')),
-        [IO.Path]::GetFullPath($repo).TrimEnd([char[]]@('\','/')), $pathComparison)) {
+    # Ask Git whether the supplied working directory has a prefix inside the
+    # worktree rather than comparing path strings. Git and the OS can report
+    # the same macOS directory as /var/... and /private/var/..., respectively.
+    $gitPrefix = (& $git[0].Source -C $repo rev-parse --show-prefix 2>$null | Out-String)
+    if ($LASTEXITCODE -ne 0) {
+        Fail 'UNSAFE_TARGET' 'Cannot determine the target path within its Git project.'
+    }
+    if (-not [string]::IsNullOrEmpty($gitPrefix.Trim())) {
         Fail 'UNSAFE_TARGET' 'Target must be the Git project root, not a nested directory.'
     }
 

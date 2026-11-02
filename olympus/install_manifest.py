@@ -40,12 +40,20 @@ def manifest_present(path: Path) -> bool:
     return path.exists() or path.is_symlink()
 
 
+def _manifest_is_within_target(target: Path, path: Path) -> bool:
+    # Resolve both sides before comparing. On Windows this canonicalizes 8.3
+    # aliases; on macOS it normalizes aliases such as /var -> /private/var.
+    canonical_target = target.resolve()
+    canonical_path = path.resolve()
+    return canonical_path.is_relative_to(canonical_target)
+
+
 def parse_project_manifest(target: Path, path: Path, raw: bytes) -> ProjectManifest:
     relative = next((item for item in MANIFEST_PATHS if target / item == path), None)
     if relative is None:
         raise ManifestError("invalid_location", f"Unsupported project manifest location: {path}")
     try:
-        if not path.resolve().is_relative_to(target):
+        if not _manifest_is_within_target(target, path):
             raise ManifestError("escaped", f"Manifest escapes the selected target: {path}", blocked=True)
     except (OSError, RuntimeError) as error:
         raise ManifestError("unreadable", f"Cannot resolve installation metadata at {path}: {error}") from error
@@ -115,7 +123,7 @@ def read_project_manifest(target: Path) -> ProjectManifest | None:
         )
     path = present[0]
     try:
-        if not path.resolve().is_relative_to(target):
+        if not _manifest_is_within_target(target, path):
             raise ManifestError("escaped", f"Manifest escapes the selected target: {path}", blocked=True)
     except (OSError, RuntimeError) as error:
         raise ManifestError("unreadable", f"Cannot resolve installation metadata at {path}: {error}") from error

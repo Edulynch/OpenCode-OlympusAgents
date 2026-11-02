@@ -40,12 +40,20 @@ def manifest_present(path: Path) -> bool:
     return path.exists() or path.is_symlink()
 
 
+def _manifest_is_within_target(target: Path, path: Path) -> bool:
+    # Resolve both sides before comparing. On Windows this canonicalizes 8.3
+    # aliases; on macOS it normalizes aliases such as /var -> /private/var.
+    canonical_target = target.resolve()
+    canonical_path = path.resolve()
+    return canonical_path.is_relative_to(canonical_target)
+
+
 def parse_project_manifest(target: Path, path: Path, raw: bytes) -> ProjectManifest:
     relative = next((item for item in MANIFEST_PATHS if target / item == path), None)
     if relative is None:
         raise ManifestError("invalid_location", f"Unsupported project manifest location: {path}")
     try:
-        if not path.resolve().is_relative_to(target):
+        if not _manifest_is_within_target(target, path):
             raise ManifestError("escaped", f"Manifest escapes the selected target: {path}", blocked=True)
     except (OSError, RuntimeError) as error:
         raise ManifestError("unreadable", f"Cannot resolve installation metadata at {path}: {error}") from error
@@ -60,6 +68,19 @@ def parse_project_manifest(target: Path, path: Path, raw: bytes) -> ProjectManif
         raise ManifestError("invalid_schema", f"Unsupported manifest schema or managed_files at {path}")
     if manifest.get("scope", "project") != "project":
         raise ManifestError("invalid_scope", f"Contradictory project manifest scope at {path}", blocked=True)
+
+    # Contract: optional object<string, object>, with per-harness contents opaque.
+    # Schema 1 remains backward compatible: absence means unknown provenance;
+    # provenance is descriptive only, never ownership, and no official origin is inferred.
+    if "harness_provenance" in manifest:
+        provenance = manifest["harness_provenance"]
+        if (not isinstance(provenance, dict)
+                or any(not isinstance(name, str) or not name.strip() or not isinstance(value, dict)
+                       for name, value in provenance.items())):
+            raise ManifestError(
+                "invalid_provenance",
+                f"Invalid harness_provenance metadata at {path}; expected an object of per-harness objects",
+            )
 
     installed = manifest.get("installed_harnesses", ["opencode"])
     if (not isinstance(installed, list) or not installed
@@ -102,7 +123,7 @@ def read_project_manifest(target: Path) -> ProjectManifest | None:
         )
     path = present[0]
     try:
-        if not path.resolve().is_relative_to(target):
+        if not _manifest_is_within_target(target, path):
             raise ManifestError("escaped", f"Manifest escapes the selected target: {path}", blocked=True)
     except (OSError, RuntimeError) as error:
         raise ManifestError("unreadable", f"Cannot resolve installation metadata at {path}: {error}") from error

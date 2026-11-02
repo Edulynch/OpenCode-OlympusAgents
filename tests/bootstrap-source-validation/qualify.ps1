@@ -33,6 +33,7 @@ function New-SourceFixture([string]$Name) {
     $scripts = Join-Path $source 'scripts'
     [IO.Directory]::CreateDirectory($scripts) | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts/bootstrap.ps1') -Destination $scripts
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts/target-writer-lock.ps1') -Destination $scripts
     return $source
 }
 

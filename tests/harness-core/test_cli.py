@@ -357,6 +357,31 @@ class SliceA(unittest.TestCase):
         self.assertIn(".opencode/agents/kael.md", human.stdout)
         self.assertIn("no target writes", human.stdout)
 
+    def test_slice_c2_3_schema1_provenance_preview_is_read_only(self):
+        manifest_path = self.create_managed_install(("opencode", "codex"))
+        provenance = {
+            "opencode": {"kind": "custom", "source_digest": "a" * 64},
+            "codex": {"kind": "custom", "source_digest": "b" * 64},
+        }
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["harness_provenance"] = provenance
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        before = manifest_path.read_bytes()
+
+        response = self.json_query(*self.config_apply_arguments("opencode"))
+
+        self.assertIn(response["result"], ("ok", "no_changes"))
+        self.assertTrue(response["data"]["preview_only"])
+        self.assertFalse(response["data"]["apply_available"])
+        self.assertEqual(["opencode", "codex"], response["data"]["installed_harnesses"])
+        self.assertEqual(before, manifest_path.read_bytes())
+
+        execute = self.json_query(*self.config_apply_arguments("opencode"), "--execute", code=2)
+        self.assertEqual("failed", execute["result"])
+        self.assertEqual("invalid_arguments", execute["issues"][0]["code"])
+        self.assertIn("--execute", execute["issues"][0]["message"])
+        self.assertEqual(before, manifest_path.read_bytes())
+
     def test_slice_c_preview_blocks_manifest_hash_drift_and_writes_nothing(self):
         self.create_managed_install(("opencode",))
         path = self.target / ".opencode/agents/kael.md"

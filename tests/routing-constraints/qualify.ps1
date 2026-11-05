@@ -65,10 +65,11 @@ try {
         $maintenanceDocs.Groups['body'].Value -match '(?is)\b(?:ordinary|normal)\b.{0,100}\bGit\b.{0,80}\breleases?\b.{0,80}\b(?:stays|belongs)\b.{0,50}\bKael\b'
     Check 'POLICY_ORDINARY_GIT_NORMAL' ($kael -match 'Ordinary Git work in a trusted user project belongs to the normal plane' -and
         $kovan -match 'Kovan is the normal-plane Git writer for an explicitly requested operation' -and
-        $aegis -match 'Kael remains the recommended normal workflow' -and
+        $aegis -match 'Kael remains the normal workflow' -and
         $normalGitRouting)
     Check 'POLICY_AEGIS_ANY_REPOSITORY' ($aegis -match 'in any repository, including ordinary user projects' -and
-        $command -match 'MAINTENANCE_AUTH: VALID' -and $command -match 'AEGIS_SCOPE: ACCEPTED')
+        $command -match 'The user invoked /maintain and requests the following maintenance task:' -and
+        $command -match '(?m)^agent: aegis\s*$' -and $command -match '(?m)^subagent: true\s*$')
     Check 'POLICY_GIT_IMPACT_NOT_PLANE' ($kael -match '(?s)Destructive or high-impact Git\s+operations require explicit, proportionate user authorization, but still do not\s+require Aegis solely because they are Git' -and
         $kovan -match '(?s)History rewrites, force-pushes.*operations require explicit user authority.*proportionate preflight')
     Check 'POLICY_GIT_ONLY_OWNERSHIP' ($kael -match 'TASK_TYPE: GIT_ONLY or\s+MIXED' -and

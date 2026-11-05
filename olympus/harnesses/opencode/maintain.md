@@ -4,7 +4,7 @@ agent: aegis
 subagent: true
 ---
 
-The user invoked /maintain and authorizes the following task:
+The user invoked /maintain and requests the following maintenance task:
 
 $ARGUMENTS
 

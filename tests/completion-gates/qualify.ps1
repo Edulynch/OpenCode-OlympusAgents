@@ -47,7 +47,7 @@ try {
         $docs -match 'CLI `opencode run` exit or a root assistant response is not a session-family completion signal')
     Check 'ROUTING_BOUNDARY' ($command -match 'subagent: true' -and $command -match 'Do not delegate' -and
         $aegis -match 'Do not invoke normal Olympus workers' -and
-        $maintenancePolicy -match 'permitted entry is user → `/maintain` → Aegis' -and
+        $maintenancePolicy -match 'supported OpenCode launch path is user → `/maintain <task>` → hidden Aegis subagent' -and
         $maintenancePolicy -match 'Kael → Aegis DENIED; child → Aegis DENIED')
     $good = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='succeeded'; validated=$true}
     $bad = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='failed'; validated=$false}

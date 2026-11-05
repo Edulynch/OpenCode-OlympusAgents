@@ -85,7 +85,6 @@ function Invoke-FastSlice {
 
     $offlineSuites = @(
         'tests/bootstrap-source-validation/qualify.ps1',
-        'tests/aegis-recovery/qualify.ps1',
         'tests/adaptive-concurrency/qualify.ps1',
         'tests/completion-gates/qualify.ps1',
         'tests/maintenance-handoff/qualify.ps1',

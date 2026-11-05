@@ -80,7 +80,7 @@ try {
     Check CAPABILITY_BLOCKED ($preflight -match 'external action has no\s+available authorized path' -and
         $preflight -match 'explain the blocker before optional research')
     Check BOUNDARY ($aegis -match 'Kael → Aegis DENIED' -and
-        $aegis -match 'The permitted entry is user → `/maintain` → Aegis' -and
+        $aegis -match 'The supported path is user → `/maintain` → Aegis' -and
         $handoff -match 'cannot invoke or' -and $handoff -match 'delegate to Aegis' -and
         $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: aegis\s*\r?\n\s*effect: allow')
     Check KAEL_NATIVE_PERMISSION ($kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
@@ -110,14 +110,10 @@ try {
     Check BROAD_ALLOWED ($discovery -match 'Refactor authentication across\s+all services' -and
         $discovery -match 'audit these 40 independent\s+modules' -and $discovery -match 'repository-wide analysis')
     # Admitted Olympus Git work uses administrative rather than source-first policy.
-    Check MAINTENANCE_ADMIN ($admin -match 'After command entry acceptance' -and
+    Check MAINTENANCE_ADMIN ($admin -match 'After `/maintain` starts the task' -and
         $admin -match 'start with administrative\s+context only' -and
         $admin -match 'Do not first\s+inventory source' -and $admin -match 'history\s+rewrite plus push' -and
-        $admin -match 'non-mutating' -and $admin -match 'not definitive remote write')
-    Check MAINTENANCE_BOUNDARY ($aegis -match 'MAINTENANCE_AUTH: VALID' -and
-        $aegis -match 'AEGIS_SCOPE: ACCEPTED' -and
-        $aegis -match 'in any repository, including ordinary user projects' -and
-        $aegis -match '(?s)action: subagent\s+resource: "\*"\s+effect: deny')
+        $admin -match 'non-mutating' -and $admin -match 'does not establish that the remote\s+will accept a write')
     Check INVARIANTS ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kael -match 'model: "openai/gpt-6.1-sol#high"' -and
         $aegis -match 'model: openai/gpt-6-luna#max' -and

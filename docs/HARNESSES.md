@@ -15,7 +15,7 @@ guarantee.
 | `olympus/policies/routing.md` and `orchestration.toml` | Specialist suppression, trivial fast path, direct-root ownership, bounded parallelism, and the canonical maximum of four children. |
 | `olympus/policies/result-lifecycle.md` | Question barrier, completion barrier, original-result reconciliation, and no-blind-retry semantics. |
 | `olympus/policies/authority.md` | Canonical ALLOW / ASK / DENY meaning. |
-| `olympus/policies/maintenance-plane.md` | Task-scoped Aegis authority established by explicit `/maintain` command entry, and the no-automatic-escalation boundary. |
+| `olympus/policies/maintenance-plane.md` | Explicit `/maintain` task dispatch to Aegis without an Olympus-side authorization flow, task continuity, and the no-automatic-escalation boundary. |
 | `olympus/harnesses/capabilities.toml` | The two-harness capability contract (`SUPPORTED`, `ADAPTABLE`, `PARTIAL`, `GAP`, `NOT_NEEDED`). |
 | `olympus/harnesses/opencode/` | OpenCode permission/frontmatter, native role-prompt representation, `/maintain`, default config, and activity plugin sources. |
 | `olympus/harnesses/codex/` | Codex-native role-prompt representation, root instructions, project config, and permission profile. Codex has no Aegis agent. |

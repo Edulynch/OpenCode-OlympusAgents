@@ -481,20 +481,27 @@ Parallel Aegis administration is permitted through shell and OpenCode session AP
 Issue #8 retains three essential functional qualifications, with their current
 dispositions:
 
-- **T1 maintenance execution — PASS:** `/maintain` dispatches the user's task
+- **T1 maintenance execution — PASS:** `/maintain` dispatched the user's task
   to Aegis without an Olympus-specific authorization gate. Aegis has no
-  Olympus-specific authorization state machine. This is the current
-  command/configuration contract, not a claim of a new live runtime smoke.
-- **T2 task continuity — PARTIAL:** compaction continuity concerns the original
-  task and its scope. Continuing that task requires no authorization replay or
-  approval reconstruction. The existing evidence does not establish native
-  post-compaction runtime continuity.
-- **T3 native isolation — UNVERIFIED:** Kael and unrelated agents must lack
-  prohibited native routes to Aegis, but this remains unverified at runtime.
+  Olympus-specific authorization state machine.
+- **T2 task continuity — PASS (native):** after one compaction, the same Aegis
+  child session continued the original task and retained its path value. The
+  output used `AUTHORIZED_FILE` where `ALLOWED_FILE` was expected; this was a
+  field-name mismatch, not loss of the path value.
+- **T3 native isolation — PASS (equivalent native-engine evidence):** the
+  engine evidence establishes the isolation behavior without invoking any
+  prohibited calls.
+
+These T1–T3 dispositions refer to evidence obtained against the original
+Issue #8 commit, `7c20c35defe17240e661c66f22a93906ad2abaed`, before its
+isolation onto the new branch. They are not results of the FAST qualification
+or new native runs on that branch. The FAST run on the isolated branch is
+separate repository-level validation and does not reproduce or extend the
+native evidence.
 
 `tests/maintenance-scope/qualify.ps1` covers these as static
 configuration/prompt contracts and checks generated OpenCode outputs; it is not
-native runtime proof.
+native runtime proof and is distinct from the native/equivalent evidence above.
 
 The qualification disposition is deliberately narrow:
 
@@ -514,15 +521,16 @@ The qualification disposition is deliberately narrow:
   contract remains in external-work ownership. The bespoke PID/process-state
   simulator is not a native runtime qualification.
 
-`NATIVE_SMOKE_PENDING`: this offline work does not verify live `/maintain`
-dispatch, actual post-compaction continuation, or native Kael/child launch
-denial. No live compaction stress test was run. A user-provided fresh-entry
-runtime smoke on 2026-09-30 returned legacy metadata fields in about 5.5
-seconds, with zero requested tools, file changes or child sessions. Those
-fields were removed by Phase 1C; the old smoke is historical and does not
-qualify the current task-execution contract or resume.
+The isolated-branch FAST qualification is offline and does not itself verify
+live `/maintain` dispatch, post-compaction continuation, or native Kael/child
+launch denial; those claims above rely on the separately identified
+original-commit evidence. No live compaction stress test is claimed. A
+user-provided fresh-entry runtime smoke on 2026-09-30 returned legacy metadata
+fields in about 5.5 seconds, with zero requested tools, file changes or child
+sessions. Those fields were removed by Phase 1C; the old smoke is historical and
+does not qualify the current task-execution contract or resume.
 
-The 2026-10-01 user-provided runtime smoke **passed only for its exact same-session continuation**: it retained Aegis identity and the original task scope with `opencode run --session <id>`. It did not test compaction and does not substitute for any pending native smoke. See [ISSUE-8-CHECKPOINT-RESUME.md](history/ISSUE-8-CHECKPOINT-RESUME.md) for the historical scoped PASS.
+The 2026-10-01 user-provided runtime smoke **passed only for its exact same-session continuation**: it retained Aegis identity and the original task scope with `opencode run --session <id>`. It did not test compaction; the later T2 evidence above is the separate one-compaction observation. See [ISSUE-8-CHECKPOINT-RESUME.md](history/ISSUE-8-CHECKPOINT-RESUME.md) for the historical scoped PASS.
 
 Earlier Issue #8 checkpoint notes, retrospective specifications, and changelog entries remain dated historical evidence. They do not define the current Aegis task-dispatch or continuation contract.
 

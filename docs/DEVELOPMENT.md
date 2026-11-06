@@ -15,7 +15,7 @@ Olympus Core defines canonical role responsibilities, model intent, routing, aut
 
 **Future contract to keep the adapters decoupled:** specify shared Core invariants separately from adapter-specific capabilities and evidence. A new OpenCode-only behavior should be designed and qualified against its OpenCode contract; a missing Codex mapping must not block it. Codex checks apply when a change actually touches shared integrity/compatibility or is an explicitly authorized critical Codex correction—not as a parity gate. This is policy guidance, not an implementation or test-suite change in this task.
 
-Kael checks feasibility and plane routing from the request **before** delegated research or planning. Explicit `/maintain` accepts its delivered task in any repository; its command entry is sufficient authorization. Ordinary user-project work, including ordinary Git administration, remains in the normal plane; Git alone is not an Aegis capability boundary. Kael does not automatically delegate to Aegis. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
+Kael checks feasibility and plane routing from the request **before** delegated research or planning. Explicit `/maintain` dispatches its delivered task to Aegis in any repository, without a separate Olympus-side approval flow. Ordinary user-project work, including ordinary Git administration, remains in the normal plane; Git alone is not an Aegis capability boundary. Kael does not automatically delegate to Aegis. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
 
 ### Authority Grants — beta.3
 
@@ -388,14 +388,13 @@ pwsh -NoProfile -File ./tests/release/dirty-worktree.ps1
 pwsh -NoProfile -File ./tests/preflight/qualify.ps1
 pwsh -NoProfile -File ./tests/routing-constraints/qualify.ps1
 pwsh -NoProfile -File ./tests/question-barrier/qualify.ps1
-pwsh -NoProfile -File ./tests/aegis-recovery/qualify.ps1
 pwsh -NoProfile -File ./tests/completion-gates/qualify.ps1
 pwsh -NoProfile -File ./tests/result-reconciliation/qualify.ps1
 pwsh -NoProfile -File ./tests/maintenance-handoff/qualify.ps1
 pwsh -NoProfile -File ./tests/maintenance-handoff/qualify-fidelity.ps1
 ```
 
-`tests/maintenance-scope/qualify.ps1` checks byte-zero frontmatter in both canonical and generated files. `tests/authority/qualify.ps1` stages generated runtime resources in a disposable project, so its live effective-agent probe does not depend on this checkout's `.opencode` outputs. This isolates only the byte/runtime-sensitive gates and does not require serializing unrelated read-only qualifications.
+`tests/maintenance-scope/qualify.ps1` statically checks Issue #8's three Aegis invariants and generated OpenCode outputs. It does not exercise `/maintain`, compaction, or native agent execution. `tests/authority/qualify.ps1` stages generated runtime resources in a disposable project, so its live effective-agent probe does not depend on this checkout's `.opencode` outputs. This isolates only the byte/runtime-sensitive gates and does not require serializing unrelated read-only qualifications.
 
 `check` is read-only. Harness-core qualification tests renderer idempotence,
 drift/missing-output detection, canonical role/model/policy sources, and
@@ -409,7 +408,7 @@ Phase 4C covers bootstrap security and static Maintenance Plane checks; the sepa
 
 `tests/worktree-activation/native-smoke.ps1` uses the installed OpenCode CLI with all OpenCode data/config/cache/state redirected to a task-owned temporary directory. It installs into a disposable Git repository, saves `Project.Commands.start` through the OpenCode API, creates two native worktrees through `worktree.create`, and validates each copied manifest and effective `default_agent`. OpenCode V2's awaited startup hook is exercised; **no model prompt, effective agent roster, Kael delegation, or cancellation event is claimed**. Those require a separately observed prompt/session smoke and are not established by these fixtures.
 
-The Routing/Constraints, Authority Grants, Question Barrier, and Aegis Recovery harnesses verify static contracts plus deterministic synthetic cases; they do not claim interactive runtime execution or real process termination. `tests/authority/qualify.ps1` also inspects OpenCode's effective agent rules, but approval/rejection delivery and exact runtime tool behavior require an interactive OpenCode session. Report interactive evidence separately from static qualification output. The Question Barrier live race remains separate and must be reported as `RUNTIME_QUESTION_RACE: NOT AUTOMATED` unless observed.
+The Routing/Constraints, Authority Grants, and Question Barrier harnesses verify static contracts plus deterministic synthetic cases; they do not claim interactive runtime execution or real process termination. `tests/authority/qualify.ps1` also inspects OpenCode's effective agent rules, but approval/rejection delivery and exact runtime tool behavior require an interactive OpenCode session. Report interactive evidence separately from static qualification output. The Question Barrier live race remains separate and must be reported as `RUNTIME_QUESTION_RACE: NOT AUTOMATED` unless observed.
 
 Native ASK is a client-side permission event, not a requirement for literal `ASK`
 transcript text. Keep four facts separate in a child report: `TOOL_ATTEMPT`,
@@ -441,22 +440,20 @@ Issue #2 applies Issue #1's safety principle to the separate explicit `/maintain
 
 Olympus owns Kael's interpretation and user-facing synthesis; OpenCode owns platform tool/subagent presentation. Olympus does not claim to change or suppress OpenCode's visible "Maintenance failed" badge. Whether the historical early badge persisted after terminal completion is unproven. `tests/maintenance-handoff/qualify.ps1` uses static assertions and synthetic timelines; `tests/maintenance-handoff/live-control.md` prepares a manual read-only healthy handoff, **not executed by Aegis** and not a requirement to reproduce the intermittent error.
 
-Issue #10's maintenance-specific exact-field contract uses `EXPECTED_OUTPUT`:
-Aegis preserves requested terminal field names and values, and Kael retains
-them through dependent decisions while allowing a concise additive summary.
-For the confirmed missing-separator case only, Kael may recognize an exact
-field token declared in `EXPECTED_OUTPUT` immediately following either exact
-known metadata literal: `AEGIS_SCOPE: ACCEPTED` or `MAINTENANCE_AUTH: VALID`.
-No arbitrary splitting, fuzzy labels, inferred values, or duplicate required
-fields are accepted; absent or renamed fields/values remain
-`STRUCTURED_RESULT_INCOMPLETE`. This does not
-change Issue #1 missing-result/no-blind-retry semantics. The focused
-`tests/maintenance-handoff/qualify-fidelity.ps1` includes the exact runtime
-reproduction synthetically; it still does not prove native Aegis-to-Kael runtime
-delivery. The reported loss was specific to normalization at the Maintenance
-Handoff boundary, not ordinary child-result delivery. [Issue #10 is closed](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10)
-after integration of [fix `a83847b84d6603aed144f5a8ce4b77de8a48fe32`](https://github.com/Edulynch/OpenCode-OlympusAgents/commit/a83847b84d6603aed144f5a8ce4b77de8a48fe32).
-The recorded Runtime fidelity PASS predates that integration; no post-integration
+Issue #10's exact-field contract remains: when `/maintain` specifies required
+terminal fields, Aegis preserves their names and values, and Kael retains them
+through dependent decisions while allowing a concise additive summary. Each
+required label and nonempty value must occur verbatim in the raw result; missing,
+renamed, or duplicate required fields remain `STRUCTURED_RESULT_INCOMPLETE`.
+Phase 1C removes the old special-case parsing of maintenance-entry metadata;
+there is no metadata prefix to split or normalize. This does not change Issue #1
+missing-result/no-blind-retry semantics. The focused
+`tests/maintenance-handoff/qualify-fidelity.ps1` checks exact raw-field handling
+synthetically; it does not prove native Aegis-to-Kael runtime delivery. The
+historical Issue #10 runtime observation and its fix remain recorded at
+[Issue #10](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10) and
+[fix `a83847b84d6603aed144f5a8ce4b77de8a48fe32`](https://github.com/Edulynch/OpenCode-OlympusAgents/commit/a83847b84d6603aed144f5a8ce4b77de8a48).
+The recorded Runtime fidelity PASS predates integration; no post-integration
 smoke was repeated, so it is not evidence of a post-integration smoke PASS.
 
 ## Trusted-project execution
@@ -469,26 +466,73 @@ The passive, read-only plugin uses native OpenCode child-session list and status
 
 ## Aegis Plane (explicit maintenance operations)
 
-Kael → Aegis: **DENIED**; child → Aegis: **DENIED**. User → `/maintain <task>` → Aegis accepts the delivered task in any repository. Aegis is hidden, cannot self-activate, and cannot accept automatic escalation or broaden task scope.
+Kael → Aegis: **DENIED**; child → Aegis: **DENIED**. User → `/maintain <task>` → hidden Aegis subagent is the supported OpenCode launch path, in any repository. The native command and agent configuration control who can launch Aegis. Aegis is a maintenance executor, not a second Olympus authorization system: it executes the delivered task without authorization states, command-origin checks, or authorization receipts/markers, and does not request additional Olympus authorization. It cannot self-activate, accept automatic escalation, delegate, or broaden task scope.
 
-Fresh command entry immediately emits `MAINTENANCE_AUTH: VALID` and `AEGIS_SCOPE: ACCEPTED`, then executes the delivered task. No classification phase, repository ownership gate, independent invocation proof, envelope, durable authorization marker or provenance reconstruction. Same-run runtime resume preserves accepted task scope; a genuinely new execution requires `/maintain` again. An uncertain resume or unauthenticated entry fails closed immediately without tools or long reasoning.
+An OpenCode continuation carries the same task across compaction. Aegis continues from task context retained by that session and keeps the original task boundaries. If essential details are missing or ambiguous, it reports the missing task information and stops dependent operations, especially writes, until clarified; this is a task-information gap requiring clarification, not authorization replay or approval reconstruction. Summaries do not supply missing task details. Destructive/high-impact effects must be clearly requested; clarification is about the requested operation or target, never an additional Olympus approval step. Preserve unrelated work.
 
-The normal project workflow must not directly modify an Olympus-owned target, such as global Nox, or automatically invoke Aegis. Explain that project-plane boundary without broadening the task. This protection does not restrict explicit `/maintain` admission by repository or target ownership.
+The normal project workflow must not directly modify an Olympus-owned target, such as global Nox, or automatically invoke Aegis. Explain that project-plane boundary without broadening the task. This protection does not restrict an explicit `/maintain` task by repository or target ownership.
 
-Ordinary trusted-project Git (status/diff, task-owned staging, explicitly requested commit/push, branch/tag work, or ordinary project release) belongs to the normal Kael/Kovan plane. Kovan may perform it only within the task's explicit repository/Git ownership; stage only task-owned paths. Destructive or high-impact operations such as history rewrite, force-push, reset/clean, destructive ref changes, or publishing require explicit, proportionate authorization, but do not route to Aegis solely because Git is involved. Explicit `/maintain` may authorize repository operations within its delivered task; it does not implicitly authorize destructive or high-impact work outside that task.
+Ordinary trusted-project Git (status/diff, task-owned staging, explicitly requested commit/push, branch/tag work, or ordinary project release) belongs to the normal Kael/Kovan plane. Kovan may perform it only within the task's explicit repository/Git ownership; stage only task-owned paths. Destructive or high-impact operations such as history rewrite, force-push, reset/clean, destructive ref changes, or publishing require an explicit, proportionate task request, but do not route to Aegis solely because Git is involved. An explicit `/maintain` task includes only the repository operations the user actually requested; it does not include destructive or high-impact work that was not part of that task.
 
-Aegis separates authorized repository administration from software-development investigation. Authorized Git operations start with Git-scoped non-mutating feasibility checks (target, scope, state, remote and tools as relevant), not application architecture. Read/authentication evidence alone does not prove remote write permission.
+Aegis separates repository administration from software-development investigation. Requested Git operations start with Git-scoped non-mutating feasibility checks (target, task scope, state, remote and tools as relevant), not application architecture. Read or login evidence alone does not prove the remote will accept a write.
 
 Parallel Aegis administration is permitted through shell and OpenCode session APIs, not through Olympus child-agent routing. It must track every launched root and descendant, join, collect and validate required results before declaring success; unknown/uncollected children mean PARTIAL or COMPLETION_UNCONFIRMED. Do not serialize independent jobs as a substitute for joining them.
 
-The Aegis fresh-entry contract is statically qualified by
-`tests/maintenance-scope/qualify.ps1`, `tests/maintenance-handoff/qualify.ps1`,
-frontmatter, routing, authority, reconciliation and renderer checks. A
-user-provided fresh-entry runtime smoke on 2026-09-30 returned
-`MAINTENANCE_AUTH: VALID` and `AEGIS_SCOPE: ACCEPTED` in about 5.5 seconds, with
-zero requested tools, file changes or child sessions. It did not qualify resume.
+Issue #8 retains three essential functional qualifications, with their current
+dispositions:
 
-The 2026-10-01 user-provided runtime smoke **passed only for its exact same-session continuation**: Aegis identity, marker, original task scope, `MAINTENANCE_AUTH`, and `AEGIS_SCOPE` were retained with `opencode run --session <id>`. It **did not test compaction**. Issue #8 was reopened on 2026-10-09 after an OpenCode v2.0.26 compaction appeared to discard the accepted authority context; it remains **OPEN/deferred**, with no fix for that observation claimed. See [ISSUE-8-CHECKPOINT-RESUME.md](history/ISSUE-8-CHECKPOINT-RESUME.md) for the historical scoped PASS.
+- **T1 maintenance execution — PASS:** `/maintain` dispatched the user's task
+  to Aegis without an Olympus-specific authorization gate. Aegis has no
+  Olympus-specific authorization state machine.
+- **T2 task continuity — PASS (native):** after one compaction, the same Aegis
+  child session continued the original task and retained its path value. The
+  output used `AUTHORIZED_FILE` where `ALLOWED_FILE` was expected; this was a
+  field-name mismatch, not loss of the path value.
+- **T3 native isolation — PASS (equivalent native-engine evidence):** the
+  engine evidence establishes the isolation behavior without invoking any
+  prohibited calls.
+
+These T1–T3 dispositions refer to evidence obtained against the original
+Issue #8 commit, `7c20c35defe17240e661c66f22a93906ad2abaed`, before its
+isolation onto the new branch. They are not results of the FAST qualification
+or new native runs on that branch. The FAST run on the isolated branch is
+separate repository-level validation and does not reproduce or extend the
+native evidence.
+
+`tests/maintenance-scope/qualify.ps1` covers these as static
+configuration/prompt contracts and checks generated OpenCode outputs; it is not
+native runtime proof and is distinct from the native/equivalent evidence above.
+
+The qualification disposition is deliberately narrow:
+
+- **KEEP:** `tests/maintenance-handoff/qualify.ps1` (Issue #2 result visibility
+  and exact-once handoff), `tests/maintenance-handoff/qualify-fidelity.ps1`
+  (Issue #10 raw structured fields), `tests/result-reconciliation/qualify.ps1`
+  (Issue #1 original-result reconciliation), and
+  `tests/external-work-ownership/qualify.ps1` (shared foreground/process
+  ownership and safe-stop contract).
+- **REWRITE:** the Issue #8 scope qualifier is reduced to T1–T3; duplicate
+  pseudoauthorization-state checks were removed from the handoff, preflight,
+  and harness-core suites. Fidelity fixtures now identify themselves as
+  synthetic rather than implying a live reproduction.
+- **RETIRE:** the separate `tests/aegis-recovery/qualify.ps1` synthetic recovery
+  matrix. Its session result and no-blind-retry coverage remains in result
+  reconciliation and maintenance handoff; its shared process-ownership
+  contract remains in external-work ownership. The bespoke PID/process-state
+  simulator is not a native runtime qualification.
+
+The isolated-branch FAST qualification is offline and does not itself verify
+live `/maintain` dispatch, post-compaction continuation, or native Kael/child
+launch denial; those claims above rely on the separately identified
+original-commit evidence. No live compaction stress test is claimed. A
+user-provided fresh-entry runtime smoke on 2026-09-30 returned legacy metadata
+fields in about 5.5 seconds, with zero requested tools, file changes or child
+sessions. Those fields were removed by Phase 1C; the old smoke is historical and
+does not qualify the current task-execution contract or resume.
+
+The 2026-10-01 user-provided runtime smoke **passed only for its exact same-session continuation**: it retained Aegis identity and the original task scope with `opencode run --session <id>`. It did not test compaction; the later T2 evidence above is the separate one-compaction observation. See [ISSUE-8-CHECKPOINT-RESUME.md](history/ISSUE-8-CHECKPOINT-RESUME.md) for the historical scoped PASS.
+
+Earlier Issue #8 checkpoint notes, retrospective specifications, and changelog entries remain dated historical evidence. They do not define the current Aegis task-dispatch or continuation contract.
 
 External work ownership is the outer lifecycle rule for work Aegis launches to fulfill the current user request: PowerShell processes, scripts/controllers, builds, tests, benchmark controllers, disposable validation and OpenCode roots created through session APIs. Normal synchronous commands whose tool call returns only on completion are already owned. **Foreground/join is mandatory**, regardless of duration or a request to run in the background: launch → track → wait/join → collect → validate → final response. Aegis briefly explains that it will wait rather than detach. Progress updates are not final responses. A launcher exit is not sufficient when subordinate work survives it; reuse the family-aware completion gate below. A reliably completing controller can own its own subordinate jobs; Aegis waits for and validates its terminal report rather than duplicating that controller's tracking. Independent external jobs can still run in parallel, provided all required jobs are joined before finalization.
 

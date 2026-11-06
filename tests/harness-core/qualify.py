@@ -117,18 +117,6 @@ def main(argv: list[str] | None = None) -> int:
     with (ROOT / "olympus" / "harnesses" / "capabilities.toml").open("rb") as stream:
         capabilities = tomllib.load(stream)
     maintenance_policy = (ROOT / "olympus" / "policies" / "maintenance-plane.md").read_text(encoding="utf-8").strip()
-    check(
-        "MAINTENANCE_SCOPE_CORE_CONTRACT",
-        "COMMAND_ENTRY → MAINTENANCE_AUTH_VALID → AEGIS_SCOPE_ACCEPTED → TASK_EXECUTION" in maintenance_policy
-        and "in any repository, including ordinary user projects" in maintenance_policy
-        and "fails closed immediately" in maintenance_policy
-        and "global Nox policy" in maintenance_policy
-        and "maintenance_authorization = accepted_for_current_execution" in maintenance_policy
-        and "prior Aegis-authored `assistant` message" in maintenance_policy
-        and "A genuinely new session cannot inherit this state" in maintenance_policy
-        and "The new turn cannot replace or enlarge `accepted_scope`" in maintenance_policy,
-    )
-
     canonical_roles = {path.stem for path in (ROOT / "olympus" / "roles").glob("*.md")}
     check("CANONICAL_12_UNIQUE_ROLE_FILES", len(canonical_roles) == 12 and canonical_roles == set(models["roles"]))
     check("CANONICAL_12_UNIQUE_DISPLAY_IDENTITIES", set(identities) == canonical_roles and len(set(identities.values())) == 12 and
@@ -213,7 +201,7 @@ def main(argv: list[str] | None = None) -> int:
     check(
         "OPENCODE_KAEL_DERIVES_CORE_TARGET_BOUNDARY",
         "The normal project workflow must not modify an Olympus-owned target" in kael_prompt
-        and "do not edit it from the project task" in kael_prompt,
+        and "do not edit it, silently enlarge that task" in kael_prompt,
     )
 
     for role, intent in models["roles"].items():

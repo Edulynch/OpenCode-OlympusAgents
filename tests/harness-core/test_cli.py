@@ -2605,8 +2605,9 @@ raise SystemExit(main(sys.argv[1:]))
         before = self._file_snapshot()
         help_result = self._run("--help")
         self.assertEqual(0, help_result.returncode, help_result.stderr)
-        # La ayuda debe identificar que config apply ofrece un preview, sin habilitar escrituras.
-        for command in ("set-family", "set-model", "recover", "config apply is preview-only in this slice"):
+        # The help distinguishes the read-only preview from explicit project writes.
+        for command in ("set-family", "set-model", "recover", "config apply --scope project",
+                        "writes only with --execute"):
             self.assertIn(command, help_result.stdout)
         self.assertEqual(before, self._file_snapshot())
         cases = (

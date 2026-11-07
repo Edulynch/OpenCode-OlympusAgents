@@ -1,6 +1,6 @@
 # CLI portátil Olympus — quickstart (Slices A, B, C1 y C3)
 
-**Estado de esta rama**: Slice A **SHIPPED**; Slice B **ACEPTADA** tras T019 Windows y T020 Linux (G2 PASS). C3 implementa `config apply --execute` sólo para instalaciones project existentes; validación Linux de PR aún pendiente y macOS **NOT VERIFIED**. La implementación no se ha probado sobre instalaciones reales. [Estado y evidencia histórica de A/B](tasks.md).
+**Estado de esta rama**: Slice A **SHIPPED**; Slice B **ACEPTADA** tras T019 Windows y T020 Linux (G2 PASS). C3 implementa `config apply --execute` sólo para instalaciones project existentes; validación Linux del PR PASS (14 pruebas de writer compatibility, incluida regresión C3) y macOS **NOT VERIFIED**. La implementación no se ha probado sobre instalaciones reales. [Estado y evidencia histórica de A/B](tasks.md).
 
 ## Requisitos y contexto
 

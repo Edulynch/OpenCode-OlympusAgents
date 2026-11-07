@@ -143,7 +143,7 @@ En la evaluación histórica, el motor consumía outputs junto al script y valid
 
 ## Project Structure
 
-Inventario de rutas definido durante la planificación. Los archivos de A asignados a T002–T009 ya fueron creados; Slice B está implementada y aceptada según [tasks.md](tasks.md); C3 está en implementación en esta rama y el resto de C y otros elementos futuros siguen pendientes:
+Inventario de rutas definido durante la planificación. Los archivos de A asignados a T002–T009 ya fueron creados; Slice B está implementada y aceptada según [tasks.md](tasks.md); C3 está implementada en esta rama y el resto de C y otros elementos futuros siguen pendientes:
 
 ```text
 olympus/core/models.toml                  fuente canónica; sin modificar ahora

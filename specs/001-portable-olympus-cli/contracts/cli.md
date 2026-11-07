@@ -1,6 +1,6 @@
 # Contrato propuesto de CLI
 
-**Estado de esta rama**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C1 preview read-only y C3 apply explícito project implementados en esta rama; validación Linux de PR aún pendiente; macOS **NOT VERIFIED**. C3 no habilita scope global ni instalaciones reales durante las pruebas.
+**Estado de esta rama**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C1 preview read-only y C3 apply explícito project implementados en esta rama; validación Linux del PR PASS (14 pruebas de writer compatibility, incluida regresión C3); macOS **NOT VERIFIED**. C3 no habilita scope global ni instalaciones reales durante las pruebas.
 
 ## Entrada, contexto y soporte
 

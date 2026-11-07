@@ -93,6 +93,7 @@ def diagnose(source: Path, args, response: dict, *, source_version: str,
     """Populate a doctor response without persistent source or target writes."""
     from . import config_apply
 
+    source = source.resolve()
     selected = ("opencode", "codex") if args.harness == "all" else (args.harness,)
     data = {
         "installation_state": "unknown",

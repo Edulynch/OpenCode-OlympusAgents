@@ -12,12 +12,13 @@ Start with the root [README](../README.md) for installation and the short produc
 | Feature requirements and evidence | [`specs/`](../specs/README.md) | Keep implemented and retrospective contracts there. `specs/future/` is a proposal register, not implementation authority. |
 | Spec Kit setup and local customizations | [Spec Kit audit](../.specify/README.md), [constitution](../.specify/memory/constitution.md), and [template overrides](../.specify/templates/overrides/) | Spec Kit stays the specification workflow. The local audit records its version and update decision. |
 | Release history | [Changelog](../CHANGELOG.md) and the dated release records below | Release documents preserve what shipped and the evidence known at that time; they do not describe a newer release. |
+| Issue triage, decisions, gates, and WIP | [Issue decision ledger](ISSUE-LEDGER.md) and [GitHub issues](https://github.com/Edulynch/OpenCode-OlympusAgents/issues) | Operational snapshot; GitHub and canonical specs remain authoritative. Follow #92 for mission/cleanup policy. |
 
 Issue #91 keeps documentation versioned in this repository. Enabling or publishing a Wiki remains outside this change and subject to #67; any future Wiki navigation should point back here rather than become a second copy of contracts. Installation UX work in #66 remains a separate scope; this index only links to the existing guide.
 
 ## Current guidance and release records
 
-The files below are the 9 documents retained at the top of `docs/`. No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
+The files below are the 10 documents retained at the top of `docs/` (nine from the historical governance inventory plus this operational issue ledger). No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
 
 | Document | Purpose and audience | State, relationship, and incoming references | Proposed owner |
 | --- | --- | --- | --- |
@@ -26,6 +27,7 @@ The files below are the 9 documents retained at the top of `docs/`. No per-docum
 | [HARNESS-CAPABILITIES.md](HARNESS-CAPABILITIES.md) | Operator-facing capability matrix | **Vigente, generated.** Rendered from `olympus/harnesses/capabilities.toml`; edit the source and use the existing renderer. | Core maintainers (source); renderer-owned output |
 | [HARNESSES.md](HARNESSES.md) | Harness map and installation/output reference | **Vigente.** Maintainer and contributor reference; Core and the renderer define behavior. Historical evaluations link to this page. | Repository maintainers |
 | [INSTALLATION.md](INSTALLATION.md) | Detailed public install, removal, scope, and recovery guide | **Vigente.** Canonical extended installer guide; the README remains the first-run entrypoint. | Repository maintainers |
+| [ISSUE-LEDGER.md](ISSUE-LEDGER.md) | Maintainer-facing snapshot of issue decisions, evidence limits, next gates, and Git/WIP lifecycle | **Vigente, operativo (snapshot).** Links to live GitHub issues/PRs; not a second source of truth, requirements catalog, or release record. | Repository maintainers |
 | [ROADMAP.md](ROADMAP.md) | Directional shipped, in-validation, and proposed work | **Vigente, directional.** Not a release promise or implementation authorization; links to closed Phase 12 results. | Repository maintainers |
 | [WORKTREES.md](WORKTREES.md) | Worktree setup and use | **Vigente.** Operational guidance; related retrospective behavior is recorded under `specs/`. | Repository maintainers |
 | [RELEASE-v0.4.8.md](RELEASE-v0.4.8.md) | v0.4.8 release record | **Histórico.** Preserved release facts; superseded as current-version guidance by later release records. | Release maintainer (proposed role) |

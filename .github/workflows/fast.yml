@@ -192,6 +192,21 @@ jobs:
             throw 'C2.3 CLI preview and disabled --execute regression did not pass.'
           }
 
+      - name: Slice C4 (Windows project doctor)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $testOutput = @(& python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_c4 -v 2>&1)
+          $testExitCode = $LASTEXITCODE
+          $testOutput | Out-Host
+          if ($testExitCode -ne 0) { exit $testExitCode }
+          $transcript = $testOutput -join "`n"
+          if ($transcript -notmatch '(?m)^Ran 4 tests in ' -or
+              $transcript -notmatch '(?m)^OK$') {
+            throw 'Slice C4 Windows project doctor tests did not all pass.'
+          }
+
       - name: Confirm source checkout unchanged
         shell: pwsh
         run: |

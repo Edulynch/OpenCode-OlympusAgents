@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from olympus import config_apply, config_apply_transaction, source_edit
+from olympus import config_apply, config_apply_transaction, doctor, source_edit
 from olympus.cli import load_renderer as cli_load_renderer, parser as cli_parser, release_version, source_query as cli_source_query
 
 
@@ -51,7 +51,7 @@ class SliceA(unittest.TestCase):
         shutil.copytree(ROOT / "olympus", self.source / "olympus",
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         (self.source / "scripts").mkdir()
-        for name in ("render_harnesses.py", "olympus_cli.py", "olympus", "olympus.cmd"):
+        for name in ("render_harnesses.py", "olympus_cli.py", "olympus", "olympus.cmd", "bootstrap.ps1"):
             shutil.copy2(ROOT / "scripts" / name, self.source / "scripts" / name)
         shutil.copy2(ROOT / "install.ps1", self.source / "install.ps1")
         self.source_version = release_version(self.source)
@@ -181,8 +181,9 @@ class SliceA(unittest.TestCase):
             self.assertIn(text, help_result.stdout)
         for command in ("models set-family", "agents set-model", "config recover"):
             self.assertIn(command, help_result.stdout)
-        for command in ("doctor", "install", "uninstall"):
+        for command in ("install", "uninstall"):
             self.assertNotRegex(help_result.stdout, rf"\b{command}\b")
+        self.assertIn("doctor --scope project", help_result.stdout)
         self.assertIn("config apply --scope project", help_result.stdout)
         apply_help = self.query("config", "apply", "--help")
         self.assertIn("--dry-run", apply_help.stdout)
@@ -494,6 +495,121 @@ class SliceA(unittest.TestCase):
                      "--harness", "opencode", "--json")
         response = self.json_query(*arguments, code=2)
         self.assertEqual("failed", response["result"])
+
+    def test_slice_c4_doctor_reports_absence_in_human_and_json_without_writes(self):
+        arguments = ("doctor", "--scope", "project", "--target", str(self.target), "--harness", "opencode")
+        response = self.json_query(*arguments)
+        self.assertEqual("absent", response["result"])
+        self.assertEqual("absent", response["data"]["installation_state"])
+        self.assertEqual("absent", response["data"]["harnesses"]["opencode"])
+        human = self.query(*arguments)
+        self.assertEqual(0, human.returncode, human.stdout + human.stderr)
+        for key, value in response["data"].items():
+            self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
+
+    def test_slice_c4_invalid_requests_and_manifest_ownership_are_read_only(self):
+        invalid = self.query("doctor", "--scope", "global", "--target", str(self.target), "--harness", "all")
+        self.assertEqual(2, invalid.returncode)
+        invalid_path = self.json_query("doctor", "--scope", "project", "--target", "relative", "--harness", "all", code=2)
+        self.assertEqual("invalid_target", invalid_path["issues"][0]["code"])
+
+        manifest_path = self.create_managed_install(("opencode",), version=self.source_version)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["scope"] = "global"
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        invalid_manifest = self.json_query("doctor", "--scope", "project", "--target", str(self.target),
+                                           "--harness", "opencode", code=3)
+        self.assertEqual("invalid", invalid_manifest["data"]["manifest_state"])
+        self.assertEqual("invalid_manifest", invalid_manifest["issues"][0]["code"])
+
+        manifest["scope"] = "project"
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        args = cli_parser().parse_args(("doctor", "--scope", "project", "--target", str(self.target),
+                                        "--harness", "opencode"))
+        response = {}
+        with mock.patch("olympus.doctor._windows_verifier_supported", return_value=True), \
+             mock.patch("olympus.doctor.shutil.which", return_value="pwsh"), \
+             mock.patch("olympus.doctor._powershell_7", return_value=False), \
+             mock.patch("olympus.doctor._run_verify_only") as run_verify:
+            code = doctor.diagnose(self.source, args, response, source_version=self.source_version,
+                                   source_query=cli_source_query)
+        self.assertEqual(3, code)
+        self.assertEqual("verifier_version_unsupported", response["issues"][0]["code"])
+        run_verify.assert_not_called()
+
+    def test_slice_c4_doctor_classifies_drift_and_invalid_inventory_without_writes(self):
+        manifest_path = self.create_managed_install(("opencode",), version=self.source_version)
+        managed = self.target / ".opencode/agents/veyra.md"
+        original = managed.read_bytes()
+        managed.write_bytes(original + b"foreign drift\n")
+        drift_output = (f"OLYMPUS_VERIFY: {self.source_version} FAIL\n"
+                        "OLYMPUS_VERIFY_REASON: MANAGED_FILE_MISMATCH\n"
+                        "OLYMPUS_VERIFY_DETAIL: MANAGED_FILE_MISMATCH: Installed managed content differs from the requested release: .opencode/agents/veyra.md\n")
+        args = cli_parser().parse_args(("doctor", "--scope", "project", "--target", str(self.target),
+                                        "--harness", "opencode"))
+        before = self.snapshot()
+        with mock.patch("olympus.doctor._windows_verifier_supported", return_value=True), \
+             mock.patch("olympus.doctor.shutil.which", return_value="pwsh"), \
+             mock.patch("olympus.doctor._powershell_7", return_value=True), \
+             mock.patch("olympus.doctor._run_verify_only", return_value=subprocess.CompletedProcess([], 1, drift_output, "")):
+            drift = {}
+            self.assertEqual(1, doctor.diagnose(self.source, args, drift, source_version=self.source_version,
+                                                source_query=cli_source_query))
+        self.assertEqual(before, self.snapshot())
+        self.assertEqual("drift", drift["data"]["installation_state"])
+        self.assertEqual("drift", drift["data"]["integrity"])
+        self.assertEqual("managed_file_drift", drift["issues"][0]["code"])
+
+        managed.write_bytes(original)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["managed_files"].append(dict(manifest["managed_files"][0]))
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        invalid_output = (f"OLYMPUS_VERIFY: {self.source_version} FAIL\n"
+                          "OLYMPUS_VERIFY_REASON: MANAGED_FILE_MISMATCH\n"
+                          "OLYMPUS_VERIFY_DETAIL: MANAGED_FILE_MISMATCH: Installed managed file set differs for requested harness 'opencode'.\n")
+        before = self.snapshot()
+        with mock.patch("olympus.doctor._windows_verifier_supported", return_value=True), \
+             mock.patch("olympus.doctor.shutil.which", return_value="pwsh"), \
+             mock.patch("olympus.doctor._powershell_7", return_value=True), \
+             mock.patch("olympus.doctor._run_verify_only", return_value=subprocess.CompletedProcess([], 1, invalid_output, "")):
+            invalid = {}
+            self.assertEqual(3, doctor.diagnose(self.source, args, invalid, source_version=self.source_version,
+                                                source_query=cli_source_query))
+        self.assertEqual(before, self.snapshot())
+        self.assertEqual("invalid", invalid["data"]["manifest_state"])
+        self.assertEqual("invalid_manifest", invalid["issues"][0]["code"])
+
+    def test_slice_c4_doctor_diagnoses_a_c3_applied_project_read_only(self):
+        self.assertEqual("'C:\\one''two'", doctor._powershell_literal("C:\\one'two"))
+        self.create_managed_install(("opencode",), version=self.source_version)
+        role = self.source / "olympus/roles/veyra.md"
+        role.write_text(role.read_text(encoding="utf-8") + "\nC4 isolated fixture change.\n", encoding="utf-8")
+        self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
+        applied = self.invoke_cli("config", "apply", "--scope", "project", "--target", str(self.target),
+                                  "--harness", "opencode", "--execute")
+        self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
+        self.assertIn("execution: committed", applied.stdout)
+
+        arguments = ("doctor", "--scope", "project", "--target", str(self.target), "--harness", "opencode")
+        if sys.platform == "win32" and doctor.shutil.which("pwsh"):
+            expected_code = 0
+            expected_state = "verified"
+        else:
+            expected_code = 3
+            expected_state = "verification_unavailable"
+        response = self.json_query(*arguments, code=expected_code)
+        self.assertEqual(expected_state, response["data"]["installation_state"])
+        self.assertEqual("local", response["data"]["recorded_version"])
+        self.assertEqual("unknown", response["data"]["assignments"])
+        if expected_code == 0:
+            self.assertEqual("verified", response["data"]["integrity"])
+            self.assertEqual("verified", response["data"]["harnesses"]["opencode"])
+        else:
+            self.assertEqual("platform_unqualified", response["issues"][0]["code"])
+        human = self.query(*arguments)
+        self.assertEqual(expected_code, human.returncode, human.stdout + human.stderr)
+        for key, value in response["data"].items():
+            self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
 
     def test_slice_c3_explicit_apply_updates_selected_harness_and_is_idempotent(self):
         manifest_path = self.create_managed_install(("opencode", "codex"))

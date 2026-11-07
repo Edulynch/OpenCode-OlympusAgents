@@ -34,9 +34,11 @@ def parser() -> Parser:
                 "  olympus config check\n"
                 "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --dry-run\n"
                 "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --execute\n"
+                "  olympus doctor --scope project --target <absolute-worktree-root> --harness all [--json]\n"
                 "  olympus status --scope project --target <absolute-worktree-root>\n"
                 "Source edits affect only the canonical checkout; project config apply writes only with --execute.\n"
-                "Queries do not verify installations or model availability.\n"
+                "Doctor uses project VerifyOnly where qualified; it does not run runtime discovery.\n"
+                "Queries do not verify model availability.\n"
                 "macOS is not verified."),
         allow_abbrev=False,
     )
@@ -76,6 +78,11 @@ def parser() -> Parser:
     mode.add_argument("--dry-run", action="store_true", help="read-only preview; no target writes")
     mode.add_argument("--execute", action="store_true", help="explicitly apply the previewed project configuration")
     apply.add_argument("--json", action="store_true", help="emit a single JSON preview")
+    doctor = commands.add_parser("doctor", help="read-only diagnostic for a managed project installation", allow_abbrev=False)
+    doctor.add_argument("--scope", choices=("project",), required=True)
+    doctor.add_argument("--target", type=Path, required=True, help="absolute existing Git worktree root")
+    doctor.add_argument("--harness", choices=("opencode", "codex", "all"), required=True)
+    doctor.add_argument("--json", action="store_true")
     recover = config_commands.add_parser("recover", help="explicitly recover one pending source edit or project apply", allow_abbrev=False)
     recover.add_argument("--scope", choices=("project", "global"), help="project selects a target apply journal")
     recover.add_argument("--target", type=Path, help="absolute project root for project-apply recovery")
@@ -480,6 +487,13 @@ def main(argv: list[str] | None = None) -> int:
             code = config_apply.preview(source, args, response, source_query=source_query,
                                         load_renderer=load_renderer, release_version=release_version)
             config_apply.emit_preview(response, as_json)
+            return code
+        if response["operation"] == "doctor":
+            from . import doctor
+
+            code = doctor.diagnose(source, args, response, source_version=release_version(source),
+                                   source_query=source_query)
+            emit(response, as_json)
             return code
         code = installation_status(args, response)
         emit(response, as_json)

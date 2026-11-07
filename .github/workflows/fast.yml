@@ -155,17 +155,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot locate the native temporary filesystem.' }
           New-Item -ItemType Directory -Force -Path (Join-Path $tempRoot 'opencode') | Out-Null
 
-      - name: Run every required C2.3 test on native filesystem
+      - name: Run every required C2.3/C3 writer-lock test on native filesystem
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $testOutput = @(& python -B -m unittest discover -s tests/harness-core -p test_writer_compat.py -k slice_c2_3 -v 2>&1)
+          $testOutput = @(& python -B -m unittest discover -s tests/harness-core -p test_writer_compat.py -k slice_c -v 2>&1)
           $testExitCode = $LASTEXITCODE
           $testOutput | Out-Host
           if ($testExitCode -ne 0) { exit $testExitCode }
           $transcript = $testOutput -join "`n"
-          if ($transcript -notmatch '(?m)^Ran 13 tests in ') {
-            throw 'C2.3 qualification did not execute all 13 required tests.'
+          if ($transcript -notmatch '(?m)^Ran 14 tests in ') {
+            throw 'C2.3/C3 writer-lock qualification did not execute all 14 required tests.'
           }
           if ($env:RUNNER_OS -eq 'Windows') {
             if ($transcript -match 'skipped' -and
@@ -174,11 +174,11 @@ jobs:
               throw 'Windows may skip only the symlink fixture when host privileges prohibit creating it.'
             }
             if ($transcript -notmatch '(?m)^OK(?: \(skipped=1\))?$') {
-              throw 'C2.3 Windows test result is incomplete.'
+              throw 'C2.3/C3 Windows test result is incomplete.'
             }
           } else {
             if ($transcript -match 'skipped' -or $transcript -notmatch '(?m)^OK$') {
-              throw 'Linux and macOS must execute every C2.3 test without skips.'
+              throw 'Linux and macOS must execute every C2.3/C3 writer-lock test without skips.'
             }
           }
 

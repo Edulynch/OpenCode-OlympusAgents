@@ -139,7 +139,9 @@ reemplazar recursos administrados y el manifest. Sólo actualiza harnesses selec
 los demás y los archivos no administrados permanecen intactos. El manifest registra
 la fuente como `installed_version=local` y `installed_from_commit=unknown`; no convierte
 una fuente local en release oficial inmutable. Si una interrupción deja journal, los siguientes apply se bloquean
-hasta recovery explícita. Divergencias preservan evidencia y no se fuerzan.
+hasta recovery explícita. Recovery vuelve a validar el inventario con el renderer del checkout fuente que originó
+el journal: usa ese mismo checkout (o su ruta explícita con `--source`) y conserva su renderer sin modificaciones
+mientras exista `.olympus-cli-config-apply`. Una divergencia preserva evidencia y no se fuerza.
 
 Ejemplo en PowerShell desde el checkout de Olympus, usando un proyecto existente:
 
@@ -159,7 +161,7 @@ aplicación. Para mutar, omite `--json` y usa explícitamente `--execute`; `--dr
 y `--execute` son mutuamente excluyentes. Después de una interrupción usa:
 
 ```powershell
-& "$sourceCheckout\scripts\olympus.cmd" config recover --scope project --target $targetProject
+& "$sourceCheckout\scripts\olympus.cmd" --source $sourceCheckout config recover --scope project --target $targetProject
 ```
 
 ## Evidencia enfocada y plataformas
@@ -267,4 +269,4 @@ El protocolo coordina operaciones Olympus cooperantes y bloquea conflictos obser
 | G2 / Slice B | **PASS Windows/Linux**. La prueba verificó snapshots, independencia de A, rollback/recovery, conflictos y los 15 límites del write-set. El checkout fuente quedó sin cambios. |
 | macOS | **NOT VERIFIED**. |
 
-FAST Windows y CodeQL también pasaron en el PR Draft #70. La evidencia C1 histórica fue Windows 6/6 **PASS** (local) y Linux 6/6 **PASS** en GitHub Actions [run 41310141414](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/41310141414), commit `a09cdeb934804f4a6c86d1e998f930ccb0be6f70`; no es validación de C3. En esta rama C3 Windows está sujeto a las pruebas enfocadas enumeradas arriba; Linux CI queda pendiente del Draft PR. macOS **UNVERIFIED**. FULL y runtime interactivo **NOT_RUN**; el resto de C y la feature completa siguen pendientes.
+FAST Windows y CodeQL también pasaron en el PR Draft #70. La evidencia C1 histórica fue Windows 6/6 **PASS** (local) y Linux 6/6 **PASS** en GitHub Actions [run 41310141414](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/41310141414), commit `a09cdeb934804f4a6c86d1e998f930ccb0be6f70`; no es validación de C3. El Linux CI del Draft PR #110 pasó en [run 42392613719](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/42392613719) sobre el HEAD inicial `2b23a26c92f2d7c014d92da96c2dafe7054ec8e4`; su filtro anterior ejecutó 13 pruebas de writer compatibility, pero excluyó `test_slice_c3_project_apply_uses_existing_target_writer_lock`. Este cambio amplía el filtro a 14 pruebas; el nuevo resultado de ese gate se confirmará en CI tras el push. macOS **UNVERIFIED**. FULL y runtime interactivo **NOT_RUN**; el resto de C y la feature completa siguen pendientes.

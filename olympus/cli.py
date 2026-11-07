@@ -33,8 +33,9 @@ def parser() -> Parser:
                 "  olympus config recover\n"
                 "  olympus config check\n"
                 "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --dry-run\n"
+                "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --execute\n"
                 "  olympus status --scope project --target <absolute-worktree-root>\n"
-                "Source edits affect only the canonical checkout; config apply is preview-only in this slice.\n"
+                "Source edits affect only the canonical checkout; project config apply writes only with --execute.\n"
                 "Queries do not verify installations or model availability.\n"
                 "macOS is not verified."),
         allow_abbrev=False,
@@ -66,14 +67,18 @@ def parser() -> Parser:
     check.add_argument("--harness", choices=("opencode", "codex", "all"), default="all")
     check.add_argument("--json", action="store_true")
     apply = config_commands.add_parser(
-        "apply", help="preview changes to an existing project installation (dry-run only)", allow_abbrev=False,
+        "apply", help="preview or explicitly apply changes to an existing project installation", allow_abbrev=False,
     )
     apply.add_argument("--scope", choices=("project", "global"), required=True)
     apply.add_argument("--target", type=Path, required=True, help="absolute existing Git worktree root")
     apply.add_argument("--harness", choices=("opencode", "codex", "all"), required=True)
-    apply.add_argument("--dry-run", action="store_true", required=True, help="required; no target writes are implemented")
+    mode = apply.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--dry-run", action="store_true", help="read-only preview; no target writes")
+    mode.add_argument("--execute", action="store_true", help="explicitly apply the previewed project configuration")
     apply.add_argument("--json", action="store_true", help="emit a single JSON preview")
-    config_commands.add_parser("recover", help="explicitly recover one pending source-edit batch", allow_abbrev=False)
+    recover = config_commands.add_parser("recover", help="explicitly recover one pending source edit or project apply", allow_abbrev=False)
+    recover.add_argument("--scope", choices=("project", "global"), help="project selects a target apply journal")
+    recover.add_argument("--target", type=Path, help="absolute project root for project-apply recovery")
     status = commands.add_parser("status", help="read reported installation metadata; no integrity verification", allow_abbrev=False)
     status.add_argument("--scope", choices=("project", "global"), default="project")
     status.add_argument("--target", type=Path, help="absolute Git worktree root; required for project scope")
@@ -387,6 +392,37 @@ def _run_recovery(source: Path, response: dict) -> int:
     return 0
 
 
+def _run_project_recovery(source: Path, args, response: dict) -> int:
+    from . import config_apply, config_apply_transaction
+    from . import source_edit
+
+    response["operation"] = "config recover"
+    response["context"] = {"source": str(source), "kind": "project_apply_recovery", "scope": "project"}
+    if args.scope == "global":
+        raise CLIError("Global config recovery is unavailable.", 3)
+    if args.scope != "project" or args.target is None or not args.target.is_absolute():
+        raise CLIError("Project recovery requires --scope project --target <absolute-worktree-root>.", 2)
+    target = config_apply._validate_target(source, args.target)
+    response["context"]["target"] = str(target)
+    try:
+        result = config_apply_transaction.recover(target, source)
+    except config_apply_transaction.TransactionError as error:
+        response["result"] = {1: "failed", 3: "blocked", 4: "unconfirmed"}.get(error.code, "failed")
+        response["issues"] = [{"code": response["result"], "message": str(error)}]
+        emit(response, False)
+        return error.code
+    except (OSError, UnicodeError, source_edit.BatchError, source_edit.LockError) as error:
+        response["result"] = "unconfirmed"
+        response["issues"] = [{"code": "unconfirmed", "message": str(error)}]
+        emit(response, False)
+        return 4
+    response["result"] = "no_changes" if result == "no_changes" else "ok"
+    response["data"] = {"recovery": result}
+    print(f"config recover: {result}")
+    print(f"target: {target}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     for stream in (sys.stdout, sys.stderr):
@@ -408,6 +444,8 @@ def main(argv: list[str] | None = None) -> int:
         response["operation"] = operation
         if operation in ("models set-family", "agents set-model") and args.json and not args.dry_run:
             raise CLIError("--json for model edits requires --dry-run", 2)
+        if operation == "config apply" and args.json and args.execute:
+            raise CLIError("--json for config apply requires --dry-run", 2)
         if args.command == "agents" and args.action == "set-model" and args.family is None and args.effort is None:
             raise CLIError("agents set-model requires --family and/or --effort", 2)
         source = recovery_source_root(args.source) if operation == "config recover" else source_root(args.source)
@@ -428,18 +466,19 @@ def main(argv: list[str] | None = None) -> int:
         if response["operation"] in ("models set-family", "agents set-model"):
             return _run_model_edit(source, args, response)
         if response["operation"] == "config recover":
+            if args.scope is not None or args.target is not None:
+                return _run_project_recovery(source, args, response)
             return _run_recovery(source, response)
         if response["operation"] == "config apply":
             from . import config_apply
 
-            code = config_apply.preview(
-                source,
-                args,
-                response,
-                source_query=source_query,
-                load_renderer=load_renderer,
-                release_version=release_version,
-            )
+            if args.execute:
+                return config_apply.execute(
+                    source, args, response, source_query=source_query,
+                    load_renderer=load_renderer, release_version=release_version,
+                )
+            code = config_apply.preview(source, args, response, source_query=source_query,
+                                        load_renderer=load_renderer, release_version=release_version)
             config_apply.emit_preview(response, as_json)
             return code
         code = installation_status(args, response)
@@ -465,9 +504,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except KeyboardInterrupt:
         response["result"] = "unconfirmed"
+        message = "Operation interrupted; inspect/recover pending source-edit state explicitly."
+        if response.get("operation") == "config apply":
+            target = str(getattr(locals().get("args", None), "target", "unknown"))
+            message = ("Project config apply interrupted; inspect and explicitly recover the pending project state "
+                       f"with config recover --scope project --target {target}.")
         response["issues"].append({
             "code": "unconfirmed",
-            "message": "Operation interrupted; inspect/recover pending source-edit state explicitly.",
+            "message": message,
         })
         emit(response, as_json)
         return 4

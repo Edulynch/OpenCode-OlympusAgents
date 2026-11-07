@@ -23,8 +23,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from olympus import config_apply, source_edit
-from olympus.cli import release_version
+from olympus import config_apply, config_apply_transaction, source_edit
+from olympus.cli import load_renderer as cli_load_renderer, parser as cli_parser, release_version, source_query as cli_source_query
 
 
 def load_file(name: str, path: Path):
@@ -106,6 +106,23 @@ class SliceA(unittest.TestCase):
         finally:
             self.assertEqual(before, self.snapshot(), "Read-only command changed files, directories, hashes or mtimes")
 
+    def invoke_cli(self, *arguments: str):
+        return subprocess.run([sys.executable, "-B", "-m", "olympus", *arguments], cwd=self.source,
+                              env=self.env, capture_output=True, text=True, encoding="utf-8",
+                              check=False, timeout=30)
+
+    def execution_plan(self):
+        args = cli_parser().parse_args(("--source", str(self.source),
+                                        *self.config_apply_arguments()[:-1], "--execute"))
+        response = {"schema_version": 1, "operation": "config apply", "result": "ok",
+                    "context": {}, "data": {}, "issues": []}
+        code = config_apply.preview(self.source, args, response, source_query=cli_source_query,
+                                    load_renderer=cli_load_renderer, release_version=release_version)
+        self.assertEqual(0, code, response)
+        return args, response, config_apply._execution_plan(
+            self.source, args, response, load_renderer=cli_load_renderer,
+        )
+
     def json_query(self, *arguments: str, code=0, entry="module"):
         result = self.query(*arguments, "--json", entry=entry)
         self.assertEqual(code, result.returncode, (result.stdout, result.stderr))
@@ -169,7 +186,7 @@ class SliceA(unittest.TestCase):
         self.assertIn("config apply --scope project", help_result.stdout)
         apply_help = self.query("config", "apply", "--help")
         self.assertIn("--dry-run", apply_help.stdout)
-        self.assertIn("required", apply_help.stdout)
+        self.assertIn("--execute", apply_help.stdout)
         version = self.query("--version")
         self.assertEqual(0, version.returncode)
         self.assertIn(f"olympus {self.source_version}", version.stdout)
@@ -340,7 +357,7 @@ class SliceA(unittest.TestCase):
 
         response = self.json_query(*self.config_apply_arguments("opencode"))
         self.assertEqual("ok", response["result"])
-        self.assertFalse(response["data"]["apply_available"])
+        self.assertTrue(response["data"]["apply_available"])
         self.assertEqual("ready", response["data"]["preview_state"])
         self.assertEqual("managed_paths_and_hashes_match", response["data"]["manifest"]["ownership"])
         changed = {item["path"]: item for item in response["data"]["changes"]}
@@ -372,7 +389,7 @@ class SliceA(unittest.TestCase):
 
         self.assertIn(response["result"], ("ok", "no_changes"))
         self.assertTrue(response["data"]["preview_only"])
-        self.assertFalse(response["data"]["apply_available"])
+        self.assertTrue(response["data"]["apply_available"])
         self.assertEqual(["opencode", "codex"], response["data"]["installed_harnesses"])
         self.assertEqual(before, manifest_path.read_bytes())
 
@@ -450,7 +467,7 @@ class SliceA(unittest.TestCase):
     def test_slice_c_codex_only_preview_and_invalid_manifest_are_safe(self):
         manifest_path = self.create_managed_install(("codex",), version=self.source_version)
         response = self.json_query(*self.config_apply_arguments("codex"))
-        self.assertEqual("no_changes", response["result"])
+        self.assertEqual("ok", response["result"])
         self.assertEqual(["codex"], response["data"]["installed_harnesses"])
         self.assertEqual([], response["data"]["preserved"]["harnesses"])
 
@@ -477,6 +494,152 @@ class SliceA(unittest.TestCase):
                      "--harness", "opencode", "--json")
         response = self.json_query(*arguments, code=2)
         self.assertEqual("failed", response["result"])
+
+    def test_slice_c3_explicit_apply_updates_selected_harness_and_is_idempotent(self):
+        manifest_path = self.create_managed_install(("opencode", "codex"))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        provenance = {"opencode": {"kind": "custom", "source_digest": "a" * 64},
+                     "codex": {"kind": "custom", "source_digest": "b" * 64}}
+        manifest["harness_provenance"] = provenance
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        codex_before = {path.relative_to(self.source).as_posix(): (self.target / path.relative_to(self.source)).read_bytes()
+                        for path in self.renderer.outputs_for(self.source, "codex")
+                        if path.relative_to(self.source).as_posix().startswith(".codex/")
+                        or path.relative_to(self.source).as_posix() == "CODEX.md"}
+        custom = self.target / ".opencode/custom-user-file.md"
+        custom.parent.mkdir(parents=True, exist_ok=True)
+        custom.write_text("preserve me\n", encoding="utf-8")
+        kael = self.target / ".opencode/agents/kael.md"
+        kael.write_bytes(b"old managed content\n")
+        current_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        next(item for item in current_manifest["managed_files"] if item["path"] == ".opencode/agents/kael.md")["sha256"] = hashlib.sha256(kael.read_bytes()).hexdigest()
+        manifest_path.write_text(json.dumps(current_manifest) + "\n", encoding="utf-8")
+
+        result = self.invoke_cli("config", "apply", "--scope", "project", "--target", str(self.target),
+                                 "--harness", "opencode", "--execute")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("execution: committed", result.stdout)
+        self.assertEqual(self.outputs[self.source / ".opencode/agents/kael.md"].encode("utf-8"), kael.read_bytes())
+        self.assertEqual("preserve me\n", custom.read_text(encoding="utf-8"))
+        for relative, raw in codex_before.items():
+            self.assertEqual(raw, (self.target / relative).read_bytes())
+        updated = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual("local", updated["installed_version"])
+        self.assertEqual("unknown", updated["installed_from_commit"])
+        self.assertEqual({"codex": provenance["codex"]}, updated["harness_provenance"])
+        self.assertFalse((self.target / ".olympus-cli-config-apply").exists())
+        self.assertTrue((self.target / ".olympus-cli-edit.lock").is_file())
+
+        before_noop = self.snapshot()
+        repeated = self.invoke_cli("config", "apply", "--scope", "project", "--target", str(self.target),
+                                   "--harness", "opencode", "--execute")
+        self.assertEqual(0, repeated.returncode, repeated.stdout + repeated.stderr)
+        self.assertIn("execution: no_changes", repeated.stdout)
+        self.assertEqual(before_noop, self.snapshot(), "Idempotent apply must not rewrite a no-op target")
+
+    def test_slice_c3_execute_rejects_drift_before_lock_or_target_writes(self):
+        self.create_managed_install(("opencode",))
+        managed = self.target / ".opencode/agents/kael.md"
+        managed.write_bytes(managed.read_bytes() + b"user drift\n")
+        before = self.snapshot()
+        result = self.invoke_cli("config", "apply", "--scope", "project", "--target", str(self.target),
+                                 "--harness", "opencode", "--execute")
+        self.assertEqual(3, result.returncode, result.stdout + result.stderr)
+        self.assertIn("managed_file_drift", result.stdout + result.stderr)
+        self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
+        self.assertEqual(before, self.snapshot())
+
+    def test_slice_c3_execute_rejects_invalid_ownership_and_linked_resources(self):
+        manifest_path = self.create_managed_install(("opencode",))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["managed_files"].append(dict(manifest["managed_files"][0]))
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        invalid_before = self.snapshot()
+        invalid = self.invoke_cli("config", "apply", "--scope", "project", "--target", str(self.target),
+                                  "--harness", "opencode", "--execute")
+        self.assertEqual(3, invalid.returncode, invalid.stdout + invalid.stderr)
+        self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
+        self.assertEqual(invalid_before, self.snapshot())
+
+        # Restore valid ownership, then replace one managed regular file by a
+        # link whose bytes still match the manifest.
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["managed_files"].pop()
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        managed = self.target / ".opencode/agents/kael.md"
+        external = self.sandbox / "linked managed output"
+        external.write_bytes(managed.read_bytes())
+        managed.unlink()
+        try:
+            os.symlink(external, managed)
+        except (OSError, NotImplementedError) as error:
+            self.skipTest(f"Host cannot create the symlink safety fixture: {error}")
+        before_link_check = self.snapshot()
+        linked = self.invoke_cli("config", "apply", "--scope", "project", "--target", str(self.target),
+                                 "--harness", "opencode", "--execute")
+        self.assertEqual(3, linked.returncode, linked.stdout + linked.stderr)
+        self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
+        self.assertEqual(before_link_check, self.snapshot())
+
+    def test_slice_c3_partial_failure_rolls_back_and_preserves_evidence_on_interruption(self):
+        manifest_target = self.create_managed_install(("opencode",))
+        kael_path = self.target / ".opencode/agents/kael.md"
+        kael_old = b"previous valid managed configuration\n"
+        kael_path.write_bytes(kael_old)
+        manifest_data = json.loads(manifest_target.read_text(encoding="utf-8"))
+        next(item for item in manifest_data["managed_files"] if item["path"] == ".opencode/agents/kael.md")["sha256"] = hashlib.sha256(kael_old).hexdigest()
+        manifest_target.write_text(json.dumps(manifest_data) + "\n", encoding="utf-8")
+        args, response, plan = self.execution_plan()
+        changes, manifest_path, manifest_old, manifest_new = plan
+        manifest_target = self.target / manifest_path
+        original_replace = os.replace
+        failed = False
+
+        def fail_manifest_replace(source, destination):
+            nonlocal failed
+            if Path(destination) == manifest_target and not failed:
+                failed = True
+                raise OSError("fixture replacement failure")
+            return original_replace(source, destination)
+
+        with mock.patch("olympus.config_apply_transaction.os.replace", side_effect=fail_manifest_replace):
+            with self.assertRaises(config_apply_transaction.TransactionError) as failure:
+                config_apply_transaction.commit(
+                    self.target, self.source, changes, manifest_path, manifest_old, manifest_new,
+                    lambda: (changes, manifest_old, manifest_new),
+                )
+        self.assertEqual(1, failure.exception.code)
+        self.assertIn("rollback was confirmed", str(failure.exception))
+        self.assertEqual([], list((self.target / ".olympus-cli-config-apply").glob("**/*")))
+        self.assertFalse((self.target / ".olympus-cli-config-apply").exists())
+        self.assertEqual(manifest_old, manifest_target.read_bytes())
+        self.assertEqual(kael_old, kael_path.read_bytes())
+
+        # Simulate termination immediately after a target replacement: the OS
+        # releases the stable lock and explicit recovery rolls the PREPARED batch back.
+        failed = False
+
+        def interrupt_after_manifest_replace(source, destination):
+            nonlocal failed
+            result = original_replace(source, destination)
+            if Path(destination) == manifest_target and not failed:
+                failed = True
+                raise KeyboardInterrupt
+            return result
+
+        with mock.patch("olympus.config_apply_transaction.os.replace", side_effect=interrupt_after_manifest_replace):
+            with self.assertRaises(KeyboardInterrupt):
+                config_apply_transaction.commit(
+                    self.target, self.source, changes, manifest_path, manifest_old, manifest_new,
+                    lambda: (changes, manifest_old, manifest_new),
+                )
+        self.assertTrue((self.target / ".olympus-cli-config-apply/record.json").is_file())
+        recovered = self.invoke_cli("config", "recover", "--scope", "project", "--target", str(self.target))
+        self.assertEqual(0, recovered.returncode, recovered.stdout + recovered.stderr)
+        self.assertIn("rolled_back", recovered.stdout)
+        self.assertEqual(manifest_old, manifest_target.read_bytes())
+        self.assertEqual(kael_old, kael_path.read_bytes())
+        self.assertFalse((self.target / ".olympus-cli-config-apply").exists())
 
     def test_slice_a_explicit_source_and_python_launcher(self):
         response = self.json_query("--source", str(self.source), "models", "list", entry="python_launcher")

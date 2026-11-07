@@ -1,8 +1,4 @@
-"""Read-only preview of an update to an existing project installation.
-
-This slice deliberately has no target writer. It validates the current project
-manifest and every manifest-owned file before presenting an in-memory render.
-"""
+"""Preview and explicitly apply updates to an existing project installation."""
 
 from __future__ import annotations
 
@@ -296,7 +292,7 @@ def _manifest_entries(record: ProjectManifest, expected: set[str]) -> tuple[dict
 def _blank_data() -> dict[str, Any]:
     return {
         "preview_only": True,
-        "apply_available": False,
+        "apply_available": True,
         "preview_state": "blocked",
         "changes": [],
         "unchanged": [],
@@ -327,6 +323,42 @@ def _failed(response: dict, error: PreviewFault) -> int:
     return error.code
 
 
+def _updated_manifest_bytes(record: ProjectManifest, raw: bytes, selected: tuple[str, ...],
+                            expected_by_harness: dict[str, dict[str, bytes]], source_commit: str) -> bytes:
+    data = json.loads(raw.decode("utf-8-sig"))
+    entries = []
+    for original in data["managed_files"]:
+        entry = dict(original)
+        relative = entry["path"].replace("\\", "/")
+        if relative.startswith(".opencode/") or relative == "opencode.jsonc":
+            harness = "opencode"
+        elif relative.startswith(".codex/") or relative == "CODEX.md":
+            harness = "codex"
+        else:
+            raise PreviewFault(3, "unsupported_manifest_inventory", f"Unsupported manifest resource: {relative}")
+        if harness in selected:
+            content = expected_by_harness[harness].get(relative)
+            if content is None:
+                raise PreviewFault(3, "unsupported_manifest_inventory", f"Renderer omitted owned resource: {relative}")
+            entry["sha256"] = _digest(content)
+        entries.append(entry)
+    data["managed_files"] = sorted(entries, key=lambda item: item["path"].replace("\\", "/"))
+    provenance = data.get("harness_provenance")
+    if isinstance(provenance, dict):
+        retained = {name: value for name, value in provenance.items() if name not in selected}
+        if retained:
+            data["harness_provenance"] = retained
+        else:
+            data.pop("harness_provenance")
+    # A local working checkout is not an immutable official release, even when
+    # its installer marker has release-shaped text.
+    data["installed_version"] = "local"
+    data["installed_from_commit"] = source_commit
+    if data == record.data:
+        return raw
+    return (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+
+
 def preview(source: Path, args, response: dict, *, source_query: Callable, load_renderer: Callable,
             release_version: Callable) -> int:
     response["operation"] = "config apply"
@@ -342,6 +374,13 @@ def preview(source: Path, args, response: dict, *, source_query: Callable, load_
             raise PreviewFault(3, "scope_unavailable", "This slice supports config apply previews only for --scope project.")
         target = _validate_target(source, args.target)
         response["context"]["target"] = str(target)
+
+        from .config_apply_transaction import pending
+        if pending(target):
+            return _blocked(response, [{
+                "code": "pending_project_apply",
+                "message": "A project-apply or source-edit journal is pending; explicitly recover that writer state before applying.",
+            }])
 
         for surface in (".opencode", ".codex"):
             path, metadata, issue = _lstat_target_path(target, surface)
@@ -472,20 +511,33 @@ def preview(source: Path, args, response: dict, *, source_query: Callable, load_
                         "proposed_sha256": _digest(desired),
                     })
 
+        source_commit = "unknown"
         metadata_differences = []
-        if record.installed_version != source_version:
+        if record.installed_version != "local":
             metadata_differences.append({
                 "field": "installed_version",
                 "current": record.installed_version,
-                "source_release_marker": source_version,
+                "proposed": "local",
             })
+        if record.installed_from_commit != source_commit:
+            metadata_differences.append({
+                "field": "installed_from_commit",
+                "current": record.installed_from_commit,
+                "proposed": source_commit,
+            })
+        proposed_manifest = _updated_manifest_bytes(
+            record, manifest_raw, selected, expected_by_harness, source_commit,
+        )
+        manifest_write_planned = proposed_manifest != manifest_raw
         preserved_harnesses = [name for name in installed if name not in selected]
-        response["result"] = "ok" if changes or metadata_differences else "no_changes"
+        response["result"] = "ok" if changes or manifest_write_planned else "no_changes"
         response["data"] = {
             "preview_only": True,
-            "apply_available": False,
-            "preview_state": "ready" if changes or metadata_differences else "no_changes",
+            "apply_available": True,
+            "preview_state": "ready" if changes or manifest_write_planned else "no_changes",
             "source_version": source_version,
+            "source_provenance": "local_checkout",
+            "source_commit": source_commit,
             "installed_harnesses": list(installed),
             "selected_harnesses": list(selected),
             "changes": changes,
@@ -497,7 +549,10 @@ def preview(source: Path, args, response: dict, *, source_query: Callable, load_
                 "recorded_version": record.installed_version,
                 "recorded_source_commit": record.installed_from_commit,
                 "ownership": "managed_paths_and_hashes_match",
-                "write_planned": False,
+                "proposed_version": "local",
+                "proposed_source_commit": source_commit,
+                "proposed_sha256": _digest(proposed_manifest),
+                "write_planned": manifest_write_planned,
                 "metadata_differences": metadata_differences,
                 "managed_hashes_to_refresh_if_applied": [item["path"] for item in changes],
             },
@@ -510,11 +565,179 @@ def preview(source: Path, args, response: dict, *, source_query: Callable, load_
                 "selected output conflicts and retired OpenCode destinations are absent",
             ],
             "conflicts": [],
-            "execution": "not_implemented; this command performs no target writes",
+            "execution": "not_run; no target writes (use --execute to apply)",
         }
         return 0
     except PreviewFault as error:
         return _failed(response, error)
+
+
+def _execution_plan(source: Path, args, response: dict, *, load_renderer: Callable):
+    from .config_apply_transaction import Change
+
+    target = Path(response["context"]["target"])
+    record, manifest_raw, blockers = _manifest_record(target)
+    if blockers or record is None or manifest_raw is None:
+        raise PreviewFault(3, "target_changed", "Project ownership changed after preview; no writes were made.")
+    selected = ("opencode", "codex") if args.harness == "all" else (args.harness,)
+    try:
+        renderer = load_renderer(source)
+        by_harness = _render_managed_outputs(source, renderer, record.installed_harnesses)
+    except PreviewFault:
+        raise
+    except (OSError, UnicodeError, KeyError, TypeError, ValueError, AttributeError) as error:
+        raise PreviewFault(1, "source_invalid", f"Cannot prepare project apply from the selected source: {error}") from error
+
+    resource_changes = []
+    for harness in record.installed_harnesses:
+        if harness not in selected:
+            continue
+        for relative, desired in sorted(by_harness[harness].items()):
+            old, issue = _read_target_file(target, relative)
+            if issue or old is None:
+                raise PreviewFault(3, "target_changed", issue or f"Managed resource disappeared: {relative}")
+            if old == desired:
+                continue
+            path, metadata, path_issue = _lstat_target_path(target, relative)
+            if path_issue or metadata is None or path is None:
+                raise PreviewFault(3, "target_changed", path_issue or f"Cannot inspect managed resource: {relative}")
+            resource_changes.append(Change(relative, old, desired, stat.S_IMODE(metadata.st_mode)))
+
+    source_commit = "unknown"
+    manifest_new = _updated_manifest_bytes(record, manifest_raw, selected, by_harness, source_commit)
+    manifest_path = record.relative_path
+    if manifest_new != manifest_raw:
+        old, issue = _read_target_file(target, manifest_path)
+        path, metadata, path_issue = _lstat_target_path(target, manifest_path)
+        if issue or old is None or path_issue or metadata is None or path is None:
+            raise PreviewFault(3, "target_changed", issue or path_issue or "Project manifest changed after preview.")
+        resource_changes.sort(key=lambda item: item.path)
+        resource_changes.append(Change(manifest_path, old, manifest_new, stat.S_IMODE(metadata.st_mode)))
+
+    planned = {item["path"]: item for item in response["data"].get("changes", [])}
+    actual = {item.path: {"current_sha256": _digest(item.old), "proposed_sha256": _digest(item.new)}
+              for item in resource_changes if item.path != manifest_path}
+    if (set(planned) != set(actual)
+            or any(planned[path].get("current_sha256") != values["current_sha256"]
+                   or planned[path].get("proposed_sha256") != values["proposed_sha256"]
+                   for path, values in actual.items())
+            or response["data"]["manifest"].get("proposed_sha256") != _digest(manifest_new)):
+        raise PreviewFault(3, "target_changed", "Project plan changed after preview; no writes were made.")
+    return tuple(resource_changes), manifest_path, manifest_raw, manifest_new
+
+
+def _plan_fingerprint(response: dict) -> tuple:
+    data = response["data"]
+    manifest = data.get("manifest", {})
+    return (
+        tuple((item["path"], item["current_sha256"], item["proposed_sha256"])
+              for item in data.get("changes", [])),
+        manifest.get("proposed_sha256"),
+        tuple(data.get("selected_harnesses", [])),
+    )
+
+
+def execute(source: Path, args, response: dict, *, source_query: Callable, load_renderer: Callable,
+            release_version: Callable) -> int:
+    """Explicitly apply one previewed project plan under the shared target lock."""
+    from . import config_apply_transaction as transaction
+    from . import source_edit
+
+    code = preview(source, args, response, source_query=source_query,
+                   load_renderer=load_renderer, release_version=release_version)
+    if code:
+        emit_preview(response, False)
+        return code
+    preview_printed = False
+    try:
+        changes, manifest_path, manifest_old, manifest_new = _execution_plan(
+            source, args, response, load_renderer=load_renderer,
+        )
+        if not changes:
+            response["result"] = "no_changes"
+            response["data"]["preview_state"] = "no_changes"
+            response["data"]["preview_only"] = False
+            response["data"]["execution"] = "no_changes"
+            emit_preview(response, False)
+            print("execution: no_changes")
+            return 0
+
+        before = _plan_fingerprint(response)
+        print("Execution preview (not yet applied):")
+        emit_preview(response, False)
+        preview_printed = True
+
+        def revalidate():
+            latest = {"schema_version": 1, "operation": "config apply", "result": "ok",
+                      "context": {}, "data": {}, "issues": []}
+            latest_code = preview(source, args, latest, source_query=source_query,
+                                  load_renderer=load_renderer, release_version=release_version)
+            if latest_code:
+                raise transaction.TransactionError(
+                    "Locked project revalidation failed: " + "; ".join(item["message"] for item in latest["issues"]),
+                    latest_code,
+                )
+            if _plan_fingerprint(latest) != before:
+                raise transaction.TransactionError("Project state changed after preview; rerun config apply --dry-run.", 3)
+            latest_changes, latest_manifest_path, latest_old, latest_new = _execution_plan(
+                source, args, latest, load_renderer=load_renderer,
+            )
+            if latest_manifest_path != manifest_path:
+                raise transaction.TransactionError("Project manifest location changed after preview.", 3)
+            return latest_changes, latest_old, latest_new
+
+        state = transaction.commit(
+            Path(response["context"]["target"]), source, changes, manifest_path,
+            manifest_old, manifest_new, revalidate,
+        )
+        if state == "no_changes":
+            response["result"] = "no_changes"
+            response["data"]["execution"] = "no_changes"
+            response["data"]["preview_only"] = False
+            print("execution: no_changes")
+            return 0
+        response["result"] = "ok"
+        response["data"]["preview_state"] = "applied"
+        response["data"]["preview_only"] = False
+        response["data"]["execution"] = "committed"
+        response["data"]["manifest"]["write_planned"] = False
+        response["data"]["manifest"]["sha256"] = _digest(manifest_new)
+        response["data"]["manifest"]["recorded_version"] = "local"
+        response["data"]["manifest"]["recorded_source_commit"] = response["data"]["source_commit"]
+        response["data"]["manifest"]["ownership"] = "managed_paths_and_hashes_match"
+        print("execution: committed")
+        return 0
+    except PreviewFault as error:
+        code = _failed(response, error)
+        if not preview_printed:
+            emit_preview(response, False)
+        else:
+            print(f"config apply: {response['result']}", file=sys.stderr)
+            print(str(error), file=sys.stderr)
+        return code
+    except transaction.TransactionError as error:
+        response["result"] = {1: "failed", 3: "blocked", 4: "unconfirmed"}.get(error.code, "failed")
+        response["data"]["execution"] = (
+            "rollback_confirmed" if "rollback was confirmed" in str(error)
+            or "no target writes occurred" in str(error) else "unconfirmed"
+        )
+        response["issues"] = [{"code": response["result"], "message": str(error)}]
+        if preview_printed:
+            print(f"config apply: {response['result']}", file=sys.stderr)
+            print(str(error), file=sys.stderr)
+        else:
+            emit_preview(response, False)
+        return error.code
+    except (OSError, UnicodeError, source_edit.BatchError, source_edit.LockError) as error:
+        response["result"] = "unconfirmed"
+        response["data"]["execution"] = "unconfirmed"
+        response["issues"] = [{"code": "unconfirmed", "message": str(error)}]
+        if preview_printed:
+            print("config apply: unconfirmed", file=sys.stderr)
+            print(str(error), file=sys.stderr)
+        else:
+            emit_preview(response, False)
+        return 4
 
 
 def emit_preview(response: dict, as_json: bool) -> None:

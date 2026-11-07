@@ -517,6 +517,24 @@ try {
         finally:
             self.stop_owner(owner)
 
+    def test_slice_c3_project_apply_uses_existing_target_writer_lock(self):
+        self.create_managed_install(("opencode",))
+        owner = self.start_python_owner()
+        try:
+            before = self.snapshot_target(omit_lock=True)
+            apply = subprocess.run(
+                [sys.executable, "-B", "-m", "olympus", "config", "apply", "--scope", "project",
+                 "--target", str(self.target), "--harness", "opencode", "--execute"],
+                cwd=ROOT, env=self.environment, capture_output=True, text=True,
+                encoding="utf-8", timeout=30, check=False,
+            )
+            self.assertEqual(3, apply.returncode, apply.stdout + apply.stderr)
+            self.assertIn("stable target writer lock", apply.stdout + apply.stderr)
+            self.assertEqual(before, self.snapshot_target(omit_lock=True))
+            self.assertFalse((self.target / ".olympus-cli-config-apply").exists())
+        finally:
+            self.stop_owner(owner)
+
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
     def test_slice_c2_3_rejected_bootstrap_is_target_read_only_and_does_not_create_lock(self):
         self.create_managed_install(("codex",))

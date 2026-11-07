@@ -123,17 +123,15 @@ El escritor único es cooperante: commit y recovery Olympus comparten exclusión
 
 Limitaciones aprobadas de FR-012: sin protección absoluta contra procesos no cooperantes, vista atómica multiarquivo ni durabilidad absoluta ante pérdida de energía. No sobrescribir automáticamente modificaciones externas ni conflictos detectados. Si un tercero modifica un recurso después de la última comprobación, esa carrera queda fuera de garantía; no afirmar linearizabilidad universal. Mantener estado bloqueado o sin confirmar cuando no se pueda recuperar coherencia propia. T019/T020 validan este contrato; no amplían sus límites.
 
-### Aplicación instalada: preview C1 entregado; escritura aún bloqueada
+### Aplicación instalada: C3 implementada en esta rama; CI Linux pendiente
 
-**Actualización 2026-10-31:** `olympus config apply --scope project --target ... --harness ... --dry-run` ofrece un preview Python/stdlib read-only para una instalación existente con inventario del renderer actual. Reutiliza el renderer y el parser compartido del manifest; exige raíz Git, manifest único, selección ya instalada, inventario exacto y hashes intactos. No llama bootstrap/install, no inspecciona runtimes/proveedores, no escribe y siempre reporta `apply_available=false`. Es una primera comprobación, no la ruta de aplicación instalada aprobada.
+**Actualización 2026-11-07:** C1 conserva `config apply ... --dry-run` como preview read-only; C3 agrega `config apply ... --execute` para actualizar sólo harnesses ya administrados en un target project existente. La implementación reutiliza renderer, parser de manifest y lock estable compartido, vuelve a validar ownership/drift bajo lock y usa journal PREPARING/PREPARED/COMMITTED con recovery project explícita. No llama bootstrap/install ni runtime/proveedor, no instala harnesses ausentes, no admite global ni `--force`, y preserva harnesses/recursos no seleccionados. La fuente local queda registrada como `installed_version=local` y `installed_from_commit=unknown`; no se afirma provenance de release inmutable. Pruebas enfocadas Windows pasaron; Draft PR y Linux CI aún pendientes.
 
-La prohibición previa de usar `install.ps1 -SourceRoot` como contrato soportado sigue vigente. Python sólo lee los paths explícitos necesarios para este preview; no agrega/modifica `.opencode`, `.codex` ni manifests del destino.
+La especificación de viabilidad de 2026-10-31 que sigue se conserva como historial, no como descripción del estado actual. La prohibición de usar `install.ps1 -SourceRoot` como contrato soportado sigue vigente; esta vía Python sólo cambia archivos administrados existentes y el manifest validado.
 
-Hechos concretos: el motor consume outputs ya generados junto al script, valida hashes/ownership y preserva drift al rechazarlo. Sin embargo, registra versión/commit sin distinguir cambios locales, escribe antes de manifest sin recovery y bootstrap exige IDs fijos Sol/Luna para OpenCode. Linux tiene guards y rutas Windows; `all` global procesa dos harnesses independientemente.
+En la evaluación histórica, el motor consumía outputs junto al script y validaba hashes/ownership, pero no diferenciaba cambios locales ni tenía recovery para escritura instalada; bootstrap exigía IDs fijos Sol/Luna para OpenCode. La propuesta entonces pendiente era demostrar un delta seguro conservando rechazo de drift, hashes, paths y scope. C3 resuelve la aplicación project acotada en esta rama sin resolver global, diagnosis/install/uninstall, verificación runtime ni soporte completo de C.
 
-La vía a investigar para desbloquear es **un delta pequeño en el mismo motor**: entrada explícita para aplicar configuración renderizada del checkout validado, procedencia personalizada verificable basada en digest de fuentes y release base, preflight completo antes de ambos harnesses, integración con verificador/uninstall y recuperación acotada a recursos propios. Los digests serían metadatos de procedencia, no otra copia de asignaciones. Debe conservar rechazo de drift, hashes, paths y scope. No decidir hoy campos definitivos ni parámetros sin esa prueba de compatibilidad; no modificar entrypoints de v0.4.9 para fingir un producto posterior.
-
-C se conserva como tercera slice, con subcapacidad apply bloqueada, dentro de #64. No se crea otro issue ni se aprueba un split de release. El siguiente entregable para C sería evidencia de ese contrato y recuperación en motores existentes, antes de tareas de aplicación. Diagnóstico/install/uninstall Windows pueden planificarse como delegación; aplicación Linux se informa no soportada, sin reescritura PowerShell→Python.
+## Slices y condiciones de avance
 
 ### Slices y condiciones de avance
 
@@ -141,11 +139,11 @@ C se conserva como tercera slice, con subcapacidad apply bloqueada, dentro de #6
 |---|---|---|---|---|---|
 | A — SHIPPED | Consulta entregada mediante PR #69 | Archivos A existentes, sin cambios ahora | Baseline master | Evidencia A histórica conservada | No reabrir ni cambiar A por B |
 | B — ACEPTADA (G2 PASS) | Contrato de IDs, exclusión/recovery y renderer existente reconciliados | `model_edit.py`, `source_edit.py`, CLI y pruebas existentes; comandos de edición de fuente | A SHIPPED; T019 Windows + T020 Linux | Selección integrada Windows/Linux y evidencia T017–T020 | B aceptada; no incluye apply, instalaciones ni autorización implícita de fuente real |
-| C — BLOCKED | Doctor/routing reutilizables; apply no habilitado | Native routing y suites existentes; delta motor sólo después de desbloqueo | A/B, procedencia, ownership/manifests/versiones/verificador y recuperación segura | Drift/parcial all/overrides; fixtures y smoke posterior | Contrato instalado y recuperación aún no demostrados; sin éxito completo |
+| C — PARCIAL | C3: apply explícito project existente implementado en esta rama; resto de C pendiente | Renderer/parser existentes, CLI, writer lock, journal de apply y pruebas enfocadas | A/B y ownership/manifests; Linux CI de este PR pendiente | Drift, rollback/recovery, harnesses seleccionados/no seleccionados | No global, doctor/install/uninstall ni aceptación completa de C |
 
 ## Project Structure
 
-Inventario de rutas definido durante la planificación. Los archivos de A asignados a T002–T009 ya fueron creados; Slice B está implementada y aceptada según [tasks.md](tasks.md), mientras C y otros elementos futuros siguen siendo propuestas:
+Inventario de rutas definido durante la planificación. Los archivos de A asignados a T002–T009 ya fueron creados; Slice B está implementada y aceptada según [tasks.md](tasks.md); C3 está en implementación en esta rama y el resto de C y otros elementos futuros siguen pendientes:
 
 ```text
 olympus/core/models.toml                  fuente canónica; sin modificar ahora

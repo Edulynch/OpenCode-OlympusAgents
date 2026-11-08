@@ -45,6 +45,8 @@ $LegacyMaintenanceFiles = @('.opencode/agents/maintenance.md', '.opencode/comman
     '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
 $OldReasoner = '.opencode/agents/sorin.md'
 $RetiredMaintenanceAgent = '.opencode/agents/maintenance.md'
+$RetiredOpenCodeResources = @($OldReasoner, $RetiredMaintenanceAgent,
+    '.opencode/agents/aegis.md', '.opencode/commands/maintain.md')
 
 function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
 function Rel([string]$Path) { ($Path -replace "\\", "/").TrimStart([char[]]@('/')) }
@@ -184,7 +186,6 @@ function Get-GeneratedHarnessOutputs([string]$Name) {
     }
     if ($Name -eq 'opencode') {
         $managedSourcePaths.AddRange([string[]]@(
-            '.opencode/commands/maintain.md',
             '.opencode/plugins/olympus-activity/activity.ts',
             '.opencode/plugins/olympus-activity/tui.tsx',
             '.opencode/scripts/worktree-setup.ps1'
@@ -269,7 +270,7 @@ function Assert-Target([string]$Raw) {
 }
 
 function Assert-Install-Destinations([string]$Repo) {
-    foreach ($p in @($Managed) + @($OpenCodeManifestRel, $CodexManifestRel, $OldReasoner, $RetiredMaintenanceAgent)) {
+    foreach ($p in @($Managed) + @($OpenCodeManifestRel, $CodexManifestRel) + @($RetiredOpenCodeResources)) {
         $path = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         if (-not (Path-Is-Within $path $Repo)) {
             Fail "UNSAFE_TARGET_PATH" "Install destination escapes the target repository: $p"
@@ -393,6 +394,9 @@ function Get-LegacyOpenCodeSets {
         $allowed += ,@($currentBeforeWorktreeSetup | Where-Object { $_ -notin $missing })
         $allowed += ,@($historical | Where-Object { $_ -notin $missing })
     }
+    # The last shipped Aegis roster added both paths; retire them only when the
+    # exact manifest set and hashes prove Olympus ownership.
+    $allowed += ,@($OpenCodeManaged + '.opencode/agents/aegis.md' + '.opencode/commands/maintain.md')
     $allowed += ,@($OpenCodeManaged)
     return ,$allowed
 }
@@ -437,13 +441,13 @@ function Assert-Managed([string]$Repo, $Manifest) {
             Fail "MANAGED_FILE_DRIFT" "Managed file modified: $p"
         }
     }
-    foreach ($old in @($OldReasoner, $RetiredMaintenanceAgent)) {
+    foreach ($old in $RetiredOpenCodeResources) {
         if ($old -notin $actual -and (Test-Path -LiteralPath (Join-Path $Repo ($old -replace '/', [IO.Path]::DirectorySeparatorChar)))) {
             Fail 'INSTALL_CONFLICT' "Unowned retired agent exists: $old"
         }
     }
     $script:ExistingEntries = @($entries)
-    return @($actual | Where-Object { $_ -in @($OldReasoner, $RetiredMaintenanceAgent) })
+    return @($actual | Where-Object { $_ -in $RetiredOpenCodeResources })
 }
 
 function Assert-No-Conflicts([string]$Repo, $Manifest, $Content) {
@@ -468,7 +472,7 @@ function Assert-No-Conflicts([string]$Repo, $Manifest, $Content) {
         }
     }
     if ('opencode' -in $SelectedHarnesses) {
-        foreach ($old in @($OldReasoner, $RetiredMaintenanceAgent)) {
+        foreach ($old in $RetiredOpenCodeResources) {
             $full = Join-Path $Repo ($old -replace '/', [IO.Path]::DirectorySeparatorChar)
             if ((Test-Path -LiteralPath $full) -and -not $owned.Contains($old)) {
                 Fail 'INSTALL_CONFLICT' "Unowned retired agent exists: $old"
@@ -744,8 +748,8 @@ function Validate-Install([string]$Repo) {
                     break
                 }
             }
-            if ($null -eq $lastMismatch -and @($agents | Where-Object { $_.id -in @('sorin','maintenance') }).Count -gt 0) {
-                $lastMismatch = 'Retired sorin or maintenance agent remains active.'
+            if ($null -eq $lastMismatch -and @($agents | Where-Object { $_.id -in @('sorin','maintenance','aegis') }).Count -gt 0) {
+                $lastMismatch = 'A retired Olympus agent remains active.'
             }
             if ($null -eq $lastMismatch) { return }
             if ($attempt -lt 5) { Start-Sleep -Milliseconds 250 }
@@ -797,7 +801,7 @@ function Assert-InstalledHarness([string]$Repo, $Manifest) {
         }
     }
     if ('opencode' -in $SelectedHarnesses) {
-        foreach ($retiredPath in @($OldReasoner, $RetiredMaintenanceAgent)) {
+        foreach ($retiredPath in $RetiredOpenCodeResources) {
             $retiredFile = Join-Path $Repo ($retiredPath -replace '/', [IO.Path]::DirectorySeparatorChar)
             if (Test-Path -LiteralPath $retiredFile) {
                 Fail 'ROSTER_MISMATCH' "Retired or unowned OpenCode agent remains present: $retiredPath"

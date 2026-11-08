@@ -100,7 +100,7 @@ function Simulate([string]$case, [string]$worker = 'TERMINAL') {
     }
     [pscustomobject]@{ Status=$status; Sessions=$sessions; Consultations=$calls; WorkerParent=$workerParent; SessionID=if ($eligible) { 'argus-1' } else { '' } }
 }
-$expected = @{ kael='gpt-6.1-sol#high'; atlas='gpt-6.1-sol#high'; argus='gpt-6.1-sol#high'; thales='gpt-6.1-sol#xhigh'; helios='gpt-6.1-sol#high'; aegis='gpt-6-luna#max'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
+$expected = @{ kael='gpt-6.1-sol#high'; atlas='gpt-6.1-sol#high'; argus='gpt-6.1-sol#high'; thales='gpt-6.1-sol#xhigh'; helios='gpt-6.1-sol#high'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
     if ($QualificationSlice -eq 'Offline') { Enable-OfflineOpenCodeStub $run }
@@ -139,8 +139,6 @@ try {
     Check AR24 ($k -match 'Fourth automatic consultation DENIED' -and $a -match 'Automatic consultation #4 DENIED')
     Check AR25 ($k -match 'NO_PROGRESS:' -and $a -match 'NO_PROGRESS')
     Check AR26 ($k -match 'MISSING OUTPUT != WORKER FAILURE' -and $k -match 'COMPLETION_UNCONFIRMED' -and $k -match 'never launch replacement')
-    Check AR27 ($k -match 'Issue #2 Aegis handoff remain unchanged' -and $k -match 'MAINTENANCE_RESULT_PENDING')
-    Check AR28 ($a -match 'Kael → Aegis DENIED' -and $k -match 'Kael → Aegis remains DENIED' -and $k -match 'user → /maintain explicit only')
     Check AR29 ($k -match 'BUG_DIAGNOSIS means diagnosis only' -and $a -match 'Kael owns final completion')
     Check AR30 (@($expected.Keys | Where-Object { ([IO.File]::ReadAllText((Join-Path $source ".opencode/agents/$_.md"))) -notmatch ('(?m)^model: "?openai/' + [regex]::Escape($expected[$_]) + '"?\r?$') }).Count -eq 0)
     Check AR31 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')

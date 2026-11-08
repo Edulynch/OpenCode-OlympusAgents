@@ -66,8 +66,8 @@ def main() -> int:
     policy = toml(ROOT / "olympus" / "policies" / "orchestration.toml")
     capabilities = toml(ROOT / "olympus" / "harnesses" / "capabilities.toml")
     canonical = {path.stem for path in (ROOT / "olympus" / "roles").glob("*.md")}
-    supported_children = canonical - {"kael", "aegis"}
-    require(len(canonical) == 12 and canonical == set(models["roles"]), "canonical role/model roster mismatch")
+    supported_children = canonical - {"kael"}
+    require(len(canonical) == 11 and canonical == set(models["roles"]), "canonical role/model roster mismatch")
 
     config_path = ROOT / ".codex" / "config.toml"
     config = toml(config_path)
@@ -111,7 +111,9 @@ def main() -> int:
 
     codex_docs = (ROOT / "CODEX.md").read_text(encoding="utf-8")
     require(all(f"`{name}`" in codex_docs for name in supported_children), "root routing references a missing supported role")
-    require("Aegis is intentionally not a Codex custom agent" in codex_docs, "Aegis gap must remain explicit")
+    require("does not support contextual OlympusAgents source" in codex_docs and
+            "Codex capability gap" in codex_docs,
+            "Codex contextual maintenance gap must remain explicit")
     require(not (ROOT / "AGENTS.md").exists(), "do not add AGENTS.md: it can alter other runtimes")
     require(not (AGENTS / "aegis.toml").exists(), "unsafe Codex Aegis entrypoint must stay absent")
     codex_runtime_text = "\n".join(path.read_text(encoding="utf-8") for path in [config_path, ROOT / "CODEX.md", *files])
@@ -120,7 +122,8 @@ def main() -> int:
     require(capabilities["codex"]["ALLOW"] == "SUPPORTED", "Codex ALLOW capability drifted")
     require(capabilities["codex"]["ASK"] == "ADAPTABLE", "Codex ASK capability drifted")
     require(capabilities["codex"]["DENY"] == "GAP", "Codex hard DENY gap must remain explicit")
-    require(capabilities["codex"]["AEGIS"] == "GAP", "Codex Aegis gap must remain explicit")
+    require(capabilities["codex"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "GAP",
+            "Codex contextual maintenance gap must remain explicit")
     require(capabilities["codex"]["RESULT_DELIVERY"] == "SUPPORTED", "Codex result delivery capability drifted")
     require(capabilities["codex"]["MULTI_AGENT"] == "SUPPORTED" and capabilities["codex"]["BOUNDED_PARALLELISM"] == "SUPPORTED", "runtime-confirmed multi-agent capabilities drifted")
 
@@ -146,7 +149,7 @@ def main() -> int:
 
     if args.mode == "all":
         print("Olympus Codex static profile qualification: PASS")
-        print(f"Codex specialists: {len(files)}; Kael is root; Aegis: explicit GAP; max children: {policy['max_children']}; OpenCode roles: {len(opencode_files)}")
+        print(f"Codex specialists: {len(files)}; Kael is root; contextual maintenance: GAP; max children: {policy['max_children']}; OpenCode roles: {len(opencode_files)}")
     else:
         print("Olympus Codex static profile qualification: PASS (Codex CLI and renderer check not run)")
     return 0

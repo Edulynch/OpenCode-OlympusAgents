@@ -38,12 +38,12 @@ foreach ($match in [regex]::Matches($modelsText, '(?ms)^\[roles\.(?<role>[a-z]+)
     $models[$name] = @($modelId, $match.Groups['effort'].Value, $mode)
 }
 $expectedIds = @($models.Keys)
-Check 'MODEL_SOURCE_CANONICAL_ROSTER' ($expectedIds.Count -eq 12 -and $modelsText -match '(?m)^\[families\.sol\]\r?$' -and $modelsText -match '(?m)^\[families\.luna\]\r?$')
+Check 'MODEL_SOURCE_CANONICAL_ROSTER' ($expectedIds.Count -eq 11 -and $modelsText -match '(?m)^\[families\.sol\]\r?$' -and $modelsText -match '(?m)^\[families\.luna\]\r?$')
 
 $agentsRoot = Join-Path $root '.opencode/agents'
 $agentFiles = @(Get-ChildItem -LiteralPath $agentsRoot -Filter '*.md' -File)
 $actualIds = @($agentFiles | ForEach-Object BaseName)
-Check 'ROSTER_12_ROLES' ($agentFiles.Count -eq 12 -and
+Check 'ROSTER_11_ROLES' ($agentFiles.Count -eq 11 -and
     [string]::Join(',', @($actualIds | Sort-Object)) -ceq [string]::Join(',', @($expectedIds | Sort-Object)))
 
 foreach ($name in $models.Keys) {
@@ -60,8 +60,8 @@ Check 'ROOT_DEFAULT_MODEL_FROM_CORE' ($config -match '(?m)^\s*"model"\s*:\s*"ope
 $installer = Text 'scripts/bootstrap.ps1'
 Check 'INSTALLER_DERIVES_MODELS_FROM_GENERATED_ROLES' ($installer -match 'function Get-Expected-Agents' -and
     $installer -match 'Join-Path.*\.opencode/agents' -and $installer -match '\(\?m\)\^model:' -and
-    $installer -notmatch '(?m)^\s*"(?:kael|thales|atlas|argus|talos|helios|veyra|orin|kovan|nox|vera|aegis)"=@\(')
-Check 'INSTALLER_MODEL_DISCOVERY' ($installer -notmatch '(?m)^\s*"(?:kael|thales|atlas|argus|talos|helios|veyra|orin|kovan|nox|vera|aegis)"=@\(')
+    $installer -notmatch '(?m)^\s*"(?:kael|thales|atlas|argus|talos|helios|veyra|orin|kovan|nox|vera)"=@\(')
+Check 'INSTALLER_MODEL_DISCOVERY' ($installer -notmatch '(?m)^\s*"(?:kael|thales|atlas|argus|talos|helios|veyra|orin|kovan|nox|vera)"=@\(')
 
 $fixture = Text 'tests/release/fixtures/opencode.ps1'
 Check 'RELEASE_MODEL_FIXTURE_CURRENT_AND_STABLE' ($fixture -match "openai/gpt-6\.1-sol" -and

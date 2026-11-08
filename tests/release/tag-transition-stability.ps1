@@ -384,7 +384,7 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
     }
     foreach ($required in @('issue #1 remains OPEN',
             '[#10](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10) are CLOSED',
-            'Codex DENY/Aegis remain gaps')) {
+            'Codex DENY and contextual Olympus maintenance remain explicit frozen GAPs')) {
         if (-not [regex]::IsMatch($roadmap, [regex]::Escape($required), [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
             $errors.Add('DOC_KNOWN_CAPABILITY_GAP_MISSING')
         }
@@ -414,13 +414,13 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
     }
     $openCodeGlobal = $openCodeStates['GLOBAL_RUNTIME_DISCOVERY']
     $codexGlobal = $codexStates['GLOBAL_RUNTIME_DISCOVERY']
-    $readmeOpenAegisClaim = $readme -match '(?i)explicit `/maintain` invokes hidden Aegis'
-    $readmeCodexAegisClaim = $readme -match '(?i)Codex has no equivalent Aegis capability'
+    $readmeOpenMaintenanceClaim = $readme -match '(?i)OpenCode supports this contextual workflow'
+    $readmeCodexMaintenanceGapClaim = $readme -match '(?i)Codex currently declares it a capability gap'
     $roadmapOpenGlobal = '(?i)OpenCode V2[^\r\n]*GLOBAL_RUNTIME_DISCOVERY\s*=\s*`?' + [regex]::Escape([string]$openCodeGlobal) + '`?'
     $roadmapCodexGlobal = '(?i)Codex remains\s+`?' + [regex]::Escape([string]$codexGlobal) + '`?\s+on separately supplied evidence'
     if ($capabilityMismatch -or -not $openCodeGlobal -or -not $codexGlobal -or
-        $readmeOpenAegisClaim -ne ($openCodeStates['AEGIS'] -eq 'SUPPORTED') -or
-        $readmeCodexAegisClaim -ne ($codexStates['AEGIS'] -eq 'GAP') -or
+        $readmeOpenMaintenanceClaim -ne ($openCodeStates['CONTEXTUAL_OLYMPUS_MAINTENANCE'] -eq 'SUPPORTED') -or
+        $readmeCodexMaintenanceGapClaim -ne ($codexStates['CONTEXTUAL_OLYMPUS_MAINTENANCE'] -eq 'GAP') -or
         -not [regex]::IsMatch($roadmap, $roadmapOpenGlobal) -or
         -not [regex]::IsMatch($roadmap, $roadmapCodexGlobal)) {
         $errors.Add('DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH')
@@ -499,14 +499,14 @@ try {
     $badGlobalTable['docs/HARNESS-CAPABILITIES.md'] = ([string]$badGlobalTable['docs/HARNESS-CAPABILITIES.md']).Replace($correctRow, $wrongRow)
     Assert-Rejected $badGlobalTable $version 'POST_TAG' 'DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH' 'REGRESSION_REJECTS_GLOBAL_CAPABILITY_TABLE_MISMATCH'
 
-    $badAegisCapabilityTable = Copy-ReleaseDocs $docs
-    $correctAegisRow = '| `AEGIS` | SUPPORTED | GAP |'
-    $wrongAegisRow = '| `AEGIS` | GAP | GAP |'
-    if (-not ([string]$badAegisCapabilityTable['docs/HARNESS-CAPABILITIES.md']).Contains($correctAegisRow)) {
-        throw 'REGRESSION_MUTATION_SETUP_FAILED: expected Aegis capability row missing.'
+    $badMaintenanceCapabilityTable = Copy-ReleaseDocs $docs
+    $correctMaintenanceRow = '| `CONTEXTUAL_OLYMPUS_MAINTENANCE` | SUPPORTED | GAP |'
+    $wrongMaintenanceRow = '| `CONTEXTUAL_OLYMPUS_MAINTENANCE` | GAP | GAP |'
+    if (-not ([string]$badMaintenanceCapabilityTable['docs/HARNESS-CAPABILITIES.md']).Contains($correctMaintenanceRow)) {
+        throw 'REGRESSION_MUTATION_SETUP_FAILED: expected contextual maintenance capability row missing.'
     }
-    $badAegisCapabilityTable['docs/HARNESS-CAPABILITIES.md'] = ([string]$badAegisCapabilityTable['docs/HARNESS-CAPABILITIES.md']).Replace($correctAegisRow, $wrongAegisRow)
-    Assert-Rejected $badAegisCapabilityTable $version 'POST_TAG' 'DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH' 'REGRESSION_REJECTS_AEGIS_CAPABILITY_TABLE_MISMATCH'
+    $badMaintenanceCapabilityTable['docs/HARNESS-CAPABILITIES.md'] = ([string]$badMaintenanceCapabilityTable['docs/HARNESS-CAPABILITIES.md']).Replace($correctMaintenanceRow, $wrongMaintenanceRow)
+    Assert-Rejected $badMaintenanceCapabilityTable $version 'POST_TAG' 'DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH' 'REGRESSION_REJECTS_CONTEXTUAL_MAINTENANCE_CAPABILITY_TABLE_MISMATCH'
 
     $correctClaim = '`GLOBAL_RUNTIME_DISCOVERY = ' + $openCodeState + '`'
     $wrongClaim = '`GLOBAL_RUNTIME_DISCOVERY = ' + $otherState + '`'
@@ -518,7 +518,7 @@ try {
     Assert-Rejected $badGlobalRoadmap $version 'POST_TAG' 'DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH' 'REGRESSION_REJECTS_GLOBAL_ROADMAP_MISMATCH'
 
     $badKnownCodexGap = Copy-ReleaseDocs $docs
-    $codexGapClaim = 'Codex DENY/Aegis remain gaps'
+    $codexGapClaim = 'Codex DENY and contextual Olympus maintenance remain explicit frozen GAPs'
     if (-not ([string]$badKnownCodexGap['docs/ROADMAP.md']).Contains($codexGapClaim)) {
         throw 'REGRESSION_MUTATION_SETUP_FAILED: existing Codex capability gaps missing.'
     }

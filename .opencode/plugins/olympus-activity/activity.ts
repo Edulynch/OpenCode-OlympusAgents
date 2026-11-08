@@ -4,7 +4,6 @@ type Session = { id: string; parentID?: string | null; agent?: string; title?: s
 type Row = { id: string; agent: string; title: string }
 
 const names: Record<string, string> = {
-  aegis: "Aegis — The Keeper",
   argus: "Argus — The Bug Hunter",
   atlas: "Atlas — The Planner",
   helios: "Helios — The Optimizer",
@@ -26,7 +25,7 @@ function label(agent?: string): string {
 function title(session: Session): string {
   const value = (session.title || "").replace(/\s+/g, " ").trim()
   if (!value || /^(?:(?:new |child )?session|(?:subagent )?task|untitled)(?: \d+)?$/i.test(value)) {
-    return session.agent?.toLowerCase() === "aegis" ? "Aegis task" : "Subagent task"
+    return "Subagent task"
   }
   return value.length > 64 ? value.slice(0, 61) + "…" : value
 }

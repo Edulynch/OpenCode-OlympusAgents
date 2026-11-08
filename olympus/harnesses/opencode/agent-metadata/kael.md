@@ -8,13 +8,29 @@ permissions:
     effect: ask
   - action: shell
     resource: "*"
-    effect: deny
-  - action: serena_*
+    effect: allow
+  # Serena is limited to read-only semantic navigation; edits use scoped native tools.
+  - action: serena_get_symbols_overview
     resource: "*"
-    effect: deny
+    effect: allow
+  - action: serena_find_symbol
+    resource: "*"
+    effect: allow
+  - action: serena_find_referencing_symbols
+    resource: "*"
+    effect: allow
+  - action: serena_find_implementations
+    resource: "*"
+    effect: allow
+  - action: serena_find_declaration
+    resource: "*"
+    effect: allow
+  - action: serena_get_diagnostics_for_file
+    resource: "*"
+    effect: allow
   - action: edit
     resource: "*"
-    effect: deny
+    effect: allow
   - action: subagent
     resource: "*"
     effect: deny
@@ -49,15 +65,24 @@ permissions:
     resource: helios
     effect: allow
   - action: edit
-    resource: "olympus/**"
+    resource: ".opencode/agents/**"
+    effect: deny
+  - action: edit
+    resource: ".opencode/plugins/olympus-activity/**"
+    effect: deny
+  - action: edit
+    resource: ".opencode/scripts/worktree-setup.ps1"
+    effect: deny
+  - action: edit
+    resource: ".opencode/orchestrator-install.json"
+    effect: deny
+  - action: edit
+    resource: "opencode.jsonc"
     effect: deny
   - action: edit
     resource: ".codex/**"
     effect: deny
   - action: edit
     resource: "CODEX.md"
-    effect: deny
-  - action: edit
-    resource: "scripts/render_harnesses.py"
     effect: deny
 ---

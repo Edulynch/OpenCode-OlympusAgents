@@ -2,6 +2,28 @@
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "kael",
   "model": "{{opencode_kael_model}}",
+  "mcp": {
+    "servers": {
+      "serena": {
+        "type": "local",
+        "command": [
+          "serena",
+          "start-mcp-server",
+          "--context",
+          "ide",
+          "--transport",
+          "stdio",
+          "--project-from-cwd",
+          "--enable-web-dashboard",
+          "False",
+          "--open-web-dashboard",
+          "False"
+        ],
+        "disabled": false,
+        "codemode": false
+      }
+    }
+  },
   "permissions": [
     // External paths require native user approval; do not grant every path.
     {
@@ -10,7 +32,6 @@
       "effect": "ask"
     },
     // Shell is globally denied; Kovan and Nox opt into trusted-project shell.
-    // The hidden Aegis agent explicitly allows shell for /maintain only.
     {
       "action": "shell",
       "resource": "*",

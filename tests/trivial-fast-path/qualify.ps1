@@ -94,7 +94,8 @@ try {
         $section -match 'cross-cutting or\s+cross-subsystem' -and $section -match 'not destructive, high-risk, security-sensitive' -and
         $section -match 'explicit request for independent review' -and $section -match 'checked directly and cheaply')
     Check 'FAST_POLICY_NATIVE_ASK' ($section -match 'exact operation, `WRITE_SCOPE`, canonical\s+repository root' -and
-        $section -match 'only the writer with the\s+exact `NATIVE_ASK` grant' -and
+        $section -match 'positive project-ownership evidence, protected-path exclusions,\s+and current task grant before the tool attempt' -and
+        $section -match 'selected writer attempts only that native tool operation' -and
         $section -match 'rejection or\s+cancellation stops it without fallback' -and
         $section -match 'requested target was written within exact scope' -and
         $section -match 'no Olympus-owned\s+resource was modified')
@@ -112,8 +113,8 @@ try {
         $docs -match 'not a seconds\s+SLA')
     Check 'FAST_POLICY_GENERIC' ($docs -match 'special-case project names' -and
         $section -match 'eligible write' -and $section -match 'actual objective')
-    Check 'FAST_POLICY_TRIVIAL_COMPLETION_GATE' ($kael -match 'TRIVIAL FAST-PATH CHANGE: one scoped implementer plus lightweight direct Master Orchestrator validation' -and
-        $kael -match 'no separate tester/reviewer unless the user requests review')
+    Check 'FAST_POLICY_TRIVIAL_COMPLETION_GATE' ($kael -match 'TRIVIAL FAST-PATH CHANGE: Kael directly implements a small scoped change when effective tools/authority allow, or uses one scoped Kovan writer when that adds value, followed by lightweight direct Kael validation' -and
+        $kael -match 'no separate tester/reviewer unless requested or new evidence requires escalation')
     Check 'SURGICAL_MODE_MINIMUM_SCOPE_WITH_TESTS' ($surgicalMode -match 'files causally necessary' -and
         $surgicalMode -match 'including indispensable tests or dependencies' -and
         $surgicalMode -match 'Avoid refactors,\s+upgrades, cleanup, or opportunistic improvements' -and

@@ -30,25 +30,28 @@ function Gate($units) {
 }
 try {
     $kael = Text '.opencode/agents/kael.md'
-    $aegis = Text '.opencode/agents/aegis.md'
-    $command = Text '.opencode/commands/maintain.md'
-    $maintenancePolicy = Text 'olympus/policies/maintenance-plane.md'
+    $maintenancePolicy = Text 'olympus/policies/maintenance-context.md'
     $docs = Text 'docs/DEVELOPMENT.md'
     Check 'KAEL_JOIN' ($kael -match 'enumerate the required direct child' -and $kael -match 'consume each result' -and
         $kael -match 'Never declare final completion while a required direct child is non-terminal' -and
         $kael -match 'IN PROGRESS / waiting')
-    Check 'AEGIS_PARALLEL' ($aegis -match 'Independent administrative work may run concurrently' -and
-        $aegis -match 'NOT Olympus subagent routing' -and $aegis -match 'bounded,\s*task-appropriate')
-    Check 'AEGIS_JOIN' ($aegis -match 'DEFINE the required units' -and
-        $aegis -match 'WAIT / JOIN every required session family' -and $aegis -match 'COLLECT terminal' -and
-        $aegis -match 'Recheck family membership' -and $aegis -match 'session.inbox.list')
     Check 'API_SEMANTICS' ($docs -match 'MESSAGE_COMPLETE, ROOT_IDLE and FAMILY_COMPLETE' -and
         $docs -match 'No native family-wide wait|no documented family-wide wait' -and $docs -match 'session/active' -and
         $docs -match 'CLI `opencode run` exit or a root assistant response is not a session-family completion signal')
-    Check 'ROUTING_BOUNDARY' ($command -match 'subagent: true' -and $command -match 'Do not delegate' -and
-        $aegis -match 'Do not invoke normal Olympus workers' -and
-        $maintenancePolicy -match 'supported OpenCode launch path is user → `/maintain <task>` → hidden Aegis subagent' -and
-        $maintenancePolicy -match 'Kael → Aegis DENIED; child → Aegis DENIED')
+    Check 'CONTEXTUAL_MAINTENANCE' ($maintenancePolicy -match 'Kael is the only root orchestrator' -and
+        $maintenancePolicy -match 'There is no separate maintenance role, command' -and
+        $maintenancePolicy -match 'canonical Olympus Core files' -and
+        $maintenancePolicy -match 'independent project-identity evidence identifies OlympusAgents' -and
+        $maintenancePolicy -match 'A directory name, a request mentioning Olympus, or an isolated matching file is not sufficient evidence' -and
+        $maintenancePolicy -match 'If identity or target is unclear, do not perform dependent writes' -and
+        $maintenancePolicy -match 'different user project' -and
+        $maintenancePolicy -match 'do not reach into a separate OlympusAgents checkout' -and
+        $maintenancePolicy -match 'manifest-owned files' -and
+        $kael -match '## Identify the target repository' -and
+        $kael -match '## Preserve the external-project boundary' -and
+        $kael -match 'independent project-identity evidence identifies OlympusAgents' -and
+        $kael -match 'do not perform dependent writes' -and
+        $kael -match 'manifest-owned files')
     $good = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='succeeded'; validated=$true}
     $bad = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='failed'; validated=$false}
     $missing = [pscustomobject]@{known=$false; terminal=$false; collected=$false; familyKnown=$false; inboxEmpty=$false; parentConsumed=$false; outcome=''; validated=$false}
@@ -92,13 +95,12 @@ try {
         $codexRoot -match 'Preserve mandatory independent validation or review' -and
         $codexRoot -match 'all reconciled required results')
     Check 'PROGRESS_NOT_FINAL' ($kael -match 'Progress\s+messages must explicitly say IN PROGRESS / waiting' -and
-        $aegis -match 'IN PROGRESS progress update is allowed, but is not final success')
+        $kael -match 'Never declare final completion while a required direct child is non-terminal')
     $agents = Get-ChildItem (Join-Path $root '.opencode/agents') -Filter '*.md'
     $allAgentText = ($agents | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
     Check 'NO_LUNA_FAST' ($allAgentText -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
     $workersMatch = @(@('veyra','orin','kovan','nox','vera') | ForEach-Object { (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max' }) -notcontains $false
     Check 'MODELS' ($kael -match 'model: "?openai/gpt-6.1-sol#high' -and
-        $aegis -match 'model: openai/gpt-6-luna#max' -and
         (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.1-sol#xhigh' -and
         $workersMatch)
     Write-Output 'COMPLETION GATE QUALIFICATION: PASS (static + synthetic; live qualification separate)'

@@ -465,7 +465,7 @@ def _role_rows(old_models: dict[str, Any], new_models: dict[str, Any], identitie
             },
             "representation": {
                 "opencode": "agent",
-                "codex": "root" if role == "kael" else "absent" if role == "aegis" else "agent",
+                "codex": "root" if role == "kael" else "agent",
             },
         })
     return rows
@@ -484,8 +484,8 @@ def _make_candidate(source_root: str | Path, operation: str,
     try:
         old_models, policies, capabilities, identities, roles = renderer.checked_sources(source)
         roles = set(roles)
-        if len(roles) != 12:
-            raise ModelEditError(f"Expected twelve canonical roles, found {len(roles)}")
+        if len(roles) != 11:
+            raise ModelEditError(f"Expected eleven canonical roles, found {len(roles)}")
         if set(identities) != roles or set(old_models.get("roles", {})) != roles:
             raise ModelEditError("Source roster, identities, and model roles are ambiguous")
         old_models = dict(old_models)

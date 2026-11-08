@@ -4,9 +4,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $kael = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/kael.md'))
-$aegis = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/aegis.md'))
 $kovan = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/kovan.md'))
 $nox = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/nox.md'))
+$maintenance = [IO.File]::ReadAllText((Join-Path $root 'olympus/policies/maintenance-context.md'))
 $fixture = Join-Path $PSScriptRoot 'fixtures'
 
 function Check([string]$Id, [bool]$Condition) {
@@ -30,20 +30,18 @@ try {
     $kaelMetadata = Frontmatter $kael
     $noxMetadata = Frontmatter $nox
     $discovery = Section $kael 'Task-scoped, progressive discovery'
-    $admin = Section $aegis 'Administrative fast path'
     $mission = Section $kael 'Mission and routing'
-    $handoff = Section $kael 'Explicit Aegis result handoff'
-    $maintenanceBoundary = Section $kael 'Target ownership and project-plane boundary'
 
     Check ORDER ($mission.IndexOf('Capability Preflight') -ge 0 -and
         $mission.IndexOf('Capability Preflight') -lt $mission.IndexOf('choose DIRECT') -and
         $kael.IndexOf('## Capability Preflight') -lt $kael.IndexOf('Use the delegation gate'))
     Check PREFLIGHT ($preflight -match 'actual outcome' -and $preflight -match 'required capabilities' -and
-        $preflight -match 'known Olympus' -and $preflight -match 'is any repository discovery needed' -and
+        $preflight -match 'target-repository\s+identity' -and $preflight -match 'role permissions' -and
+        $preflight -match 'is any repository discovery\s+needed' -and
         $preflight -match 'not a research phase')
-    Check CAPABILITY_ROUTE_ORDER ($preflight -match 'INTENT → REQUIRED_CAPABILITY → ROLE →\s+EFFECTIVE_AUTHORITY → NATIVE_ROUTE → EXECUTE/BLOCK' -and
-        $preflight -match 'Kael''s own `shell: deny` applies to Kael''s\s+direct shell use' -and
-        $preflight -match 'by itself it does not establish that an authorized specialist\s+route is unavailable')
+    Check CAPABILITY_ROUTE_ORDER ($preflight -match 'INTENT → TARGET_REPOSITORY → REQUIRED_CAPABILITY → ROLE →\s+EFFECTIVE_AUTHORITY → NATIVE_ROUTE → EXECUTE/BLOCK' -and
+        $preflight -match 'scope against that role''s effective native permission, user constraints,\s+ownership, and policy boundaries' -and
+        $preflight -match 'selected specialist can be invoked under the effective `subagent` permission')
     Check SPECIALIST_ROUTE ($preflight -match 'read-only `git status --short` to\s+Nox as one bounded child assignment' -and
         $preflight -match '`SCOPE: read-only git status --short`\s+and `REPOSITORY_ROOT: <the identified trusted repository root>`' -and
         $preflight -match 'Reconcile and consume that original child''s terminal result' -and
@@ -69,21 +67,30 @@ try {
     Check NO_DELEGATION ($preflight -match 'Do not invoke Veyra to decide\s+whether Olympus has permission' -and
         $preflight -match 'Orin to decide the plane' -and
         $preflight -match 'inspect the project\s+to confirm an already-known boundary')
-    Check NORMAL_GIT_ROUTING ($preflight -match 'Ordinary Git work in a trusted user project belongs to the normal plane' -and
+    Check NORMAL_GIT_ROUTING ($preflight -match 'Ordinary Git work in a trusted project belongs to Kael''s normal workflow' -and
         $preflight -match 'Kovan is the normal-plane Git writer' -and
         $preflight -match 'Nox may perform only read-only Git\s+integrity checks' -and
-        $preflight -match 'do not\s+require Aegis solely because they are Git' -and
         $kael -match 'TASK_TYPE: GIT_ONLY or\s+MIXED' -and
         $kovan -match 'For GIT_ONLY, WRITE_SCOPE must be exactly' -and
         $kovan -match 'exact task-owned paths/refs')
     # A second known normal-plane blocker must precede optional discovery.
     Check CAPABILITY_BLOCKED ($preflight -match 'external action has no\s+available authorized path' -and
         $preflight -match 'explain the blocker before optional research')
-    Check BOUNDARY ($aegis -match 'Kael → Aegis DENIED' -and
-        $aegis -match 'The supported path is user → `/maintain` → Aegis' -and
-        $handoff -match 'cannot invoke or' -and $handoff -match 'delegate to Aegis' -and
-        $kael -notmatch '(?m)^\s*- action: subagent\s*\r?\n\s*resource: aegis\s*\r?\n\s*effect: allow')
-    Check KAEL_NATIVE_PERMISSION ($kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
+    Check BOUNDARY ($maintenance -match 'Kael is the only root orchestrator' -and
+        $maintenance -match 'There is no separate maintenance role, command' -and
+        $maintenance -match 'canonical Olympus Core files' -and
+        $maintenance -match 'olympus/core/models\.toml' -and
+        $maintenance -match 'olympus/core/identities\.toml' -and
+        $maintenance -match 'olympus/policies/routing\.md' -and
+        $maintenance -match 'independent project-identity evidence identifies OlympusAgents' -and
+        $maintenance -match 'A directory name, a request mentioning Olympus, or an isolated matching file is not sufficient evidence' -and
+        $maintenance -match 'If identity or target is unclear, do not perform dependent writes' -and
+        $maintenance -match 'For a different user project, work only on that project' -and
+        $maintenance -match 'Do not reach into a separate OlympusAgents checkout' -and
+        $maintenance -match 'manifest-owned files' -and
+        $kael -notmatch '(?i)Aegis|/maintain')
+    Check KAEL_NATIVE_PERMISSION ($kaelMetadata -match '(?m)^  - action: external_directory\r?\n    resource: "\*"\r?\n    effect: ask(?:\r?\n|$)' -and
+        $kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: allow(?:\r?\n|$)' -and
         $kaelMetadata -match '(?m)^  - action: subagent\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
         $kaelMetadata -match '(?m)^  - action: subagent\r?\n    resource: nox\r?\n    effect: allow(?:\r?\n|$)')
     Check NOX_NATIVE_SHELL ($noxMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: allow(?:\r?\n|$)' -and
@@ -110,14 +117,13 @@ try {
     Check BROAD_ALLOWED ($discovery -match 'Refactor authentication across\s+all services' -and
         $discovery -match 'audit these 40 independent\s+modules' -and $discovery -match 'repository-wide analysis')
     # Admitted Olympus Git work uses administrative rather than source-first policy.
-    Check MAINTENANCE_ADMIN ($admin -match 'After `/maintain` starts the task' -and
-        $admin -match 'start with administrative\s+context only' -and
-        $admin -match 'Do not first\s+inventory source' -and $admin -match 'history\s+rewrite plus push' -and
-        $admin -match 'non-mutating' -and $admin -match 'does not establish that the remote\s+will accept a write')
+    Check CONTEXTUAL_MAINTENANCE ($maintenance -match 'canonical Olympus Core files' -and
+        $maintenance -match 'project-identity evidence' -and
+        $maintenance -match 'do not perform dependent writes' -and
+        $maintenance -match 'A native `/goal` surface remains opt-in')
     Check INVARIANTS ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kael -match 'model: "openai/gpt-6.1-sol#high"' -and
-        $aegis -match 'model: openai/gpt-6-luna#max' -and
-        $kael -notmatch 'Luna Fast|project-context\.json' -and $aegis -notmatch 'project-context\.json')
+        $kael -notmatch 'Luna Fast|project-context\.json')
     Write-Output 'PREFLIGHT / SCOPED DISCOVERY QUALIFICATION: PASS (static policy contracts + fixture only; no live delegation or native permission behavior executed)'
     exit 0
 } catch {

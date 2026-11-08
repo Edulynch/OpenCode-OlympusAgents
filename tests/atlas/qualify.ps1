@@ -112,8 +112,6 @@ try {
     Check AT18 ($a -match 'Third automatic consultation DENIED' -and $k -match 'Third automatic Atlas consultation DENIED')
     Check AT19 ($a -match 'NO_PROGRESS:' -and $k -match 'NO_PROGRESS:')
     Check AT20 ($k -match 'reconcile the known original worker' -and $k -match 'COMPLETION_UNCONFIRMED' -and $k -match 'No blind replacement')
-    Check AT21 ($k -match 'Kael → Aegis remains DENIED' -and $a -match 'user → /maintain')
-    Check AT22 ($a -match 'never aegis' -and $k -match 'never request Aegis as an evidence worker')
     Check AT23 ($a -match 'Kael owns actual routing, reconciliation and final completion' -and $k -match 'A STATUS: PLAN is planning completed')
     # Beta.3 intentionally adds the shared Authority handoff to the prior
     # read-only roles; verify policy integration without changing their models.

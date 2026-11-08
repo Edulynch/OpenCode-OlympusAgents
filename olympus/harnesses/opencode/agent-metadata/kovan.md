@@ -9,9 +9,25 @@ permissions:
   - action: shell
     resource: "*"
     effect: allow
-  - action: serena_*
+  # Serena is limited to read-only semantic navigation; edits use scoped native tools.
+  - action: serena_get_symbols_overview
     resource: "*"
-    effect: deny
+    effect: allow
+  - action: serena_find_symbol
+    resource: "*"
+    effect: allow
+  - action: serena_find_referencing_symbols
+    resource: "*"
+    effect: allow
+  - action: serena_find_implementations
+    resource: "*"
+    effect: allow
+  - action: serena_find_declaration
+    resource: "*"
+    effect: allow
+  - action: serena_get_diagnostics_for_file
+    resource: "*"
+    effect: allow
   - action: subagent
     resource: "*"
     effect: deny
@@ -52,9 +68,6 @@ permissions:
     resource: ".opencode/agents/**"
     effect: deny
   - action: edit
-    resource: ".opencode/commands/maintain.md"
-    effect: deny
-  - action: edit
     resource: ".opencode/plugins/olympus-activity/**"
     effect: deny
   # The worktree provisioning script is Olympus-owned, not a project plugin.
@@ -92,15 +105,9 @@ permissions:
     resource: "*"
     effect: allow
   - action: edit
-    resource: "olympus/**"
-    effect: deny
-  - action: edit
     resource: ".codex/**"
     effect: deny
   - action: edit
     resource: "CODEX.md"
-    effect: deny
-  - action: edit
-    resource: "scripts/render_harnesses.py"
     effect: deny
 ---

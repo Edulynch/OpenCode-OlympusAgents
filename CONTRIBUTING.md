@@ -6,7 +6,7 @@ Thanks for helping keep the framework reliable and approachable. Small, focused 
 
 - **OpenCode V2 — ACTIVE DEVELOPMENT.** Prioritize it for new features, agents, commands, architecture, and runtime capabilities. New OpenCode-only capabilities do not require Codex equivalents.
 - **Codex — FROZEN COMPATIBILITY.** Preserve existing Codex components, installers, manifests, and uninstall protections. Do not add integrations or pursue parity-only gap closure. Only evidenced critical Codex fixes or regressions introduced by shared-code changes are in scope.
-- Keep existing shared-integrity and compatibility tests; do not create Codex gates for OpenCode-only work. Codex gaps in authority, Aegis, hard `DENY`, and observability remain frozen. Do not claim newer Codex versions verified without evidence.
+- Keep existing shared-integrity and compatibility tests; do not create Codex gates for OpenCode-only work. Codex gaps in authority, contextual Olympus maintenance, hard `DENY`, and observability remain frozen. Do not claim newer Codex versions verified without evidence.
 
 ## Before you start
 

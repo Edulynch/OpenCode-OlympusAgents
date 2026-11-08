@@ -110,9 +110,10 @@ try {
     Check 'GLOBAL_BOTH_PROJECT_OVERRIDES_RETAINED' ($globalInstall.Text -match 'GLOBAL_INSTALLED PROJECT_LOCAL_REMAINS_AS_OVERRIDE' -and
         $globalInstall.Text -match 'PROJECT_LOCAL_OVERRIDE: opencode' -and $globalInstall.Text -match 'PROJECT_LOCAL_OVERRIDE: codex' -and
         (Snapshot $project) -ceq $projectBeforeMigration) ("exit=$($globalInstall.Code)`n$($globalInstall.Text)`nPROJECT_SNAPSHOT_UNCHANGED=$((Snapshot $project) -ceq $projectBeforeMigration)")
-    Check 'GLOBAL_OPENCODE_RESOLVES_CURRENT_CLI_CONFIG_PATH' ((Test-Path (Join-Path $openCodeRoot 'agents/kael.md')) -and
-        (Test-Path (Join-Path $openCodeRoot 'commands/maintain.md')) -and
-        (Test-Path (Join-Path $openCodeRoot 'plugins/olympus-activity/activity.ts')))
+    Check 'GLOBAL_OPENCODE_CONTEXTUAL_KAEL_ROSTER' ((Test-Path (Join-Path $openCodeRoot 'agents/kael.md')) -and
+        (Test-Path (Join-Path $openCodeRoot 'plugins/olympus-activity/activity.ts')) -and
+        -not (Test-Path (Join-Path $openCodeRoot 'agents/aegis.md')) -and
+        -not (Test-Path (Join-Path $openCodeRoot 'commands/maintain.md')))
     Check 'GLOBAL_CODEX_PROFILE_AND_AGENTS' ((Test-Path (Join-Path $codexHome 'agents/veyra.toml')) -and
         (Test-Path (Join-Path $codexHome 'olympus.config.toml')) -and
         (Test-Path (Join-Path $codexHome 'AGENTS.md')) -and
@@ -150,7 +151,59 @@ try {
     $openCodeOnlyManifest = Get-Content (Join-Path $openCodeOnlyRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
     Check 'GLOBAL_OPENCODE_ONLY_SELECTOR' ($openCodeOnly.Code -eq 0 -and $openCodeOnlyManifest.scope -eq 'global' -and
         $openCodeOnlyManifest.installed_harnesses.Count -eq 1 -and $openCodeOnlyManifest.installed_harnesses[0] -eq 'opencode' -and
-        $openCodeOnlyManifest.managed_files.Count -eq 15)
+        $openCodeOnlyManifest.managed_files.Count -eq 13)
+
+    # A clean-break update retires the previous Aegis/command only when the old
+    # global manifest still owns their exact bytes.
+    $openCodeOnlyManifestPath = Join-Path $openCodeOnlyRoot 'olympus/orchestrator-install.json'
+    $legacyPaths = @('agents/aegis.md','commands/maintain.md')
+    $legacyText = @('historical generated agent','historical generated command')
+    $retiredManifest = Get-Content -LiteralPath $openCodeOnlyManifestPath -Raw | ConvertFrom-Json
+    for ($i = 0; $i -lt $legacyPaths.Count; $i++) {
+        $legacyFile = Join-Path $openCodeOnlyRoot $legacyPaths[$i]
+        [IO.Directory]::CreateDirectory((Split-Path -Parent $legacyFile)) | Out-Null
+        [IO.File]::WriteAllText($legacyFile, $legacyText[$i] + "`n", $utf8)
+        $retiredManifest.managed_files += [pscustomobject]@{
+            path=$legacyPaths[$i]
+            sha256=(Get-FileHash -LiteralPath $legacyFile -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+    }
+    [IO.File]::WriteAllText($openCodeOnlyManifestPath, (($retiredManifest | ConvertTo-Json -Depth 20) + "`n"), $utf8)
+    $globalMigration = Run-Installer $project @('-Scope','global','-Harness','opencode')
+    $migratedGlobalManifest = Get-Content -LiteralPath $openCodeOnlyManifestPath -Raw | ConvertFrom-Json
+    Check 'GLOBAL_RETIRED_RESOURCES_HASH_VERIFIED_REMOVAL' ($globalMigration.Code -eq 0 -and
+        -not (Test-Path (Join-Path $openCodeOnlyRoot 'agents/aegis.md')) -and
+        -not (Test-Path (Join-Path $openCodeOnlyRoot 'commands/maintain.md')) -and
+        $migratedGlobalManifest.managed_files.Count -eq 13)
+
+    $openCodeDriftRoot = Join-Path $run 'OpenCode Global Retired Drift'
+    [IO.Directory]::CreateDirectory($openCodeDriftRoot) | Out-Null
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeDriftRoot
+    $driftInstall = Run-Installer $project @('-Scope','global','-Harness','opencode')
+    if ($driftInstall.Code -ne 0) { throw "Global drift fixture install failed: $($driftInstall.Text)" }
+    $driftManifestPath = Join-Path $openCodeDriftRoot 'olympus/orchestrator-install.json'
+    $driftManifest = Get-Content -LiteralPath $driftManifestPath -Raw | ConvertFrom-Json
+    $driftLegacy = Join-Path $openCodeDriftRoot 'agents/aegis.md'
+    [IO.File]::WriteAllText($driftLegacy, "historical generated agent`n", $utf8)
+    $driftManifest.managed_files += [pscustomobject]@{
+        path='agents/aegis.md'
+        sha256=(Get-FileHash -LiteralPath $driftLegacy -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    $driftCommand = Join-Path $openCodeDriftRoot 'commands/maintain.md'
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $driftCommand)) | Out-Null
+    [IO.File]::WriteAllText($driftCommand, "historical generated command`n", $utf8)
+    $driftManifest.managed_files += [pscustomobject]@{
+        path='commands/maintain.md'
+        sha256=(Get-FileHash -LiteralPath $driftCommand -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    [IO.File]::WriteAllText($driftManifestPath, (($driftManifest | ConvertTo-Json -Depth 20) + "`n"), $utf8)
+    [IO.File]::AppendAllText($driftLegacy, "user edit`n", $utf8)
+    $driftBefore = Snapshot $openCodeDriftRoot
+    $driftUpdate = Run-Installer $project @('-Scope','global','-Harness','opencode')
+    Check 'GLOBAL_MODIFIED_RETIRED_RESOURCE_PRESERVED' ($driftUpdate.Code -ne 0 -and
+        $driftUpdate.Text -match 'GLOBAL_MANAGED_FILE_DRIFT' -and
+        (Snapshot $openCodeDriftRoot) -ceq $driftBefore)
+
     $codexOnlyHome = Join-Path $run 'Codex Only Global Home'
     [IO.Directory]::CreateDirectory($codexOnlyHome) | Out-Null
     $env:CODEX_HOME = $codexOnlyHome
@@ -170,7 +223,7 @@ try {
     $codexManifest = $codexManifestText | ConvertFrom-Json
     Check 'GLOBAL_MANIFEST_SCOPE_AND_RESOURCES' ($openManifest.scope -eq 'global' -and $codexManifest.scope -eq 'global' -and
         $openManifest.installed_harnesses[0] -eq 'opencode' -and $codexManifest.installed_harnesses[0] -eq 'codex' -and
-        $openManifest.managed_files.Count -eq 15 -and $codexManifest.managed_files.Count -eq 12)
+        $openManifest.managed_files.Count -eq 13 -and $codexManifest.managed_files.Count -eq 12)
 
     $openBeforeVerify = Snapshot $openCodeRoot
     $codexBeforeVerify = Snapshot $codexHome

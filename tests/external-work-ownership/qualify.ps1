@@ -49,57 +49,27 @@ function Join-And-Validate($unit) {
 $units = [Collections.Generic.List[object]]::new()
 try {
     if (-not $ProcessesOnly) {
-    $aegis = Text '.opencode/agents/aegis.md'
     $kael = Text '.opencode/agents/kael.md'
     $docs = Text 'docs/DEVELOPMENT.md'
-    $command = Text '.opencode/commands/maintain.md'
-    Check 'AEGIS_FOREGROUND_ONLY' ($aegis -match 'Always foreground-owned' -and
-        $aegis -match 'LAUNCH → TRACK → WAIT/JOIN → COLLECT → VALIDATE → FINALIZE' -and
-        $aegis -match 'There is no detached terminal state' -and
-        $aegis -notmatch '(?i)explicit background exception|background_handoff|explicit background handoff')
-    Check 'BACKGROUND_REQUEST_STILL_OWNED' ($aegis -match '(?s)Even if the user asks to "run this in the background".*keep ownership and wait' -and
-        $aegis -match 'No PID, status\s+file or manual polling handoff' -and
-        $kael -match '(?s)If a user asked for background execution,\s+Aegis still waits' -and
-        $docs -match 'Foreground/join is mandatory')
-    Check 'LONG_RUNNING_AND_TERMINAL' ($aegis -match '(?s)Five, twenty or\s+thirty minutes.*do not authorize detaching' -and
-        $aegis -match 'SUCCESS, PARTIAL, BLOCKED,\s+FAILED or TIMEOUT' -and
-        $aegis -match 'do not launch: report\s+BLOCKED' -and
-        $aegis -match 'Never silently leave required work active')
-    Check 'HEADLESS_OBSERVABLE' ($aegis -match 'CreateNoWindow=true' -and
-        $aegis -match 'without a\s+visible console or focus stealing' -and
-        $aegis -match 'stdout, stderr, exit code and results' -and
-        $aegis -match 'Prefer direct shell/tool execution')
-    Check 'RESTART_OWNERSHIP_RECEIPT' ($aegis -match 'minimal task-scoped recovery receipt' -and $aegis -match 'unique task/run ID' -and
-        $aegis -match 'PID and process start time' -and $aegis -match 'executable path' -and
-        $aegis -match 'exact launch\s+arguments/command line' -and
-        $aegis -match 'working directory' -and
-        $aegis -match 'unambiguous task/run ownership marker where supported' -and
-        $aegis -match 'parent PID and parent start time' -and $aegis -match 'expected result path' -and
-        $aegis -match 'latest meaningful progress timestamp/counter' -and
-        $aegis -match 'not a registry' -and $aegis -match 'remove it after validated result collection')
-    Check 'ORPHAN_CLASSIFICATION_AND_SAFE_STOP' ($aegis -match 'ACTIVE only with meaningful progress evidence' -and
-        $aegis -match 'STALLED only after no meaningful progress over a finite' -and
-        $aegis -match 'ORPHANED only when Olympus/Aegis ownership is verified' -and
-        $aegis -match '`Responding=True`' -and
-        $aegis -match 'parent disappearance alone is not ownership or progress evidence' -and
-        $aegis -match 'recheck the exact PID' -and
-        $aegis -match 'never kill by process\s+name' -and
-        $aegis -match 'forbids retry' -and $aegis -match 'Never retry while the original\s+process is alive')
-    Check 'PARALLEL_CONTROLLER_AND_GATES' ($aegis -match 'launch independent A/B/C concurrently' -and
-        $aegis -match 'controller may be the ownership boundary' -and
-        $aegis -match 'Recheck family membership' -and $aegis -match 'session.inbox.list' -and
-        $aegis -match 'root response, idle root or IN PROGRESS update alone cannot substitute')
-    Check 'ROUTING_AND_KAEL' ($command -match 'subagent: true' -and
-        $aegis -match 'do not spawn, call, or delegate to any child agent' -and
-        $kael -match 'Kael → Aegis remains DENIED' -and
-        $kael -match 'a completed Aegis\s+result is not a detached-work handoff' -and
-        $kael -notmatch 'RUNNING IN BACKGROUND while the Aegis')
-    Check 'NO_PERSISTENT_SYSTEM' ($aegis -match 'No global job registry, daemon or scheduled monitor' -and
-        -not (Test-Path -LiteralPath (Join-Path $repo '.olympus/jobs.json')))
+    Check 'KAEL_FOREGROUND_OWNERSHIP' ($kael -match 'Kael owns every process, controller, build/test job, and native child session' -and
+        $kael -match 'Keep the turn open from launch through tracking,\s*wait/join, collection, validation, and finalization' -and
+        $kael -match 'background does not authorize detached work' -and
+        $kael -match 'report BLOCKED without starting it' -and
+        $docs -match 'Keep the task open through tracking, wait/join,\s*collection, validation, and finalization' -and
+        $docs -match 'Background requests do not authorize\s+detachment' -and
+        $docs -match 'otherwise report BLOCKED without starting it')
+    Check 'LIFECYCLE_AND_TERMINAL' ($kael -match 'Never declare final completion while a required direct child is non-terminal' -and
+        $kael -match 'COMPLETION_UNCONFIRMED' -and $kael -match 'PARTIAL or\s+COMPLETION_UNCONFIRMED')
+    Check 'PROCESS_OWNERSHIP' ($kael -match 'Missing output is not failure' -and
+        $kael -match 'never blindly retry' -and
+        $kael -match 'If exact ownership, safe cleanup, or lifecycle\s+completion cannot be established')
+    Check 'PARALLEL_CONTROLLER_AND_GATES' ($kael -match 'waits for required native results or parent notifications' -and
+        $kael -match 'consume each result' -and
+        $kael -match 'An assistant\s+message or an idle root does not join background children')
+    Check 'NO_PERSISTENT_SYSTEM' (-not (Test-Path -LiteralPath (Join-Path $repo '.olympus/jobs.json')))
     $agents = Get-ChildItem (Join-Path $repo '.opencode/agents') -Filter '*.md'
     $agentText = ($agents | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
     Check 'MODELS_AND_NO_LUNA_FAST' ($kael -match 'model: "openai/gpt-6.1-sol#high"' -and
-        $aegis -match 'model: openai/gpt-6-luna#max' -and
         (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.1-sol#xhigh' -and
         @(@('veyra','orin','kovan','nox','vera') | ForEach-Object {
             (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max'
@@ -131,7 +101,7 @@ Write-Output "CONTROLLER TERMINAL $($result.label)"
     $fg = Join-And-Validate $foreground
     Check 'FOREGROUND_FINAL_AFTER_TERMINAL' ($fg.Final -ge [DateTimeOffset]::Parse($fg.Data.terminal) -and
         [DateTimeOffset]::Parse($fg.Data.launched) -ge $fg.Unit.Started.AddSeconds(-2))
-    Write-Output "FOREGROUND: launch=$($fg.Data.launched) controller terminal=$($fg.Data.terminal) Aegis final(simulated)=$($fg.Final.ToString('o'))"
+    Write-Output "FOREGROUND: launch=$($fg.Data.launched) controller terminal=$($fg.Data.terminal) Kael final(simulated)=$($fg.Final.ToString('o'))"
 
     $parallel = @('parallel-a','parallel-b','parallel-c' | ForEach-Object { Launch $_ 3 })
     Check 'PARALLEL_HEADLESS' (@($parallel | Where-Object { $_.Process.StartInfo.CreateNoWindow -and
@@ -143,7 +113,7 @@ Write-Output "CONTROLLER TERMINAL $($result.label)"
     $parallelFinal = [DateTimeOffset]::UtcNow
     Check 'PARALLEL_3_OVERLAP_AND_JOIN' ($joined.Count -eq 3 -and $lastLaunch -lt $firstTerminal -and
         $parallelFinal -ge $lastTerminal -and @($joined | Where-Object { $_.Unit.Process.HasExited }).Count -eq 3)
-    Write-Output "PARALLEL: overlapping=3 last launch=$($lastLaunch.ToString('o')) first terminal=$($firstTerminal.ToString('o')) last terminal=$($lastTerminal.ToString('o')) Aegis final(simulated)=$($parallelFinal.ToString('o'))"
+    Write-Output "PARALLEL: overlapping=3 last launch=$($lastLaunch.ToString('o')) first terminal=$($firstTerminal.ToString('o')) last terminal=$($lastTerminal.ToString('o')) Kael final(simulated)=$($parallelFinal.ToString('o'))"
     Write-Output 'VISIBLE WINDOWS OBSERVED: 0 (MainWindowHandle; desktop popup/focus not instrumented)'
     if ($ProcessesOnly) {
         Write-Output 'EXTERNAL WORK OWNERSHIP QUALIFICATION: PASS (disposable foreground processes; interactive agent not tested)'

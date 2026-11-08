@@ -82,7 +82,7 @@ En la prueba aislada desde `git archive HEAD` se generaron 20 wrappers con hashe
 
 ## Principios y referencias canónicas
 
-La constitución adopta Olympus Core como fuente canónica y define límites de adaptadores, autoridad de Kael y Aegis, controles reales del runtime, simplicidad, TFR, compatibilidad, integridad de instalaciones, evidencia y alcance autorizado. Su versión inicial ratificada es **1.0.0**, con fecha 2026-10-14; el historial indica expresamente que no había una versión constitucional ratificada previa.
+La constitución adopta Olympus Core como fuente canónica y define límites de adaptadores, autoridad de Kael, controles reales del runtime, simplicidad, TFR, compatibilidad, integridad de instalaciones, evidencia y alcance autorizado. Su versión vigente es **2.0.0** (ratificada inicialmente como **1.0.0** el 2026-10-14), con la enmienda #28 del 2026-11-07; el historial conserva que no había una versión constitucional ratificada previa.
 
 La constitución enlaza los documentos técnicos canónicos en lugar de duplicarlos: [Olympus Core](../olympus/README.md), [roles](../olympus/roles/), [identidades](../olympus/core/identities.toml), [modelos](../olympus/core/models.toml), [políticas](../olympus/policies/), [capacidades](../olympus/harnesses/capabilities.toml), [harnesses](../docs/HARNESSES.md), [compatibilidad de Codex](../docs/CODEX-COMPATIBILITY.md), [desarrollo](../docs/DEVELOPMENT.md), [release v0.4.9](../docs/RELEASE-v0.4.9.md) y [contribución](../CONTRIBUTING.md).
 

@@ -38,6 +38,23 @@ try {
     [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), "@echo off`r`npwsh -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n", [Text.Encoding]::ASCII)
     $env:PATH = $mockBin + [IO.Path]::PathSeparator + $env:PATH
     $results = @()
+    $expectedOpenCodeAssets = @(
+        'opencode.jsonc',
+        '.opencode/agents/argus.md',
+        '.opencode/agents/atlas.md',
+        '.opencode/agents/helios.md',
+        '.opencode/agents/kael.md',
+        '.opencode/agents/kovan.md',
+        '.opencode/agents/nox.md',
+        '.opencode/agents/orin.md',
+        '.opencode/agents/talos.md',
+        '.opencode/agents/thales.md',
+        '.opencode/agents/vera.md',
+        '.opencode/agents/veyra.md',
+        '.opencode/plugins/olympus-activity/activity.ts',
+        '.opencode/plugins/olympus-activity/tui.tsx',
+        '.opencode/scripts/worktree-setup.ps1'
+    ) | Sort-Object
     foreach ($hostEntry in $hosts) {
         $target = Join-Path $run $hostEntry.Id
         [IO.Directory]::CreateDirectory($target) | Out-Null
@@ -60,7 +77,9 @@ try {
             $output -match "OLYMPUS_INSTALL: $candidatePattern READY_OR_NO_CHANGES" -and
             (Test-Path -LiteralPath $manifestPath -PathType Leaf))
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-        Check ($hostEntry.Id + '_ASSETS') ($manifest.managed_files.Count -eq 17 -and
+        $installedAssets = @($manifest.managed_files | ForEach-Object { ([string]$_.path).Replace('\','/') } | Sort-Object)
+        Check ($hostEntry.Id + '_ASSETS') ($manifest.managed_files.Count -eq 15 -and
+            [string]::Join("`n", $installedAssets) -ceq [string]::Join("`n", $expectedOpenCodeAssets) -and
             (Test-Path -LiteralPath (Join-Path $target '.opencode/plugins/olympus-activity/activity.ts') -PathType Leaf))
         $toolStatus = (& git -C $target status --porcelain=v1 -uall -- .serena | Out-String)
         Check ($hostEntry.Id + '_UNTRACKED_TOOL_STATE') ($LASTEXITCODE -eq 0 -and

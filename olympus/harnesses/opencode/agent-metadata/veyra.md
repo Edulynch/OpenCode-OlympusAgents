@@ -21,9 +21,25 @@ permissions:
   - action: execute
     resource: "*"
     effect: deny
-  - action: serena_*
+  # Read-only symbol tools support bounded repository evidence gathering.
+  - action: serena_get_symbols_overview
     resource: "*"
-    effect: deny
+    effect: allow
+  - action: serena_find_symbol
+    resource: "*"
+    effect: allow
+  - action: serena_find_referencing_symbols
+    resource: "*"
+    effect: allow
+  - action: serena_find_implementations
+    resource: "*"
+    effect: allow
+  - action: serena_find_declaration
+    resource: "*"
+    effect: allow
+  - action: serena_get_diagnostics_for_file
+    resource: "*"
+    effect: allow
   - action: read
     resource: "*"
     effect: allow

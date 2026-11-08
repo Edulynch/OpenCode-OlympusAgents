@@ -87,8 +87,6 @@ function Invoke-FastSlice {
         'tests/bootstrap-source-validation/qualify.ps1',
         'tests/adaptive-concurrency/qualify.ps1',
         'tests/completion-gates/qualify.ps1',
-        'tests/maintenance-handoff/qualify.ps1',
-        'tests/maintenance-scope/qualify.ps1',
         'tests/model-migration/qualify.ps1',
         'tests/preflight/qualify.ps1',
         'tests/question-barrier/qualify.ps1',
@@ -98,7 +96,8 @@ function Invoke-FastSlice {
         'tests/trivial-fast-path/qualify.ps1'
     )
     foreach ($suite in $offlineSuites) { Invoke-PwshCheck $suite $suite }
-    Invoke-PwshCheck 'Maintenance handoff fidelity' 'tests/maintenance-handoff/qualify-fidelity.ps1'
+    Invoke-PythonCheck 'Contextual maintenance contract' 'tests/maintenance-scope/qualify.py'
+    Invoke-PwshCheck 'Structured task output contract' 'tests/structured-output/qualify.ps1'
     Invoke-PwshCheck 'External-work ownership static contracts' 'tests/external-work-ownership/qualify.ps1' @('-StaticOnly')
 }
 
@@ -128,9 +127,7 @@ function Invoke-FullAdditions {
         }
     }
 
-    Invoke-PythonCheck 'Phase 11 offline qualifier' 'tests/phase11-integrated-routing/qualify.py'
-    Invoke-Check 'Phase 11 unittest suite' $script:Python @('-B','-m','unittest','discover','-s',(Join-Path $script:RepoRoot 'tests/phase11-integrated-routing'),'-p','test_*.py','-v')
-    Invoke-Check 'Phase 11 feature fixture unittests' $script:Python @('-B','-m','unittest','discover','-s',(Join-Path $script:RepoRoot 'tests/phase11-integrated-routing/fixtures/feature'),'-p','test_*.py','-v')
+    Write-Output 'PHASE11_HISTORICAL_ONLY: old routing traces are retained as evidence and are not run as current contract tests.'
 
     $offlineSlices = @(
         @('Authority grants','tests/authority/qualify.ps1'),

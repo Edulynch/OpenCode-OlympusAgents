@@ -70,7 +70,10 @@ try {
     }
     if (-not $openCodeCommand) { throw 'OPENCODE_UNAVAILABLE: Native OpenCode V2 CLI was not found.' }
     $version = Run-OpenCode @('--version')
-    if ($version.Code -ne 0 -or $version.Text -notmatch 'opencode v2\.0\.(2[4-9]|[3-9][0-9])') {
+    # Keep stable V2 releases eligible as OpenCode advances beyond the 2.0 patch series.
+    $versionMatch = [regex]::Match($version.Text.Trim(), '^opencode v(2\.\d+\.\d+)$')
+    if ($version.Code -ne 0 -or -not $versionMatch.Success -or
+        [version]($versionMatch.Groups[1].Value) -lt [version]'2.0.24') {
         throw "OPENCODE_VERSION_UNQUALIFIED: Expected OpenCode V2.0.24 or newer; got $($version.Text.Trim())."
     }
     Write-Output ('NATIVE_OPENCODE_VERSION: ' + $version.Text.Trim())
@@ -90,7 +93,7 @@ try {
     $wrapper = "@echo off`r`n`"$pwsh`" -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
     [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), $wrapper, [Text.Encoding]::ASCII)
     $env:PATH = $mockBin + [IO.Path]::PathSeparator + $originalPath
-    $install = Run-Script (Join-Path $source 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$source,'-Version','v0.4.4')
+    $install = Run-Script (Join-Path $source 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$source)
     Check 'NATIVE_FIXTURE_PROJECT_INSTALL' ($install.Code -eq 0) $install.Text
     $env:PATH = $originalPath
 

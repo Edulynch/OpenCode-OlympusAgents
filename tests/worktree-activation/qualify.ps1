@@ -138,6 +138,13 @@ try {
     $candidateUpgrade = Run-Script (Join-Path $root 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$root)
     Check 'V044_TO_CANDIDATE_UPGRADE' ($candidateUpgrade.Code -eq 0 -and
         (Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json).managed_files.path -contains '.opencode/scripts/worktree-setup.ps1') $candidateUpgrade.Text
+    # A successful upgrade must retire legacy maintenance resources only when owned.
+    $upgradedManifest = Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json
+    Check 'V044_OWNED_MAINTENANCE_RETIRED' (
+        '.opencode/agents/aegis.md' -notin @($upgradedManifest.managed_files.path) -and
+        '.opencode/commands/maintain.md' -notin @($upgradedManifest.managed_files.path) -and
+        -not (Test-Path -LiteralPath (Join-Path $main '.opencode/agents/aegis.md')) -and
+        -not (Test-Path -LiteralPath (Join-Path $main '.opencode/commands/maintain.md')))
 
     $userOwnedFile = Join-Path $first '.opencode/user-owned.md'
     [IO.Directory]::CreateDirectory((Split-Path -Parent $userOwnedFile)) | Out-Null

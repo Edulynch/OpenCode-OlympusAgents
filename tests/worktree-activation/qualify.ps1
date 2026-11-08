@@ -135,7 +135,7 @@ try {
 
     # Upgrade the project checkout from the immutable stable baseline to the
     # candidate installer before using its opted-in native startup hook.
-    $candidateUpgrade = Run-Script (Join-Path $root 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$root,'-Version','v0.4.4')
+    $candidateUpgrade = Run-Script (Join-Path $root 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$root)
     Check 'V044_TO_CANDIDATE_UPGRADE' ($candidateUpgrade.Code -eq 0 -and
         (Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json).managed_files.path -contains '.opencode/scripts/worktree-setup.ps1') $candidateUpgrade.Text
 

@@ -394,9 +394,27 @@ function Get-LegacyOpenCodeSets {
         $allowed += ,@($currentBeforeWorktreeSetup | Where-Object { $_ -notin $missing })
         $allowed += ,@($historical | Where-Object { $_ -notin $missing })
     }
-    # v0.4.4 owned Aegis and /maintain before the worktree helper existed.
-    # Admit only that exact historical set; ownership hashes are checked below.
-    $allowed += ,@($currentBeforeWorktreeSetup + '.opencode/agents/aegis.md' + '.opencode/commands/maintain.md')
+    # Freeze the exact v0.4.4 project inventory independently of future agent releases.
+    # Existing manifest hashes still decide ownership before retiring either legacy file.
+    $v044Managed = @(
+        '.opencode/agents/aegis.md',
+        '.opencode/agents/argus.md',
+        '.opencode/agents/atlas.md',
+        '.opencode/agents/helios.md',
+        '.opencode/agents/kael.md',
+        '.opencode/agents/kovan.md',
+        '.opencode/agents/nox.md',
+        '.opencode/agents/orin.md',
+        '.opencode/agents/talos.md',
+        '.opencode/agents/thales.md',
+        '.opencode/agents/vera.md',
+        '.opencode/agents/veyra.md',
+        '.opencode/commands/maintain.md',
+        '.opencode/plugins/olympus-activity/activity.ts',
+        '.opencode/plugins/olympus-activity/tui.tsx',
+        'opencode.jsonc'
+    )
+    $allowed += ,@($v044Managed)
     # The last shipped Aegis roster added both paths; retire them only when the
     # exact manifest set and hashes prove Olympus ownership.
     $allowed += ,@($OpenCodeManaged + '.opencode/agents/aegis.md' + '.opencode/commands/maintain.md')

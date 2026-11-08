@@ -371,7 +371,7 @@ def main(argv: list[str] | None = None) -> int:
         # A change to Core must invalidate both adapters until they are re-rendered.
         fixture_routing = fixture / "olympus" / "policies" / "routing.md"
         original_routing = fixture_routing.read_text(encoding="utf-8")
-        fixture_routing.write_text(original_routing + "\nTFR_FIXTURE_POLICY_CHANGE\n", encoding="utf-8")
+        fixture_routing.write_text(original_routing.replace("## TFR — risk-based focused testing", "## TFR — risk-based focused testing\n\nTFR_FIXTURE_POLICY_CHANGE", 1), encoding="utf-8")
         tfr_opencode_check = run_renderer("check", "opencode", fixture, safe_root_read_only=safe_root_read_only)
         tfr_codex_check = run_renderer("check", "codex", fixture, safe_root_read_only=safe_root_read_only)
         check("TFR_CORE_DRIFT_INVALIDATES_BOTH_ROOT_OUTPUTS",

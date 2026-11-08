@@ -45,7 +45,7 @@ def parser() -> Parser:
     commands = root.add_subparsers(dest="command", parser_class=Parser)
     models = commands.add_parser("models", help="query or explicitly edit canonical model assignments", allow_abbrev=False)
     model_commands = models.add_subparsers(dest="action", required=True, parser_class=Parser)
-    listing = model_commands.add_parser("list", help="list all twelve roles and both adapters", allow_abbrev=False)
+    listing = model_commands.add_parser("list", help="list all eleven roles and both adapters", allow_abbrev=False)
     listing.add_argument("--json", action="store_true")
     set_family = model_commands.add_parser("set-family", help="explicitly edit both IDs of an existing family", allow_abbrev=False)
     set_family.add_argument("family")
@@ -141,8 +141,8 @@ def load_renderer(source: Path):
 def model_assignments(renderer, source: Path) -> dict:
     # checked_sources uses tomllib and validates the single canonical registry.
     models, _, _, identities, roles = renderer.checked_sources(source)
-    if len(roles) != 12:
-        raise CLIError(f"Expected twelve canonical roles, found {len(roles)}")
+    if len(roles) != 11:
+        raise CLIError(f"Expected eleven canonical roles, found {len(roles)}")
     rows = []
     for role in sorted(roles):
         resolved = {}
@@ -156,7 +156,7 @@ def model_assignments(renderer, source: Path) -> dict:
         rows.append({"role": role, "identity": identities[role],
                      "family": models["roles"][role]["family"], "effort": effort,
                      "models": resolved,
-                     "representation": {"opencode": "agent", "codex": "root" if role == "kael" else "absent" if role == "aegis" else "agent"}})
+                     "representation": {"opencode": "agent", "codex": "root" if role == "kael" else "agent"}})
     return {"roles": rows}
 
 

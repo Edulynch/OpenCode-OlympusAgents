@@ -84,14 +84,13 @@ try {
     $agents = Get-ChildItem (Join-Path $root '.opencode/agents') -Filter '*.md'
     $allAgentText = ($agents | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
     $modelLines = @($agents | ForEach-Object { ([regex]::Match([IO.File]::ReadAllText($_.FullName), '(?m)^model:.*$')).Value })
-    Check 'RR13_MODELS' ($modelLines.Count -eq 12 -and
+    Check 'RR13_MODELS' ($modelLines.Count -eq 11 -and
         $kael -match 'model: "openai/gpt-6.1-sol#high"' -and
         (Text '.opencode/agents/atlas.md') -match 'model: openai/gpt-6.1-sol#high' -and
         (Text '.opencode/agents/argus.md') -match 'model: openai/gpt-6.1-sol#high' -and
         (Text '.opencode/agents/talos.md') -match 'model: openai/gpt-6.1-sol#high' -and
         (Text '.opencode/agents/helios.md') -match 'model: openai/gpt-6.1-sol#high' -and
         (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.1-sol#xhigh' -and
-        (Text '.opencode/agents/aegis.md') -match 'model: openai/gpt-6-luna#max' -and
         @(@('veyra','orin','kovan','nox','vera') | ForEach-Object { (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max' }) -notcontains $false)
     Check 'RR14_CONCURRENCY' ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kael -match 'FAST is an explicit user-selected latency-priority profile' -and

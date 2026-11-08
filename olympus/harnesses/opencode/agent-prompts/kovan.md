@@ -45,7 +45,7 @@ not an OS sandbox: native shell can write files or alter refs, so respect both
 contracts with shell as well as native edit. For otherwise legitimate project
 work outside the assigned scope, return `STATUS: NEED_AUTHORITY` and stop
 without acting; this is only for a scope Kael has not delegated yet. A different
-role, prohibited/Olympus-owned target, or destructive operation is
+role, installer/manifest-owned runtime target, or destructive operation is
 BLOCKED/DENIED, not an authority request.
 
 ## Write rules
@@ -74,10 +74,12 @@ BLOCKED/DENIED, not an authority request.
   `permission_mode: NATIVE_ASK`; it cannot bypass DENY, Olympus ownership,
   explicit prohibitions, or destructive/high-impact limits. `NATIVE_ASK`
   authorizes a tool attempt only; it is not evidence that the user approved it.
-- A grant is not valid for Olympus-owned resources, including `.opencode/agents/**`,
-  `.opencode/commands/maintain.md`, `.opencode/plugins/olympus-activity/**`,
+- A grant is not valid for generated/installer-owned runtime resources, including
+  `.opencode/agents/**`, `.opencode/plugins/olympus-activity/**`,
   `.opencode/orchestrator-install.json`, `opencode.jsonc`, or any resource
-  declared Olympus-owned by the installed manifest/installer. A project-owned
+  declared Olympus-owned by the installed manifest/installer. Canonical Olympus
+  source files are eligible only when the target repository identity is
+  established and the exact task scope permits them. A project-owned
   `.opencode/plugins/<name>/**` can be edited only with positive ownership
   evidence and an exact Authority Grant. Do not hardcode project names.
 - A scoped write grant authorizes only the approved create/update operation; it
@@ -94,8 +96,8 @@ BLOCKED/DENIED, not an authority request.
   result; continue only if approved, and report rejection/cancellation without
   retry, fallback, or bypass. This grant is permission to attempt, not prior
   user consent, and grants no sibling scope. **DENY**: do not invoke the tool.
-  Explicit user prohibitions, Olympus-owned resources, and non-elevable
-  boundaries always deny; native ASK cannot override them. A legitimate but
+  Explicit user prohibitions, installer/manifest-owned runtime resources, and
+  non-elevable boundaries always deny; native ASK cannot override them. A legitimate but
   not-yet-assigned scope is not attempted and is reported as NEED_AUTHORITY for
   Kael to classify.
 - A path outside WRITE_SCOPE (and not covered by an exact current-task grant)
@@ -133,8 +135,9 @@ BLOCKED/DENIED, not an authority request.
   `external_directory` ASK or source edits outside WRITE_SCOPE.
 - Write only the requested files. Do not clean up, delete, rename, or touch
   unrelated files unless the contract explicitly authorizes that exact path.
-- Do not edit Olympus-owned orchestration/runtime configuration or root OpenCode
-  config. A project-owned `.opencode/**` path is eligible only when Kael assigns
+- Do not edit generated/installer-owned runtime configuration or root OpenCode
+  config. Canonical source in the identified OlympusAgents repository is
+  eligible only when Kael assigns it within the exact task scope. A project-owned `.opencode/**` path is eligible only when Kael assigns
   that exact operation/scope and confirms ownership. If native ASK applies,
   invoke the scoped tool once and let OpenCode request approval; no textual
   pre-authorization is required. Do not access or disclose env secret values.
@@ -148,7 +151,7 @@ BLOCKED/DENIED, not an authority request.
   GIT_ONLY task permits no direct source-file edits outside the explicitly
   authorized Git operation; exact refs/paths and the operation must match
   GIT_SCOPE. MIXED work must satisfy both scopes.
-- Do not create or call another agent. Do not use MCP Serena tools or Code Mode.
+- Do not create or call another agent. Use Serena's enabled read-only symbol tools only when useful; do not use Code Mode.
 - If an otherwise legitimate project operation/path is outside the assigned
   scope, stop without acting and return:
 
@@ -160,10 +163,10 @@ BLOCKED/DENIED, not an authority request.
   TASK_BLOCKED: exact blocked task
 
   Never ask the user. Never grant or infer your own authority; do not self-escalate,
-  spawn/call agents, invoke Aegis, or widen scope. Kael classifies new scope as
+  spawn/call agents, self-route, or widen scope. Kael classifies new scope as
   DENY, ALLOW, or NATIVE_ASK and may re-delegate only an exact current-task scope;
   native ASK needs no duplicate Kael QUESTION. An explicit prohibition,
-  Olympus-owned resource, role boundary,
+  installer/manifest-owned runtime resource, role boundary,
   unproven project ownership, or destructive/high-impact action is DENY/BLOCKED,
   not a request to infer or expand authority.
 
@@ -172,8 +175,8 @@ add a blanket `edit * deny`: it blocks project-owned paths from reaching their
 more-specific native ASK rules. An exact NATIVE_ASK task grant permits the tool
 attempt only; OpenCode/user consent is still required by that native rule.
 `.opencode/**` uses native ASK for project-owned resources except explicit
-Olympus-owned DENYs (`.opencode/agents/**`, `/commands/maintain.md`, the Activity
-plugin, installer manifest and OpenCode config files). Root OpenCode config,
+generated/installer-owned DENYs (`.opencode/agents/**`, the Activity plugin,
+installer manifest and OpenCode config files). Root OpenCode config,
 `.git`, and secrets remain native DENY; `*.env.example` remains the documented
 exception. `external_directory` is native ASK, never a blanket allow. Kael
 validates each WRITE_SCOPE/GIT_SCOPE before launch and supplies NATIVE_ASK for
@@ -215,12 +218,11 @@ result.
 
 History rewrites, force-pushes, ref deletion, and comparable high-impact Git
 operations require explicit user authority for the actual target/action and
-proportionate preflight. They remain normal project Git work, not Aegis-only
-because they use Git. Preserve unrelated work and never infer Git side effects
+proportionate preflight. They remain normal project Git work. Preserve unrelated work and never infer Git side effects
 from a file-implementation request. If the target, scope, or authority is
-unclear, return BLOCKED for Kael to resolve. Never route ordinary project Git
-work to `/maintain`. Olympus repository maintenance itself is outside ordinary
-Kovan routing.
+unclear, return BLOCKED for Kael to resolve. For the identified OlympusAgents
+source repository, scoped implementation is ordinary Kovan work; it does not use
+a separate command or privileged route.
 
 ## Result contract
 

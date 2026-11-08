@@ -70,14 +70,14 @@ function Consume-Original($assignment, [string]$payload, [string[]]$required) {
 }
 
 try {
-    $maintenanceFields = @('STATUS','PROBE_MARKER','EXACT_ID','EXACT_COUNT','EXACT_PATH','DECISION')
-    $maintenanceResult = @'
+    $requiredFields = @('STATUS','PROBE_MARKER','EXACT_ID','EXACT_COUNT','EXACT_PATH','DECISION')
+    $result = @'
 STATUS: SUCCESS
-SUMMARY: Maintenance probe completed; keep the result.
-PROBE_MARKER: OLYMPUS_MAINTENANCE_FIDELITY_FINAL
-EXACT_ID: MNT-FINAL-42
+SUMMARY: Structured result probe completed; keep the result.
+PROBE_MARKER: OLYMPUS_RESULT_FIDELITY_FINAL
+EXACT_ID: RSLT-FINAL-42
 EXACT_COUNT: 37
-EXACT_PATH: docs/maintenance-fidelity-probe.md
+EXACT_PATH: docs/result-fidelity-probe.md
 DECISION: KEEP
 '@
     $normalResult = @'
@@ -97,7 +97,7 @@ DECISION: KEEP
         $compact.Fields['STATUS'] -ceq 'SUCCESS' -and $compact.Fields['SUMMARY'] -ceq 'Ordinary completion.')
 
     # B. Previously observed ordinary child exact-field probe remains valid.
-    $normal = Validate-RequiredFields $normalResult $maintenanceFields
+    $normal = Validate-RequiredFields $normalResult $requiredFields
     Check 'CASE_B_NORMAL_CHILD_EXACT_FIELDS_PASS' ($normal.Status -eq 'STRUCTURED_RESULT_COMPLETE' -and
         $normal.Fields['PROBE_MARKER'] -ceq 'OLYMPUS_RESULT_FIDELITY_001' -and
         $normal.Fields['EXACT_ID'] -ceq 'RSLT-7F29-A1' -and
@@ -105,53 +105,53 @@ DECISION: KEEP
         $normal.Fields['EXACT_PATH'] -ceq 'docs/result-fidelity-probe.md' -and
         $normal.Fields['DECISION'] -ceq 'KEEP')
 
-    # C/D. The raw maintenance result retains exact field names and values.
-    $validated = Validate-RequiredFields $maintenanceResult $maintenanceFields
+    # C/D. The raw result retains exact field names and values.
+    $validated = Validate-RequiredFields $result $requiredFields
     $allExact = $validated.Status -eq 'STRUCTURED_RESULT_COMPLETE'
-    foreach ($name in $maintenanceFields) {
-        if (-not [string]::Equals($validated.Fields[$name], (Parse-Fields $maintenanceResult).Fields[$name], [StringComparison]::Ordinal)) {
+    foreach ($name in $requiredFields) {
+        if (-not [string]::Equals($validated.Fields[$name], (Parse-Fields $result).Fields[$name], [StringComparison]::Ordinal)) {
             $allExact = $false
         }
     }
-    Check 'CASE_C_MAINTENANCE_REQUIRED_FIELDS' ($validated.Status -eq 'STRUCTURED_RESULT_COMPLETE')
+    Check 'CASE_C_REQUIRED_FIELDS' ($validated.Status -eq 'STRUCTURED_RESULT_COMPLETE')
     Check 'CASE_D_KAEL_RETAINS_EXACT_NAMES_AND_VALUES' $allExact
 
     # E. Prose can be included, or absent; it never substitutes for exact fields.
     Check 'CASE_E_SUMMARY_COEXISTS' ($validated.Fields.ContainsKey('SUMMARY') -and
-        $validated.Fields['SUMMARY'] -ceq 'Maintenance probe completed; keep the result.')
-    $noSummary = [regex]::Replace($maintenanceResult, '(?m)^SUMMARY:.*\r?\n', '')
-    Check 'CASE_E_SUMMARY_OPTIONAL' ((Validate-RequiredFields $noSummary $maintenanceFields).Status -eq 'STRUCTURED_RESULT_COMPLETE')
+        $validated.Fields['SUMMARY'] -ceq 'Structured result probe completed; keep the result.')
+    $noSummary = [regex]::Replace($result, '(?m)^SUMMARY:.*\r?\n', '')
+    Check 'CASE_E_SUMMARY_OPTIONAL' ((Validate-RequiredFields $noSummary $requiredFields).Status -eq 'STRUCTURED_RESULT_COMPLETE')
 
     # F/G. Missing and renamed requested fields fail closed; summary is not a substitute.
-    $missingPayload = [regex]::Replace($maintenanceResult, '(?m)^EXACT_COUNT:.*\r?\n', '')
-    $missing = Validate-RequiredFields $missingPayload $maintenanceFields
+    $missingPayload = [regex]::Replace($result, '(?m)^EXACT_COUNT:.*\r?\n', '')
+    $missing = Validate-RequiredFields $missingPayload $requiredFields
     Check 'CASE_F_MISSING_FIELD_INCOMPLETE' ($missing.Status -eq 'STRUCTURED_RESULT_INCOMPLETE' -and
         $missing.Reason -eq 'MISSING:EXACT_COUNT')
-    $renamedPayload = [regex]::Replace($maintenanceResult, '(?m)^EXACT_ID:', 'RENAMED_ID:')
-    $renamed = Validate-RequiredFields $renamedPayload $maintenanceFields
+    $renamedPayload = [regex]::Replace($result, '(?m)^EXACT_ID:', 'RENAMED_ID:')
+    $renamed = Validate-RequiredFields $renamedPayload $requiredFields
     Check 'CASE_G_RENAMED_FIELD_NOT_SATISFIED' ($renamed.Status -eq 'STRUCTURED_RESULT_INCOMPLETE' -and
         $renamed.Reason -eq 'MISSING:EXACT_ID')
 
     # H. Unrequested fields are additive and do not affect required exact values.
-    $extra = Validate-RequiredFields ($maintenanceResult + "`nFUTURE_EXTRA: allowed") $maintenanceFields
+    $extra = Validate-RequiredFields ($result + "`nFUTURE_EXTRA: allowed") $requiredFields
     Check 'CASE_H_EXTRA_FIELDS_ALLOWED' ($extra.Status -eq 'STRUCTURED_RESULT_COMPLETE' -and
         $extra.Fields['FUTURE_EXTRA'] -ceq 'allowed')
 
-    # N. This synthetic raw result needs no special entry metadata or normalization.
+    # N. The synthetic raw result needs no special metadata or normalization.
     $syntheticRawResult = @'
 STATUS: SUCCESS
-PROBE_MARKER: OLYMPUS_MAINTENANCE_FIDELITY_FINAL
-EXACT_ID: MNT-FINAL-42
+PROBE_MARKER: OLYMPUS_RESULT_FIDELITY_FINAL
+EXACT_ID: RSLT-FINAL-42
 EXACT_COUNT: 37
-EXACT_PATH: docs/maintenance-fidelity-probe.md
+EXACT_PATH: docs/result-fidelity-probe.md
 DECISION: KEEP
 '@
     $expectedOutput = @('STATUS','PROBE_MARKER','EXACT_ID','EXACT_COUNT','DECISION')
     $rawResult = Validate-RequiredFields $syntheticRawResult $expectedOutput
     Check 'CASE_N_SYNTHETIC_RAW_RESULT_COMPLETE' ($rawResult.Status -eq 'STRUCTURED_RESULT_COMPLETE' -and
         $rawResult.Fields['STATUS'] -ceq 'SUCCESS' -and
-        $rawResult.Fields['PROBE_MARKER'] -ceq 'OLYMPUS_MAINTENANCE_FIDELITY_FINAL' -and
-        $rawResult.Fields['EXACT_ID'] -ceq 'MNT-FINAL-42' -and
+        $rawResult.Fields['PROBE_MARKER'] -ceq 'OLYMPUS_RESULT_FIDELITY_FINAL' -and
+        $rawResult.Fields['EXACT_ID'] -ceq 'RSLT-FINAL-42' -and
         $rawResult.Fields['EXACT_COUNT'] -ceq '37' -and
         $rawResult.Fields['DECISION'] -ceq 'KEEP')
 
@@ -179,8 +179,8 @@ DECISION: KEEP
 
     # I/K. Consume the original terminal result once, even when incomplete; never replace it.
     $assignment = [pscustomobject]@{ Consumed=$false; ConsumedCount=0; ReplacementCount=0 }
-    $first = Consume-Original $assignment $missingPayload $maintenanceFields
-    $duplicate = Consume-Original $assignment $missingPayload $maintenanceFields
+    $first = Consume-Original $assignment $missingPayload $requiredFields
+    $duplicate = Consume-Original $assignment $missingPayload $requiredFields
     Check 'CASE_I_DUPLICATE_CONSUMED_ONCE' ($first.Action -eq 'CONSUME_ORIGINAL' -and
         $first.Validation.Status -eq 'STRUCTURED_RESULT_INCOMPLETE' -and
         $duplicate.Action -eq 'IGNORE_DUPLICATE' -and $assignment.ConsumedCount -eq 1)
@@ -192,22 +192,19 @@ DECISION: KEEP
     Check 'CASE_J_ISSUE1_MISSING_RESULT_SEMANTICS' ($lifecycle -match 'Missing output is not failure' -and
         $lifecycle -match 'do not replace it' -and $lifecycle -match 'Never retry an original operation while it is live, unknown, or unreconciled')
 
-    # D/M. Canonical Aegis and Kael maintenance handoff sources both state the contract.
-    $maintenancePolicy = Text 'olympus/policies/maintenance-plane.md'
+    # The common Kael task contract applies exact fields without a special handoff route.
     $kaelPrompt = Text 'olympus/harnesses/opencode/agent-prompts/kael.md'
-    Check 'CASE_M_MAINTENANCE_HANDOFF_CONTRACT' ($maintenancePolicy -match 'EXPECTED_OUTPUT' -and
-        $maintenancePolicy -match 'preserve each required field name and its produced value' -and
+    Check 'CASE_M_STRUCTURED_TASK_OUTPUT_CONTRACT' ($kaelPrompt -match 'EXPECTED_OUTPUT' -and
+        $kaelPrompt -match 'preserve each required field name and its produced value' -and
         $kaelPrompt -match 'STRUCTURED_RESULT_INCOMPLETE' -and
-        $kaelPrompt -match 'Do\s+not prepend special entry metadata or normalize missing field boundaries' -and
-        $kaelPrompt -notmatch 'MAINTENANCE_AUTH|AEGIS_SCOPE' -and
+        $kaelPrompt -match 'Do not infer or invent a\s+missing value' -and
         $kaelPrompt -match 'Do not\s+split arbitrary strings' -and
-        $kaelPrompt -match 'consume the original result once' -and
         $kaelPrompt -match 'internal fidelity does not require dumping every field')
 
-    Write-Output 'MAINTENANCE RESULT-FIDELITY QUALIFICATION: PASS (synthetic contract + canonical source checks; live handoff separate)'
+    Write-Output 'STRUCTURED OUTPUT QUALIFICATION: PASS (synthetic contract + canonical source checks; live model behavior not assessed)'
     exit 0
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
-    Write-Output 'MAINTENANCE RESULT-FIDELITY QUALIFICATION: FAIL'
+    Write-Output 'STRUCTURED OUTPUT QUALIFICATION: FAIL'
     exit 1
 }

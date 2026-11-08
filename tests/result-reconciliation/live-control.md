@@ -1,4 +1,4 @@
-# Manual live control (not executed by Aegis)
+# Manual live control (not executed during qualification)
 
 Use an installed Olympus in a disposable **trusted** project and a fresh Kael
 conversation. This is a manual control of ordinary read-only delegation without

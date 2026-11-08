@@ -31,7 +31,7 @@ EXPECTED_CAPABILITIES = {
     "ALLOW",
     "ASK",
     "DENY",
-    "AEGIS",
+    "CONTEXTUAL_OLYMPUS_MAINTENANCE",
     "ACTIVITY_VISIBILITY",
     "GLOBAL_RUNTIME_DISCOVERY",
 }
@@ -116,10 +116,10 @@ def main(argv: list[str] | None = None) -> int:
         orchestration = tomllib.load(stream)
     with (ROOT / "olympus" / "harnesses" / "capabilities.toml").open("rb") as stream:
         capabilities = tomllib.load(stream)
-    maintenance_policy = (ROOT / "olympus" / "policies" / "maintenance-plane.md").read_text(encoding="utf-8").strip()
+    maintenance_policy = (ROOT / "olympus" / "policies" / "maintenance-context.md").read_text(encoding="utf-8").strip()
     canonical_roles = {path.stem for path in (ROOT / "olympus" / "roles").glob("*.md")}
-    check("CANONICAL_12_UNIQUE_ROLE_FILES", len(canonical_roles) == 12 and canonical_roles == set(models["roles"]))
-    check("CANONICAL_12_UNIQUE_DISPLAY_IDENTITIES", set(identities) == canonical_roles and len(set(identities.values())) == 12 and
+    check("CANONICAL_11_UNIQUE_ROLE_FILES", len(canonical_roles) == 11 and canonical_roles == set(models["roles"]))
+    check("CANONICAL_11_UNIQUE_DISPLAY_IDENTITIES", set(identities) == canonical_roles and len(set(identities.values())) == 11 and
         all(display.split(" — ", 1)[0].casefold() == role for role, display in identities.items()))
     check("ONE_ROOT_ORCHESTRATOR", "ROOT ORCHESTRATOR" in (ROOT / "olympus/roles/kael.md").read_text(encoding="utf-8"))
 
@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     opencode_files = {path.stem: path for path in (ROOT / ".opencode/agents").glob("*.md")}
     codex_files = {path.stem: path for path in (ROOT / ".codex/agents").glob("*.toml")}
     check("OPENCODE_EXPECTED_ROSTER", set(opencode_files) == canonical_roles)
-    check("CODEX_EXPECTED_SUPPORTED_ROSTER", set(codex_files) == canonical_roles - {"kael", "aegis"})
+    check("CODEX_EXPECTED_SUPPORTED_ROSTER", set(codex_files) == canonical_roles - {"kael"})
     check("OPENCODE_FULL_DISPLAY_IDENTITY_DERIVED_FROM_CORE", all(
         identities[role] in opencode_files[role].read_text(encoding="utf-8")
         and identities[role] + ". " in opencode_files[role].read_text(encoding="utf-8")
@@ -160,27 +160,9 @@ def main(argv: list[str] | None = None) -> int:
     check("OPENCODE_ACTIVITY_HUD_DERIVES_ALL_DISPLAY_IDENTITIES", all(
         f'{role}: "{identity}"' in (ROOT / ".opencode/plugins/olympus-activity/activity.ts").read_text(encoding="utf-8")
         for role, identity in identities.items()))
-    aegis_prompt = opencode_files["aegis"].read_text(encoding="utf-8")
     kael_prompt = opencode_files["kael"].read_text(encoding="utf-8")
-    maintain_command = (ROOT / ".opencode/commands/maintain.md").read_text(encoding="utf-8")
-    command_frontmatter = yaml_frontmatter(maintain_command)
-    check(
-        "OPENCODE_COMMAND_FRONTMATTER_FIRST",
-        command_frontmatter is not None and maintain_command.startswith("---\n"),
-    )
-    generated_comment = f"<!-- {GENERATED_MARKER} -->"
-    check(
-        "OPENCODE_COMMAND_GENERATED_MARKER_AFTER_FRONTMATTER",
-        command_frontmatter is not None
-        and generated_comment in maintain_command
-        and maintain_command.index(generated_comment) >= command_frontmatter[1],
-    )
-    check(
-        "MAINTAIN_COMMAND_AEGIS_METADATA",
-        command_frontmatter is not None
-        and re.search(r"(?m)^agent: aegis$", command_frontmatter[0]) is not None
-        and re.search(r"(?m)^subagent: true$", command_frontmatter[0]) is not None,
-    )
+    check("NO_RETIRED_AEGIS_OR_MAINTAIN_OUTPUT", "aegis" not in opencode_files and
+          not (ROOT / ".opencode/commands/maintain.md").exists())
     generated_agent_frontmatter = {
         role: yaml_frontmatter(path.read_text(encoding="utf-8")) for role, path in opencode_files.items()
     }
@@ -197,12 +179,9 @@ def main(argv: list[str] | None = None) -> int:
             for value in (generated_agent_frontmatter[role],)
         ),
     )
-    check("OPENCODE_AEGIS_AND_COMMAND_DERIVE_CORE_POLICY", maintenance_policy in aegis_prompt and maintenance_policy in maintain_command)
-    check(
-        "OPENCODE_KAEL_DERIVES_CORE_TARGET_BOUNDARY",
-        "The normal project workflow must not modify an Olympus-owned target" in kael_prompt
-        and "do not edit it, silently enlarge that task" in kael_prompt,
-    )
+    check("OPENCODE_KAEL_DERIVES_CONTEXTUAL_MAINTENANCE_POLICY", maintenance_policy in kael_prompt and
+          "Kael is the only root orchestrator" in kael_prompt and "project-identity evidence" in kael_prompt and
+          "do not silently broaden" in kael_prompt.lower())
 
     for role, intent in models["roles"].items():
         family = models["families"][intent["family"]]
@@ -210,9 +189,6 @@ def main(argv: list[str] | None = None) -> int:
         opencode_model = f"{family['opencode']}#{intent['effort']}"
         check(f"OPENCODE_MODEL_{role.upper()}", f"model: \"{opencode_model}\"" in opencode_text or f"model: {opencode_model}" in opencode_text)
         if role == "kael":
-            continue
-        if role == "aegis":
-            check("CODEX_AEGIS_OMITTED", role not in codex_files)
             continue
         with codex_files[role].open("rb") as stream:
             codex_agent = tomllib.load(stream)
@@ -225,13 +201,15 @@ def main(argv: list[str] | None = None) -> int:
     codex_config = tomllib.loads((ROOT / ".codex/config.toml").read_text(encoding="utf-8"))
     check("CODEX_ROOT_MODEL_INTENT", codex_config["model"] == kael_family["codex"] and codex_config["model_reasoning_effort"] == kael_intent["effort"])
     check("SOL_TRANSLATION_BOTH_ADAPTERS", models["families"]["sol"]["opencode"] == "openai/gpt-6.1-sol" and models["families"]["sol"]["codex"] == "gpt-6.1-sol")
-    check("LUNA_REMAINS_LUNA", models["families"]["luna"]["opencode"].endswith("gpt-6-luna") and models["families"]["luna"]["codex"] == "gpt-6-luna" and all(models["roles"][r]["family"] == "luna" for r in ("veyra", "orin", "kovan", "nox", "vera", "aegis")))
+    check("LUNA_REMAINS_LUNA", models["families"]["luna"]["opencode"].endswith("gpt-6-luna") and models["families"]["luna"]["codex"] == "gpt-6-luna" and all(models["roles"][r]["family"] == "luna" for r in ("veyra", "orin", "kovan", "nox", "vera")))
     check("NO_STALE_GPT_6_SOL_OUTPUT", all("gpt-6-sol" not in path.read_text(encoding="utf-8") for path in [*opencode_files.values(), *codex_files.values(), ROOT / "CODEX.md", ROOT / ".codex/config.toml", ROOT / "opencode.jsonc"]))
     check("EFFORTS_CANONICAL", models["roles"]["thales"]["effort"] == "xhigh" and models["roles"]["kovan"]["effort"] == "max" and all(models["roles"][r]["effort"] == "high" for r in ("kael", "atlas", "argus", "talos", "helios")))
 
     check("MAX_CHILDREN_CANONICAL_FOUR", orchestration["max_children"] == 4)
     routing = (ROOT / "olympus/policies/routing.md").read_text(encoding="utf-8")
-    check("TRIVIAL_FAST_PATH_CANONICAL", "trivial implementation fast path" in routing and routing.count("trivial implementation fast path") == 1)
+    check("TRIVIAL_FAST_PATH_CANONICAL", "trivial deterministic changes do not fan out" in routing and
+          "Kael may directly implement a small, deterministic change" in routing and
+          "delegate to Kovan when implementation complexity or independent expertise makes that useful" in routing)
     lifecycle = (ROOT / "olympus/policies/result-lifecycle.md").read_text(encoding="utf-8")
     check("QUESTION_BARRIER_CANONICAL_ONCE", lifecycle.count("## Question barrier") == 1)
     check("COMPLETION_BARRIER_CANONICAL_ONCE", lifecycle.count("## Completion barrier") == 1)
@@ -242,8 +220,8 @@ def main(argv: list[str] | None = None) -> int:
 
     check("OPENCODE_DENY_SUPPORTED", capabilities["opencode"]["DENY"] == "SUPPORTED")
     check("CODEX_DENY_GAP", capabilities["codex"]["DENY"] == "GAP")
-    check("OPENCODE_AEGIS_SUPPORTED", capabilities["opencode"]["AEGIS"] == "SUPPORTED" and (ROOT / ".opencode/agents/aegis.md").is_file())
-    check("CODEX_AEGIS_GAP", capabilities["codex"]["AEGIS"] == "GAP" and not (ROOT / ".codex/agents/aegis.toml").exists())
+    check("OPENCODE_CONTEXTUAL_MAINTENANCE_SUPPORTED", capabilities["opencode"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "SUPPORTED")
+    check("CODEX_CONTEXTUAL_MAINTENANCE_GAP", capabilities["codex"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "GAP")
     check("CODEX_RESULT_DELIVERY_SUPPORTED", capabilities["codex"]["RESULT_DELIVERY"] == "SUPPORTED")
     check("CAPABILITY_CONTRACT_COMPLETE", set(capabilities) == {"opencode", "codex"} and all(set(value) == EXPECTED_CAPABILITIES for value in capabilities.values()) and all(state in {"SUPPORTED", "ADAPTABLE", "PARTIAL", "GAP", "NOT_NEEDED"} for value in capabilities.values() for state in value.values()))
     check("CODEX_ACTIVITY_IS_BASIC_PARTIAL", capabilities["codex"]["ACTIVITY_VISIBILITY"] == "PARTIAL")
@@ -255,12 +233,12 @@ def main(argv: list[str] | None = None) -> int:
     protected_paths = ("olympus/**", ".codex/**", "CODEX.md", "scripts/render_harnesses.py")
     protected = True
     for role, path in opencode_files.items():
-        if role == "aegis":
-            continue
         header = path.read_text(encoding="utf-8").split("\n---\n", 1)[0]
         for resource in protected_paths:
+            if role in {"kael", "kovan"} and resource in {"olympus/**", "scripts/render_harnesses.py"}:
+                continue
             protected = protected and f'resource: "{resource}"\n    effect: deny' in header
-    check("OPENCODE_CORE_AND_GENERATOR_HARD_DENY", protected)
+    check("OPENCODE_RUNTIME_AND_CODEX_HARD_DENY", protected)
     check("CODEX_CORE_SOURCE_READ_ONLY_POLICY", all(codex_config["permissions"][profile]["filesystem"][":workspace_roots"].get(path) == "read" for profile in ("olympus-project", "olympus-readonly") for path in ("olympus", "scripts/render_harnesses.py")))
 
     spec = importlib.util.spec_from_file_location("olympus_renderer", RENDERER)
@@ -332,7 +310,7 @@ def main(argv: list[str] | None = None) -> int:
         report_output_snapshot("ROOT_MANAGED_OUTPUT_BEFORE", before)
         check(
             "SAFE_ROOT_ALL_OUTPUT_COVERAGE",
-            len(managed) == 30
+            len(managed) == 28
             and shared_capabilities in managed
             and worktree_setup in managed,
         )
@@ -393,7 +371,7 @@ def main(argv: list[str] | None = None) -> int:
         # A change to Core must invalidate both adapters until they are re-rendered.
         fixture_routing = fixture / "olympus" / "policies" / "routing.md"
         original_routing = fixture_routing.read_text(encoding="utf-8")
-        fixture_routing.write_text(original_routing + "\nTFR_FIXTURE_POLICY_CHANGE\n", encoding="utf-8")
+        fixture_routing.write_text(original_routing.replace("## TFR — risk-based focused testing", "## TFR — risk-based focused testing\n\nTFR_FIXTURE_POLICY_CHANGE", 1), encoding="utf-8")
         tfr_opencode_check = run_renderer("check", "opencode", fixture, safe_root_read_only=safe_root_read_only)
         tfr_codex_check = run_renderer("check", "codex", fixture, safe_root_read_only=safe_root_read_only)
         check("TFR_CORE_DRIFT_INVALIDATES_BOTH_ROOT_OUTPUTS",
@@ -413,6 +391,19 @@ def main(argv: list[str] | None = None) -> int:
         missing.unlink()
         missing_check = run_renderer("check", "codex", fixture, safe_root_read_only=safe_root_read_only)
         check("MISSING_GENERATED_OUTPUT_DETECTED", missing_check.returncode == 1 and "DRIFT missing: CODEX.md" in missing_check.stdout)
+
+        retired_agent = fixture / ".opencode" / "agents" / "aegis.md"
+        retired_command = fixture / ".opencode" / "commands" / "maintain.md"
+        retired_agent.write_text(f"<!-- {GENERATED_MARKER} -->\n", encoding="utf-8")
+        retired_command.parent.mkdir(parents=True, exist_ok=True)
+        retired_command.write_text(f"<!-- {GENERATED_MARKER} -->\n", encoding="utf-8")
+        retired_snapshot = snapshot_outputs((retired_agent, retired_command))
+        retired_check = run_renderer("check", "opencode", fixture, safe_root_read_only=safe_root_read_only)
+        retired_render = run_renderer("render", "opencode", fixture, safe_root_read_only=safe_root_read_only)
+        check("RETIRED_OUTPUTS_FAIL_CLOSED", retired_check.returncode == 1 and
+              "DRIFT retired output: .opencode/agents/aegis.md" in retired_check.stdout and
+              "DRIFT retired output: .opencode/commands/maintain.md" in retired_check.stdout and
+              retired_render.returncode == 2 and snapshot_outputs((retired_agent, retired_command)) == retired_snapshot)
 
     print("OLYMPUS_HARNESS_CORE_QUALIFICATION: PASS")
     return 0

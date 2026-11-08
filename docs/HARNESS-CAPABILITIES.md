@@ -18,9 +18,9 @@
 | `ALLOW` | SUPPORTED | SUPPORTED |
 | `ASK` | SUPPORTED | ADAPTABLE |
 | `DENY` | SUPPORTED | GAP |
-| `AEGIS` | SUPPORTED | GAP |
+| `CONTEXTUAL_OLYMPUS_MAINTENANCE` | SUPPORTED | GAP |
 | `ACTIVITY_VISIBILITY` | SUPPORTED | PARTIAL |
 | `GLOBAL_RUNTIME_DISCOVERY` | SUPPORTED | SUPPORTED |
 
-OpenCode provides native hard DENY, explicit `/maintain` → Aegis, and the Activity HUD. Codex currently uses adaptable/native ASK, reports DENY and Aegis as GAP, and relies on basic/partial native activity visibility. Do not infer stronger enforcement than these states claim.
+OpenCode supports contextual OlympusAgents maintenance through Kael's normal routing. Codex currently declares contextual OlympusAgents maintenance and DENY as gaps, uses adaptable/native ASK, and relies on basic/partial native activity visibility. Do not infer stronger enforcement than these states claim.
 Global install file placement and global runtime discovery are separate claims. `GLOBAL_RUNTIME_DISCOVERY = GAP` means an isolated runtime omitted required global agents; `PARTIAL` means evidence is incomplete or inconclusive; `SUPPORTED` requires isolated paths and the expected runtime roster.

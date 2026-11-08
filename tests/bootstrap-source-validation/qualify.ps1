@@ -19,8 +19,14 @@ function New-SourceFixture([string]$Name) {
     [IO.Directory]::CreateDirectory($source) | Out-Null
     $trackedOpenCodeFiles = @(& git -C $repoRoot ls-files -- '.opencode')
     if ($LASTEXITCODE -ne 0) { throw 'Unable to list tracked OpenCode fixture files.' }
+    # The dirty clean-break worktree can still list intentionally retired outputs in the index.
+    $retiredTrackedOutputs = @('.opencode/agents/aegis.md', '.opencode/commands/maintain.md')
     foreach ($relative in $trackedOpenCodeFiles) {
         $sourcePath = Join-Path $repoRoot $relative
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+            if ($relative -in $retiredTrackedOutputs) { continue }
+            throw "Tracked OpenCode fixture file is missing: $relative"
+        }
         $destinationPath = Join-Path $source $relative
         [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destinationPath)) | Out-Null
         Copy-Item -LiteralPath $sourcePath -Destination $destinationPath

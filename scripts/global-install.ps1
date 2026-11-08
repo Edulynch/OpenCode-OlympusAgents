@@ -102,13 +102,12 @@ function Get-GlobalOutputs([string]$SelectedHarness) {
         foreach ($file in @(Get-ChildItem -LiteralPath $agentRoot -Filter '*.md' -File | Sort-Object Name)) {
             Add-GeneratedOutput $outputs ('agents/' + $file.Name) $file.FullName
         }
-        Add-GeneratedOutput $outputs 'commands/maintain.md' (Join-Path $SourceRoot '.opencode/commands/maintain.md')
         $pluginRoot = Join-Path $SourceRoot '.opencode/plugins/olympus-activity'
         foreach ($file in @(Get-ChildItem -LiteralPath $pluginRoot -File -Recurse | Sort-Object FullName)) {
             $relative = $file.FullName.Substring($pluginRoot.Length + 1).Replace('\','/')
             Add-GeneratedOutput $outputs ('plugins/olympus-activity/' + $relative) $file.FullName
         }
-        if ($outputs.Count -ne 15) { Fail 'SOURCE_INVALID' "Unexpected OpenCode global resource inventory: $($outputs.Count)." }
+        if ($outputs.Count -ne 13) { Fail 'SOURCE_INVALID' "Unexpected OpenCode global resource inventory: $($outputs.Count)." }
     } else {
         $agentRoot = Join-Path $SourceRoot '.codex/agents'
         foreach ($file in @(Get-ChildItem -LiteralPath $agentRoot -Filter '*.toml' -File | Sort-Object Name)) {

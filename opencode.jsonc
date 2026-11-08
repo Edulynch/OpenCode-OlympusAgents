@@ -3,6 +3,28 @@
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "kael",
   "model": "openai/gpt-6.1-sol",
+  "mcp": {
+    "servers": {
+      "serena": {
+        "type": "local",
+        "command": [
+          "serena",
+          "start-mcp-server",
+          "--context",
+          "ide",
+          "--transport",
+          "stdio",
+          "--project-from-cwd",
+          "--enable-web-dashboard",
+          "False",
+          "--open-web-dashboard",
+          "False"
+        ],
+        "disabled": false,
+        "codemode": false
+      }
+    }
+  },
   "permissions": [
     // External paths require native user approval; do not grant every path.
     {
@@ -10,8 +32,14 @@
       "resource": "*",
       "effect": "ask"
     },
+    // Deny Serena by default: agent-specific read-only grants come later,
+    // while symbol edits, file writes, and REPL tools remain unavailable.
+    {
+      "action": "serena_*",
+      "resource": "*",
+      "effect": "deny"
+    },
     // Shell is globally denied; Kovan and Nox opt into trusted-project shell.
-    // The hidden Aegis agent explicitly allows shell for /maintain only.
     {
       "action": "shell",
       "resource": "*",

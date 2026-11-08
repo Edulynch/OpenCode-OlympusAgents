@@ -197,7 +197,7 @@ class SliceA(unittest.TestCase):
         self.assertEqual("models list", response["operation"])
         self.assertEqual("ok", response["result"])
         rows = response["data"]["roles"]
-        self.assertEqual(12, len(rows))
+        self.assertEqual(11, len(rows))
         with (self.source / "olympus/core/models.toml").open("rb") as stream:
             models = tomllib.load(stream)
         human = self.query("models", "list")
@@ -212,7 +212,7 @@ class SliceA(unittest.TestCase):
                 self.assertIn(value, human.stdout)
         by_role = {row["role"]: row for row in rows}
         self.assertEqual("root", by_role["kael"]["representation"]["codex"])
-        self.assertEqual("absent", by_role["aegis"]["representation"]["codex"])
+        self.assertNotIn("aegis", by_role)
         self.assertEqual(10, sum(row["representation"]["codex"] == "agent" for row in rows))
 
     def test_slice_a_check_renderer_interface_and_human_json(self):
@@ -664,7 +664,7 @@ class SliceA(unittest.TestCase):
                 self.assertEqual(0, human.returncode, human.stderr)
                 self.assertIn(str(self.source), human.stdout)
                 if arguments[0] == "models":
-                    self.assertEqual(12, len(response["data"]["roles"]))
+                    self.assertEqual(11, len(response["data"]["roles"]))
                     for row in response["data"]["roles"]:
                         for value in (row["identity"], row["family"], row["effort"], *row["models"].values()):
                             self.assertIn(value, human.stdout)
@@ -1205,7 +1205,7 @@ class SliceBModelEdit(unittest.TestCase):
         self.assertEqual(row["models"]["codex"]["old"], row["models"]["codex"]["new"])
         self.assert_preview_matches_renderer(candidate)
 
-    def test_slice_b_kael_root_and_aegis_codex_absence_are_preserved(self):
+    def test_slice_b_kael_root_and_retired_aegis_role_is_rejected(self):
         model_edit = self.model_edit()
         kael = model_edit._build_set_role_candidate(self.source, "kael", family="luna", effort="max")
         kael_row = kael.preview["data"]["roles"][0]
@@ -1214,11 +1214,8 @@ class SliceBModelEdit(unittest.TestCase):
         self.assertNotIn("CODEX.md", kael.preview["data"]["write_set"])
         self.assert_preview_matches_renderer(kael)
 
-        aegis = model_edit._build_set_role_candidate(self.source, "aegis", family="sol", effort="high")
-        aegis_row = aegis.preview["data"]["roles"][0]
-        self.assertEqual("absent", aegis_row["representation"]["codex"])
-        self.assertNotIn(".codex/agents/aegis.toml", aegis.preview["data"]["write_set"])
-        self.assert_preview_matches_renderer(aegis)
+        with self.assertRaisesRegex(model_edit.ModelEditError, "Unknown canonical role"):
+            model_edit._build_set_role_candidate(self.source, "aegis", family="sol", effort="high")
 
     def test_slice_b_noop_has_no_files_lock_scratch_or_source_mutations(self):
         model_edit = self.model_edit()
@@ -2637,7 +2634,7 @@ raise SystemExit(main(sys.argv[1:]))
         self.assertIn("requires --dry-run", error_doc["issues"][0]["message"])
         self.assertEqual(before, self._file_snapshot())
 
-    def test_slice_b_t018_preview_human_json_and_kael_aegis_are_read_only(self):
+    def test_slice_b_t018_preview_human_json_and_retired_role_rejection_are_read_only(self):
         before = self._file_snapshot()
         family = self._run(
             "models", "set-family", "sol", "--opencode", "openai/t018-sol", "--codex", "codex/t018-sol",
@@ -2662,16 +2659,13 @@ raise SystemExit(main(sys.argv[1:]))
 
         kael = self._run("agents", "set-model", "kael", "--family", "luna", "--effort", "max",
                          "--dry-run", "--json")
-        aegis = self._run("agents", "set-model", "aegis", "--family", "sol", "--effort", "high",
-                          "--dry-run", "--json")
         self.assertEqual(0, kael.returncode, kael.stderr)
-        self.assertEqual(0, aegis.returncode, aegis.stderr)
         kael_row = json.loads(kael.stdout)["data"]["roles"][0]
-        aegis_row = json.loads(aegis.stdout)["data"]["roles"][0]
         self.assertEqual("root", kael_row["representation"]["codex"])
         self.assertNotIn(".codex/agents/kael.toml", json.loads(kael.stdout)["data"]["write_set"])
-        self.assertEqual("absent", aegis_row["representation"]["codex"])
-        self.assertNotIn(".codex/agents/aegis.toml", json.loads(aegis.stdout)["data"]["write_set"])
+        aegis = self._run("agents", "set-model", "aegis", "--family", "sol", "--effort", "high",
+                          "--dry-run", "--json")
+        self.assertEqual(2, aegis.returncode)
         self.assertEqual(before, self._file_snapshot())
         self.assertFalse((self.source / ".olympus-cli-edit.lock").exists())
         self.assertFalse((self.source / ".olympus-cli-edit").exists())
@@ -2974,7 +2968,7 @@ raise SystemExit(main(sys.argv[1:]))
             cwd=ROOT, env=self.env, capture_output=True, text=True, encoding="utf-8", check=False, timeout=20,
         )
         self.assertEqual(0, result.returncode, (result.stdout, result.stderr))
-        self.assertEqual(12, len(json.loads(result.stdout)["data"]["roles"]))
+        self.assertEqual(11, len(json.loads(result.stdout)["data"]["roles"]))
         self.assertEqual("False", subprocess.run(
             [sys.executable, "-B", "-c",
              "import sys; import olympus.cli; print('tomlkit' in sys.modules)"]
@@ -2986,10 +2980,9 @@ raise SystemExit(main(sys.argv[1:]))
             ("sol", ("models", "set-family", "sol", "--opencode", "openai/t019-sol",
                       "--codex", "codex/t019-sol"), 14),
             ("luna", ("models", "set-family", "luna", "--opencode", "openai/t019-luna",
-                       "--codex", "codex/t019-luna"), 12),
+                       "--codex", "codex/t019-luna"), 11),
             ("specialist", ("agents", "set-model", "veyra", "--family", "sol", "--effort", "high"), 3),
             ("kael", ("agents", "set-model", "kael", "--family", "luna", "--effort", "max"), {3, 4}),
-            ("aegis", ("agents", "set-model", "aegis", "--family", "sol", "--effort", "high"), 2),
             ("no-op", ("models", "set-family", "sol", "--opencode", "openai/gpt-6.1-sol",
                         "--codex", "gpt-6.1-sol"), 0),
         )
@@ -3064,7 +3057,7 @@ raise SystemExit(main(sys.argv[1:]))
             (("--help",), lambda result: self.assertIn("config recover", result.stdout)),
             (("--version",), lambda result: self.assertIn("olympus ", result.stdout)),
             (("models", "list", "--json"), lambda result: self.assertEqual(
-                12, len(json.loads(result.stdout)["data"]["roles"]))),
+                11, len(json.loads(result.stdout)["data"]["roles"]))),
             (("config", "check", "--json"), lambda result: self.assertTrue(
                 json.loads(result.stdout)["data"]["coherent"])),
             (("status", "--scope", "project", "--target", str(target), "--json"),

@@ -9,16 +9,16 @@ guarantee.
 
 | Source | Owns |
 |---|---|
-| `olympus/roles/<role>.md` | One conceptual definition and responsibility boundary for each of the 12 canonical roles. Kael is the ROOT ORCHESTRATOR independently of runtime. |
+| `olympus/roles/<role>.md` | One conceptual definition and responsibility boundary for each of the 11 canonical roles. Kael is the ROOT ORCHESTRATOR independently of runtime. |
 | `olympus/core/identities.toml` | The single canonical full display identity for each technical role ID; renderers derive OpenCode descriptions/HUD and Codex descriptions/root heading from it. |
 | `olympus/core/models.toml` | The only role → model family / reasoning effort map, plus each family's OpenCode and Codex identifier. A family upgrade is one edit followed by rendering and qualification. |
 | `olympus/policies/routing.md` and `orchestration.toml` | Specialist suppression, trivial fast path, direct-root ownership, bounded parallelism, and the canonical maximum of four children. |
 | `olympus/policies/result-lifecycle.md` | Question barrier, completion barrier, original-result reconciliation, and no-blind-retry semantics. |
 | `olympus/policies/authority.md` | Canonical ALLOW / ASK / DENY meaning. |
-| `olympus/policies/maintenance-plane.md` | Explicit `/maintain` task dispatch to Aegis without an Olympus-side authorization flow, task continuity, and the no-automatic-escalation boundary. |
+| `olympus/policies/maintenance-context.md` | Repository identity, contextual maintenance routing, goal-first execution, and the external-project ownership boundary. |
 | `olympus/harnesses/capabilities.toml` | The two-harness capability contract (`SUPPORTED`, `ADAPTABLE`, `PARTIAL`, `GAP`, `NOT_NEEDED`). |
-| `olympus/harnesses/opencode/` | OpenCode permission/frontmatter, native role-prompt representation, `/maintain`, default config, and activity plugin sources. |
-| `olympus/harnesses/codex/` | Codex-native role-prompt representation, root instructions, project config, and permission profile. Codex has no Aegis agent. |
+| `olympus/harnesses/opencode/` | OpenCode permission/frontmatter, native role-prompt representation, default config, shared Serena MCP registration, and activity plugin sources. |
+| `olympus/harnesses/codex/` | Codex-native role-prompt representation, root instructions, project config, and permission profile. Contextual Olympus maintenance remains a declared capability gap. |
 
 Adapter prompt files intentionally contain runtime-specific instructions, not
 second canonical role or model definitions. Changes to Olympus meaning start in
@@ -39,8 +39,10 @@ python tests/harness-core/qualify.py
 ```
 
 `render` is deterministic and idempotent. `check` is read-only: it compares
-expected bytes in memory, reports every missing/drifted output, creates no
-temporary repository files, and exits nonzero on drift. Generated files contain
+expected bytes in memory, reports missing/drifted outputs and known retired
+OpenCode outputs, creates no temporary repository files, and exits nonzero on
+drift. Rendering refuses to overwrite stale retired paths; remove only verified
+generated outputs first. Generated files contain
 a parser-safe generated marker; **edit Core/adapter source, not generated
 outputs**.
 
@@ -48,7 +50,7 @@ outputs**.
 
 | Adapter | Managed/generated outputs |
 |---|---|
-| OpenCode | `.opencode/agents/**`, `.opencode/commands/maintain.md`, `.opencode/plugins/olympus-activity/**`, `opencode.jsonc` |
+| OpenCode | `.opencode/agents/**`, `.opencode/plugins/olympus-activity/**`, `opencode.jsonc` |
 | Codex | `CODEX.md`, `.codex/config.toml`, `.codex/agents/*.toml` |
 | Shared contract presentation | `docs/HARNESS-CAPABILITIES.md` |
 
@@ -107,8 +109,8 @@ runtime discovery is a separate contract:
 
 | Harness | Global support | Runtime evidence and blocker |
 |---|---|---|
-| OpenCode | **SUPPORTED — Windows V2.0.26 (isolated)** | Real `v0.4.6` global install: 15 managed resources; `VerifyOnly` read-only PASS; `opencode.config.agent` `active`; 12/12 Olympus agents plus 2/2 independent controls. An opt-in global `default_agent=kael` selected visible primary Kael; Aegis remained hidden. No LLM prompt. [Issue #7 acceptance](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7#issuecomment-6106396436). |
-| Codex | **SUPPORTED** | The user-provided Codex runtime evidence classifies `CODEX_GLOBAL_RUNTIME: SUPPORTED`. It was accepted as supplied and not re-run during this continuation; no additional Codex smoke or profile investigation was performed. Existing `DENY = GAP` and `AEGIS = GAP` classifications are unchanged. |
+| OpenCode | **SUPPORTED — Windows V2.0.26 (isolated)** | Historical real `v0.4.6` global install: 15 managed resources; `VerifyOnly` read-only PASS; `opencode.config.agent` `active`; 12/12 agents plus 2/2 independent controls. The current 11-role candidate has not yet been included in that runtime evidence. [Issue #7 acceptance](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7#issuecomment-6106396436). |
+| Codex | **SUPPORTED** | The user-provided Codex runtime evidence classifies `CODEX_GLOBAL_RUNTIME: SUPPORTED`. It was accepted as supplied and not re-run during this continuation; contextual Olympus maintenance and `DENY` remain declared gaps. |
 
 OpenCode's official current config docs confirm global agents under
 `~/.config/opencode/agents/`, `OPENCODE_CONFIG_DIR` as a custom config directory,
@@ -189,13 +191,20 @@ profile. Its older empty-roster observation did not wait for verified plugin
 activation and must not be treated as a current rejection of the V2.0.26
 supported-state evidence.
 
-The OpenCode project adapter provides the `/maintain` command, hidden Aegis,
-native ASK, hard DENY, Activity HUD, roles, models, permissions, and
-installer-managed surface. Global discovery is separately qualified above
-for isolated Windows V2.0.26; no model-backed prompt is implied.
+The OpenCode project adapter provides Kael, normal specialists, native ASK,
+hard DENY, Activity HUD, models, permissions, and installer-managed resources.
+Contextual Olympus maintenance uses the same Kael workflow; the current 11-role
+candidate requires its own runtime evidence. OpenCode's project config registers
+one native `serena` MCP server (`serena start-mcp-server`, project-from-cwd,
+stdio, Code Mode disabled) so Kael, Veyra, and Kovan can use read-only Serena
+symbol-navigation tools. This requires the Serena CLI on `PATH`; the generated
+agent permissions intentionally do not expose Serena editing tools. The actual
+server/tool result remains a runtime dependency, not a prompt-only guarantee.
+Global discovery is separately
+qualified above for isolated Windows V2.0.26; no model-backed prompt is implied.
 Codex installation does not imply capability parity: Codex multi-agent and
 result delivery are supported, ALLOW is supported, ASK is adaptable, DENY and
-Aegis remain gaps, and activity visibility is partial/basic. See the generated
+contextual Olympus maintenance remain gaps, and activity visibility is partial/basic. See the generated
 [capability contract](HARNESS-CAPABILITIES.md).
 
 Codex uses its root thread as Kael, custom specialists, per-role model/effort,
@@ -222,7 +231,7 @@ point and its FAST/FULL/RUNTIME boundaries are documented in
 - `DENY = GAP`: Codex does not currently provide equivalent hard Olympus
   resource protection. Its read-only permission-profile rules remain documented
   honestly as policy/profile protection, not an immutable ACL.
-- `AEGIS = GAP`: no Codex Aegis or unsafe substitute is installed.
+- `CONTEXTUAL_OLYMPUS_MAINTENANCE = GAP`: no Codex support is claimed for the contextual Olympus maintenance workflow.
 - `RESULT_DELIVERY = SUPPORTED`: native delivery passed in the user-provided runtime evidence; missing-result recovery remains a separate `PARTIAL` capability.
 - `ASK = ADAPTABLE`: native approval is used, not claimed as an identical
   per-role Olympus grant. Native requests from child threads can be visible

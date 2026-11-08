@@ -55,7 +55,6 @@ function Normalize-Managed-Path([string]$Path) {
     }
     $allowed = $relative -ceq 'opencode.jsonc' -or $relative -ceq 'CODEX.md' -or
         $relative -match '^\.opencode/agents/[A-Za-z0-9_-]+\.md$' -or
-        $relative -ceq '.opencode/commands/maintain.md' -or
         $relative -match '^\.opencode/plugins/olympus-activity/(activity\.ts|tui\.tsx)$' -or
         $relative -ceq '.opencode/scripts/worktree-setup.ps1' -or
         $relative -match '^\.codex/agents/[A-Za-z0-9_-]+\.toml$' -or
@@ -170,7 +169,6 @@ try {
     # Installed projects lack Core renderer sources; this is the exact current
     # bootstrap-generated roster. Historical sets remain bootstrap-only.
     $expectedOpenCode = @(
-        '.opencode/agents/aegis.md',
         '.opencode/agents/argus.md',
         '.opencode/agents/atlas.md',
         '.opencode/agents/helios.md',
@@ -182,7 +180,6 @@ try {
         '.opencode/agents/thales.md',
         '.opencode/agents/vera.md',
         '.opencode/agents/veyra.md',
-        '.opencode/commands/maintain.md',
         '.opencode/plugins/olympus-activity/activity.ts',
         '.opencode/plugins/olympus-activity/tui.tsx',
         '.opencode/scripts/worktree-setup.ps1',

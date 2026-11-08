@@ -1,6 +1,12 @@
 # Registro futuro y limitaciones conocidas
 
-Este registro separa propuestas, evaluación y bugs abiertos de las diez capacidades ya presentes en v0.4.9. Estar aquí no autoriza implementación ni crea tareas, plan o criterios de aceptación. Estado de issues consultado el 2026-10-14; verificarlo antes de cualquier trabajo posterior.
+Este registro separa propuestas, evaluación y bugs abiertos de las capacidades ya presentes en v0.4.9. Estar aquí no autoriza implementación ni crea tareas, plan o criterios de aceptación. Los estados de issues de la instantánea inicial se consultaron el 2026-10-14; #28 se actualizó con la decisión aprobada del 2026-11-07.
+
+## Decisión aprobada en implementación
+
+| Issue | Dirección | Estado |
+|---|---|---|
+| [#28](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/28) | Corte limpio: Kael contextual, sin rol Aegis ni comando `/maintain`; conservar evidencia histórica. | Implementación en curso en `feat/28-single-kael-maintenance`; abrir Draft PR, no fusionar ni liberar. |
 
 ## Propuestas abiertas
 
@@ -16,7 +22,6 @@ Este registro separa propuestas, evaluación y bugs abiertos de las diez capacid
 |---|---|---|
 | [#13](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/13) | OPEN; auto-review opcional | Exploración no comprometida. No crea un gate de aprobación. |
 | [#26](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/26) | OPEN; jerarquía | Exploración no comprometida; no cambia la propiedad actual de Kael ni la política de profundidad. |
-| [#28](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/28) | OPEN; variación Kael→Aegis | Exploración no comprometida, en tensión con la regla actual que prohíbe a Kael y a sus hijos invocar Aegis. No es una excepción aprobada ni un cambio de autoridad. |
 | [#37](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/37) | OPEN; supervisión adaptativa y fidelidad de skills | Exploración futura no comprometida. |
 
 ## Limitaciones y bugs abiertos ya representados

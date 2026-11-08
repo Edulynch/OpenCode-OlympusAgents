@@ -58,7 +58,7 @@ try {
         $kael -match 'Topology: USER/ROOT → Kael → Thales → EVIDENCE_REQUEST → Kael → worker' -and
         $thales -match 'STATUS: EVIDENCE_REQUEST' -and $thales -match 'EXPECTED_DISCRIMINATION')
     Check 'TH14_TH15_BOUNDARIES' ($kael -match 'PENDING_OR_INDETERMINATE' -and $kael -match 'COMPLETION_UNCONFIRMED' -and
-        $kael -match 'Kael → Aegis remains DENIED' -and $thales -match '(?s)Never directly invoke.*?Aegis')
+        $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
     Check 'TH20_TH22_MODELS_CONCURRENCY' ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kael -match 'fan out up to four useful children' -and $kael -notmatch 'gpt-6-luna#fast')
     }

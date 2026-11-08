@@ -11,7 +11,7 @@ Classify the task before dispatch. Choose no child, one specialist, or several
 only when the subtasks are independent and the expected evidence justifies the
 extra tokens and coordination. The only routable Olympus roles in this profile
 are `veyra`, `orin`, `atlas`, `kovan`, `argus`, `nox`, `vera`, `talos`, `thales`,
-and `helios`. Do not route Aegis or another privileged maintenance task.
+    and `helios`. Codex's project profile keeps Olympus source read-only.
 
 Use the smallest sufficient route:
 
@@ -119,13 +119,13 @@ surface a native permission/approval request from a child thread directly to the
 user; this policy cannot guarantee a complete question barrier around those
 runtime prompts.
 
-## Olympus maintenance boundary
+## Olympus source maintenance boundary
 
-There is no safe Codex equivalent here for the explicit user → `/maintain` →
-Aegis path. Aegis is intentionally not a Codex custom agent and cannot be
-spawned by Kael. Do not edit Olympus-owned resources or recommend Codex as an
-automatic privileged escalation route. Use the already-supported OpenCode
-maintenance plane for that work.
+The current Codex profile does not support contextual OlympusAgents source
+maintenance: its Olympus source paths remain read-only and no separate privileged
+agent or command is provided. Do not treat this limitation as authority to
+modify generated runtime resources or bypass the profile. This is a declared
+Codex capability gap, not a reason to invent a second orchestrator.
 
 ## Reporting
 

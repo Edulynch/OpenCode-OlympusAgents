@@ -205,18 +205,18 @@ try {
             $first.Text -match "OLYMPUS_INSTALL: $($script:CandidateRegex) READY_OR_NO_CHANGES")
         if (-not $r1Pass) { Write-Output "R1_INSTALL_OUTPUT: $($first.Text)" }
         Check 'R1_CANDIDATE_RESOLVED_CANDIDATE' $r1Pass
-        $paths = @('opencode.jsonc', '.opencode/orchestrator-install.json', '.opencode/commands/maintain.md',
+        $paths = @('opencode.jsonc', '.opencode/orchestrator-install.json',
             '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx',
             '.opencode/scripts/worktree-setup.ps1')
-        $paths += @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios','aegis' | ForEach-Object { ".opencode/agents/$_.md" })
+        $paths += @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios' | ForEach-Object { ".opencode/agents/$_.md" })
         Check 'R2_CANDIDATE_ROSTER_FILES' (@($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path $target $_) -PathType Leaf) }).Count -eq 0 -and
-            -not (Test-Path -LiteralPath (Join-Path $target '.opencode/agents/maintenance.md')))
+            -not (Test-Path -LiteralPath (Join-Path $target '.opencode/agents/aegis.md')) -and
+            -not (Test-Path -LiteralPath (Join-Path $target '.opencode/commands/maintain.md')))
         $manifestPath = Join-Path $target '.opencode/orchestrator-install.json'
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
         Check 'R2_CANDIDATE_MANIFEST_VERSION_AND_OWNERSHIP' ($manifest.schema_version -eq 1 -and
-            $manifest.installed_version -eq $script:CandidateVersion -and $manifest.managed_files.Count -eq 17 -and
-            @($manifest.managed_files | Where-Object path -eq '.opencode/agents/aegis.md').Count -eq 1 -and
-            @($manifest.managed_files | Where-Object path -eq '.opencode/agents/maintenance.md').Count -eq 0)
+            $manifest.installed_version -eq $script:CandidateVersion -and $manifest.managed_files.Count -eq 15 -and
+            @($manifest.managed_files | Where-Object path -match 'aegis|commands/maintain|agents/maintenance').Count -eq 0)
 
         $betaVerify = Verify $target $candidateArchive $script:CandidateVersion
         Check 'R24_CANDIDATE_INSTALL_VERIFY_PASS' ($betaVerify.Code -eq 0 -and $betaVerify.Text -match "(?m)^OLYMPUS_VERIFY: $($script:CandidateRegex) PASS\s*$")
@@ -224,24 +224,25 @@ try {
         Push-Location $target
         try {
             $agents = (& opencode debug agents 2>&1 | Out-String) | ConvertFrom-Json -Depth 100
-            Check 'R3_EFFECTIVE_AGENTS' ($LASTEXITCODE -eq 0 -and @($agents | Where-Object { $_.id -in @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios','aegis') }).Count -eq 12 -and @($agents | Where-Object { $_.id -in @('maintenance','sorin') }).Count -eq 0)
+            Check 'R3_EFFECTIVE_AGENTS' ($LASTEXITCODE -eq 0 -and @($agents | Where-Object { $_.id -in @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios') }).Count -eq 11 -and @($agents | Where-Object { $_.id -in @('maintenance','sorin','aegis') }).Count -eq 0)
             $plugins = (& opencode plugin list 2>&1 | Out-String)
             Check 'R9_HUD_DISCOVERY' ($LASTEXITCODE -eq 0 -and $plugins -match 'olympus-activity')
         } finally { Pop-Location }
         $expected = @{
             kael=@('gpt-6.1-sol','high','primary'); thales=@('gpt-6.1-sol','xhigh','subagent'); atlas=@('gpt-6.1-sol','high','subagent'); argus=@('gpt-6.1-sol','high','subagent'); talos=@('gpt-6.1-sol','high','subagent'); helios=@('gpt-6.1-sol','high','subagent')
             veyra=@('gpt-6-luna','max','subagent'); orin=@('gpt-6-luna','max','subagent'); kovan=@('gpt-6-luna','max','subagent')
-            nox=@('gpt-6-luna','max','subagent'); vera=@('gpt-6-luna','max','subagent'); aegis=@('gpt-6-luna','max','subagent')
+            nox=@('gpt-6-luna','max','subagent'); vera=@('gpt-6-luna','max','subagent')
         }
         foreach ($id in $expected.Keys) {
             $agent = @($agents | Where-Object id -eq $id)
             Check "R5_MODEL_$id" ($agent.Count -eq 1 -and $agent[0].model.id -eq $expected[$id][0] -and
                 $agent[0].model.variant -eq $expected[$id][1] -and $agent[0].mode -eq $expected[$id][2])
         }
-        $m = @($agents | Where-Object id -eq aegis)[0]
-        Check 'R4_AEGIS_HIDDEN' ($m.mode -eq 'subagent' -and $m.hidden -eq $true)
-        $maintainCommand = [IO.File]::ReadAllText((Join-Path $target '.opencode/commands/maintain.md'))
-        Check 'R4_MAINTAIN_ROUTES_AEGIS' ($maintainCommand -match '(?m)^agent: aegis\s*$' -and $maintainCommand -match '(?m)^subagent: true\s*$')
+        $kaelText = [IO.File]::ReadAllText((Join-Path $target '.opencode/agents/kael.md'))
+        Check 'R4_CONTEXTUAL_MAINTENANCE_ON_KAEL' ($kaelText -match 'Kael is the only root orchestrator' -and
+            $kaelText -match 'There is no separate maintenance role, command' -and
+            -not (Test-Path -LiteralPath (Join-Path $target '.opencode/agents/aegis.md')) -and
+            -not (Test-Path -LiteralPath (Join-Path $target '.opencode/commands/maintain.md')))
     } else {
         Write-Output 'REVALIDATION_START: R4_PERMISSION_CHECKS (R1-R4 discovery gates already collected; no gate assertions rerun).'
         if ($first.Code -ne 0) { throw 'Fixture setup failed while restoring permission check context.' }
@@ -253,7 +254,9 @@ try {
     $n = @($agents | Where-Object id -eq nox)[0]
     $kael = @($agents | Where-Object id -eq kael)[0]
     $kaelChildren = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object resource)
-    Check 'R4_KAEL_CANNOT_ROUTE_AEGIS' (@($kaelChildren | Where-Object { $_ -eq 'aegis' -or $_ -eq '*' }).Count -eq 0)
+    $expectedChildren = @('veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios')
+    Check 'R4_KAEL_CAN_ROUTE_NORMAL_SPECIALISTS' ($kaelChildren.Count -eq $expectedChildren.Count -and
+        @($expectedChildren | Where-Object { $_ -notin $kaelChildren }).Count -eq 0)
     function Perm($a, [string]$action, [string]$effect) {
         @($a.permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq $effect }).Count -gt 0
     }
@@ -342,7 +345,7 @@ try {
     $missingTarget = New-Target 'verify-managed-file-missing'
     $missingInstall = Install $missingTarget $candidateArchive $script:CandidateVersion
     if ($missingInstall.Code -ne 0) { throw 'Candidate fixture install failed before missing-file verification.' }
-    $missingFile = Join-Path $missingTarget '.opencode/agents/aegis.md'
+    $missingFile = Join-Path $missingTarget '.opencode/agents/kael.md'
     Remove-Item -LiteralPath $missingFile -Force
     $missingSnapshot = Get-ProjectSnapshot $missingTarget
     $missingVerify = Verify $missingTarget $candidateArchive $script:CandidateVersion
@@ -354,7 +357,7 @@ try {
     $retiredAgentTarget = New-Target 'verify-retired-agent-active'
     $retiredInstall = Install $retiredAgentTarget $candidateArchive $script:CandidateVersion
     if ($retiredInstall.Code -ne 0) { throw 'Candidate fixture install failed before retired-agent verification.' }
-    [IO.File]::WriteAllText((Join-Path $retiredAgentTarget '.opencode/agents/maintenance.md'), "id: maintenance`n", $utf8)
+    [IO.File]::WriteAllText((Join-Path $retiredAgentTarget '.opencode/agents/aegis.md'), "id: aegis`n", $utf8)
     $retiredVerify = Verify $retiredAgentTarget $candidateArchive $script:CandidateVersion
     Check 'R24_CANDIDATE_ROSTER_REJECTS_MAINTENANCE' ($retiredVerify.Code -ne 0 -and
         $retiredVerify.Text -match 'OLYMPUS_VERIFY_REASON: ROSTER_MISMATCH')

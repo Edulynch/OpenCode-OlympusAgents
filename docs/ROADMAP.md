@@ -7,16 +7,16 @@ Maintainer-facing, directional, evidence-driven and subject to validation. This 
 - **OpenCode V2 — ACTIVE DEVELOPMENT.** Prioritize it for every new feature, agent, command, architectural improvement, and runtime capability. OpenCode-only capabilities need no Codex equivalent or parity gate.
 - **Codex — FROZEN COMPATIBILITY.** Codex is neither removed nor declared wholly incompatible. Retain its existing components, installers, manifests, and uninstall protections. Do not add integrations or close gaps solely for parity; allow only evidenced critical Codex fixes or regressions caused by shared-code changes, with a concrete bounded scope.
 - Keep existing tests that protect shared integrity and compatibility. Do not add Codex gates for OpenCode-only capabilities. Do not claim newer Codex versions are verified without version-specific evidence.
-- Frozen Codex gaps include differences in **authority, Aegis, hard `DENY`, and observability**. The historical compatibility evidence and its version/date qualifications below remain intact; this policy does not promote it to evidence for newer versions.
-- The twelve canonical Olympus Core roles and their responsibilities remain intact. Runtime support status does not remove or reassign a role.
+- Frozen Codex gaps include differences in **authority, contextual Olympus maintenance, hard `DENY`, and observability**. The historical compatibility evidence and its version/date qualifications below remain intact; this policy does not promote it to evidence for newer versions.
+- The eleven canonical Olympus Core roles and their responsibilities remain intact. Runtime support status does not remove or reassign a role.
 - Kael's three optional execution modifiers are OpenCode-only and task-scoped: terminal standalone `long-mode`, `fast-mode`, and `surgical-mode` lines. `fast-mode` reuses existing FAST; no parser, scheduler, model, permission, or Codex change is introduced. Prompt instructions can define marker placement, but static checks do not prove live model recognition or compliance.
 
 ## Current foundation — SHIPPED
 
 - Harness Core, OpenCode adapter, and Codex adapter are present; OpenCode V2 is actively developed, while Codex stays at its frozen compatibility baseline and its capability differences remain explicit.
 - The dual-harness project and global installer entrypoints are published. `-Scope project` remains the default; Codex/OpenCode/All selection is supported. Global installation and agent discovery are Windows-qualified for OpenCode V2.0.26 (isolated runtime, Issue #7); no prompt execution or other runtime versions are implied.
-- Completion/reconciliation, external-work ownership, authority, and the explicit `/maintain` → Aegis maintenance entry are part of Core. OpenCode has Aegis, hard DENY, native ASK, and the passive Activity HUD. Codex DENY/Aegis remain gaps and activity visibility is basic/partial.
-- Upstream OpenCode result-correlation issue #1 remains OPEN; Olympus keeps no-blind-retry/result reconciliation. Issues #2–#6, #9 and [#10](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10) are CLOSED. Issue #8 remains OPEN; Phase 1C simplifies Aegis to maintenance-task execution without claiming a live compaction/runtime fix. Global discovery #7 has a Windows V2.0.26 real-install and Kael-selection acceptance PASS; historical early roster results remain in the issue thread.
+- Completion/reconciliation, external-work ownership, authority, and contextual maintenance through the same Kael workflow are part of Core. OpenCode has contextual Olympus maintenance, hard DENY, native ASK, and the passive Activity HUD. Codex contextual maintenance and DENY remain gaps; activity visibility is basic/partial.
+- Upstream OpenCode result-correlation issue #1 remains OPEN; Olympus keeps no-blind-retry/result reconciliation. Historical Aegis and explicit-command qualification records remain historical only and do not define the current product route. Global discovery #7 has a Windows V2.0.26 real-install and Kael-selection acceptance PASS; historical early roster results remain in the issue thread.
 - Release history: the v0.4.0 validation tag records the integrated foundation; its release validation failed because documentation still named beta.5 as the active baseline and contradicted the established integration/tag state, and no GitHub Release was created.
 - The v0.4.1 validation tag also failed release validation because documentation treated that version as upcoming and advised against publishing it; no GitHub Release was created.
 - Both validation tags are immutable historical records.
@@ -27,7 +27,7 @@ Maintainer-facing, directional, evidence-driven and subject to validation. This 
 - The v0.4.0 foundation introduced one canonical Full Agent Display Identity source and derived adapters, plus the global OpenCode/Codex/All installer foundation, manifests, verification, update, safe uninstall, and non-destructive project→global migration. The corrective v0.4.2 and subsequent v0.4.3 releases preserve these capabilities and project scope as the default; project-local behavior remains backwards-compatible.
 - Historical OpenCode V2.0.20 global-runtime runs returned empty rosters; the old diagnostic used the wrong location query and lacked loader-activation confirmation. The original cause remains unknown (Issue #7), so the results are preserved as historical investigation rather than an active unsupported-capability verdict.
 - OpenCode V2.0.26 `GLOBAL_RUNTIME_DISCOVERY = SUPPORTED` on isolated Windows with the actual v0.4.6 global installer (15 resources), verified loader, 12/12 agents, 2/2 controls, and configuration-level selection of primary Kael; no LLM prompt. [Acceptance evidence](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7#issuecomment-6106396436). Codex remains `SUPPORTED` on separately supplied evidence, not rerun.
-- Codex DENY and Codex Aegis remain explicit frozen GAPs. Research found no demonstrated hard-deny equivalent or safely enforced privileged maintenance entry; do not use prompt-only theater or weaken Core. No parity work is planned solely to close these gaps.
+- Codex DENY and contextual Olympus maintenance remain explicit frozen GAPs. Do not infer support or weaken Core. No parity work is planned solely to close these gaps.
 - Phase 12 cross-harness evaluation is CLOSED: [3 matched pairs and 6/6 verified executions](history/PHASE12-CROSS-HARNESS-RESULTS.md), with PASS for the tested functional, routing, completion, and scope invariants. Capability gaps remain; this does not establish total parity, superiority, or a harness/model winner.
 
 ## Scope and backlog reconciliation — Issues #73 and #75
@@ -93,7 +93,6 @@ The table captures shipped roles and current in-validation identities. Model ent
 | `talos` — Talos — The Sentinel | GPT-6.1 Sol High | Security defect and trust-boundary reasoning | SHIPPED; required for established/strongly evidenced material security/trust/authorization boundary defects under diagnosis/classification; no extra unanswered question required |
 | `thales` — Thales — The Sage | GPT-6.1 Sol XHigh | High-uncertainty diagnostic escalation | SHIPPED: native evolution of Sorin; live routing qualified |
 | `helios` — Helios — The Optimizer | GPT-6.1 Sol High | Explicit-only optimization feasibility and evidence-bounded proposal | SHIPPED; user-executed live qualification passed |
-| `aegis` — Aegis — The Keeper | GPT-6 Luna Max | Hidden privileged task executor through explicit `/maintain`; never a Kael child or ownership gate | SHIPPED on OpenCode; `CODEX_AEGIS = GAP` |
 
 ## Defect routing and diagnostic budget — Phase 6 shipped
 
@@ -108,7 +107,7 @@ Explicit user optimization intent may engage Helios; a performance fact alone ne
 
 ## Command UX — CLOSED
 
-Phase 10 evaluated `/power`, `/plan`, `/performance` and `/fast`; none provides an exclusive capability or authority boundary that justifies a new Olympus command. Natural language and existing routing remain the primary UX. `/maintain` remains the exception because it explicitly enters the privileged Aegis maintenance plane.
+Phase 10 evaluated `/power`, `/plan`, `/performance` and `/fast`; none provides an exclusive capability or authority boundary that justifies a new Olympus command. Natural language and existing routing remain the primary UX. The former separate maintenance command and role are retired by Issue #28's approved clean break. `/goal` remains opt-in and user-selected only where the native surface provides it; Kael does not trigger it invisibly or assume it delegates.
 
 - `/power` — **DROP**. It mixes model, reasoning, parallelism, configuration and routing concerns; Olympus is not a model-configuration dashboard.
 - `/plan` — **DROP as an Olympus command**. Users can say “Plan X. Do not implement.” Atlas remains optional. Codex's native `/plan` belongs to that harness and does not equate to invoking Atlas.
@@ -119,17 +118,17 @@ Phase 10 evaluated `/power`, `/plan`, `/performance` and `/fast`; none provides 
 
 | Phase | Status | Target / qualification focus |
 |---|---|---|
-| 0 — Foundation | **SHIPPED** | OpenCode V2 runtime, preflight/discovery, completion and external-work gates, HUD, trusted-project execution, Maintenance Plane, NORMAL/FAST up to four. |
+| 0 — Foundation | **SHIPPED** | OpenCode V2 runtime, preflight/discovery, completion and external-work gates, HUD, trusted-project execution, contextual maintenance, NORMAL/FAST up to four. |
 | 1 — Adaptive Concurrency finalization | **DEFERRED** | The earlier NORMAL 4 / FAST 6 proposal remains unimplemented. Current policy retains useful parallelism by default in NORMAL and explicitly requested FAST with at most four active children; this maintenance release makes no concurrency change. |
 | 2 — Current Sorin baseline qualification | **SUPERSEDED** | The Sorin-specific qualification plan was superseded by shipped Phase 4 Thales evolution; no Sorin agent or session is to be resurrected. Evidence: the Thales evolution entry in `CHANGELOG.md` and the Phase 4 migration qualification in `tests/thales/`. |
-| 3 — Role Purity + Iterative Evidence | **SHIPPED** | Kael-mediated Role Purity, same-session Sorin evidence follow-up, no-progress stop, completion ownership, Issue #1 reconciliation and Issue #2 Maintenance safety. Static/synthetic/full regression passed; user-executed live Cases A and B passed. No third automatic Sorin consultation. |
+| 3 — Role Purity + Iterative Evidence | **SHIPPED** | Kael-mediated Role Purity, same-session Sorin evidence follow-up, no-progress stop, completion ownership, and Issue #1 reconciliation. Historical evidence is preserved; current routing has no separate maintenance handoff. |
 | 4 — Thales evolution | **SHIPPED** | Sorin visible identity → Thales The Sage; Sol XHigh deep-escalation role, user-executed live routing and deterministic negative control passed. |
 | 5 — Atlas The Planner | **SHIPPED** | Sol High, smallest sufficient execution plan; no implementation/discovery ownership; gated use. User-executed live planning and negative control passed. |
 | 6 — Argus The Bug Hunter | **SHIPPED** | Optional functional diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. No implementation or direct discovery. |
 | 7 — Talos The Sentinel | **SHIPPED** | Bounded security defect and trust-boundary diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. |
 | 8 — Helios The Optimizer | **SHIPPED** | Explicit-only feasibility/proposal, mandatory user approval, before/after validation; user-executed live cases A and B passed. |
-| 9 — Aegis evolution | **SHIPPED on OpenCode; Codex GAP** | Hidden Aegis on Luna Max executes the maintenance task delivered by the explicit `/maintain` command; preserves Kael/child denials, task boundaries, and result reconciliation without a separate Olympus authorization flow. |
-| 10 — Command UX | **CLOSED** | `/power`, `/plan`, `/performance` and `/fast` were evaluated and dropped: no exclusive capability; natural language and routing remain primary, with `/maintain` retained as the explicit maintenance dispatch. |
+| 9 — Contextual maintenance (Issue #28) | **IN VALIDATION** | One Kael handles OlympusAgents and external-project work using the normal specialists and gates; former separate maintenance role/command are removed. Codex remains `CONTEXTUAL_OLYMPUS_MAINTENANCE = GAP`. |
+| 10 — Command UX | **CLOSED** | `/power`, `/plan`, `/performance` and `/fast` were evaluated and dropped. Natural language and existing routing remain primary; `/goal` remains opt-in and is never triggered invisibly. |
 | 11 — Integrated Routing Qualification | **SHIPPED** | [Closure evidence](../tests/phase11-integrated-routing/baseline.md): qualification is complete with no pending native cases. Case I remains guided PARTIAL; Argus/Thales same-session follow-up runtime coverage was NOT_EXERCISED. These are non-blocking limits, not evidence that every runtime path was exercised. |
 | 12 — Cross-harness evaluation | **CLOSED** | [Results](history/PHASE12-CROSS-HARNESS-RESULTS.md): 3 matched pairs / 6 verified executions; PASS for tested invariants only. Capability limitations remain; no total parity, superiority, or winner is claimed. |
 

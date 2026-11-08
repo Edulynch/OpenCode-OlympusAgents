@@ -51,7 +51,3 @@ effort = "xhigh"
 [roles.helios]
 family = "sol"
 effort = "high"
-
-[roles.aegis]
-family = "luna"
-effort = "max"

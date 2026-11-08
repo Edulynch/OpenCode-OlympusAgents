@@ -93,7 +93,7 @@ function Simulate([string]$case) {
     if ($case -eq 'regression') { $state = 'VALIDATION_FAILED' }
     [pscustomobject]@{ Status=$state; Sessions=[int]$intent; Calls=$calls; Worker=$worker; WorkerParent=$workerParent; SameSession=$same; Implemented=$implementation }
 }
-$expected = @{ kael='gpt-6.1-sol#high'; atlas='gpt-6.1-sol#high'; argus='gpt-6.1-sol#high'; talos='gpt-6.1-sol#high'; helios='gpt-6.1-sol#high'; thales='gpt-6.1-sol#xhigh'; aegis='gpt-6-luna#max'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
+$expected = @{ kael='gpt-6.1-sol#high'; atlas='gpt-6.1-sol#high'; argus='gpt-6.1-sol#high'; talos='gpt-6.1-sol#high'; helios='gpt-6.1-sol#high'; thales='gpt-6.1-sol#xhigh'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
     if ($QualificationSlice -eq 'Offline') { Enable-OfflineOpenCodeStub $run }
@@ -135,8 +135,6 @@ try {
     Check HE27 ($k -match 'Third automatic consultation DENIED' -and $h -match 'Third automatic consultation DENIED')
     Check HE28 ($k -match 'NO_PROGRESS:' -and $h -match 'NO_PROGRESS:')
     Check HE29 ($k -match 'MISSING OUTPUT != WORKER FAILURE' -and $h -match 'reconciles that original')
-    Check HE30 ($k -match 'Issue #2 Aegis handoff stays intact' -and $k -match 'MAINTENANCE_RESULT_PENDING')
-    Check HE31 ($k -match 'Kael → Aegis DENIED' -and $h -match 'user → /maintain explicit only')
     Check HE32 ($k -match 'Kael retains all routing, reconciliation and root completion' -and $h -match 'Kael retains routing, reconciliation and root completion')
     Check HE33 (@($expected.Keys | Where-Object { ([IO.File]::ReadAllText((Join-Path $source ".opencode/agents/$_.md"))) -notmatch ('(?m)^model: "?openai/' + [regex]::Escape($expected[$_]) + '"?\r?$') }).Count -eq 0)
     Check HE34 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')

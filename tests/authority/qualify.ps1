@@ -18,7 +18,7 @@ function Covers([string]$scope, [string]$path) {
 
 function Is-OlympusOwned([string]$path, [string[]]$manifestPaths = @()) {
     $p = $path.Replace('\','/').TrimStart('/').ToLowerInvariant()
-    $fixed = @('.opencode/agents/', '.opencode/commands/maintain.md',
+    $fixed = @('.opencode/agents/',
         '.opencode/plugins/olympus-activity/', '.opencode/scripts/worktree-setup.ps1',
         '.opencode/orchestrator-install.json',
         '.opencode/opencode.json', '.opencode/opencode.jsonc', '.codex/', 'CODEX.md',
@@ -1052,14 +1052,14 @@ try {
         (Native-Decision $nativeRules 'edit' $activityPath) -eq 'DENY' -and
         $kael -match '\.opencode/plugins/olympus-activity/\*\*')
 
-    foreach ($path in @('.opencode/agents/kovan.md','.opencode/commands/maintain.md',
+    foreach ($path in @('.opencode/agents/kovan.md',
         '.opencode/orchestrator-install.json','.opencode/opencode.json','.opencode/opencode.jsonc',
         '.codex/agents/kovan.toml','.codex/config.toml','CODEX.md','olympus/core/models.toml',
         'olympus/roles/kael.md','olympus/policies/authority.md','scripts/render_harnesses.py',
         'opencode.json','opencode.jsonc')) {
         Check ('AUTH9_NATIVE_DENY_' + ($path -replace '[^A-Za-z0-9]','_')) ((Native-Decision $nativeRules 'edit' $path) -eq 'DENY')
     }
-    $normalAgents = @(Get-ChildItem -LiteralPath (Join-Path $root '.opencode/agents') -Filter '*.md' -File | Where-Object BaseName -ne 'aegis')
+    $normalAgents = @(Get-ChildItem -LiteralPath (Join-Path $root '.opencode/agents') -Filter '*.md' -File)
     $coreProtectionValid = @($normalAgents | Where-Object {
         $agentRules = Read-NativeRules ([IO.File]::ReadAllText($_.FullName)) @($config.permissions)
         @('olympus/core/models.toml','olympus/roles/kael.md','olympus/policies/authority.md',
@@ -1077,7 +1077,7 @@ try {
     $managedPaths += @(Get-ChildItem -LiteralPath (Join-Path $root '.opencode/agents') -Filter '*.md' -File -Recurse -Force | ForEach-Object {
         $_.FullName.Substring(([IO.Path]::GetFullPath($root).TrimEnd([char[]]@('\','/')).Length + 1)).Replace('\','/')
     })
-    $managedPaths += @('.opencode/commands/maintain.md', '.opencode/plugins/olympus-activity/activity.ts',
+    $managedPaths += @('.opencode/plugins/olympus-activity/activity.ts',
         '.opencode/plugins/olympus-activity/tui.tsx', '.opencode/scripts/worktree-setup.ps1')
     $managedPaths += @(Get-ChildItem -LiteralPath (Join-Path $root '.codex/agents') -Filter '*.toml' -File -Recurse -Force | ForEach-Object {
         $_.FullName.Substring(([IO.Path]::GetFullPath($root).TrimEnd([char[]]@('\','/')).Length + 1)).Replace('\','/')
@@ -1139,8 +1139,7 @@ try {
     $childSelfRoutes = @($workerPaths | Where-Object { $file = Text $_; $file -notmatch '(?s)action: subagent\s+resource: "?\*"?\s+effect: deny' }).Count
     Check 'AUTH11_CHILD_SELF_ESCALATION_DENIED' ($childSelfRoutes -eq 0 -and
         @($workerTexts | Where-Object { $_ -notmatch 'never (?:ask the user, grant|grant)\s+or infer your own authority' }).Count -eq 0 -and
-        $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs' -and
-        $kael -match 'Kael → Aegis remains DENIED')
+        $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
 
     $needs = @(
         [pscustomobject]@{ root=$rootPath; operation='WRITE_SCOPE'; scope='src/one/**' },

@@ -57,9 +57,9 @@ criteria belong to the project owner. Current product direction prioritizes Flut
 on Android and 2D games with Flame while retaining web support; Olympus does not require
 the entire tools suite to be installed.
 
-## 🛠️ Maintenance (OpenCode)
+## 🛠️ Contextual maintenance
 
-Ordinary Git work, including releases, stays with Kael in the normal project workflow. Only an explicit `/maintain` invokes hidden Aegis; Kael never escalates there automatically. Codex has no equivalent Aegis capability.
+Kael is the sole orchestrator for external projects and OlympusAgents. Maintenance is a task context, not a separate role or command: Kael uses the normal specialists and proportionate validation, with Olympus source writes scoped to the identified OlympusAgents repository. OpenCode supports this contextual workflow; Codex currently declares it a capability gap. The optional native `/goal` UX is user-selected where available and is not required or silently invoked.
 
 ## 📚 Documentation
 

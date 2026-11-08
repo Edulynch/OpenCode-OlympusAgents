@@ -16,8 +16,8 @@ desinstalación existentes, así como los tests existentes de integridad y
 compatibilidad compartidas; no se crean gates Codex para capacidades exclusivas
 de OpenCode.
 
-Los gaps congelados expresamente incluyen las diferencias de autoridad, Aegis,
-`DENY` y observabilidad. Codex no está eliminado, pero tampoco se le atribuyen
+Los gaps congelados expresamente incluyen las diferencias de autoridad,
+mantenimiento contextual de Olympus, `DENY` y observabilidad. Codex no está eliminado, pero tampoco se le atribuyen
 capacidades equivalentes que no estén acreditadas.
 
 La matriz documenta el adapter Codex soportado desde Olympus Core, contra la
@@ -83,8 +83,9 @@ no es un custom agent `kael` separado.
    No publique rollouts completos, prompts ni datos del perfil de usuario.
 
 **Límites:** `ACTIVITY_VISIBILITY = PARTIAL`; Codex no recibe el HUD
-OpenCode. `AEGIS = GAP` y `DENY = GAP`: no hay `/maintain` de Olympus
-en Codex ni permiso para simularlo. La evidencia nativa debe preceder
+OpenCode. `CONTEXTUAL_OLYMPUS_MAINTENANCE = GAP` y `DENY = GAP`: no se afirma
+soporte Codex para el mantenimiento contextual de Olympus ni una ruta alternativa.
+La evidencia nativa debe preceder
 cualquier afirmación de activación, estado o resultado. No hacen falta
 hooks, agentes nuevos ni más suites para documentar esta limitación.
 
@@ -119,11 +120,9 @@ Fuentes: [comandos CLI nativos](https://learn.chatgpt.com/docs/developer-command
 | Talos | `gpt-6.1-sol` | `high` | `gpt-6.1-sol` | `high` | DIRECT_MAPPING |
 | Thales | `gpt-6.1-sol` | `xhigh` | `gpt-6.1-sol` | `xhigh` | DIRECT_MAPPING |
 | Helios | `gpt-6.1-sol` | `high` | `gpt-6.1-sol` | `high` | DIRECT_MAPPING |
-| Aegis | `gpt-6-luna` | `max` | — | — | GAP |
 
 Los diez roles especialistas tienen archivos TOML separados bajo
-`.codex/agents/`; Kael es la sesión root, no un custom agent adicional. Aegis no
-existe en ese roster. El catálogo `codex debug models --bundled` pasó la
+`.codex/agents/`; Kael es la sesión root, no un custom agent adicional. El catálogo `codex debug models --bundled` pasó la
 calificación estática: los modelos y esfuerzos configurados están disponibles
 en esta CLI. No se promocionó ningún rol Luna a Sol. Los identificadores
 OpenCode llevan provider (`openai/`); Codex usa el slug desnudo equivalente.
@@ -158,7 +157,7 @@ OpenCode llevan provider (`openai/`); Codex usa el slug desnudo equivalente.
 | Enforcement en Windows | PARTIAL | El proyecto fija `windows.sandbox = "elevated"`; documentación oficial señala que `unelevated` es más débil y puede no admitir carveouts split read/write. Config válida no prueba que el sandbox elevado esté instalado ni que deniegue cada path; no se calificó runtime. |
 | Olympus-owned protection | PARTIAL | Config intenta proteger runtime OpenCode, instrucciones Codex, `.codex`, `.git` e entrypoints de instalación. Son límites del profile/sandbox y policy, no una primitive de ownership Olympus ni ACL de SO. No rebajar protección para obtener compatibilidad; probar enforcement antes de uso real. |
 | Repos sibling / rutas externas | PARTIAL | Codex permite añadir roots/permisos, subjecto al runtime/approval. Olympus requiere scope exacto y decisión explícita del usuario; no se configuró un grant amplio ni se probó acceso cross-repository. |
-| Aegis maintenance plane | GAP | No existe entrada Codex segura equivalente a usuario explícitamente `/maintain` → Aegis, inaccesible a Kael. No se instala ni inventa un Aegis Codex. |
+| Contextual Olympus maintenance | GAP | Este capability no se declara soportado por Codex; no se instala ni inventa una ruta o un agente alternativo. |
 | Lifecycle de child/result | PARTIAL | Ver tabla de lifecycle debajo. Codex tiene eventos nativos, pero no se observó un child en ejecución en este experimento y no se asume equivalencia con el problema upstream OpenCode `No tool output found`. |
 | Continuation / resume | PARTIAL | `codex resume` y App Server `thread/resume` continúan threads guardados. Esto no prueba que un child perdido pueda reanudarse con identidad/resultado original ni que side effects se puedan repetir con seguridad. |
 | Session/thread isolation | PARTIAL | Cada agent tiene thread identificable; `/agent` permite inspeccionar threads. Children heredan sandbox/runtime del parent. No hay evidencia de worktree/filesystem separado por child; `codex --worktree` aísla una sesión root, no establece aislamiento de cada child. |

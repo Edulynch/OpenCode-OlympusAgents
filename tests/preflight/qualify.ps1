@@ -90,7 +90,8 @@ try {
         $maintenance -match 'manifest-owned files' -and
         $kael -notmatch '(?i)Aegis|/maintain')
     Check KAEL_NATIVE_PERMISSION ($kaelMetadata -match '(?m)^  - action: external_directory\r?\n    resource: "\*"\r?\n    effect: ask(?:\r?\n|$)' -and
-        $kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: allow(?:\r?\n|$)' -and
+        $kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: ask(?:\r?\n|$)' -and
+        $kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "git status \*"\r?\n    effect: allow(?:\r?\n|$)' -and
         $kaelMetadata -match '(?m)^  - action: subagent\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
         $kaelMetadata -match '(?m)^  - action: subagent\r?\n    resource: nox\r?\n    effect: allow(?:\r?\n|$)')
     Check NOX_NATIVE_SHELL ($noxMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: allow(?:\r?\n|$)' -and

@@ -115,12 +115,23 @@ try {
 
     Push-Location -LiteralPath $main
     try {
+        # Resolving the location registers this disposable repository before querying saved projects.
+        $locationResult = Run-OpenCode @('api','--standalone','location.get')
+        Check 'NATIVE_LOCATION_GET' ($locationResult.Code -eq 0) $locationResult.Text
+        $location = $locationResult.Text | ConvertFrom-Json -Depth 100
+        $projectId = [string]$location.project.id
+        $canonical = [string]$location.project.canonical
+        # Normalize Windows separators and casing so the assertion checks identity, not formatting.
+        $expectedCanonical = ([IO.Path]::GetFullPath($main) -replace '\\','/').TrimEnd('/')
+        $actualCanonical = if ($canonical) { ([IO.Path]::GetFullPath($canonical) -replace '\\','/').TrimEnd('/') } else { '' }
+        Check 'NATIVE_PROJECT_ID_RESOLVED' (-not [string]::IsNullOrWhiteSpace($projectId) -and
+            [string]::Equals($actualCanonical,$expectedCanonical,[StringComparison]::OrdinalIgnoreCase)) $locationResult.Text
+
         $projectsResult = Run-OpenCode @('api','--standalone','project.list')
         Check 'NATIVE_PROJECT_LIST' ($projectsResult.Code -eq 0) $projectsResult.Text
         $projects = $projectsResult.Text | ConvertFrom-Json -Depth 100
-        $project = @($projects | Where-Object { [string]::Equals([string]$_.canonical,$main,[StringComparison]::OrdinalIgnoreCase) })
-        Check 'NATIVE_PROJECT_ID_RESOLVED' ($project.Count -eq 1 -and [string]$project[0].id)
-        $projectId = [string]$project[0].id
+        $project = @($projects | Where-Object { [string]::Equals([string]$_.id,$projectId,[StringComparison]::Ordinal) })
+        Check 'NATIVE_PROJECT_REGISTERED' ($project.Count -eq 1) $projectsResult.Text
 
         $startup = 'pwsh -NoProfile -File "%OPENCODE_WORKTREE_BASE%\.opencode\scripts\worktree-setup.ps1"'
         $projectUpdateBody = @{ commands = @{ start = $startup } } | ConvertTo-Json -Depth 10 -Compress

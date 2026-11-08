@@ -70,7 +70,10 @@ try {
     }
     if (-not $openCodeCommand) { throw 'OPENCODE_UNAVAILABLE: Native OpenCode V2 CLI was not found.' }
     $version = Run-OpenCode @('--version')
-    if ($version.Code -ne 0 -or $version.Text -notmatch 'opencode v2\.0\.(2[4-9]|[3-9][0-9])') {
+    # Keep stable V2 releases eligible as OpenCode advances beyond the 2.0 patch series.
+    $versionMatch = [regex]::Match($version.Text.Trim(), '^opencode v(2\.\d+\.\d+)$')
+    if ($version.Code -ne 0 -or -not $versionMatch.Success -or
+        [version]($versionMatch.Groups[1].Value) -lt [version]'2.0.24') {
         throw "OPENCODE_VERSION_UNQUALIFIED: Expected OpenCode V2.0.24 or newer; got $($version.Text.Trim())."
     }
     Write-Output ('NATIVE_OPENCODE_VERSION: ' + $version.Text.Trim())
@@ -90,7 +93,7 @@ try {
     $wrapper = "@echo off`r`n`"$pwsh`" -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
     [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), $wrapper, [Text.Encoding]::ASCII)
     $env:PATH = $mockBin + [IO.Path]::PathSeparator + $originalPath
-    $install = Run-Script (Join-Path $source 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$source,'-Version','v0.4.4')
+    $install = Run-Script (Join-Path $source 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$source)
     Check 'NATIVE_FIXTURE_PROJECT_INSTALL' ($install.Code -eq 0) $install.Text
     $env:PATH = $originalPath
 
@@ -112,12 +115,23 @@ try {
 
     Push-Location -LiteralPath $main
     try {
+        # Resolving the location registers this disposable repository before querying saved projects.
+        $locationResult = Run-OpenCode @('api','--standalone','location.get')
+        Check 'NATIVE_LOCATION_GET' ($locationResult.Code -eq 0) $locationResult.Text
+        $location = $locationResult.Text | ConvertFrom-Json -Depth 100
+        $projectId = [string]$location.project.id
+        $canonical = [string]$location.project.canonical
+        # Normalize Windows separators and casing so the assertion checks identity, not formatting.
+        $expectedCanonical = ([IO.Path]::GetFullPath($main) -replace '\\','/').TrimEnd('/')
+        $actualCanonical = if ($canonical) { ([IO.Path]::GetFullPath($canonical) -replace '\\','/').TrimEnd('/') } else { '' }
+        Check 'NATIVE_PROJECT_ID_RESOLVED' (-not [string]::IsNullOrWhiteSpace($projectId) -and
+            [string]::Equals($actualCanonical,$expectedCanonical,[StringComparison]::OrdinalIgnoreCase)) $locationResult.Text
+
         $projectsResult = Run-OpenCode @('api','--standalone','project.list')
         Check 'NATIVE_PROJECT_LIST' ($projectsResult.Code -eq 0) $projectsResult.Text
         $projects = $projectsResult.Text | ConvertFrom-Json -Depth 100
-        $project = @($projects | Where-Object { [string]::Equals([string]$_.canonical,$main,[StringComparison]::OrdinalIgnoreCase) })
-        Check 'NATIVE_PROJECT_ID_RESOLVED' ($project.Count -eq 1 -and [string]$project[0].id)
-        $projectId = [string]$project[0].id
+        $project = @($projects | Where-Object { [string]::Equals([string]$_.id,$projectId,[StringComparison]::Ordinal) })
+        Check 'NATIVE_PROJECT_REGISTERED' ($project.Count -eq 1) $projectsResult.Text
 
         $startup = 'pwsh -NoProfile -File "%OPENCODE_WORKTREE_BASE%\.opencode\scripts\worktree-setup.ps1"'
         $projectUpdateBody = @{ commands = @{ start = $startup } } | ConvertTo-Json -Depth 10 -Compress

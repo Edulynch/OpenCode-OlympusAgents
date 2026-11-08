@@ -44,6 +44,13 @@ jobs:
           pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FAST
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: OA77 worktree activation (deterministic Windows)
+        shell: pwsh
+        run: |
+          # Exercise the legacy upgrade and worktree conflict gates in temporary Git fixtures.
+          pwsh -NoProfile -File ./tests/worktree-activation/qualify.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Confirm source checkout unchanged
         shell: pwsh
         run: |

@@ -133,11 +133,34 @@ try {
         -not (Test-Path (Join-Path $second '.opencode/orchestrator-install.json')))
     Check 'MISSING_RESOURCES_MEAN_NO_KAEL_DISCOVERY' (@(Get-Effective-Agent-Ids $first).Count -eq 0)
 
+    # A modified v0.4.4-owned agent must block an upgrade before target writes.
+    # Restore the original fixture bytes even if the negative gate fails.
+    $legacyAgent = Join-Path $main '.opencode/agents/aegis.md'
+    $originalLegacyBytes = [IO.File]::ReadAllBytes($legacyAgent)
+    try {
+        [IO.File]::AppendAllText($legacyAgent, "`n# intentional v0.4.4 drift probe`n", $utf8)
+        $legacySnapshot = Get-Worktree-Snapshot $main
+        $rejectedUpgrade = Run-Script (Join-Path $root 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$root)
+        Check 'V044_MANAGED_DRIFT_BLOCKS_UPGRADE_WITHOUT_WRITES' (
+            $rejectedUpgrade.Code -ne 0 -and
+            $rejectedUpgrade.Text -match 'MANAGED_FILE_DRIFT' -and
+            (Get-Worktree-Snapshot $main) -ceq $legacySnapshot) $rejectedUpgrade.Text
+    } finally {
+        [IO.File]::WriteAllBytes($legacyAgent, $originalLegacyBytes)
+    }
+
     # Upgrade the project checkout from the immutable stable baseline to the
     # candidate installer before using its opted-in native startup hook.
-    $candidateUpgrade = Run-Script (Join-Path $root 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$root,'-Version','v0.4.4')
+    $candidateUpgrade = Run-Script (Join-Path $root 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$root)
     Check 'V044_TO_CANDIDATE_UPGRADE' ($candidateUpgrade.Code -eq 0 -and
         (Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json).managed_files.path -contains '.opencode/scripts/worktree-setup.ps1') $candidateUpgrade.Text
+    # A successful upgrade must retire legacy maintenance resources only when owned.
+    $upgradedManifest = Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json
+    Check 'V044_OWNED_MAINTENANCE_RETIRED' (
+        '.opencode/agents/aegis.md' -notin @($upgradedManifest.managed_files.path) -and
+        '.opencode/commands/maintain.md' -notin @($upgradedManifest.managed_files.path) -and
+        -not (Test-Path -LiteralPath (Join-Path $main '.opencode/agents/aegis.md')) -and
+        -not (Test-Path -LiteralPath (Join-Path $main '.opencode/commands/maintain.md')))
 
     $userOwnedFile = Join-Path $first '.opencode/user-owned.md'
     [IO.Directory]::CreateDirectory((Split-Path -Parent $userOwnedFile)) | Out-Null

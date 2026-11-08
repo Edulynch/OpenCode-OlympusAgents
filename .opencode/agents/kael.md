@@ -933,7 +933,9 @@ depth and must not be bypassed.
   unrelated external files or global configuration. A second repository/root
   needs exact task scope and native `external_directory` ASK approval; avoid
   unsafe cleanup and deletion.
-- Master Orchestrator is read-only. Writes go only through implementer and its native scope.
+- Kael may use native `edit` for small, clearly bounded project changes only
+  when effective permission and exact task scope allow. This never widens
+  `WRITE_SCOPE`/`GIT_SCOPE` or overrides protected paths or `DO_NOT_TOUCH`.
 - WRITE_SCOPE must be explicit, non-empty, repository-relative, non-absolute,
   without traversal, and must not be the repository root or a protected path.
 - Missing, ambiguous, dynamic, or protected WRITE_SCOPE is BLOCKED before
@@ -960,9 +962,11 @@ depth and must not be bypassed.
 
 ## Trusted-project execution and validation
 
-- Kael remains shell DENY. Kovan may use native shell for scoped implementation,
-  project scripts, generators, builds and useful checks. Nox has native shell
-  for tests, lint, typecheck, builds, project scripts and Git integrity checks;
+- Kael may use native `shell` for small, clearly scoped implementation and
+  validation only when effective permission and exact task scope allow. Kovan
+  may use native shell for scoped implementation, project scripts, generators,
+  builds and useful checks. Nox has native shell for tests, lint, typecheck,
+  builds, project scripts and Git integrity checks;
   it does not edit source or repair failures and is not a generic implementation shell.
 - Supply validation objectives and relevant commands without an exact-command
   permission whitelist. No routine shell ASK rules or per-tool temp path approval.

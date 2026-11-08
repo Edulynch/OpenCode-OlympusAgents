@@ -7,8 +7,25 @@ permissions:
   - action: external_directory
     resource: "*"
     effect: ask
+  # Direct shell stays available, but tests, generators, and writes need approval.
+  # Narrow Git inspection commands can run without interrupting the task.
   - action: shell
     resource: "*"
+    effect: ask
+  - action: shell
+    resource: "git status *"
+    effect: allow
+  - action: shell
+    resource: "git branch --show-current"
+    effect: allow
+  - action: shell
+    resource: "git rev-parse --show-toplevel"
+    effect: allow
+  - action: shell
+    resource: "git diff --check"
+    effect: allow
+  - action: shell
+    resource: "git diff --stat"
     effect: allow
   # Serena is limited to read-only semantic navigation; edits use scoped native tools.
   - action: serena_get_symbols_overview

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import tomllib
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 
@@ -19,6 +20,27 @@ def check(name: str, condition: bool) -> None:
 
 def text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
+
+
+def metadata_rules(metadata: str) -> list[dict[str, str]]:
+    """Read native YAML permission triples without relying on the agent's prose."""
+    return [
+        {"action": action, "resource": resource.strip('"'), "effect": effect}
+        for action, resource, effect in re.findall(
+            r'(?m)^  - action: ([^\r\n]+)\r?\n    resource: ([^\r\n]+)\r?\n    effect: (allow|deny|ask)\r?$',
+            metadata,
+        )
+    ]
+
+
+def permission_effect(global_rules: list[dict[str, str]], metadata: str,
+                      action: str, resource: str = "*") -> str:
+    """Resolve ordered OpenCode V2 permissions with the final matching rule."""
+    effective = "allow"  # OpenCode V2's documented base wildcard permission.
+    for rule in [*global_rules, *metadata_rules(metadata)]:
+        if fnmatchcase(action, rule["action"]) and fnmatchcase(resource, rule["resource"]):
+            effective = rule["effect"]
+    return effective
 
 
 def main() -> int:
@@ -65,7 +87,7 @@ def main() -> int:
           and "`DO_NOT_TOUCH`" in source_prompt
           and "Master Orchestrator is read-only" not in source_prompt
           and "Kael remains shell DENY" not in source_prompt
-          and re.search(r'(?m)^  - action: shell\n    resource: "\*"\n    effect: allow$', kael_metadata)
+          and re.search(r'(?m)^  - action: shell\n    resource: "\*"\n    effect: ask$', kael_metadata)
           and re.search(r'(?m)^  - action: edit\n    resource: "\*"\n    effect: allow$', kael_metadata))
     check("ADAPTER_CAPABILITY_CONTRACT", capabilities["opencode"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "SUPPORTED"
           and capabilities["codex"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "GAP"
@@ -85,6 +107,47 @@ def main() -> int:
             re.search(rf"(?m)^  - action: serena_{tool}\n    resource: \"\*\"\n    effect: allow$", metadata)
             for tool in semantic_tools
         ) and not re.search(r"(?m)^  - action: serena_\*\n    resource: \"\*\"\n    effect: allow$", metadata))
+    # The global denial precedes all explicit read-only Serena allowances.
+    global_rules = opencode_config["permissions"]
+    check("SERENA_DENY_BY_DEFAULT", any(
+        rule == {"action": "serena_*", "resource": "*", "effect": "deny"}
+        for rule in global_rules
+    ))
+    protected_serena_tools = (
+        "serena_replace_symbol_body", "serena_rename_symbol",
+        "serena_insert_after_symbol", "serena_insert_before_symbol",
+        "serena_replace_content", "serena_create_text_file",
+        "serena_serena_repl", "serena_execute_shell_command",
+        "serena_write_memory",
+    )
+    role_metadata = {
+        path.stem: path.read_text(encoding="utf-8")
+        for path in (ROOT / "olympus/harnesses/opencode/agent-metadata").glob("*.md")
+    }
+    check("SERENA_MUTATION_TOOLS_DENIED_FOR_EVERY_ROLE", all(
+        permission_effect(global_rules, metadata, action) == "deny"
+        for metadata in role_metadata.values()
+        for action in protected_serena_tools
+    ))
+    check("SERENA_READ_ONLY_SEMANTICS_EFFECTIVE", all(
+        permission_effect(global_rules, role_metadata[role], f"serena_{tool}") == "allow"
+        for role in ("kael", "kovan", "veyra")
+        for tool in semantic_tools
+    ))
+    check("KAEL_SHELL_ASK_WITH_NARROW_INSPECTION_ALLOWLIST", all(
+        permission_effect(global_rules, kael_metadata, "shell", command) == expected
+        for command, expected in (
+            ("git status --short", "allow"),
+            ("git branch --show-current", "allow"),
+            ("git rev-parse --show-toplevel", "allow"),
+            ("git diff --check", "allow"),
+            ("git diff --stat", "allow"),
+            ("python scripts/check_docs.py", "ask"),
+            ("git push origin feat/28-single-kael-maintenance", "ask"),
+            ("git reset --hard", "ask"),
+            ("Remove-Item docs/DEVELOPMENT.md", "ask"),
+        )
+    ))
     check("SERENA_NOT_BLOCKED_BY_KOVAN_PROMPT", "Do not use MCP Serena tools" not in text("olympus/harnesses/opencode/agent-prompts/kovan.md"))
     print("CONTEXTUAL MAINTENANCE QUALIFICATION: PASS (static source/generated contract only)")
     return 0

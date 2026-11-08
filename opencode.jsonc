@@ -32,6 +32,13 @@
       "resource": "*",
       "effect": "ask"
     },
+    // Deny Serena by default: agent-specific read-only grants come later,
+    // while symbol edits, file writes, and REPL tools remain unavailable.
+    {
+      "action": "serena_*",
+      "resource": "*",
+      "effect": "deny"
+    },
     // Shell is globally denied; Kovan and Nox opt into trusted-project shell.
     {
       "action": "shell",

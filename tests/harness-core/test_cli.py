@@ -2980,10 +2980,9 @@ raise SystemExit(main(sys.argv[1:]))
             ("sol", ("models", "set-family", "sol", "--opencode", "openai/t019-sol",
                       "--codex", "codex/t019-sol"), 14),
             ("luna", ("models", "set-family", "luna", "--opencode", "openai/t019-luna",
-                       "--codex", "codex/t019-luna"), 12),
+                       "--codex", "codex/t019-luna"), 11),
             ("specialist", ("agents", "set-model", "veyra", "--family", "sol", "--effort", "high"), 3),
             ("kael", ("agents", "set-model", "kael", "--family", "luna", "--effort", "max"), {3, 4}),
-            ("aegis", ("agents", "set-model", "aegis", "--family", "sol", "--effort", "high"), 2),
             ("no-op", ("models", "set-family", "sol", "--opencode", "openai/gpt-6.1-sol",
                         "--codex", "gpt-6.1-sol"), 0),
         )

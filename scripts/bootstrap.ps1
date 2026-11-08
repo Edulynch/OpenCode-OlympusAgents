@@ -394,6 +394,9 @@ function Get-LegacyOpenCodeSets {
         $allowed += ,@($currentBeforeWorktreeSetup | Where-Object { $_ -notin $missing })
         $allowed += ,@($historical | Where-Object { $_ -notin $missing })
     }
+    # v0.4.4 owned Aegis and /maintain before the worktree helper existed.
+    # Admit only that exact historical set; ownership hashes are checked below.
+    $allowed += ,@($currentBeforeWorktreeSetup + '.opencode/agents/aegis.md' + '.opencode/commands/maintain.md')
     # The last shipped Aegis roster added both paths; retire them only when the
     # exact manifest set and hashes prove Olympus ownership.
     $allowed += ,@($OpenCodeManaged + '.opencode/agents/aegis.md' + '.opencode/commands/maintain.md')

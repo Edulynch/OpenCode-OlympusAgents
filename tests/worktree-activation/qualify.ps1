@@ -133,6 +133,22 @@ try {
         -not (Test-Path (Join-Path $second '.opencode/orchestrator-install.json')))
     Check 'MISSING_RESOURCES_MEAN_NO_KAEL_DISCOVERY' (@(Get-Effective-Agent-Ids $first).Count -eq 0)
 
+    # A modified v0.4.4-owned agent must block an upgrade before target writes.
+    # Restore the original fixture bytes even if the negative gate fails.
+    $legacyAgent = Join-Path $main '.opencode/agents/aegis.md'
+    $originalLegacyBytes = [IO.File]::ReadAllBytes($legacyAgent)
+    try {
+        [IO.File]::AppendAllText($legacyAgent, "`n# intentional v0.4.4 drift probe`n", $utf8)
+        $legacySnapshot = Get-Worktree-Snapshot $main
+        $rejectedUpgrade = Run-Script (Join-Path $root 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$root)
+        Check 'V044_MANAGED_DRIFT_BLOCKS_UPGRADE_WITHOUT_WRITES' (
+            $rejectedUpgrade.Code -ne 0 -and
+            $rejectedUpgrade.Text -match 'MANAGED_FILE_DRIFT' -and
+            (Get-Worktree-Snapshot $main) -ceq $legacySnapshot) $rejectedUpgrade.Text
+    } finally {
+        [IO.File]::WriteAllBytes($legacyAgent, $originalLegacyBytes)
+    }
+
     # Upgrade the project checkout from the immutable stable baseline to the
     # candidate installer before using its opted-in native startup hook.
     $candidateUpgrade = Run-Script (Join-Path $root 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$root)

@@ -113,14 +113,14 @@ Status project exige --target absoluto con una marca .git de raíz de worktree; 
 python3.11 -B -m olympus status --scope global --json
 ```
 
-Esta consulta global devuelve BLOCKED/exit 3: A no realiza discovery ni consulta configuraciones personales. No ejecuta VerifyOnly, runtimes ni modelos. Check local no acredita disponibilidad/auth de modelos ni recarga de sesiones.
+Históricamente Slice A devolvía BLOCKED/exit 3 para global. Slice C7 ahora informa manifests globales como metadatos reportados (o `absent`/exit 0), sin afirmar ownership, integridad, runtime o proveedor. Si no puede resolver una raíz segura, devuelve BLOCKED/exit 3. Check local no acredita disponibilidad/auth de modelos ni recarga de sesiones.
 
 | Exit | Resultado de Slice A |
 |---|---|
 | 0 | Consulta válida, check coherente o ausencia informativa |
 | 1 | Fuentes/metadatos inválidos, output ausente o drift |
 | 2 | Argumentos/contexto inválidos; comandos no disponibles |
-| 3 | Consulta bloqueada, incluida ubicación global sin discovery |
+| 3 | Consulta bloqueada por ubicación global no verificable o capacidad no cualificada |
 
 Slice A no tiene operación parcial que emita exit 4: sus consultas no modifican fuentes, outputs, configuraciones, manifests, permisos ni cachés. Usar -B en entradas Python; los launchers lo imponen. Scratch previo se informa sin reparar. La edición/recovery de Slice B se documenta aparte abajo.
 
@@ -237,6 +237,31 @@ y `--execute` son mutuamente excluyentes. Después de una interrupción usa:
 ```powershell
 & "$sourceCheckout\scripts\olympus.cmd" --source $sourceCheckout config recover --scope project --target $targetProject
 ```
+
+### Estado, diagnóstico y preview global read-only (Slice C7)
+
+OpenCode y Codex usan raíces globales distintas. `status` sólo reporta metadata del
+manifest, incluso cuando existe; no certifica integridad. `doctor` valida
+inventario/hashes y en Windows usa el motor oficial `global-install.ps1 -VerifyOnly`
+con PowerShell 7; fuera de Windows la verificación nativa se declara no disponible.
+El preview valida hashes y muestra las diferencias sin modificar ni adoptar recursos.
+
+```powershell
+cd 'D:\WORKSPACE\Personal\Tools\OpenCode-OlympusAgents'
+git status --short --branch
+git branch --show-current
+python -B -m olympus status --scope global --harness all --json
+python -B -m olympus doctor --scope global --harness codex --json
+python -B -m olympus config apply --scope global --harness all --dry-run --json
+```
+
+Para probarlo sin leer tu instalación, prepara `OPENCODE_CONFIG_DIR` y `CODEX_HOME`
+apuntando a fixtures globales aislados. No uses esas variables para una instalación
+real sin revisar sus destinos. El preview marca `apply_available=false`; su
+`--execute` y recovery global están bloqueados. OpenCode global no administra
+`opencode.jsonc`; Codex registra a Kael en `olympus.config.toml`, no como
+especialista. Familias actuales siguen `unknown`; formatos no verificables se
+etiquetan `unsupported`. No se prueban proveedores, sesiones ni overrides.
 
 ## Evidencia enfocada y plataformas
 

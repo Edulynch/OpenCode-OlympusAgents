@@ -445,3 +445,13 @@ Este registro supersede el READY_FOR_T015 local anterior únicamente respecto de
 - `pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FAST` — PASS, 15 checks PASS, 0 FAIL, 0 NOT RUN; incluye Harness Core read-only. La qualification indica que runtime/interactive no forma parte de todos los checks.
 - `python -B scripts/check_docs.py` — PASS; seis adjuntos históricos sin versionar no fueron validados. `git diff --check` — PASS, exit 0, con advertencias Git de normalización LF→CRLF.
 - La evidencia Nox previa `writer_compat` (14 PASS) se reutilizó según la asignación y no se volvió a ejecutar. No se ejecutó Linux/hosted ni apply real.
+
+## Slice C7 — inspección global de sólo lectura (candidato de review)
+
+- [x] T030 Exponer `status --scope global` para metadatos reportados de manifests OpenCode/Codex independientes, con roots seguros y sin verificación profunda en status.
+- [x] T031 Exponer `doctor --scope global` con validación de ownership/inventario/hash y `scripts/global-install.ps1 -VerifyOnly` sólo en Windows/PowerShell 7. Un verificador no cualificado se declara bloqueado, nunca reemplazado por éxito sintético.
+- [x] T032 Exponer `config apply --scope global --dry-run` con deltas y asignaciones propuestas por el renderer; los valores actuales sólo surgen de bytes managed con hash acreditado. `--execute` y recovery global siguen bloqueados.
+- [x] T033 Preparar ocho pruebas `slice_c7` con fixtures globales aislados y snapshots de source, roots y perfiles, además de un gate Windows CI con requisito de 8/8 sin skips.
+- [ ] T034 Cualificar el candidato en CI hosted Windows/Linux, revisar el Draft PR y reconciliar límites. No habilitar writer global ni cerrar #64 con este slice.
+
+Evidencia local Linux: `python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_c7 -v` — **8/8 PASS**, exit 0. Regresión integrada `-k slice_c` — **40 tests, 39 PASS y un caso Windows-only omitido**, exit 0; Slice A — **22 tests, 21 PASS y un caso Windows-only omitido**, exit 0. `python -B scripts/check_docs.py` y `git diff --check` — PASS; el checker mantiene la advertencia histórica sobre seis adjuntos no versionados. El subconjunto writer-compat ejecutó 14 tests pero omitió diez por falta de PowerShell 7 local, por lo que no constituye cualificación nativa. No se ejecutaron instalaciones reales, FULL/RUNTIME, proveedores ni escritura global.

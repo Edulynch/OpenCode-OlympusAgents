@@ -37,6 +37,8 @@ def parser() -> Parser:
                 "  olympus install --scope project --target <absolute-worktree-root> --harness opencode --version <release-tag> --dry-run\n"
                 "  olympus uninstall --scope project --target <absolute-worktree-root> --harness opencode --execute\n"
                 "  olympus doctor --scope project --target <absolute-worktree-root> --harness all [--json]\n"
+                "  olympus doctor --scope global --harness opencode [--json]\n"
+                "  olympus config apply --scope global --harness codex --dry-run --json\n"
                 "  olympus status --scope project --target <absolute-worktree-root>\n"
                 "Source edits affect only the canonical checkout; project config apply writes only with --execute.\n"
                 "Doctor uses project VerifyOnly where qualified; it does not run runtime discovery.\n"
@@ -71,14 +73,14 @@ def parser() -> Parser:
     check.add_argument("--harness", choices=("opencode", "codex", "all"), default="all")
     check.add_argument("--json", action="store_true")
     apply = config_commands.add_parser(
-        "apply", help="preview or explicitly apply changes to an existing project installation", allow_abbrev=False,
+        "apply", help="preview an existing project/global installation; execute project only", allow_abbrev=False,
     )
     apply.add_argument("--scope", choices=("project", "global"), required=True)
-    apply.add_argument("--target", type=Path, required=True, help="absolute existing Git worktree root")
+    apply.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
     apply.add_argument("--harness", choices=("opencode", "codex", "all"), required=True)
     mode = apply.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="read-only preview; no target writes")
-    mode.add_argument("--execute", action="store_true", help="explicitly apply the previewed project configuration")
+    mode.add_argument("--execute", action="store_true", help="explicitly apply project configuration; global is blocked")
     apply.add_argument("--json", action="store_true", help="emit a single JSON preview")
     install = commands.add_parser("install", help="install an immutable official release through the existing installer", allow_abbrev=False)
     install.add_argument("--scope", choices=("project", "global"), required=True)
@@ -97,9 +99,9 @@ def parser() -> Parser:
     uninstall_mode.add_argument("--dry-run", action="store_true", help="preview when the native engine supports it")
     uninstall_mode.add_argument("--execute", action="store_true", help="execute the existing uninstall engine")
     uninstall.add_argument("--json", action="store_true", help="emit one JSON result with captured native output")
-    doctor = commands.add_parser("doctor", help="read-only diagnostic for a managed project installation", allow_abbrev=False)
-    doctor.add_argument("--scope", choices=("project",), required=True)
-    doctor.add_argument("--target", type=Path, required=True, help="absolute existing Git worktree root")
+    doctor = commands.add_parser("doctor", help="read-only managed installation diagnostic", allow_abbrev=False)
+    doctor.add_argument("--scope", choices=("project", "global"), required=True)
+    doctor.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
     doctor.add_argument("--harness", choices=("opencode", "codex", "all"), required=True)
     doctor.add_argument("--json", action="store_true")
     recover = config_commands.add_parser("recover", help="explicitly recover one pending source edit or project apply", allow_abbrev=False)
@@ -209,7 +211,7 @@ def source_query(source: Path, operation: str, harness: str) -> tuple[dict, list
         raise CLIError(f"Invalid canonical source or renderer input: {error}") from error
 
 
-def installation_status(args, response: dict) -> int:
+def installation_status(source: Path, args, response: dict) -> int:
     from .install_manifest import ManifestError, manifest_paths, manifest_present, read_project_manifest
 
     response["context"].update({"kind": "installation_metadata", "scope": args.scope,
@@ -218,10 +220,13 @@ def installation_status(args, response: dict) -> int:
                         "ownership": "unverified", "assignments": "unknown",
                         "runtime_validation": "not_performed", "evidence": "none"}
     if args.scope == "global":
-        if args.target is not None:
-            raise CLIError("--target is incompatible with --scope global", 2)
-        response["context"]["target"] = "unknown"
-        raise CLIError("Global location is unresolved: Slice A does not perform native discovery. Use explicit project scope for available metadata.", 3)
+        from . import global_readonly
+
+        return global_readonly.inspect(
+            source, args, response, source_query=source_query,
+            load_renderer=load_renderer, release_version=release_version,
+            assignment_query=model_assignments, operation="status",
+        )
     if args.target is None or not args.target.is_absolute():
         raise CLIError("Project status requires --target <absolute-worktree-root>", 2)
     target = args.target.resolve()
@@ -470,7 +475,7 @@ def main(argv: list[str] | None = None) -> int:
         response["operation"] = operation
         if operation in ("models set-family", "agents set-model") and args.json and not args.dry_run:
             raise CLIError("--json for model edits requires --dry-run", 2)
-        if operation == "config apply" and args.json and args.execute:
+        if operation == "config apply" and args.json and args.execute and args.scope != "global":
             raise CLIError("--json for config apply requires --dry-run", 2)
         if args.command == "agents" and args.action == "set-model" and args.family is None and args.effort is None:
             raise CLIError("agents set-model requires --family and/or --effort", 2)
@@ -498,6 +503,17 @@ def main(argv: list[str] | None = None) -> int:
         if response["operation"] == "config apply":
             from . import config_apply
 
+            if args.scope == "global":
+                from . import global_readonly
+
+                code = global_readonly.inspect(
+                    source, args, response, source_query=source_query,
+                    load_renderer=load_renderer, release_version=release_version,
+                    assignment_query=model_assignments, operation="config apply",
+                )
+                emit(response, as_json)
+                return code
+
             if args.execute:
                 return config_apply.execute(
                     source, args, response, source_query=source_query,
@@ -511,6 +527,17 @@ def main(argv: list[str] | None = None) -> int:
         if response["operation"] == "doctor":
             from . import doctor
 
+            if args.scope == "global":
+                from . import global_readonly
+
+                code = global_readonly.inspect(
+                    source, args, response, source_query=source_query,
+                    load_renderer=load_renderer, release_version=release_version,
+                    assignment_query=model_assignments, operation="doctor",
+                )
+                emit(response, as_json)
+                return code
+
             code = doctor.diagnose(source, args, response, source_version=release_version(source),
                                    source_query=source_query)
             emit(response, as_json)
@@ -519,7 +546,7 @@ def main(argv: list[str] | None = None) -> int:
             from . import install_routing
 
             return install_routing.run(source, args, response, emit=emit, as_json=as_json)
-        code = installation_status(args, response)
+        code = installation_status(source, args, response)
         emit(response, as_json)
         return code
     except CLIError as error:

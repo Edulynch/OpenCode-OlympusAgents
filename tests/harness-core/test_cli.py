@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from olympus import config_apply, config_apply_transaction, doctor, install_routing, source_edit
+from olympus import config_apply, config_apply_transaction, doctor, global_readonly, install_routing, source_edit
 from olympus.cli import load_renderer as cli_load_renderer, main as cli_main, model_assignments as cli_model_assignments, parser as cli_parser, release_version, source_query as cli_source_query
 
 
@@ -190,6 +190,37 @@ class SliceA(unittest.TestCase):
         manifest_path = self.target / ".opencode/orchestrator-install.json"
         if not manifest_path.exists():
             manifest_path = self.target / ".codex/orchestrator-install.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        entry = next(item for item in manifest["managed_files"] if item["path"] == relative)
+        entry["sha256"] = hashlib.sha256(raw).hexdigest()
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+
+    def create_global_managed_install(self, harnesses=("opencode", "codex"), version="local"):
+        """Prepare official global inventories under synthetic, isolated roots."""
+        inventories = global_readonly._expected(self.source, self.renderer, tuple(harnesses))
+        paths = {}
+        for harness in harnesses:
+            root = Path(self.env["OPENCODE_CONFIG_DIR" if harness == "opencode" else "CODEX_HOME"])
+            entries = []
+            for relative, raw in sorted(inventories[harness].items()):
+                destination = root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(raw)
+                entries.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest()})
+            manifest = {"schema_version": 1, "scope": "global", "installed_harnesses": [harness],
+                        "installed_version": version, "installed_from_commit": "synthetic-commit",
+                        "managed_files": entries}
+            manifest_path = root / "olympus/orchestrator-install.json"
+            manifest_path.parent.mkdir(parents=True, exist_ok=True)
+            manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+            paths[harness] = manifest_path
+        return paths
+
+    def update_global_managed_bytes(self, harness, relative, raw):
+        """An independently owned fixture may change a model without losing its hash evidence."""
+        root = Path(self.env["OPENCODE_CONFIG_DIR" if harness == "opencode" else "CODEX_HOME"])
+        (root / relative).write_bytes(raw)
+        manifest_path = root / "olympus/orchestrator-install.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         entry = next(item for item in manifest["managed_files"] if item["path"] == relative)
         entry["sha256"] = hashlib.sha256(raw).hexdigest()
@@ -363,15 +394,16 @@ class SliceA(unittest.TestCase):
         self.assertEqual("legacy", response["data"]["metadata_format"])
         self.assertEqual("unknown", response["data"]["recorded_version"])
 
-    def test_slice_a_status_context_and_global_block(self):
+    def test_slice_a_status_context_and_global_absent(self):
         for arguments in (("status",), ("status", "--target", "relative"),
                           ("status", "--target", str(self.source)),
                           ("status", "--scope", "global", "--target", str(self.target))):
             with self.subTest(arguments=arguments):
                 self.json_query(*arguments, code=2)
-        response = self.json_query("status", "--scope", "global", code=3)
-        self.assertEqual("blocked", response["result"])
-        self.assertEqual("unknown", response["context"]["target"])
+        response = self.json_query("status", "--scope", "global")
+        self.assertEqual("absent", response["result"])
+        self.assertEqual("global", response["context"]["scope"])
+        self.assertEqual("absent", response["data"]["harnesses"]["opencode"]["state"])
 
     def test_slice_a_pending_scratch_is_reported_not_repaired(self):
         scratch = self.source / ".olympus-cli-edit"
@@ -1066,7 +1098,7 @@ class SliceA(unittest.TestCase):
         # The launcher's default source must remain its checkout even from target cwd.
         self.assertEqual(str(self.source), self.json_query("models", "list", entry=entry)["context"]["source"])
         self.json_query("models", "bad", code=2, entry=entry)
-        self.json_query("status", "--scope", "global", code=3, entry=entry)
+        self.assertEqual("absent", self.json_query("status", "--scope", "global", entry=entry)["result"])
         # Fixture drift prepared outside the snapshot window; verify exit propagation.
         (self.source / ".codex/agents/veyra.toml").write_text("fixture drift", encoding="utf-8")
         self.json_query("config", "check", "--harness", "codex", code=1, entry=entry)
@@ -1452,6 +1484,131 @@ class SliceA(unittest.TestCase):
         self.assertEqual(self.env["USERPROFILE"], engine_environment["USERPROFILE"])
         self.assertEqual(roots_before, {name: tree_snapshot(root) for name, root in roots.items()})
         self.assertEqual(source_before, tree_snapshot(self.source))
+
+    def test_slice_c7_global_status_reports_metadata_without_integrity_claim(self):
+        manifests = self.create_global_managed_install()
+        response = self.json_query("status", "--scope", "global", "--harness", "all")
+        self.assertEqual("ok", response["result"])
+        for harness, manifest in manifests.items():
+            item = response["data"]["harnesses"][harness]
+            self.assertEqual("reported", item["state"])
+            self.assertEqual("unverified", item["integrity"])
+            self.assertEqual("synthetic-commit", item["installed_from_commit"])
+            self.assertEqual(str(manifest.parent.parent), item["root"])
+            self.assertEqual(13 if harness == "opencode" else 12, item["managed_files"])
+        self.assertEqual("not_performed", response["data"]["runtime_discovery"])
+
+    def test_slice_c7_global_preview_both_harnesses_assignments_and_human_output(self):
+        self.create_global_managed_install()
+        arguments = ("config", "apply", "--scope", "global", "--harness", "all", "--dry-run")
+        response = self.json_query(*arguments)
+        self.assertEqual("no_changes", response["result"])
+        self.assertFalse(response["data"]["apply_available"])
+        self.assertTrue(response["data"]["preview_only"])
+        self.assertEqual([], response["data"]["changes"])
+        assignments = response["data"]["assignments"]
+        self.assertEqual("partial", assignments["status"])
+        self.assertEqual("unknown", assignments["family"])
+        self.assertEqual(11, len(assignments["roles"]))
+        self.assertEqual("not_managed", assignments["roots"]["opencode"]["state"])
+        self.assertEqual("verified", assignments["roots"]["codex"]["current_status"])
+        kael = next(item for item in assignments["roles"] if item["role"] == "kael")
+        self.assertEqual("root", kael["harnesses"]["codex"]["state"])
+        self.assertEqual("unknown", kael["family"]["current"])
+        human = self.query(*arguments)
+        self.assertEqual(0, human.returncode, human.stderr)
+        for key, value in response["data"].items():
+            self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
+
+    def test_slice_c7_global_preview_single_harness_and_canonical_proposals(self):
+        self.create_global_managed_install(("opencode",))
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
+        self.assertEqual("no_changes", response["result"])
+        assignments = response["data"]["assignments"]
+        self.assertEqual(["opencode"], assignments["selected_harnesses"])
+        self.assertEqual("not_selected", assignments["roots"]["codex"]["state"])
+        self.assertEqual("partial", assignments["status"])
+        for role in assignments["roles"]:
+            current = role["harnesses"]["opencode"]
+            self.assertIn(current["current_status"], ("verified", "unsupported"))
+            if current["current_status"] == "unsupported":
+                self.assertIsNone(current["current"])
+            self.assertEqual(self.canonical_role(role["role"])["models"]["opencode"], current["proposed"]["model"])
+
+    def test_slice_c7_global_preview_explicit_unsupported_no_guess(self):
+        self.create_global_managed_install()
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        relative = "agents/kael.md"
+        raw = (root / relative).read_bytes()
+        altered = raw.replace(b'model: "', b'model: bare-value # "', 1)
+        self.assertNotEqual(raw, altered)
+        self.update_global_managed_bytes("opencode", relative, altered)
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--dry-run")
+        self.assertEqual("ok", response["result"])
+        self.assertEqual("partial", response["data"]["assignments"]["status"])
+        role = next(item for item in response["data"]["assignments"]["roles"] if item["role"] == "kael")
+        self.assertEqual("unsupported", role["harnesses"]["opencode"]["current_status"])
+        self.assertIsNone(role["harnesses"]["opencode"]["current"])
+        self.assertIn({"harness": "opencode", "path": relative, "action": "update",
+                       "current_sha256": hashlib.sha256(altered).hexdigest(),
+                       "proposed_sha256": hashlib.sha256(raw).hexdigest()}, response["data"]["changes"])
+
+    def test_slice_c7_global_preview_manifest_drift_and_foreign_inventory_block(self):
+        manifests = self.create_global_managed_install()
+        # A trusted manifest cannot authorize arbitrary paths or outdated bytes.
+        root = Path(self.env["CODEX_HOME"])
+        (root / "agents/veyra.toml").write_text("drift", encoding="utf-8")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--dry-run", code=3)
+        self.assertEqual("blocked", response["result"])
+        self.assertEqual("global_managed_file_drift", response["issues"][0]["code"])
+        self.assertEqual("ready", response["data"]["harnesses"]["opencode"]["state"])
+        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
+        manifest["managed_files"].append({"path": "private.txt", "sha256": "0" * 64})
+        manifests["opencode"].write_text(json.dumps(manifest), encoding="utf-8")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
+        self.assertEqual("unsupported_global_inventory", response["issues"][0]["code"])
+        manifest["managed_files"].pop()
+        text = json.dumps(manifest).replace('"scope": "global"', '"scope": "global", "scope": "global"')
+        manifests["opencode"].write_text(text, encoding="utf-8")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
+        self.assertEqual("invalid_global_manifest", response["issues"][0]["code"])
+
+    def test_slice_c7_global_root_overlap_and_hardlinks_fail_closed(self):
+        self.create_global_managed_install()
+        self.env["CODEX_HOME"] = self.env["OPENCODE_CONFIG_DIR"]
+        response = self.json_query("status", "--scope", "global", "--harness", "all", code=3)
+        self.assertEqual("overlapping_global_roots", response["issues"][0]["code"])
+        self.env["CODEX_HOME"] = str(self.sandbox / "codex_home")
+        self.env["CODEX_HOME"] += os.sep + ".." + os.sep + "codex_home"
+        response = self.json_query("status", "--scope", "global", "--harness", "codex", code=2)
+        self.assertEqual("invalid_global_root", response["issues"][0]["code"])
+        self.env["CODEX_HOME"] = str(self.sandbox / "codex_home")
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        os.link(root / "agents/kael.md", root / "linked-sentinel.txt")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
+        self.assertEqual("unsafe_global_resource", response["issues"][0]["code"])
+
+    def test_slice_c7_global_execute_and_recovery_remain_blocked(self):
+        self.create_global_managed_install()
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--execute", code=3)
+        self.assertEqual("blocked", response["result"])
+        self.assertEqual("global_execute_unavailable", response["issues"][0]["code"])
+        # Global recovery has no independently qualified journal or writer.
+        recovery = self.query("config", "recover", "--scope", "global")
+        self.assertEqual(3, recovery.returncode, recovery.stdout + recovery.stderr)
+
+    def test_slice_c7_global_doctor_native_gate_is_explicit(self):
+        self.create_global_managed_install()
+        response = self.json_query("doctor", "--scope", "global", "--harness", "all", code=3 if os.name != "nt" else 0)
+        if os.name == "nt":
+            self.assertEqual("ok", response["result"])
+            for harness in ("opencode", "codex"):
+                self.assertEqual("verified", response["data"]["harnesses"][harness]["state"])
+        else:
+            self.assertEqual("blocked", response["result"])
+            self.assertEqual(["native_verify_unavailable"] * 2, [issue["code"] for issue in response["issues"]])
+            for harness in ("opencode", "codex"):
+                self.assertEqual("unavailable", response["data"]["harnesses"][harness]["state"])
 
 
 class SliceBLock(unittest.TestCase):

@@ -229,6 +229,22 @@ jobs:
             throw 'Slice C5 Windows install/uninstall routing tests did not all pass without skips.'
           }
 
+      - name: Slice C7 (Windows global read-only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Fixtures isolate both global roots; native doctor uses VerifyOnly.
+          $testOutput = @(& python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_c7 -v 2>&1)
+          $testExitCode = $LASTEXITCODE
+          $testOutput | Out-Host
+          if ($testExitCode -ne 0) { exit $testExitCode }
+          $transcript = $testOutput -join "`n"
+          if ($transcript -notmatch '(?m)^Ran 8 tests in ' -or
+              $transcript -notmatch '(?m)^OK$' -or $transcript -match 'skipped') {
+            throw 'Slice C7 Windows global read-only tests must all pass without skips.'
+          }
+
       - name: Confirm source checkout unchanged
         shell: pwsh
         run: |

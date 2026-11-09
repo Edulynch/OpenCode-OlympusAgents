@@ -48,8 +48,16 @@ jobs:
         shell: pwsh
         run: |
           # Verify this policy change independently of the older full authority
-          # suite, whose historical native-deny fixture has a separate failure.
+          # suite so a failure can be attributed to the exact contract being tested.
           python -B -m unittest discover -s tests/authority -p 'test_scope_contract.py' -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Authority grants (offline)
+        shell: pwsh
+        run: |
+          # Confirm native DENY for installed assets and scoped ownership for
+          # canonical source, including the older authority-grant scenarios.
+          pwsh -NoProfile -File ./tests/authority/qualify.ps1 -QualificationSlice Offline
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: OA77 worktree activation (deterministic Windows)

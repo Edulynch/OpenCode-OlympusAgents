@@ -16,14 +16,18 @@ function Covers([string]$scope, [string]$path) {
     return $p.Equals($s, [StringComparison]::OrdinalIgnoreCase)
 }
 
-function Is-OlympusOwned([string]$path, [string[]]$manifestPaths = @()) {
+function Is-OlympusOwned([string]$path, [string[]]$manifestPaths = @(),
+                         [bool]$canonicalSourceTarget = $false) {
     $p = $path.Replace('\','/').TrimStart('/').ToLowerInvariant()
     $fixed = @('.opencode/agents/',
         '.opencode/plugins/olympus-activity/', '.opencode/scripts/worktree-setup.ps1',
         '.opencode/orchestrator-install.json',
         '.opencode/opencode.json', '.opencode/opencode.jsonc', '.codex/', 'CODEX.md',
         'olympus/', 'scripts/render_harnesses.py', 'opencode.jsonc', 'opencode.json')
-    if (@($fixed | Where-Object { $p.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { return $true }
+    # Canonical source is editable only when OlympusAgents is the proven task
+    # target; installed runtime resources stay protected in every repository.
+    $canonicalSource = $canonicalSourceTarget -and ($p.StartsWith('olympus/') -or $p -eq 'scripts/render_harnesses.py')
+    if (-not $canonicalSource -and @($fixed | Where-Object { $p.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { return $true }
     foreach ($entry in $manifestPaths) {
         $declared = $entry.Replace('\','/').TrimStart('/').ToLowerInvariant()
         if ($p -eq $declared -or $p.StartsWith($declared.TrimEnd('/') + '/', [StringComparison]::OrdinalIgnoreCase)) { return $true }
@@ -34,11 +38,12 @@ function Is-OlympusOwned([string]$path, [string[]]$manifestPaths = @()) {
 function Decide([string]$agent, [string]$operation, [string]$path, [string]$normalScope,
                  [string]$repositoryRoot, $grant, [bool]$taskActive = $true,
                  [bool]$projectOwned = $true, [bool]$explicitProhibition = $false,
-                 [string[]]$manifestPaths = @(), [string]$nativeDecision = 'ALLOW') {
+                 [string[]]$manifestPaths = @(), [string]$nativeDecision = 'ALLOW',
+                 [bool]$canonicalSourceTarget = $false) {
     # A null grant models an omitted AUTHORITY_GRANT; nativeDecision models the
     # confirmed effective permission and normalScope the validated assignment scope.
     if ($explicitProhibition) { return [pscustomobject]@{ decision='DENY'; question=0; reason='USER_PROHIBITION' } }
-    if (Is-OlympusOwned $path $manifestPaths) { return [pscustomobject]@{ decision='DENY'; question=0; reason='OLYMPUS_OWNED' } }
+    if (Is-OlympusOwned $path $manifestPaths $canonicalSourceTarget) { return [pscustomobject]@{ decision='DENY'; question=0; reason='OLYMPUS_OWNED' } }
     if (-not $projectOwned) { return [pscustomobject]@{ decision='DENY'; question=0; reason='OWNERSHIP_UNPROVEN' } }
     $normal = Covers $normalScope $path
     $valid = $false
@@ -1054,20 +1059,40 @@ try {
 
     foreach ($path in @('.opencode/agents/kovan.md',
         '.opencode/orchestrator-install.json','.opencode/opencode.json','.opencode/opencode.jsonc',
-        '.codex/agents/kovan.toml','.codex/config.toml','CODEX.md','olympus/core/models.toml',
-        'olympus/roles/kael.md','olympus/policies/authority.md','scripts/render_harnesses.py',
+        '.codex/agents/kovan.toml','.codex/config.toml','CODEX.md',
         'opencode.json','opencode.jsonc')) {
         Check ('AUTH9_NATIVE_DENY_' + ($path -replace '[^A-Za-z0-9]','_')) ((Native-Decision $nativeRules 'edit' $path) -eq 'DENY')
     }
-    $normalAgents = @(Get-ChildItem -LiteralPath (Join-Path $root '.opencode/agents') -Filter '*.md' -File)
-    $coreProtectionValid = @($normalAgents | Where-Object {
+
+    # Kael and Kovan can maintain canonical OlympusAgents source when task identity
+    # and WRITE_SCOPE are exact. This is a scoped policy decision, not native DENY.
+    $canonicalPath = 'olympus/core/models.toml'
+    $canonicalDeniedWithoutIdentity = Decide 'kovan' $operation $canonicalPath 'olympus/core/**' $rootPath $null
+    $canonicalDeniedWithoutScope = Decide 'kovan' $operation $canonicalPath 'src/**' $rootPath $null $true $true $false @() 'ALLOW' $true
+    $canonicalAllowed = Decide 'kovan' $operation $canonicalPath 'olympus/core/**' $rootPath $null $true $true $false @() 'ALLOW' $true
+    $canonicalNativeDenied = Decide 'kovan' $operation $canonicalPath 'olympus/core/**' $rootPath $null $true $true $false @() 'DENY' $true
+    Check 'AUTH9_CANONICAL_SOURCE_REQUIRES_IDENTITY_SCOPE_AND_NATIVE_PERMISSION' (
+        $canonicalDeniedWithoutIdentity.decision -eq 'DENY' -and
+        $canonicalDeniedWithoutScope.decision -eq 'NEED_AUTHORITY' -and
+        $canonicalAllowed.decision -eq 'ALLOW' -and
+        $canonicalNativeDenied.decision -eq 'DENY' -and
+        (Native-Decision $nativeRules 'edit' $canonicalPath) -eq 'ALLOW' -and
+        (Native-Decision $kaelNativeRules 'edit' $canonicalPath) -eq 'ALLOW' -and
+        $kael -match 'Canonical Olympus source is writable only when target repository'
+    )
+
+    # Read-only specialists retain native DENY for source and generated assets;
+    # Kael/Kovan use exact task authority for canonical source instead.
+    $readOnlyAgents = @(Get-ChildItem -LiteralPath (Join-Path $root '.opencode/agents') -Filter '*.md' -File |
+        Where-Object { $_.BaseName -notin @('kael','kovan') })
+    $coreProtectionValid = @($readOnlyAgents | Where-Object {
         $agentRules = Read-NativeRules ([IO.File]::ReadAllText($_.FullName)) @($config.permissions)
         @('olympus/core/models.toml','olympus/roles/kael.md','olympus/policies/authority.md',
           '.codex/config.toml','CODEX.md','scripts/render_harnesses.py' | Where-Object {
             (Native-Decision $agentRules 'edit' $_) -ne 'DENY'
         }).Count -gt 0
     }).Count -eq 0
-    Check 'AUTH9_CORE_AND_GENERATOR_PROTECTED_FOR_NORMAL_AGENTS' $coreProtectionValid
+    Check 'AUTH9_CORE_AND_GENERATOR_PROTECTED_FOR_READ_ONLY_SPECIALISTS' ($readOnlyAgents.Count -gt 0 -and $coreProtectionValid)
     # Match scripts/bootstrap.ps1:Get-GeneratedHarnessOutputs: agent files are
     # inventoried only in their dedicated directories, while other generated
     # destinations are explicit. Do not recurse whole adapter trees, where

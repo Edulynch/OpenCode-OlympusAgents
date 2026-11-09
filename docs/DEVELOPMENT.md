@@ -2,6 +2,36 @@
 
 For Olympus maintainers, contributors, installation debugging, qualification, and release engineering. For first-time setup, start with the [README](../README.md).
 
+## Optional local Gitleaks hook
+
+The repository provides an **opt-in** `.pre-commit-config.yaml` that pins the official Gitleaks `v8.30.1` hook to a specific upstream commit. It checks the **staged changes** before a local commit and redacts secrets in its output. It is not installed by cloning OlympusAgents or by any Olympus installer; it requires [pre-commit](https://pre-commit.com/) and Go on the contributor's machine. The first run needs network access to bootstrap the pinned hook.
+
+Before installing any hook, inspect the effective Git hooks location and any existing `pre-commit` hook. Git's `core.hooksPath` can redirect hooks away from the default directory. In Windows PowerShell:
+
+```powershell
+cd 'D:\WORKSPACE\Personal\Tools\OpenCode-OlympusAgents'
+git status --short --branch
+git branch --show-current
+
+$hookDirectory = (git rev-parse --path-format=absolute --git-path hooks).Trim()
+Get-Item -LiteralPath (Join-Path $hookDirectory 'pre-commit') -ErrorAction SilentlyContinue
+git config --show-origin --get core.hooksPath
+```
+
+If an existing hook or custom hooks path is configured, reconcile it manually first; **do not overwrite or bypass it automatically**. Once the hook location is confirmed to be safe, the contributor may choose to install and run the local check:
+
+```powershell
+cd 'D:\WORKSPACE\Personal\Tools\OpenCode-OlympusAgents'
+git status --short --branch
+git branch --show-current
+
+py -m pip install --user pre-commit
+pre-commit install --allow-missing-config
+pre-commit run gitleaks
+```
+
+The hook checks staged changes, not the entire repository or historical commits. `--allow-missing-config` skips the hook in older worktrees that lack this file; it does **not** provide secret scanning for those worktrees. A hook can also be bypassed locally, so the independent CI secret gate remains mandatory. CI scans tracked and non-ignored current files plus the selected Git history. Its pinned release archive is downloaded with bounded retries and may be cached by the workflow; every cached or newly downloaded archive must pass the expected SHA-256 check before execution. A missing or invalid archive fails the gate closed. A cache-write failure after a verified download does not abort scanning, because caching is optional. No credentials, findings, or executable files are shared with the local hook.
+
 ## Architecture
 
 Olympus Core defines canonical role responsibilities, model intent, routing, authority, result lifecycle, and contextual maintenance semantics. OpenCode V2 is the active-development runtime; its adapter is prioritized for new capabilities. The Codex adapter preserves its frozen compatibility baseline. Sharing Core does not create a Codex-parity requirement. Kael is the single conceptual ROOT ORCHESTRATOR: OpenCode represents it as its primary agent, while Codex represents it as the root thread. The eleven canonical Core roles and their responsibilities remain intact; maintenance uses Kael's normal workflow, selected from the identified target repository and task intent.

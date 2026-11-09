@@ -14,6 +14,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -27,6 +29,9 @@ ASSETS = {
     ("Linux", "aarch64"): ("linux_arm64.tar.gz", "e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"),
 }
 MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
+DOWNLOAD_ATTEMPTS = 3
+RETRY_DELAYS_SECONDS = (1, 3)
+CACHE_DIR_ENV = "OLYMPUS_GITLEAKS_CACHE_DIR"
 
 
 class GateError(Exception):
@@ -40,23 +45,128 @@ def quiet_run(args: list[str], *, cwd: Path | None = None, timeout: int = 600) -
         raise GateError("A required local command failed or timed out.") from None
 
 
-def _download_asset(asset: str, expected_sha256: str) -> bytes:
-    url = f"https://github.com/gitleaks/gitleaks/releases/download/v{VERSION}/gitleaks_{VERSION}_{asset}"
-    request = urllib.request.Request(url, headers={"User-Agent": "OlympusAgents-secret-gate"})
+def _cache_file(asset: str) -> Path | None:
+    configured = os.environ.get(CACHE_DIR_ENV)
+    if not configured:
+        return None
+    directory = Path(configured)
+    if not directory.is_absolute() or directory == Path(directory.anchor) or ".." in directory.parts:
+        raise GateError("The optional Gitleaks archive cache must be an absolute, contained directory.")
+    return directory / f"gitleaks_{VERSION}_{asset}"
+
+
+def _read_verified_cache(path: Path, expected_sha256: str) -> bytes | None:
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            payload = response.read(MAX_ARCHIVE_BYTES + 1)
-    except Exception:
-        raise GateError("Could not download the pinned Gitleaks release from GitHub.") from None
+        initial_info = path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise GateError("The optional Gitleaks archive cache cannot be inspected.") from None
+    # Inspect the name before opening it: a FIFO would otherwise block a
+    # normal read-only open. Only a single regular file is a valid cache hit.
+    if (not stat.S_ISREG(initial_info.st_mode) or initial_info.st_nlink != 1 or
+            initial_info.st_size > MAX_ARCHIVE_BYTES):
+        raise GateError("The cached Gitleaks archive has an unsafe file identity or size.")
+    try:
+        # NONBLOCK covers a concurrent replacement with a FIFO on systems
+        # that support it; NOFOLLOW prevents following a swapped-in symlink.
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0)
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(path, flags)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise GateError("The optional Gitleaks archive cache cannot be inspected.") from None
+    try:
+        info = os.fstat(descriptor)
+        link_info = path.lstat()
+        # A restored cache is untrusted input. Ensure the name and descriptor
+        # still identify the same single regular file before consuming bytes.
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or
+                info.st_size > MAX_ARCHIVE_BYTES or
+                not stat.S_ISREG(link_info.st_mode) or
+                (info.st_dev, info.st_ino) != (initial_info.st_dev, initial_info.st_ino) or
+                (info.st_dev, info.st_ino) != (link_info.st_dev, link_info.st_ino)):
+            raise GateError("The cached Gitleaks archive has an unsafe file identity or size.")
+        with os.fdopen(descriptor, "rb") as stream:
+            descriptor = -1
+            payload = stream.read(MAX_ARCHIVE_BYTES + 1)
+    except GateError:
+        raise
+    except OSError:
+        raise GateError("The optional Gitleaks archive cache could not be read.") from None
+    finally:
+        if descriptor != -1:
+            os.close(descriptor)
     if len(payload) > MAX_ARCHIVE_BYTES:
-        raise GateError("The downloaded Gitleaks archive exceeded the size limit.")
+        raise GateError("The cached Gitleaks archive exceeded the size limit.")
     _verify_sha256(payload, expected_sha256)
     return payload
 
 
+def _store_verified_cache(path: Path, payload: bytes) -> None:
+    temporary: str | None = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(prefix=".olympus-gitleaks-", dir=path.parent)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+        # Publish the complete verified archive atomically. Cache consumers
+        # recheck the hash on every run, including after a GitHub cache restore.
+        os.replace(temporary, path)
+        temporary = None
+    except OSError:
+        raise GateError("The verified Gitleaks archive could not be cached safely.") from None
+    finally:
+        if temporary is not None:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+
+
+def _download_asset(asset: str, expected_sha256: str) -> bytes:
+    cache = _cache_file(asset)
+    if cache is not None:
+        cached = _read_verified_cache(cache, expected_sha256)
+        if cached is not None:
+            return cached
+    url = f"https://github.com/gitleaks/gitleaks/releases/download/v{VERSION}/gitleaks_{VERSION}_{asset}"
+    request = urllib.request.Request(url, headers={"User-Agent": "OlympusAgents-secret-gate"})
+    for attempt in range(DOWNLOAD_ATTEMPTS):
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                payload = response.read(MAX_ARCHIVE_BYTES + 1)
+        except urllib.error.HTTPError as error:
+            # A missing asset is not transient; throttling and upstream 5xx
+            # failures can recover without changing the pinned identity.
+            if error.code not in (403, 408, 429, 500, 502, 503, 504) or attempt == DOWNLOAD_ATTEMPTS - 1:
+                raise GateError(f"Pinned Gitleaks download failed (HTTP {error.code}).") from None
+        except (urllib.error.URLError, TimeoutError, OSError):
+            if attempt == DOWNLOAD_ATTEMPTS - 1:
+                raise GateError("Pinned Gitleaks download failed after bounded network retries.") from None
+        except Exception:
+            raise GateError("Pinned Gitleaks download failed unexpectedly.") from None
+        else:
+            if len(payload) > MAX_ARCHIVE_BYTES:
+                raise GateError("The downloaded Gitleaks archive exceeded the size limit.")
+            _verify_sha256(payload, expected_sha256)
+            if cache is not None:
+                try:
+                    _store_verified_cache(cache, payload)
+                except GateError:
+                    # The archive has already passed the pinned hash check.
+                    # An optional cache-write failure must not block scanning.
+                    pass
+            return payload
+        time.sleep(RETRY_DELAYS_SECONDS[attempt])
+    raise GateError("Pinned Gitleaks download attempts were exhausted.")
+
+
 def _verify_sha256(payload: bytes, expected_sha256: str) -> None:
     if hashlib.sha256(payload).hexdigest() != expected_sha256:
-        raise GateError("The downloaded Gitleaks archive failed its pinned SHA-256 check.")
+        raise GateError("The Gitleaks archive failed its pinned SHA-256 check.")
 
 
 def ensure_binary(destination: Path) -> Path:

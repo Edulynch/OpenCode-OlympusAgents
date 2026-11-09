@@ -246,6 +246,13 @@ inventario/hashes y en Windows usa el motor oficial `global-install.ps1 -VerifyO
 con PowerShell 7; fuera de Windows la verificación nativa se declara no disponible.
 El preview valida hashes y muestra las diferencias sin modificar ni adoptar recursos.
 
+En una selección mixta instalada/ausente, `result=absent` y `selection_state=partial`
+identifican la cobertura incompleta sin usar un resultado fuera del contrato; las
+asignaciones conjuntas quedan `unknown`. La detección de drift managed devuelve
+`failed`/exit 1; conflictos, versiones no reconocidas y verificaciones nativas
+no disponibles bloquean con exit 3. `AGENTS.override.md` global de Codex tiene
+mayor precedencia y bloquea el preview, sin leer ni modificar su contenido.
+
 ```powershell
 cd 'D:\WORKSPACE\Personal\Tools\OpenCode-OlympusAgents'
 git status --short --branch

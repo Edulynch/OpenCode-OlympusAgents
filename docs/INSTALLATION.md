@@ -192,6 +192,15 @@ unsupported. Global `config apply --execute` and global recovery are blocked:
 neither operation has a qualified writer/rollback protocol. Global `--harness
 all` is not evidence of runtime/provider integration or transactional writes.
 
+For a mixed installed/absent `--harness all` selection, `result=absent` and
+`data.selection_state=partial` identify incomplete coverage; the combined
+assignment preview remains unknown. A changed managed file is reported as
+`global_managed_file_drift` (exit 1), while unrecognized manifest versions and
+Codex global `AGENTS.override.md` precedence conflicts block with exit 3.
+Doctor preserves recognized native VerifyOnly failure categories; an unavailable
+or unrecognized native result never counts as a pass. No user-owned override
+contents are read or modified.
+
 ## Installation safety
 
 - Install only into a repository you trust. Project scope requires the Git worktree root.

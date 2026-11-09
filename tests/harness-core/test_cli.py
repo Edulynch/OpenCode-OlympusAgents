@@ -1558,10 +1558,11 @@ class SliceA(unittest.TestCase):
         # A trusted manifest cannot authorize arbitrary paths or outdated bytes.
         root = Path(self.env["CODEX_HOME"])
         (root / "agents/veyra.toml").write_text("drift", encoding="utf-8")
-        response = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--dry-run", code=3)
-        self.assertEqual("blocked", response["result"])
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--dry-run", code=1)
+        self.assertEqual("failed", response["result"])
         self.assertEqual("global_managed_file_drift", response["issues"][0]["code"])
         self.assertEqual("ready", response["data"]["harnesses"]["opencode"]["state"])
+        self.assertEqual("drift", response["data"]["harnesses"]["codex"]["state"])
         manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
         manifest["managed_files"].append({"path": "private.txt", "sha256": "0" * 64})
         manifests["opencode"].write_text(json.dumps(manifest), encoding="utf-8")
@@ -1609,6 +1610,77 @@ class SliceA(unittest.TestCase):
             self.assertEqual(["native_verify_unavailable"] * 2, [issue["code"] for issue in response["issues"]])
             for harness in ("opencode", "codex"):
                 self.assertEqual("unavailable", response["data"]["harnesses"][harness]["state"])
+
+    def test_slice_c7_global_mixed_absence_has_contracted_result(self):
+        self.create_global_managed_install(("opencode",))
+        status = self.json_query("status", "--scope", "global", "--harness", "all")
+        self.assertEqual("absent", status["result"])
+        self.assertEqual("partial", status["data"]["selection_state"])
+        self.assertEqual("reported", status["data"]["harnesses"]["opencode"]["state"])
+        self.assertEqual("absent", status["data"]["harnesses"]["codex"]["state"])
+        self.assertEqual("harness_absent", status["issues"][0]["code"])
+        preview = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--dry-run")
+        self.assertEqual("absent", preview["result"])
+        self.assertEqual("partial", preview["data"]["selection_state"])
+        self.assertEqual("unknown", preview["data"]["assignments"]["status"])
+        self.assertFalse(preview["data"]["apply_available"])
+
+    def test_slice_c7_global_codex_override_and_unknown_version_block_preview(self):
+        manifests = self.create_global_managed_install(("codex",))
+        root = Path(self.env["CODEX_HOME"])
+        override = root / "AGENTS.override.md"
+        override.write_text("User-owned higher-priority instructions", encoding="utf-8")
+        blocked = self.json_query("config", "apply", "--scope", "global", "--harness", "codex", "--dry-run", code=3)
+        self.assertEqual("blocked", blocked["result"])
+        self.assertEqual("global_install_conflict", blocked["issues"][0]["code"])
+        self.assertEqual("unknown", blocked["data"]["assignments"]["status"])
+        override.unlink()
+        manifest = json.loads(manifests["codex"].read_text(encoding="utf-8"))
+        manifest["installed_version"] = "unknown-release"
+        manifests["codex"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        invalid = self.json_query("config", "apply", "--scope", "global", "--harness", "codex", "--dry-run", code=3)
+        self.assertEqual("unsupported_global_version", invalid["issues"][0]["code"])
+
+    def test_slice_c7_global_native_failure_reason_mapping(self):
+        cases = {
+            "GLOBAL_MANAGED_FILE_DRIFT": ("drift", "global_managed_file_drift", 1),
+            "GLOBAL_VERSION_DRIFT": ("version_mismatch", "version_mismatch", 3),
+            "GLOBAL_MANIFEST_INVALID": ("invalid_manifest", "invalid_global_manifest", 3),
+            "GLOBAL_INSTALL_CONFLICT": ("conflict", "global_install_conflict", 3),
+        }
+        for reason, expected in cases.items():
+            with self.subTest(reason=reason):
+                line = f"GLOBAL_HARNESS_FAILED: codex {reason}: synthetic detail"
+                self.assertEqual(expected, global_readonly._native_failure_reason(line, "codex"))
+        self.assertEqual(("unavailable", "native_verify_unavailable", 3),
+                         global_readonly._native_failure_reason("no trustworthy marker", "codex"))
+
+    def test_slice_c7_global_path_discovery_and_unsafe_symlinks(self):
+        expected = self.sandbox / "discovered_config"
+        expected.mkdir()
+        output = f"cache    {self.sandbox / 'cache'}\nconfig    {expected}\ndata    {self.sandbox / 'data'}\n"
+        with mock.patch.dict(os.environ, self.env, clear=True), \
+             mock.patch("olympus.global_readonly.shutil.which", return_value="opencode"), \
+             mock.patch("olympus.global_readonly.subprocess.run", return_value=subprocess.CompletedProcess(
+                 args=["opencode", "debug", "paths"], returncode=0, stdout=output, stderr="")):
+            os.environ.pop("OPENCODE_CONFIG_DIR")
+            self.assertEqual(expected, global_readonly._opencode_root())
+        if os.name == "posix":
+            link = self.sandbox / "linked_codex_root"
+            link.symlink_to(self.sandbox / "codex_home", target_is_directory=True)
+            self.env["CODEX_HOME"] = str(link)
+            blocked = self.json_query("status", "--scope", "global", "--harness", "codex", code=3)
+            self.assertEqual("unsafe_global_root", blocked["issues"][0]["code"])
+
+    def test_slice_c7_global_doctor_version_mismatch_is_explicit(self):
+        self.create_global_managed_install(("codex",), version="v0.0.1")
+        response = self.json_query("doctor", "--scope", "global", "--harness", "codex", code=3)
+        if os.name == "nt":
+            self.assertEqual("version_mismatch", response["data"]["harnesses"]["codex"]["state"])
+            self.assertEqual("version_mismatch", response["issues"][0]["code"])
+        else:
+            self.assertEqual("unavailable", response["data"]["harnesses"]["codex"]["state"])
+            self.assertEqual("native_verify_unavailable", response["issues"][0]["code"])
 
 
 class SliceBLock(unittest.TestCase):

@@ -18,7 +18,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
-from . import config_apply
+from . import config_apply, install_routing
 
 
 _MANIFEST = "olympus/orchestrator-install.json"
@@ -162,6 +162,10 @@ def _manifest(root: Path, harness: str, expected: dict[str, bytes] | None):
             or not isinstance(data.get("installed_from_commit"), str) or not data["installed_from_commit"]
             or not isinstance(data.get("managed_files"), list)):
         raise GlobalFault("invalid_global_manifest", "Global manifest ownership, version or schema is unsupported.")
+    # Only the local marker and official release tag grammar are interpretable.
+    # An unknown string must not silently become an actionable global preview.
+    if data["installed_version"] != "local" and install_routing._RELEASE_TAG.fullmatch(data["installed_version"]) is None:
+        raise GlobalFault("unsupported_global_version", "Global manifest has an unsupported installed version.")
     entries: dict[str, str] = {}
     for item in data["managed_files"]:
         if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("sha256"), str):
@@ -230,12 +234,28 @@ def _assignments(installed: dict[str, dict[str, bytes]], expected: dict[str, dic
             "selected_harnesses": list(installed), "preserved_harnesses": [], "roles": rows, "roots": roots}
 
 
-def _native_verify(source: Path, root: Path, harness: str, version: str) -> tuple[str, str]:
+def _native_failure_reason(stdout: str, harness: str) -> tuple[str, str, int]:
+    """Translate only the official harness failure marker into stable CLI results."""
+    failures = {
+        "GLOBAL_MANAGED_FILE_DRIFT": ("drift", "global_managed_file_drift", 1),
+        "GLOBAL_VERSION_DRIFT": ("version_mismatch", "version_mismatch", 3),
+        "GLOBAL_MANIFEST_INVALID": ("invalid_manifest", "invalid_global_manifest", 3),
+        "GLOBAL_INSTALL_CONFLICT": ("conflict", "global_install_conflict", 3),
+    }
+    prefix = f"GLOBAL_HARNESS_FAILED: {harness} "
+    for line in stdout.splitlines():
+        if line.startswith(prefix):
+            marker = line[len(prefix):].partition(":")[0]
+            return failures.get(marker, ("unavailable", "native_verify_unavailable", 3))
+    return "unavailable", "native_verify_unavailable", 3
+
+
+def _native_verify(source: Path, root: Path, harness: str, version: str) -> tuple[str, str, str | None, int]:
     if sys.platform != "win32":
-        return "unavailable", "Global native VerifyOnly is qualified only on Windows."
+        return "unavailable", "Global native VerifyOnly is qualified only on Windows.", "native_verify_unavailable", 3
     executable = shutil.which("pwsh")
     if executable is None or not (source / "scripts/global-install.ps1").is_file():
-        return "unavailable", "PowerShell 7 or the official global verifier is unavailable."
+        return "unavailable", "PowerShell 7 or the official global verifier is unavailable.", "native_verify_unavailable", 3
     # Root overrides pin the same audited target while USERPROFILE contains
     # PowerShell's startup cache outside the real user profile.
     with tempfile.TemporaryDirectory(prefix="olympus-global-verify-") as profile:
@@ -251,7 +271,7 @@ def _native_verify(source: Path, root: Path, harness: str, version: str) -> tupl
             )
             match = _POWERSHELL_VERSION.search(probe.stdout or "")
             if probe.returncode != 0 or match is None or int(match.group(1)) < 7:
-                return "unavailable", "The native verifier requires PowerShell 7 or later."
+                return "unavailable", "The native verifier requires PowerShell 7 or later.", "native_verify_unavailable", 3
             result = subprocess.run(
                 [executable, "-NoProfile", "-NonInteractive", "-File", str(source / "scripts/global-install.ps1"),
                  "-Harness", harness, "-SourceVersion", version, "-VerifyOnly"],
@@ -259,11 +279,12 @@ def _native_verify(source: Path, root: Path, harness: str, version: str) -> tupl
                 check=False, timeout=30, shell=False,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
-            return "unavailable", f"Global native verifier could not finish: {error}"
+            return "unavailable", f"Global native verifier could not finish: {error}", "native_verify_unavailable", 3
     line = f"OLYMPUS_GLOBAL_VERIFY: {harness} {version} PASS"
     if result.returncode == 0 and any(item.startswith(line + " (") for item in result.stdout.splitlines()):
-        return "verified", "Official global VerifyOnly passed."
-    return "failed", "Official global VerifyOnly failed or returned no valid success marker."
+        return "verified", "Official global VerifyOnly passed.", None, 0
+    state, issue_code, exit_code = _native_failure_reason(result.stdout, harness)
+    return state, "Official global VerifyOnly did not pass; see the reported failure category.", issue_code, exit_code
 
 
 def inspect(source: Path, args, response: dict, *, source_query: Callable, load_renderer: Callable,
@@ -292,6 +313,7 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
         current_by_harness: dict[str, dict[str, bytes]] = {}
         changes: list[dict[str, str]] = []
         absent, blocked = [], []
+        failure_codes: list[int] = []
         for harness in selected:
             root = roots[harness]
             response["data"]["harnesses"][harness] = {"root": str(root), "state": "unverified"}
@@ -311,13 +333,22 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                 current = _verified_files(root, entries)
                 current_by_harness[harness] = current
                 item["integrity"] = "hash_verified"
+                if harness == "codex":
+                    # The native installer refuses this user-owned, higher-priority
+                    # instruction file, even if every Olympus-managed byte matches.
+                    _, override, override_issue = config_apply._lstat_target_path(root, "AGENTS.override.md")
+                    if override_issue:
+                        raise GlobalFault("unsafe_global_resource", override_issue)
+                    if override is not None:
+                        raise GlobalFault("global_install_conflict", "Global Codex AGENTS.override.md takes precedence over managed AGENTS.md.")
                 if operation == "doctor":
                     version = "local" if manifest["installed_version"] == "local" else release_version(source)
-                    state, detail = _native_verify(source, root, harness, version)
+                    state, detail, issue_code, exit_code = _native_verify(source, root, harness, version)
                     item.update({"state": state, "verification": detail})
                     if state != "verified":
                         blocked.append(harness)
-                        response["issues"].append({"code": "native_verify_" + state,
+                        failure_codes.append(exit_code)
+                        response["issues"].append({"code": issue_code,
                                                    "message": detail, "harness": harness})
                 else:
                     item["state"] = "ready"
@@ -328,18 +359,23 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                                             "proposed_sha256": hashlib.sha256(desired).hexdigest()})
             except GlobalFault as error:
                 blocked.append(harness)
-                response["data"]["harnesses"][harness]["state"] = "blocked"
+                failure_codes.append(error.code)
+                response["data"]["harnesses"][harness]["state"] = "drift" if error.code == 1 else "blocked"
                 response["issues"].append({"code": error.reason, "message": str(error), "harness": harness})
+        response["data"]["selection_state"] = "partial" if absent and len(absent) != len(selected) else "absent" if absent else "complete"
+        if absent and len(absent) != len(selected):
+            response["issues"].append({"code": "harness_absent", "message": "At least one selected global harness is not installed."})
         if operation == "config apply":
             response["data"].update({"preview_only": True, "apply_available": False, "changes": changes,
                                      "assignments": {"status": "unknown", "evidence": "not_verified", "roles": [], "roots": {}}})
             if not blocked and not absent:
                 response["data"]["assignments"] = _assignments(current_by_harness, expected, assignment_query(load_renderer(source), source))
         if blocked:
-            response["result"] = "blocked"
-            return 3
+            code = 3 if 3 in failure_codes else 1
+            response["result"] = "blocked" if code == 3 else "failed"
+            return code
         if absent:
-            response["result"] = "absent" if len(absent) == len(selected) else "partial"
+            response["result"] = "absent"
             return 0
         response["result"] = "no_changes" if operation == "config apply" and not changes else "ok"
         return 0

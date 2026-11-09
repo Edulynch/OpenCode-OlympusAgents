@@ -1125,6 +1125,32 @@ try {
     Check 'AUTH10_EXTERNAL_SIBLING_REQUIRES_ASK' ($externalDecision -eq 'ASK' -and $kaelExternalDecision -eq 'ASK' -and
         @($nativeRules | Where-Object { $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'allow' }).Count -eq 0)
 
+    # A grant for one repository must never silently authorize the same relative
+    # path in a sibling repository; an exact second grant can reach native ASK.
+    $otherRoot = 'C:\fixture\other-project'
+    $firstRootGrant = New-Grant 'kovan' $operation 'src/**' $rootPath 'NATIVE_ASK'
+    $secondRootGrant = New-Grant 'kovan' $operation 'src/**' $otherRoot 'NATIVE_ASK'
+    $crossRootAttempt = Decide 'kovan' $operation 'src/feature.ts' 'docs/**' $otherRoot $firstRootGrant $true $true $false @() 'ASK'
+    $secondRootAttempt = Decide 'kovan' $operation 'src/feature.ts' 'docs/**' $otherRoot $secondRootGrant $true $true $false @() 'ASK'
+    Check 'AUTH10C_MULTI_REPO_REQUIRES_SEPARATE_ROOT_AND_SCOPE' (
+        $crossRootAttempt.decision -eq 'NEED_AUTHORITY' -and
+        $secondRootAttempt.decision -eq 'NATIVE_ASK' -and
+        $kael -match 'One repository''s WRITE_SCOPE never authorizes another root' -and
+        $kovan -match 'Do not source-edit another repository' -and
+        $docs -match 'a scope for one\s+root cannot grant access to another'
+    )
+
+    # External artifacts and hooks are distinct from source editing. Keeping
+    # that distinction explicit prevents both false denials and silent widening.
+    Check 'AUTH10D_EXTERNAL_EFFECTS_REQUIRE_EXACT_AUTHORITY' (
+        $kael -match 'Non-source external operations' -and
+        $kael -match 'separately\s+declared exact target, operation, effect' -and
+        $kael -match 'Native DENY remains final' -and
+        $kovan -match 'separately assigned non-source external effect' -and
+        $docs -match 'Separately requested non-source external\s+effects' -and
+        $kael -notmatch 'Master verifies every requested target is within the active repository'
+    )
+
     Check 'AUTH10B_EXPLICIT_PROHIBITION_OVERRIDES_NATIVE_ASK' ((Native-Decision $nativeRules 'edit' $pluginResource $true) -eq 'DENY' -and
         -not (Write-Decision 'DENY' 'APPROVE_ONCE') -and $kael -match '(?s)Explicit user prohibitions.*?override every other outcome')
 

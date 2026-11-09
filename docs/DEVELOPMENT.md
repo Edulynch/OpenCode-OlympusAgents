@@ -106,6 +106,16 @@ never elevated by text, WRITE_SCOPE, or an Authority Grant. Repository identity
 classifies whether canonical OlympusAgents source is the task target; it does
 not grant access to a separate checkout or installed Olympus runtime resources.
 
+The active repository is the verified target of the task, not implicitly the
+OlympusAgents source checkout. Each repository receiving source edits needs its
+own canonical root and bounded, repository-relative WRITE_SCOPE; a scope for one
+root cannot grant access to another. Separately requested non-source external
+effects (for example, temporary test artifacts, a shared Git hook, or a global
+installation) require an exact target, operation, effect, and applicable native
+permission rather than a fabricated repository-relative WRITE_SCOPE. Unrelated
+external files, protected paths, and native DENY remain off-limits. Ordinary
+test/build temporary output does not grant permission for unrelated source edits.
+
 ### Trivial task / authority fast path
 
 For a small deterministic operation with known scope and established ownership,

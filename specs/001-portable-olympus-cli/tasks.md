@@ -421,3 +421,27 @@ Este registro supersede el READY_FOR_T015 local anterior únicamente respecto de
 - Reconciliación: T026 PASS y C4 hosted PASS en Windows y Linux para el código de `2682f26`. PR [#112](https://github.com/Edulynch/OpenCode-OlympusAgents/pull/112) sigue OPEN/Draft; `mergeStateStatus=CLEAN`. No se hizo merge, release, instalación real ni E2E macOS. El follow-up de esta reconciliación documental no altera el código ya validado; no se alteró `.serena/` ni trabajo ignorado.
 
 **Límite FR-016 registrado (sin ampliar C4)**: `config apply --dry-run` enumera recursos afectados y hashes actual/propuesto, metadatos de manifest, harnesses seleccionados/preservados y bloqueos; no entrega los valores de asignación por rol (IDs OpenCode/Codex). El manifest no conserva IDs de asignación; registra ownership, hashes y provenance, y el preview actual no muestra ese mapa. C4 devuelve `assignments: unknown` porque no existe una fuente instalada segura para inferirlo y no parsea recursos generados. La cobertura de ese detalle FR-016 sigue pendiente; no se implementó aquí.
+
+
+## Slice C6 — asignaciones en preview project (2026-11-08)
+
+- [x] T027 Inyectar `model_assignments` en `config apply --dry-run`; después de limpiar validación de inventario/hash, extraer sólo desde los bytes target ya cargados en memoria. Proponer por el renderer canónico; mantener familia actual `unknown`, y marcar parsing no soportado sin valores inferidos. Distinguir harness seleccionado/preservado/no instalado, OpenCode Kael agent y root config, Codex specialists y Kael root, sin tocar semántica C1/C3.
+- [x] T028 Agregar regresiones `slice_c6` para IDs instalados distintos, comparación propuesta vs renderer, unknown family con IDs iguales, OpenCode/Codex roots, harnesses seleccionados/preservados, formas malformadas/ambiguas, drift, no-op, plan de ejecución y snapshots human/JSON con helpers existentes.
+- [x] T029 Reconciliar contrato de preview y roster normativo vigente de 11 roles en `spec.md`; conservar como historia el row de Verification Scope, el registro C4 y los documentos históricos fuera del alcance.
+
+### Reconciliación C6 — validación local enfocada (2026-11-08)
+
+- El preview añade `data.assignments`: propuestas canónicas para harnesses seleccionados y valores actuales únicamente de recursos managed cuyo hash coincidió con el manifest. La familia instalada permanece `unknown`; valores extraídos no acreditan runtime efectivo, aceptación de proveedor ni disponibilidad remota. OpenCode limita extracción a frontmatter/envelopes generados y escalares simples; Codex usa `tomllib` top-level. Estructura ambigua, duplicada, malformada, faltante o de tipo no soportado queda `unsupported`; si inventory/drift bloquea, la asignación completa es `unknown/not_verified`.
+- El CLI pasa el resolver por callback; no hay import circular ni parser general. OpenCode Kael agent y `opencode.jsonc` root se informan por separado; Codex Kael sólo aparece en `roots.codex`. Human/JSON presentan el mismo objeto. El dato no participa en cambios, fingerprint ni ejecución C3.
+- Validación local focal: `python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_c6 -v` — 7 pruebas PASS, exit 0. Las invocaciones human/JSON usan el snapshot helper existente para source, target y perfiles de fixtures aislados. `python -B scripts/check_docs.py` — PASS; el checker avisa que seis adjuntos históricos sin versionar no fueron validados. `git diff --check` — PASS, exit 0; Git sólo reportó advertencias de normalización LF→CRLF.
+- No se ejecutó ni se afirma Linux CI/hosted, FULL/FAST, apply real, instalación de perfil ni runtime Olympus. El row histórico de Verification Scope (linea 239) y el C4 record previo de FR-016 permanecen intactos.
+
+
+## Slice C6 corrective — escalares OpenCode bare (2026-11-08)
+
+- Vera identificó que `_opencode_scalar` aceptaba valores YAML bare como `true`, `null`, números y palabras como si fueran strings. La corrección limitada requiere la forma double-quoted simple; no añade parser YAML ni catálogo de tipos implícitos. Todo scalar bare queda `unsupported`; `"true"` quoted sigue siendo un modelo string válido.
+- Se conserva intacta la reconciliación C6 anterior, incluida su validación local de siete pruebas. La prueba integrada posterior cubre el subset completo C y el nuevo caso boolean-like quoted.
+- `python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_c -v` — 32 pruebas PASS, 0 skips, exit 0; `HARNESS_RENDER` PASS, 15 outputs sin cambios.
+- `pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FAST` — PASS, 15 checks PASS, 0 FAIL, 0 NOT RUN; incluye Harness Core read-only. La qualification indica que runtime/interactive no forma parte de todos los checks.
+- `python -B scripts/check_docs.py` — PASS; seis adjuntos históricos sin versionar no fueron validados. `git diff --check` — PASS, exit 0, con advertencias Git de normalización LF→CRLF.
+- La evidencia Nox previa `writer_compat` (14 PASS) se reutilizó según la asignación y no se volvió a ejecutar. No se ejecutó Linux/hosted ni apply real.

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-portable-olympus-cli` (rama preexistente; esta sesión no crea ni cambia ramas)  
 **Created**: 2026-10-14  
-**Status (2026-11-07)**: Slice A SHIPPED; Slice B **ACEPTADA** (T019 Windows, T020 Linux, G2 PASS); Slice C3 implementa apply explícito project y C4 diagnóstico read-only project en esta rama; T026 CI C4 PASS en Windows y Linux para el código de PR #112; scope global, resto de Slice C y feature completa siguen pendientes; macOS **NOT VERIFIED**.
+**Status (2026-11-08)**: Slice A SHIPPED; Slice B **ACEPTADA** (T019 Windows, T020 Linux, G2 PASS); Slice C3 apply project, C4 doctor project y C5 install/uninstall routing implementados; C6 añade asignaciones al preview project y sus regresiones focalizadas pasan localmente (sin cualificación hosted); scope global, resto de Slice C y feature completa siguen pendientes; macOS **NOT VERIFIED**.
 **Documentation Mode**: New  
 **Baseline**: `master` con Slice A integrada por PR [#69](https://github.com/Edulynch/OpenCode-OlympusAgents/pull/69), commit `b7f8404061847a58d5e8122e4baa2fa643b69a46`. Baseline histórico: post-PR #68 `1900da45250ddec817a6141396e0ec1268b2dfca`; producto v0.4.9 `c30a19dd410b1815f4591b204615cae0dd9e9a5f`.\
 **Restricciones de especificación inicial (históricas)**: Sólo especificación; sin implementación, planes, tareas, commits, push ni pruebas pesadas. Conservar fuentes, renderer, roles, diferencias de adaptadores y protecciones de instalación. Windows/Linux como objetivos; macOS sin cualificación acreditada. Excluir #66 y #67.\
@@ -14,7 +14,7 @@
 
 T019 y T020 quedaron reconciliadas como PASS; G2 acredita la aceptación integrada de B en Windows y Linux. T019 Windows: 55 PASS, 0 FAIL, 0 ERROR, 3 SKIPPED por `WinError 1314` al crear fixtures symlink; los skips no cuentan como PASS Windows. T020 Linux hosted: 58 PASS, 0 FAIL, 0 SKIPPED, 37.350 s, exit 0, Ubuntu 24.04, CPython 3.11.17 y TOML Kit 0.13.3. Fuente exacta: commit `539976812d14289696dbd3824f1ae706ac2f1947`, PR Draft #70; run [38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366), job [116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025). Los tres escenarios symlink omitidos en Windows pasaron en Linux. El run cubrió la selección integrada, incluyendo snapshots, independencia A, rollback/recovery, conflictos y 15 límites; confirmó checkout fuente sin cambios. FAST Windows y CodeQL también pasaron.
 
-La aceptación de B documenta edición explícita de fuentes, no autorización permanente para escribir fuentes reales ni aplicación instalada. A permanece SHIPPED y sin cambios. C1 aporta el preview read-only; C3 agrega `--execute` sólo para recursos ya administrados en scope project; C4 agrega `doctor` project read-only mediante VerifyOnly en Windows con PowerShell 7, sin runtime discovery y con asignaciones `unknown`. La cobertura local enfocada C4 y CI Windows/Linux para el código del fix pasan (T026; PR #112). Scope global, instalación de harnesses ausentes y el resto de Slice C no se habilitan. El preview aún omite valores de asignación requeridos por FR-016; C4 no amplía ese alcance. Los límites cooperantes, atomicidad multiarquivo, durabilidad y macOS NOT VERIFIED permanecen vigentes. Los registros de diseño/planificación anteriores conservan su fecha y significado histórico; la reconciliación A/B/C4 está en [tasks.md](tasks.md).
+La aceptación de B documenta edición explícita de fuentes, no autorización permanente para escribir fuentes reales ni aplicación instalada. A permanece SHIPPED y sin cambios. C1 aporta el preview read-only; C3 agrega `--execute` sólo para recursos ya administrados en scope project; C4 agrega `doctor` project read-only mediante VerifyOnly en Windows con PowerShell 7, sin runtime discovery y con asignaciones `unknown`. C6 incorpora al preview project los valores actuales extraídos únicamente de bytes managed con hashes verificados y las propuestas del renderer canónico; las familias instaladas siguen `unknown`, los formatos no soportados no producen valores inferidos y no se afirma efectividad runtime ni disponibilidad remota. C4 sigue sin inferir asignaciones. C6 no altera disponibilidad, resultado ni exits de `--execute`; scope global, instalación de harnesses ausentes y el resto de Slice C no se habilitan. Los límites cooperantes, atomicidad multiarquivo, durabilidad y macOS NOT VERIFIED permanecen vigentes. Los registros de diseño/planificación anteriores conservan su fecha y significado histórico; la reconciliación A/B/C4/C6 está en [tasks.md](tasks.md).
 
 ## Actualización contractual aprobada — Slice B (2026-10-14)
 
@@ -28,9 +28,9 @@ La persona operadora necesita una única CLI ligera para conocer las asignacione
 
 ### Baseline y delta autorizado
 
-- `olympus/core/models.toml` contiene familias `sol` y `luna`, identificadores por adaptador y familia/esfuerzo de los doce roles. Identidades y definiciones de rol siguen en sus fuentes canónicas.
+- `olympus/core/models.toml` contiene familias `sol` y `luna`, identificadores por adaptador y familia/esfuerzo de los once roles actuales. Identidades y definiciones de rol siguen en sus fuentes canónicas.
 - El renderer valida fuentes y deriva outputs OpenCode/Codex; su comprobación de drift es de sólo lectura. No demuestra disponibilidad remota de modelos ni equivalencia semántica completa de políticas/prompts.
-- OpenCode tiene doce agentes. Codex tiene diez especialistas, Kael como thread raíz y ninguna instancia de Aegis. Un identificador Codex en una familia canónica no crea soporte Codex para Aegis.
+- El roster actual tiene once roles y once agentes OpenCode; Codex tiene diez agentes especialistas y Kael como configuración/thread raíz, no como agente especialista. Aegis no forma parte del roster canónico actual.
 - Los motores existentes administran proyecto/global, manifests, ownership, hashes, verificación y desinstalación. Su cualificación documentada es Windows. No se acredita aquí un instalador Linux/macOS ni una aplicación segura de asignaciones personalizadas a destinos existentes como capacidad entregada.
 - El delta es una interfaz de operador que reutiliza fuentes, generación y controles, con consulta/configuración portable y actualización instalada explícita cuando se demuestre segura para la plataforma y operación seleccionadas.
 
@@ -54,13 +54,13 @@ Se conserva A → B → C; esto define alcance y aceptación, no tareas. Complet
 
 ### Excluido y restricciones
 
-- No crear registros competidores, duplicar configuraciones por runtime, editar manualmente agentes generados ni rediseñar framework, prompts, permisos o políticas. Conservar Kael, Veyra, Orin, Atlas, Kovan, Argus, Nox, Vera, Talos, Thales, Helios y Aegis.
+- No crear registros competidores, duplicar configuraciones por runtime, editar manualmente agentes generados ni rediseñar framework, prompts, permisos o políticas. Conservar exactamente el roster canónico actual: Kael, Veyra, Orin, Atlas, Kovan, Argus, Nox, Vera, Talos, Thales y Helios.
 - No agregar proveedores, APIs de modelos/de pago, servicios residentes, agentes en segundo plano, dependencias pesadas ni un nuevo toolchain de compilación para esta feature.
 - Python 3.11+ y biblioteca estándar son la opción inicial prioritaria por continuidad con el renderer. No se selecciona paquete, shim, launcher ni mecanismo definitivo de distribución; cualquier desviación requiere justificación técnica posterior.
 - Consulta/configuración sin requerir Bun, Node, npm, WSL ni Docker. No reescribir a ciegas el instalador PowerShell ni rediseñar los dos entrypoints o pipeline de v0.4.9 para preparar esta funcionalidad.
 - Excluir la UX `fast` sin checkout de #66 y la evaluación/publicación de Wiki de #67; no absorber otros gaps por asociación.
 - Windows y Linux son objetivos de portabilidad CLI/configuración. macOS queda sin verificar y no recibe una promesa de soporte operativo por compartir lógica portable.
-- La CLI es una herramienta de operador; no amplía autoridad de agentes, evita DENY ni activa Aegis automáticamente. Esta sesión sólo autoriza documentación, no mutaciones de Core o instalaciones.
+- La CLI es una herramienta de operador; no amplía autoridad de agentes, evita DENY ni incorpora agentes fuera del roster actual. Esta sesión sólo autoriza documentación, no mutaciones de Core o instalaciones.
 
 ## User Scenarios & Testing
 
@@ -74,7 +74,7 @@ Una persona operadora consulta modelos/esfuerzos y comprende las diferencias Ope
 
 **Acceptance Scenarios**:
 
-1. **Given** fuentes válidas del baseline, **When** se listan asignaciones, **Then** aparecen exactamente doce roles, identidad, familia, esfuerzo y ambos IDs resueltos; se distingue Kael raíz Codex y Aegis sin agente Codex.
+1. **Given** fuentes válidas del baseline, **When** se listan asignaciones, **Then** aparecen exactamente once roles, identidad, familia, esfuerzo y ambos IDs resueltos; se distingue Kael raíz Codex y no se añade un rol/agente Aegis fuera del roster actual.
 2. **Given** un mismo origen, **When** se pide listado legible o JSON, **Then** ambos describen las mismas asignaciones y contexto; JSON es procesable sin texto de presentación mezclado.
 3. **Given** fuentes/outputs coherentes, **When** se comprueba configuración, **Then** se informa coherencia local y resultado satisfactorio sin afirmar disponibilidad de modelo ni actualización instalada.
 4. **Given** TOML inválido, roster incongruente o drift de un output, **When** se comprueba, **Then** se identifica causa/recurso, termina sin éxito y no repara archivos.
@@ -95,7 +95,7 @@ Una persona que mantiene fuentes anticipa el efecto de un cambio y lo ejecuta co
 1. **Given** roles asignados a una familia, **When** se previsualiza editar sus IDs, **Then** aparecen valores anteriores/propuestos de ambos runtimes y exactamente los roles afectados, manteniendo familia/esfuerzo, sin escribir.
 2. **Given** cambio válido y origen coherente, **When** se edita la familia con una orden explícita, **Then** sólo cambian sus IDs y campos derivados por el renderer; roles de otras familias permanecen idénticos.
 3. **Given** un rol existente, **When** se previsualiza y ejecuta su cambio de familia y/o esfuerzo, **Then** aparecen ambos IDs resueltos y esfuerzos anteriores/propuestos; sólo cambia el rol solicitado y sus representaciones aplicables.
-4. **Given** una edición de Kael o Aegis, **When** se regenera, **Then** Kael conserva su representación raíz Codex y Aegis sólo cambia su salida OpenCode, sin crearse un agente Codex.
+4. **Given** una edición de Kael o de otro rol actualmente existente, **When** se regenera, **Then** Kael conserva su representación raíz Codex y no se crea ningún rol/agente fuera del roster actual.
 5. **Given** comentarios, TOML no relacionado y trabajo previo, **When** se edita, **Then** se conservan; identidades, permisos, cuerpos de prompts y outputs no afectados mantienen sus bytes.
 6. **Given** rol/familia/esfuerzo inválido, IDs requeridos ausentes, flags incompatibles, origen ambiguo, drift o conflicto, **When** se solicita editar, **Then** se rechaza antes de escribir con una explicación útil.
 7. **Given** fallo durante edición/regeneración bajo el contrato cooperante de FR-012, **When** termina o se recupera la operación, **Then** conserva o recupera coherencia propia sin sobrescribir conflictos externos detectados ni declarar render parcial exitoso. Un impedimento o resultado no acreditado se informa bloqueado o sin confirmar con estado real.
@@ -131,7 +131,7 @@ Una persona operadora selecciona destino/harness, diagnostica, revisa y aplica i
 - Orígenes o scopes coexistentes: consultas muestran contexto; las mutaciones requieren selección inequívoca sin elegir silenciosamente otro proyecto.
 - Rol/familia desconocido, TOML duplicado/incompleto o roster discrepante: rechazo sin tablas reparadoras ni defaults que reasignen roles.
 - Esfuerzo no validable localmente o ID nuevo sintácticamente válido: distinguir rechazo de contrato local de disponibilidad remota desconocida; no consultar proveedores.
-- Familia con ID Codex y rol Aegis: mostrar traducción y ausencia de agente como conceptos distintos.
+- Los ID de modelos Codex se distinguen de la presencia de una representación/rol; el roster y sus límites vienen de Core y renderer, no de identificadores por sí solos.
 - Worktree con trabajo ajeno: preservarlo sin exigir limpieza global; drift/conflicto de recursos relevantes sí bloquea.
 - Si se detecta un cambio de fuente/output/manifest entre inspección y escritura, invalidar antes de sobrescribir; si ya hay efectos, reconciliar sólo los propios y comunicar estado. En B rige FR-012: no se promete excluir cambios externos no cooperantes posteriores al último hash.
 - Rutas con espacios/no ASCII, separadores, mayúsculas y enlaces/reparse points: conservar contención y portabilidad; bloquear traversal/escape sin debilitar controles por OS.
@@ -147,7 +147,7 @@ Una persona operadora selecciona destino/harness, diagnostica, revisa y aplica i
 
 - **FR-001 (A/B/C)**: Toda intención de modelo/familia/esfuerzo DEBE resolverse exclusivamente desde `olympus/core/models.toml`, reutilizando identidades/roles y renderer existentes. No debe haber registros competidores ni mappings independientes por runtime.
 - **FR-002 (A)**: La CLI DEBE ofrecer ayuda, versión, listado de asignaciones, estado y comprobación, identificando origen/contexto y fuente frente a instalación. Una instalación ausente debe informarse sin crearla.
-- **FR-003 (A)**: El listado DEBE cubrir exactamente doce roles con identidad, familia, esfuerzo y modelos OpenCode/Codex, diferenciando representación real y límites del adaptador.
+- **FR-003 (A)**: El listado DEBE cubrir exactamente los once roles canónicos actuales con identidad, familia, esfuerzo y modelos OpenCode/Codex, diferenciando representación real y límites del adaptador.
 - **FR-004 (A/B/C)**: Listado, previews de familia/rol y diagnóstico DEBEN ofrecer salida legible y JSON opcional con datos equivalentes; JSON debe ser procesable sin mensajes de presentación mezclados.
 - **FR-005 (A/B/C)**: Consulta, check, diagnóstico y cualquier preview/`dry-run` DEBEN ser de sólo lectura: cero creación, modificación o eliminación de archivos, manifests o configuración, incluidos caches y reparaciones.
 - **FR-006 (B)**: Una orden explícita DEBE actualizar IDs de una familia existente, afectando exactamente sus roles actuales y conservando las asignaciones de familia y esfuerzo.
@@ -166,7 +166,7 @@ Una persona operadora selecciona destino/harness, diagnostica, revisa y aplica i
 - **FR-019 (C)**: Aplicar sólo DEBE declarar éxito tras actualización administrada y verificación del destino/harness. Para ambos debe reconciliar los dos resultados; efectos parciales/desconocidos requieren resultados confirmados/pendientes y recuperación segura o bloqueo explícito.
 - **FR-020 (C)**: Diagnóstico DEBE reutilizar `VerifyOnly` o verificador existente donde esté soportado, informar scope/harness/versión/integridad y distinguir ausencia, drift, manifest inválido y verificación no disponible, sin reparación ni discovery externo nuevo.
 - **FR-021 (C)**: Install/uninstall DEBEN delegar a motores/entrypoints existentes en plataformas cualificadas, conservando selección, manifests, ownership, hashes y protección contra drift. Operaciones no cualificadas terminan sin cambios ni falso éxito, explicando el límite.
-- **FR-022 (A/B/C)**: DEBEN conservarse doce roles, doce agentes OpenCode, diez especialistas Codex, Kael raíz y Aegis ausente de Codex. Cambiar modelos no cambia permisos, gobernanza, límites de agentes ni instala proveedores.
+- **FR-022 (A/B/C)**: DEBEN conservarse exactamente once roles canónicos y once agentes OpenCode; Codex mantiene diez agentes especialistas y Kael como raíz (no como agente especialista). Aegis no pertenece al roster actual. Cambiar modelos no cambia permisos, gobernanza, límites de agentes ni instala proveedores.
 - **FR-023 (A/B)**: Consulta, validación, preview y edición/regeneración DEBEN funcionar offline, sin APIs de modelos, procesos residentes ni dependencias pesadas, con igual semántica en Windows/Linux y sin WSL, Docker, Bun, Node o npm requeridos.
 - **FR-024 (A/B/C)**: Soporte DEBE informarse por operación/plataforma y evidencia. Cualificación CLI/configuración no acredita instalación ni runtime; macOS sigue sin verificar hasta evidencia específica y no se reducen controles para ampliar compatibilidad.
 - **FR-025 (A/C)**: El acceso final DEBE ofrecer un comando Olympus documentado y consistente con ejemplos copiables y prerrequisitos. La entrada Python de desarrollo puede aceptarse para A, pero no acredita UX instalada completa; distribución y spelling final se deciden después del análisis técnico.
@@ -175,7 +175,7 @@ Una persona operadora selecciona destino/harness, diagnostica, revisa y aplica i
 ### Key Entities
 
 - **Intención canónica**: familias, IDs por adaptador y familia/esfuerzo por rol en la fuente existente.
-- **Rol/identidad**: uno de los doce roles Core; cambiar modelo no cambia responsabilidad o autoridad.
+- **Rol/identidad**: uno de los once roles Core actuales; cambiar modelo no cambia responsabilidad o autoridad.
 - **Representación de adaptador**: recursos derivados por renderer, con diferencias y gaps propios.
 - **Preview**: valores anteriores/propuestos, roles, recursos y bloqueos; no es configuración alternativa.
 - **Origen**: fuentes Core/adapter y outputs de un checkout; distinto del destino instalado.
@@ -187,7 +187,7 @@ Una persona operadora selecciona destino/harness, diagnostica, revisa y aplica i
 
 ### Measurable Outcomes
 
-- **SC-001**: El 100% de los doce roles se consulta con asignaciones coincidentes con Core; cero roles adicionales e instancias Aegis Codex.
+- **SC-001**: El 100% de los once roles actuales se consulta con asignaciones coincidentes con Core; cero roles/agentes fuera del roster, incluida cualquier instancia Aegis.
 - **SC-002**: Salidas legible/JSON de listado, preview y diagnóstico describen el mismo estado y conjunto afectado; el 100% de las salidas JSON previstas es procesable.
 - **SC-003**: Una orden explícita completa cada edición válida de familia/rol con representaciones coherentes; cero roles ajenos se reasignan y cero permisos, identidades o cuerpos de prompts se alteran.
 - **SC-004**: El 100% de consultas/previews y rechazos previos conserva inventario/contenido; cero instalaciones cambian por editar fuentes.
@@ -253,7 +253,7 @@ El párrafo y los criterios históricos de planificación anteriores describían
 ## Assumptions
 
 - `specs/001-portable-olympus-cli` es la primera feature nueva directa; numeración retrospectiva anidada no consume la secuencia.
-- Actores humanos autorizados de fuentes/destinos; CLI no concede autoridad a Kael/Aegis/especialistas.
+- Actores humanos autorizados de fuentes/destinos; CLI no concede autoridad a Kael ni a ningún agente/especialista.
 - Sólo familias/roles existentes; agregar/eliminar familias/roles, cambiar identidades y habilitar proveedores queda fuera.
 - Seleccionar harness no habilita capacidades ausentes ni agrega otros harnesses.
 - Trabajo ajeno se preserva sin limpieza global; conflictos se juzgan sobre recursos relevantes.

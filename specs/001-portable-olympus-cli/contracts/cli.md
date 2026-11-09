@@ -1,6 +1,6 @@
 # Contrato propuesto de CLI
 
-**Estado de esta rama**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C1 preview read-only, C3 apply explícito project, C4 doctor project y C5 install/uninstall routing implementados. La cualificación focal de C5 queda registrada por separado; macOS **NOT VERIFIED**.
+**Estado de esta rama**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C1 preview read-only, C3 apply explícito project, C4 doctor project, C5 install/uninstall routing y C6 asignaciones en preview project implementados. C6 tiene pruebas focalizadas locales, no cualificación hosted; la cualificación focal de C5 queda registrada por separado; macOS **NOT VERIFIED**.
 
 ## Entrada, contexto y soporte
 
@@ -42,7 +42,13 @@
 
 `doctor` C4 sólo admite scope project y reutiliza bootstrap `-Target ... -Harness ... -SourceVersion ... -VerifyOnly` desde fuente local coherente, sin public wrapper que descargue archives. Manifest ausente se informa como ausencia; ownership/inventario inválido bloquea; drift de recursos administrados falla. La verificación se cualifica únicamente con PowerShell 7 en Windows; sin plataforma/verificador apto se informa `verification_unavailable` sin afirmar integridad. PowerShell recibe un `USERPROFILE` temporal para contener su cache de inicio, que se elimina al terminar. No suplantar la verificación con un hash checker Python ni ejecutar runtime discovery. Las asignaciones se informan `unknown`: el manifest no las registra y C4 no analiza recursos generados para inferirlas.
 
-**Gap FR-016 pendiente**: `config apply --dry-run` enumera archivos afectados con hashes actual/propuesto, metadatos de manifest, harnesses seleccionados/preservados y bloqueos, pero no los valores de asignación por rol para OpenCode/Codex. C4 no amplía ese preview ni infiere asignaciones desde la fuente local o los recursos instalados.
+### Asignaciones instaladas en preview — Slice C6
+
+- Tras validar inventario, ownership y hashes sin conflictos, `config apply --dry-run` agrega `data.assignments` en JSON y el mismo objeto serializado en salida humana. Las propuestas de harness seleccionado provienen de `model_assignments`/renderer canónico. Para cada recurso instalado actual, sólo se extraen campos soportados de los bytes ya leídos en memoria y cuya SHA-256 coincide con el manifest; no se vuelve a leer el destino para este informe.
+- `assignments.evidence=managed_hash_verified_bytes` indica únicamente bytes managed con hash coincidente, no configuración runtime efectiva, aceptación del proveedor ni disponibilidad remota. La familia instalada siempre es `unknown`: el manifest no contiene procedencia fiable para reconstruirla, aunque un ID coincida con Core.
+- Las filas distinguen `selected`, `preserved` y `not_installed`. Harness seleccionado muestra `current` y propuesta canónica; el no seleccionado conserva `current` y no presenta propuesta. OpenCode reporta el modelo del agente Kael y el modelo de `opencode.jsonc` de forma independiente. Codex informa a Kael sólo en `roots.codex`, nunca como agente especialista.
+- OpenCode acepta sólo la estructura de frontmatter generada con un campo `model` double-quoted sin escapes; todos los escalares bare, incluidos booleanos, nulls, números y palabras, quedan `unsupported` sin interpretación YAML. Un valor quoted como `"true"` sigue siendo una cadena de modelo. En el root JSONC se admite únicamente el envelope renderer-generado con su único modelo string cambiado. Codex usa `tomllib` y exige `model`/`model_reasoning_effort` top-level de tipo string en el archivo de rol/root conocido. Estructuras, comillas/escapes no soportados, TOML malformado/duplicado, valores faltantes, anidados o de tipo incorrecto quedan `unsupported` sin valores actuales inferidos. Esta incertidumbre sólo anota el preview: no cambia disponibilidad, resultado, plan ni exits de C1/C3.
+- Si falla la validación de manifest/inventario/hash, `assignments` queda explícitamente `unknown` con evidencia `not_verified`; no se exponen valores aparentemente verificados de una lectura bloqueada. C4 sigue informando `assignments: unknown` y no analiza recursos.
 
 ### Identificadores — contrato inicial definitivo de Slice B
 

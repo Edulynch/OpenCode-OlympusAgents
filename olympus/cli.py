@@ -504,7 +504,8 @@ def main(argv: list[str] | None = None) -> int:
                     load_renderer=load_renderer, release_version=release_version,
                 )
             code = config_apply.preview(source, args, response, source_query=source_query,
-                                        load_renderer=load_renderer, release_version=release_version)
+                                        load_renderer=load_renderer, release_version=release_version,
+                                        assignment_query=model_assignments)
             config_apply.emit_preview(response, as_json)
             return code
         if response["operation"] == "doctor":

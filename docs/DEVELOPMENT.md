@@ -99,10 +99,12 @@ blanket `edit * deny`, which blocks project-owned paths from reaching their
 more-specific native ASK rules; the explicit Olympus-owned DENYs remain in force.
 
 The project-wide `external_directory` default is ASK, not blanket ALLOW or DENY;
-normal agents have no wildcard external allow. This supports repositories outside
-the current root—including monorepo/sibling/multi-repo layouts—only after native
-user approval and exact Kael scope. Layouts are not hardcoded. Native DENY is
-never elevated by text, WRITE_SCOPE, or an Authority Grant. Repository identity
+OpenCode agent metadata must not append wildcard `external_directory` rules.
+OpenCode evaluates agent rules after project rules, so an agent-level wildcard
+ASK can override a more-specific project or runtime DENY. This supports
+repositories outside the current root—including monorepo/sibling/multi-repo
+layouts—only with effective native permission and exact Kael scope. Layouts
+are not hardcoded. Native DENY is never elevated by text, WRITE_SCOPE, or an Authority Grant. Repository identity
 classifies whether canonical OlympusAgents source is the task target; it does
 not grant access to a separate checkout or installed Olympus runtime resources.
 

@@ -240,9 +240,9 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                 $externalAllow = @($permissions | Where-Object {
                     $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'allow'
                 }).Count
-                $permissionEvidence = "edit_*_deny=$editWildcardDeny/0, edit_plugins_ask=$editPluginsAsk/1, activity_deny=$activityDeny/1, external_ask=$externalAsk/>0, external_allow=$externalAllow/0"
+                $permissionEvidence = "edit_*_deny=$editWildcardDeny/0, edit_plugins_ask=$editPluginsAsk/1, activity_deny=$activityDeny/1, external_ask=$externalAsk/inherited, external_allow=$externalAllow/0"
                 if ($editWildcardDeny -ne 0 -or $editPluginsAsk -ne 1 -or $activityDeny -ne 1 -or
-                    $externalAsk -le 0 -or $externalAllow -ne 0) {
+                    $externalAllow -ne 0) {
                     $failures.Add('effective_permission_rules_mismatch (' + $permissionEvidence + ')')
                 }
             } catch {
@@ -1150,6 +1150,30 @@ try {
     Check 'AUTH10_EXTERNAL_SIBLING_REQUIRES_ASK' ($externalDecision -eq 'ASK' -and $kaelExternalDecision -eq 'ASK' -and
         @($nativeRules | Where-Object { $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'allow' }).Count -eq 0)
 
+    # An agent-level wildcard ASK follows project rules and can silently
+    # downgrade a user's specific DENY. Guard every installed agent against
+    # that precedence regression, including read-only delegates.
+    $prohibitedPattern = 'C:/fixture/prohibited/*'
+    $prohibitedPath = 'C:/fixture/prohibited/deny-probe.txt'
+    $explicitExternalDeny = [pscustomobject]@{
+        action = 'external_directory'; resource = $prohibitedPattern; effect = 'deny'
+    }
+    $globalWithDeny = @($config.permissions) + @($explicitExternalDeny)
+    $rolesThatOverrideDeny = [Collections.Generic.List[string]]::new()
+    foreach ($role in @('kael', 'kovan', 'nox', 'orin', 'vera', 'veyra', 'thales')) {
+        $roleRules = Read-NativeRules (Text ('.opencode/agents/' + $role + '.md')) $globalWithDeny
+        if ((Native-Decision $roleRules 'external_directory' $prohibitedPath) -ne 'DENY') {
+            $rolesThatOverrideDeny.Add($role)
+        }
+    }
+    $unsafeWildcardAsk = [pscustomobject]@{
+        action = 'external_directory'; resource = '*'; effect = 'ask'
+    }
+    Check 'AUTH10E_SPECIFIC_EXTERNAL_DENY_SURVIVES_AGENT_PRECEDENCE' (
+        $rolesThatOverrideDeny.Count -eq 0 -and
+        (Native-Decision (@($globalWithDeny) + @($unsafeWildcardAsk)) 'external_directory' $prohibitedPath) -eq 'ASK'
+    )
+
     # A grant for one repository must never silently authorize the same relative
     # path in a sibling repository; an exact second grant can reach native ASK.
     $otherRoot = 'C:\fixture\other-project'
@@ -1265,7 +1289,7 @@ try {
         -not $prohibitionFlow.attempted -and $prohibited.reason -eq 'USER_PROHIBITION' -and
         (Classify-NewScope 'ASK' $true $true) -eq 'DENY')
 
-    $validRuntimeFixture = '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"allow"},{"action":"edit","resource":".opencode/plugins/**","effect":"ask"},{"action":"edit","resource":".opencode/plugins/olympus-activity/**","effect":"deny"},{"action":"external_directory","resource":"*","effect":"ask"}]}]'
+    $validRuntimeFixture = '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"allow"},{"action":"edit","resource":".opencode/plugins/**","effect":"ask"},{"action":"edit","resource":".opencode/plugins/olympus-activity/**","effect":"deny"}]}]'
     $failedRuntimeProbe = Inspect-EffectiveRules 17 $validRuntimeFixture 'fixture runtime error'
     Check 'AUTH14_RUNTIME_COMMAND_FAILURE_HAS_EVIDENCE' (-not $failedRuntimeProbe.passed -and
         $failedRuntimeProbe.evidence -match 'runtime_exit=17' -and $failedRuntimeProbe.evidence -match 'stderr=fixture runtime error')

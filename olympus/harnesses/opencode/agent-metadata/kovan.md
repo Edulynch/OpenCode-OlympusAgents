@@ -3,9 +3,6 @@ description: Trusted-project implementer with shell and explicitly scoped source
 mode: subagent
 model: "{{opencode_model}}#{{effort}}"
 permissions:
-  - action: external_directory
-    resource: "*"
-    effect: ask
   - action: shell
     resource: "*"
     effect: allow

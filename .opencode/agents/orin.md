@@ -4,9 +4,6 @@ description: "Orin — The Architect. Read-only architect worker for bounded arc
 mode: subagent
 model: "openai/gpt-6-luna#max"
 permissions:
-  - action: external_directory
-    resource: "*"
-    effect: ask
   - action: edit
     resource: "*"
     effect: deny

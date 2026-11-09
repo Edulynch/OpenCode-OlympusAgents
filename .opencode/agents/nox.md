@@ -4,9 +4,6 @@ description: "Nox — The Tester. Source-read-only trusted-project validation sp
 mode: subagent
 model: "openai/gpt-6-luna#max"
 permissions:
-  - action: external_directory
-    resource: "*"
-    effect: ask
   - action: edit
     resource: "*"
     effect: deny

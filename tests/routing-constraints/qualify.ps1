@@ -78,7 +78,7 @@ try {
         $nativeConfig -match '(?s)"action":\s*"external_directory"\s*,\s*"resource":\s*"\*"\s*,\s*"effect":\s*"ask"' -and
         $kovan -match '\.opencode/plugins/\*\*"\s+effect: ask' -and
         $kovan -match '\.opencode/agents/\*\*"\s+effect: deny' -and
-        $kovan -match '(?s)action: external_directory\s+resource: "?\*"?\s+effect: ask')
+        $kovan -notmatch '(?m)^  - action: external_directory\b')
 
     $normalCommit = Route 'user-project' 'commit'
     $normalPush = Route 'user-project' 'push'

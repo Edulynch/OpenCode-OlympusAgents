@@ -48,12 +48,20 @@ class ScopeContractTests(unittest.TestCase):
         self.assertIn("separately assigned non-source external effect", self.kovan)
         self.assertIn("native DENY", self.docs)
 
-    def test_native_external_directory_still_asks(self) -> None:
-        # New prompt wording must never become a wildcard filesystem grant.
-        for role in ("kael", "kovan"):
-            metadata = read(f"olympus/harnesses/opencode/agent-metadata/{role}.md")
-            self.assertRegex(metadata, r'action: external_directory\s+resource: "\*"\s+effect: ask')
-            self.assertNotRegex(metadata, r'action: external_directory\s+resource: "\*"\s+effect: allow')
+    def test_external_directory_ask_does_not_override_project_deny(self) -> None:
+        # The project supplies the default ASK; a later role wildcard would
+        # downgrade a more-specific DENY supplied by the user or task runtime.
+        config = read("olympus/harnesses/opencode/config.jsonc")
+        self.assertRegex(
+            config,
+            r'"action":\s*"external_directory"\s*,\s*'
+            r'"resource":\s*"\*"\s*,\s*"effect":\s*"ask"',
+        )
+        metadata_dir = ROOT / "olympus/harnesses/opencode/agent-metadata"
+        for path in sorted(metadata_dir.glob("*.md")):
+            with self.subTest(agent=path.stem):
+                metadata = path.read_text(encoding="utf-8")
+                self.assertNotRegex(metadata, r"(?m)^\s+- action:\s*external_directory\b")
 
     def test_generated_agents_contain_the_contract(self) -> None:
         # Source edits are only effective after the harness outputs are rendered.

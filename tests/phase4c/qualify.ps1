@@ -504,7 +504,7 @@ try {
         Assert-Condition (-not (Has-Rule $kovan 'edit' '*' 'deny')) 'Kovan blanket edit DENY blocks scoped native ASK rules.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $kovan 'shell' '*' 'allow') 'Kovan shell ALLOW missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $kovan 'subagent' '*' 'deny') 'Kovan subagent DENY missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $kovan 'external_directory' '*' 'ask' -and -not (Has-Rule $kovan 'external_directory' '*' 'allow')) 'Kovan external-directory must ASK, not blanket ALLOW.' 'BOOTSTRAP_BUG'
+        Assert-Condition (@($kovan.permissions | Where-Object { $_.action -eq 'external_directory' }).Count -eq 0) 'Kovan must inherit project external-directory rules without overriding a specific DENY.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $kovan 'edit' '.opencode/**' 'ask' -and Has-Rule $kovan 'edit' '.opencode/plugins/**' 'ask') 'Project-owned protected-adjacent edit ASK missing.' 'BOOTSTRAP_BUG'
         foreach ($resource in @('.git', '.git/*', '.opencode', '.opencode/agents/**',
             '.opencode/plugins/olympus-activity/**',
@@ -524,7 +524,7 @@ try {
         Assert-Condition (Has-Rule $nox 'edit' '*' 'deny') 'Nox edit DENY missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $nox 'shell' '*' 'allow') 'Nox shell ALLOW missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $nox 'subagent' '*' 'deny') 'Nox subagent DENY missing.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $nox 'external_directory' '*' 'ask' -and -not (Has-Rule $nox 'external_directory' '*' 'allow')) 'Nox external-directory must ASK, not blanket ALLOW.' 'BOOTSTRAP_BUG'
+        Assert-Condition (@($nox.permissions | Where-Object { $_.action -eq 'external_directory' }).Count -eq 0) 'Nox must inherit project external-directory rules without overriding a specific DENY.' 'BOOTSTRAP_BUG'
         $shellRules = @($nox.permissions | Where-Object { $_.action -eq 'shell' })
         Assert-Condition (@($shellRules | Where-Object effect -eq 'ask').Count -eq 0) 'Effective Nox shell ASK exists.' 'BOOTSTRAP_BUG'
         Assert-Condition (@($shellRules | Where-Object { $_.effect -eq 'allow' -and $_.resource -eq '*' }).Count -gt 0) 'Effective Nox broad shell allow missing.' 'BOOTSTRAP_BUG'

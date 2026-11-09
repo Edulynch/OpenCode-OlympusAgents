@@ -3,9 +3,6 @@ description: Strict read-only reviewer worker for correctness, scope, security, 
 mode: subagent
 model: "{{opencode_model}}#{{effort}}"
 permissions:
-  - action: external_directory
-    resource: "*"
-    effect: ask
   - action: edit
     resource: "*"
     effect: deny

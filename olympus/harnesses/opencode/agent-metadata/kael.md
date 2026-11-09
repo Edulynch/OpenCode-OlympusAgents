@@ -3,9 +3,6 @@ description: Primary OpenCode V2 orchestrator for direct answers, research, arch
 mode: primary
 model: "{{opencode_model}}#{{effort}}"
 permissions:
-  - action: external_directory
-    resource: "*"
-    effect: ask
   # Direct shell stays available, but tests, generators, and writes need approval.
   # Narrow Git inspection commands can run without interrupting the task.
   - action: shell

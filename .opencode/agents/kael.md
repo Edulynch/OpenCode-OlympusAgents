@@ -4,9 +4,6 @@ description: "Kael — The Master. Primary OpenCode V2 orchestrator for direct a
 mode: primary
 model: "openai/gpt-6.1-sol#high"
 permissions:
-  - action: external_directory
-    resource: "*"
-    effect: ask
   # Direct shell stays available, but tests, generators, and writes need approval.
   # Narrow Git inspection commands can run without interrupting the task.
   - action: shell

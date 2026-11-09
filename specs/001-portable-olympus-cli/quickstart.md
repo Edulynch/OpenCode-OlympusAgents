@@ -1,6 +1,6 @@
-# CLI portátil Olympus — quickstart (Slices A, B, C1 y C3)
+# CLI portátil Olympus — quickstart (Slices A, B, C1, C3 y C4)
 
-**Estado de esta rama**: Slice A **SHIPPED**; Slice B **ACEPTADA** tras T019 Windows y T020 Linux (G2 PASS). C3 implementa `config apply --execute` sólo para instalaciones project existentes; validación Linux del PR PASS (14 pruebas de writer compatibility, incluida regresión C3) y macOS **NOT VERIFIED**. La implementación no se ha probado sobre instalaciones reales. [Estado y evidencia histórica de A/B](tasks.md).
+**Estado de esta rama**: Slice A **SHIPPED**; Slice B **ACEPTADA** tras T019 Windows y T020 Linux (G2 PASS). C3 implementa `config apply --execute` sólo para instalaciones project existentes. C4 agrega `doctor` read-only de proyecto; CI final de C4 está pendiente. No se probó sobre instalaciones reales; macOS **NOT VERIFIED**. [Estado y evidencia de A/B/C4](tasks.md).
 
 ## Requisitos y contexto
 
@@ -23,6 +23,7 @@ python3.11 -B -m olympus config check
 python3.11 -B -m olympus config check --harness codex --json
 python3.11 -B -m olympus config apply --scope project --target /path/to/existing-project --harness opencode --dry-run
 python3.11 -B -m olympus config apply --scope project --target /path/to/existing-project --harness opencode --execute
+python3.11 -B -m olympus doctor --scope project --target /path/to/existing-project --harness all --json
 ```
 
 El listado presenta doce roles, identidad, familia, esfuerzo y ambos IDs desde Core. OpenCode representa doce agentes; Codex tiene diez especialistas, Kael como raíz y Aegis ausente. Un ID Codex de Aegis no equivale a un agente instalado. Check compara outputs del renderer en memoria; --harness admite opencode, codex y all (default). No regenera ni repara archivos.
@@ -122,6 +123,28 @@ Esta consulta global devuelve BLOCKED/exit 3: A no realiza discovery ni consulta
 | 3 | Consulta bloqueada, incluida ubicación global sin discovery |
 
 Slice A no tiene operación parcial que emita exit 4: sus consultas no modifican fuentes, outputs, configuraciones, manifests, permisos ni cachés. Usar -B en entradas Python; los launchers lo imponen. Scratch previo se informa sin reparar. La edición/recovery de Slice B se documenta aparte abajo.
+
+### Diagnóstico read-only de proyecto (Slice C4)
+
+`doctor` requiere `--scope project`, una raíz de worktree Git absoluta y
+`--harness opencode|codex|all`. Lee el manifest y, para harnesses registrados,
+usa `scripts/bootstrap.ps1 -VerifyOnly` desde el checkout local coherente. La
+verificación profunda sólo se cualifica en Windows con PowerShell 7; en otras
+plataformas o sin `pwsh` el comando informa `verification_unavailable` (exit 3)
+sin afirmar integridad. No ejecuta runtime discovery ni consulta modelos.
+
+Las asignaciones instaladas quedan `unknown`: el manifest no guarda IDs por rol
+y el diagnóstico no los deduce de la fuente actual. El proceso PowerShell usa un
+`USERPROFILE` temporal para contener su cache de inicio; se elimina al terminar.
+No se cambia el proyecto ni se instalan/reparan recursos. Ejemplo Windows:
+
+```powershell
+& "$sourceCheckout\scripts\olympus.cmd" doctor --scope project --target $targetProject --harness all --json
+$LASTEXITCODE
+```
+
+La aplicación C1/C3 sigue siendo una operación separada; `doctor` no completa
+los valores de asignación que FR-016 aún exige al preview.
 
 ### Preview y aplicación explícita project (Slices C1/C3)
 

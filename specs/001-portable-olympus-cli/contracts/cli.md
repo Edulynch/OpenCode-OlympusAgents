@@ -1,6 +1,6 @@
 # Contrato propuesto de CLI
 
-**Estado de esta rama**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C1 preview read-only y C3 apply explícito project implementados en esta rama; validación Linux del PR PASS (14 pruebas de writer compatibility, incluida regresión C3); macOS **NOT VERIFIED**. C3 no habilita scope global ni instalaciones reales durante las pruebas.
+**Estado de esta rama**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C1 preview read-only, C3 apply explícito project y C4 doctor project implementados en esta rama; C4 aún requiere CI final. C3 no habilita scope global ni instalaciones reales durante las pruebas. macOS **NOT VERIFIED**.
 
 ## Entrada, contexto y soporte
 
@@ -10,7 +10,7 @@
 - Proyecto: `--scope project --target <absolute-worktree-root>`. Global: `--scope global`, usando resolución segura del motor, sin interpretar un target de proyecto como destino global. Para contexto de override global, identificarlo explícitamente sin modificarlo.
 - `--harness opencode|codex|all` selecciona representación/operación cuando aplique. Listado incluye ambos; check default all; mutaciones instaladas no usan un default silencioso.
 - Sintaxis inválida/opciones incompatibles se rechazan antes de cualquier escritura. No `--force`, bypass de drift, proveedor nuevo o modo automático Aegis.
-- Consultas/preview no crean tempfiles, locks, backups, caches ni directorios. Un scratch previo se informa, no se repara. También propagar `PYTHONDONTWRITEBYTECODE=1` a hijos.
+- Consultas/preview no crean tempfiles, locks, backups, caches ni directorios. Excepción C4: PowerShell corre con `USERPROFILE` temporal para contener su cache de inicio; se elimina al salir y no persiste en source/target/perfil real. Un scratch previo se informa, no se repara. También propagar `PYTHONDONTWRITEBYTECODE=1` a hijos.
 
 ## Superficie de comandos
 
@@ -23,7 +23,7 @@
 | `models set-family <existing> --opencode <id> --codex <id> [--dry-run [--json]]` | B; editar los dos IDs de esa familia | Preview sin escribir; ejecución una orden explícita |
 | `agents set-model <role> [--family <existing>] [--effort <canonical-value>] [--dry-run [--json]]` | B; al menos un valor solicitado | Otros roles inalterados; preview de resolución completa |
 | `config recover` | B; rollback/cleanup de batch propio pendiente | Adquirir lock nativo estable existente antes de inspección del batch; sin dueño activo, identidad/estado/hashes/backups reconciliados; sin retry original |
-| `doctor --scope ... [--target ...] --harness ... [--json]` | C; verificar mediante motor existente | Windows cualificado, fuente local apta; read-only bloqueado si no se garantiza |
+| `doctor --scope project --target <absolute-worktree-root> --harness opencode|codex|all [--json]` | C4; diagnóstico read-only de instalación project existente | PowerShell 7 en Windows y fuente local coherente para VerifyOnly; otras plataformas/verificador no disponible quedan bloqueadas; no runtime discovery |
 | `config apply --scope project --target <root> --harness ... --dry-run [--json]` | C1; preview read-only de recursos de una instalación existente | Exige manifiesto válido y hashes sin drift; no instala harnesses ausentes ni llama bootstrap/install |
 | `config apply --scope project --target <root> --harness ... --execute` | C3; actualización explícita de recursos ya administrados | Exclusión estable del target, revalidación bajo lock y journal PREPARING/PREPARED/COMMITTED; sólo escritura humana, nunca `--force` |
 | `config recover --scope project --target <root>` | C3; recuperación explícita del journal de apply project | Abre sólo el lock existente; PREPARED revierte estados new verificados y COMMITTED limpia evidencia; divergencias preservan journal y bloquean |
@@ -32,7 +32,9 @@
 
 `--json` de edición sólo se ofrece con `--dry-run` inicialmente; ejecución humana muestra preview antes de escribir y luego resumen. Esto evita mezclar varios documentos JSON en stdout sin introducir un protocolo de eventos. No se exige JSON de edición real por FR-004. Diagnóstico/listado/preview comparten datos equivalentes entre formatos.
 
-`doctor` usa bootstrap `-Target ... -Harness ... -SourceVersion ... -VerifyOnly` para proyecto y global-install `-Harness ... -SourceVersion ... -VerifyOnly` para global, desde fuente local coherente, sin public wrapper que descargue archives. Si la versión/candidate/procedencia no puede verificarse, informa límite/fallo. No suplantar la verificación con un hash checker Python. Global OpenCode discovery existente se evalúa por evidencia; si escribe, doctor permanece bloqueado como read-only.
+`doctor` C4 sólo admite scope project y reutiliza bootstrap `-Target ... -Harness ... -SourceVersion ... -VerifyOnly` desde fuente local coherente, sin public wrapper que descargue archives. Manifest ausente se informa como ausencia; ownership/inventario inválido bloquea; drift de recursos administrados falla. La verificación se cualifica únicamente con PowerShell 7 en Windows; sin plataforma/verificador apto se informa `verification_unavailable` sin afirmar integridad. PowerShell recibe un `USERPROFILE` temporal para contener su cache de inicio, que se elimina al terminar. No suplantar la verificación con un hash checker Python ni ejecutar runtime discovery. Las asignaciones se informan `unknown`: el manifest no las registra y C4 no analiza recursos generados para inferirlas.
+
+**Gap FR-016 pendiente**: `config apply --dry-run` enumera archivos afectados con hashes actual/propuesto, metadatos de manifest, harnesses seleccionados/preservados y bloqueos, pero no los valores de asignación por rol para OpenCode/Codex. C4 no amplía ese preview ni infiere asignaciones desde la fuente local o los recursos instalados.
 
 ### Identificadores — contrato inicial definitivo de Slice B
 

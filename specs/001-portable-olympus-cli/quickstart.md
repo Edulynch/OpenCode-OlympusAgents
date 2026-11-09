@@ -1,6 +1,6 @@
-# CLI portátil Olympus — quickstart (Slices A, B, C1, C3 y C4)
+# CLI portátil Olympus — quickstart (Slices A, B, C1, C3, C4 y C5)
 
-**Estado de esta rama**: Slice A **SHIPPED**; Slice B **ACEPTADA** tras T019 Windows y T020 Linux (G2 PASS). C3 implementa `config apply --execute` sólo para instalaciones project existentes. C4 agrega `doctor` read-only de proyecto; CI final de C4 está pendiente. No se probó sobre instalaciones reales; macOS **NOT VERIFIED**. [Estado y evidencia de A/B/C4](tasks.md).
+**Estado de esta rama**: Slice A **SHIPPED**; Slice B **ACEPTADA** tras T019 Windows y T020 Linux (G2 PASS). C3 implementa `config apply --execute` sólo para instalaciones project existentes. C4 agrega `doctor` read-only y C5 enruta install/uninstall a los motores oficiales. No se probaron instalaciones reales; macOS **NOT VERIFIED**. [Evidencia histórica de A/B/C4](tasks.md).
 
 ## Requisitos y contexto
 
@@ -8,7 +8,7 @@ Python **3.11+ real**. Slice A usa sólo biblioteca estándar y no carga TOML Ki
 
 Se necesita un checkout confiable de Olympus con fuentes y renderer. La CLI carga el renderer de ese origen; no ejecuta código encontrado en el destino. No requiere OpenCode/Codex, WSL, Docker, Node ni credenciales.
 
-La entrada de módulo se usa desde el checkout con -B. Los launchers apuntan a su propio checkout y funcionan desde otro directorio. La opción global --source acepta otro origen **absoluto y confiable**, antes del subcomando; el cwd del destino no selecciona otra fuente automáticamente. --version informa la release declarada por la fuente en install.ps1, actualmente v0.4.9: no certifica publicación de los comandos nuevos ni integridad de la fuente.
+La entrada de módulo se usa desde el checkout con -B. Los launchers apuntan a su propio checkout y funcionan desde otro directorio. La opción global --source acepta otro origen **absoluto y confiable**, antes del subcomando; el cwd del destino no selecciona otra fuente automáticamente. `olympus --version` informa la release declarada por la fuente en `install.ps1`, actualmente `v0.4.12`: no certifica publicación ni integridad de la fuente.
 
 ## Comandos disponibles
 
@@ -26,7 +26,7 @@ python3.11 -B -m olympus config apply --scope project --target /path/to/existing
 python3.11 -B -m olympus doctor --scope project --target /path/to/existing-project --harness all --json
 ```
 
-El listado presenta doce roles, identidad, familia, esfuerzo y ambos IDs desde Core. OpenCode representa doce agentes; Codex tiene diez especialistas, Kael como raíz y Aegis ausente. Un ID Codex de Aegis no equivale a un agente instalado. Check compara outputs del renderer en memoria; --harness admite opencode, codex y all (default). No regenera ni repara archivos.
+El listado presenta los once roles canónicos, identidad, familia, esfuerzo y ambos IDs desde Core; Kael es el único orquestador. OpenCode representa los once roles; Codex representa Kael como raíz y los diez especialistas como agentes. Check compara outputs del renderer en memoria; `--harness` admite `opencode`, `codex` y `all` (default). No regenera ni repara archivos.
 
 ### Windows: launcher desde cualquier directorio
 
@@ -145,6 +145,57 @@ $LASTEXITCODE
 
 La aplicación C1/C3 sigue siendo una operación separada; `doctor` no completa
 los valores de asignación que FR-016 aún exige al preview.
+
+### Install y uninstall mediante motores oficiales (Slice C5)
+
+C5 sólo enruta a los motores ya existentes; no implementa un instalador paralelo.
+Requiere Windows y PowerShell 7 (`pwsh`). Project exige un `--target` absoluto que
+sea exactamente la raíz de un worktree Git existente y distinto del checkout de
+fuente. Global rechaza `--target`; sus raíces sólo las resuelve el motor oficial.
+El cwd heredado queda como contexto de sólo lectura para detectar overrides de
+proyecto; nunca se usa como destino global ni se suplanta `USERPROFILE`.
+
+`install --version` exige un tag exacto de release Olympus; es distinto de
+`olympus --version`, que sólo informa la versión de la herramienta. El launcher
+consulta metadata `releases/tags/<tag>`, exige que el tag devuelto coincida,
+`immutable=true`, release publicado/no prerelease y la identidad del installer.
+No se aceptan checkouts, archivos ni source overrides como origen de instalación.
+Sustituye el tag de ejemplo sólo por un release oficial publicado:
+
+```powershell
+$sourceCheckout = (Get-Location).Path
+$targetProject = 'D:\Repos\Sample Project'
+$releaseTag = 'v0.4.11'
+& "$sourceCheckout\scripts\olympus.cmd" install --scope project --target $targetProject --harness opencode --version $releaseTag --dry-run --json
+$LASTEXITCODE
+& "$sourceCheckout\scripts\olympus.cmd" install --scope project --target $targetProject --harness opencode --version $releaseTag --execute
+$LASTEXITCODE
+```
+
+`--dry-run` y `--execute` son mutuamente excluyentes y requeridos. El preview usa
+el `-DryRun` del installer; puede descargar el release a temp/cache, pero no
+instala recursos en el target. No ejecutes el ejemplo de `--execute` salvo que
+quieras cambiar ese target.
+
+```powershell
+# Global: no --target; el motor descubre las raíces oficiales.
+& "$sourceCheckout\scripts\olympus.cmd" install --scope global --harness all --version $releaseTag --dry-run --json
+& "$sourceCheckout\scripts\olympus.cmd" uninstall --scope global --harness all --dry-run --json
+
+# Project uninstall usa el motor local y no consulta la red.
+& "$sourceCheckout\scripts\olympus.cmd" uninstall --scope project --target $targetProject --harness opencode --execute --json
+```
+
+El uninstaller project no ofrece preview: `uninstall --scope project ...
+--dry-run` se bloquea antes de arrancar PowerShell. En global, el preview nativo
+lee manifests/hashes sin borrar recursos; `--harness all --execute` procesa ambos
+roots secuencialmente y no es atómico. Los uninstallers sólo retiran recursos
+manifest-owned intactos; drift o ownership inválido bloquea el motor. JSON es un
+solo documento e incluye exit code/stdout/stderr nativos. Si una mutación falla,
+se interrumpe o excede 300 s, el resultado es `unconfirmed`/exit 4 cuando no se
+pueden descartar efectos parciales. No reintentes sin inspeccionar el destino.
+La prueba de versión de `pwsh` está acotada a 10 s; el motor a 300 s. Linux y
+macOS quedan bloqueados sin afirmar compatibilidad.
 
 ### Preview y aplicación explícita project (Slices C1/C3)
 
@@ -290,6 +341,8 @@ El protocolo coordina operaciones Olympus cooperantes y bloquea conflictos obser
 | Windows, T019, CPython 3.11.17 | 55 PASS, 0 FAIL, 0 ERROR, 3 SKIPPED; exit 0. Los tres casos omitidos crean symlinks y Windows devolvió `WinError 1314`; no se cuentan como PASS Windows. |
 | Linux hosted, T020, Ubuntu 24.04 / CPython 3.11.17 / TOML Kit 0.13.3 | 58 PASS, 0 FAIL, 0 SKIPPED; 37.350 s, exit 0. Los tres escenarios de symlink pasaron. Fuente: commit `539976812d14289696dbd3824f1ae706ac2f1947`, run [38857503366](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366), job [116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025). |
 | G2 / Slice B | **PASS Windows/Linux**. La prueba verificó snapshots, independencia de A, rollback/recovery, conflictos y los 15 límites del write-set. El checkout fuente quedó sin cambios. |
+| C5 / Windows local | **PASS**: `python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_c5 -v` ejecutó 8/8 sin skips; incluye project-uninstall real sobre Git fixtures aislados y global uninstall `--dry-run` real contra roots temporales `OPENCODE_CONFIG_DIR`/`CODEX_HOME` con manifests mínimos. Bytes/modos de roots y source quedaron iguales; probe y motor recibieron `PYTHONDONTWRITEBYTECODE=1`, y el motor mantuvo el `USERPROFILE` del fixture mientras el probe usó otro temporal. Los snapshots cubren roots/source, no temp/cache. Adquisición/API de release y ruta de instalación siguen con mocks; sin red, instalaciones reales ni CI remoto C5. |
+| Launcher UX / Windows local | **PASS**: `pwsh -NoProfile -NonInteractive -File tests/installer-ux/qualify.ps1` terminó con `INSTALLER UX QUALIFICATION: PASS`; latest sigue igual y C5 valida endpoint exact-tag, mismatch, release mutable y forwarding de dry-run con API/installer mocks y raíces temporales. |
 | macOS | **NOT VERIFIED**. |
 
-FAST Windows y CodeQL también pasaron en el PR Draft #70. La evidencia C1 histórica fue Windows 6/6 **PASS** (local) y Linux 6/6 **PASS** en GitHub Actions [run 41310141414](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/41310141414), commit `a09cdeb934804f4a6c86d1e998f930ccb0be6f70`; no es validación de C3. El Linux CI inicial del Draft PR #110 pasó en [run 42392613719](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/42392613719) sobre el HEAD `2b23a26c92f2d7c014d92da96c2dafe7054ec8e4`, pero el filtro de entonces ejecutó 13 pruebas y excluyó `test_slice_c3_project_apply_uses_existing_target_writer_lock`. Tras ampliar el filtro, el job Linux [run 42401262655](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/42401262655/job/128489298237) pasó las 14 pruebas sin skips, incluida esa regresión C3, en el commit `4f1f5515faacec5aa2ed71d90d4081b44f9c333a`. macOS **UNVERIFIED**. FULL y runtime interactivo **NOT_RUN**; el resto de C y la feature completa siguen pendientes.
+FAST Windows y CodeQL también pasaron en el PR Draft #70. La evidencia C1 histórica fue Windows 6/6 **PASS** (local) y Linux 6/6 **PASS** en GitHub Actions [run 41310141414](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/41310141414), commit `a09cdeb934804f4a6c86d1e998f930ccb0be6f70`; no es validación de C3. El Linux CI inicial del Draft PR #110 pasó en [run 42392613719](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/42392613719) sobre el HEAD `2b23a26c92f2d7c014d92da96c2dafe7054ec8e4`, pero el filtro de entonces ejecutó 13 pruebas y excluyó `test_slice_c3_project_apply_uses_existing_target_writer_lock`. Tras ampliar el filtro, el job Linux [run 42401262655](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/42401262655/job/128489298237) pasó las 14 pruebas sin skips, incluida esa regresión C3, en el commit `4f1f5515faacec5aa2ed71d90d4081b44f9c333a`. FULL, runtime interactivo y operaciones de instalación/desinstalación sobre instalaciones reales **NOT_RUN**; no se afirma ejecución de CI remoto para C5. macOS **UNVERIFIED**.

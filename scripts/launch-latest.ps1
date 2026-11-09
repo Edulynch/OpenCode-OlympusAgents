@@ -10,7 +10,9 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('opencode', 'codex', 'all')]
     [string]$Harness,
-    [string]$Target = (Get-Location).Path
+    [string]$Target = (Get-Location).Path,
+    [string]$Version,
+    [switch]$DryRun
 )
 
 Set-StrictMode -Version Latest
@@ -77,6 +79,16 @@ function ConvertTo-ReleasePublishedTimestamp([object]$Value) {
 }
 
 try {
+    if ($DryRun -and $Action -ne 'install') {
+        throw 'DRY_RUN_UNSUPPORTED: -DryRun is available only for install.'
+    }
+    if ($Version -and -not [regex]::IsMatch(
+        $Version,
+        '\Av(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?\z'
+    )) {
+        throw "LATEST_RELEASE_INVALID: Requested version '$Version' is not an exact Olympus release tag."
+    }
+
     $pwsh = @(Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue)
     if ($pwsh.Count -eq 0) {
         throw 'OLYMPUS_REQUIRES_POWERSHELL_7: PowerShell 7 (pwsh) is required.'
@@ -86,14 +98,22 @@ try {
     # GitHub's HTTPS metadata and raw source are the acquisition channel. The
     # immutable flag is GitHub's assertion; this does not independently verify
     # a signature or cryptographic provenance for the downloaded bytes.
-    $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest' -Headers $headers -ErrorAction Stop
+    $releaseUri = if ($Version) {
+        "https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/tags/$Version"
+    } else {
+        'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest'
+    }
+    $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers -ErrorAction Stop
     Assert-ReleaseBoolean $release 'immutable' $true
     Assert-ReleaseBoolean $release 'draft' $false
     Assert-ReleaseBoolean $release 'prerelease' $false
 
     $tag = [string](Get-ReleaseField $release 'tag_name')
-    if ($tag -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') {
+    if (-not [regex]::IsMatch($tag, '\Av(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?\z')) {
         throw "LATEST_RELEASE_INVALID: GitHub latest release returned malformed tag '$tag'."
+    }
+    if ($Version -and $tag -cne $Version) {
+        throw "LATEST_RELEASE_TAG_MISMATCH: Requested '$Version' but metadata returned '$tag'."
     }
     if ($tag -match '-(?:alpha|beta|rc)\.' -and -not [bool](Get-ReleaseField $release 'prerelease')) {
         throw "LATEST_RELEASE_METADATA_INCONSISTENT: tag '$tag' is prerelease but GitHub reports prerelease=false."
@@ -138,6 +158,7 @@ try {
 
     $args = @(
         '-NoProfile',
+        '-NonInteractive',
         '-File', $installer,
         '-Version', $tag,
         '-Target', ([IO.Path]::GetFullPath($Target)),
@@ -145,12 +166,15 @@ try {
         '-Harness', $Harness
     )
     if ($Action -eq 'uninstall') { $args += '-Uninstall' }
+    if ($DryRun) { $args += '-DryRun' }
 
     Write-Output "OLYMPUS_ENTRYPOINT: action=$Action scope=$Scope harness=$Harness release=$tag"
     Write-Output "OLYMPUS_RELEASE_EXECUTING: tag=$tag installer=$installerUrl"
     & $pwsh[0].Source @args
     if ($LASTEXITCODE -ne 0) {
-        throw "OLYMPUS_ENTRYPOINT_FAILED: release installer exited $LASTEXITCODE."
+        $installerExitCode = $LASTEXITCODE
+        Write-Output "OLYMPUS_ENTRYPOINT_FAILED: release installer exited $installerExitCode."
+        exit $installerExitCode
     }
     Write-Output "OLYMPUS_RELEASE_EXECUTED: tag=$tag exit_code=0"
 } finally {

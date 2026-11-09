@@ -119,6 +119,53 @@ pwsh -NoProfile -File (Join-Path $source 'install.ps1') `
 
 Use the version actually declared by the checkout; do not copy the example version blindly. Local-source installation is for advanced, trusted-checkout use and is not evidence that the corresponding release is published or immutable.
 
+## Portable CLI routing (Slice C5)
+
+The portable `olympus` CLI also exposes install/uninstall routing for operators who
+need an explicit mode and machine-readable result. It delegates to the existing
+PowerShell engines; it does not replace their release, manifest, ownership, hash,
+or target safety checks. This surface is qualified only on Windows with PowerShell
+7 (`pwsh`).
+
+```powershell
+$sourceCheckout = 'C:\Path\to\trusted\OpenCode-OlympusAgents'
+$targetProject = 'C:\Users\Ada Lovelace\source\Sample Project'
+$releaseTag = 'v0.4.11' # choose an official published release
+& "$sourceCheckout\scripts\olympus.cmd" install --scope project --target $targetProject `
+    --harness opencode --version $releaseTag --dry-run --json
+& "$sourceCheckout\scripts\olympus.cmd" install --scope project --target $targetProject `
+    --harness opencode --version $releaseTag --execute
+& "$sourceCheckout\scripts\olympus.cmd" uninstall --scope project --target $targetProject `
+    --harness opencode --execute --json
+```
+
+`--version` is an exact release tag and is separate from root `olympus --version`.
+The CLI asks the release launcher for that exact GitHub tag and still requires the
+published immutable metadata, matching tag, installer identity, and existing
+archive checks. No arbitrary checkout/archive is accepted for installation.
+Project scope requires an absolute existing Git worktree root. Global scope
+rejects `--target`; the official engine alone discovers global roots. The
+inherited current directory remains read-only override context for existing
+engine checks, not a global destination; the CLI does not impersonate
+`USERPROFILE` for a global operation.
+
+Install requires exactly one of `--dry-run` or `--execute`; the former forwards
+the existing installer's `-DryRun` and may still use temporary acquisition/cache
+locations. Project uninstall has no native dry-run and is blocked before
+PowerShell; global uninstall supports `--dry-run` through
+`scripts/global-install.ps1 -Uninstall -DryRun`. Project uninstall delegates to
+the local `scripts/project-uninstall.ps1`; uninstall does not download a release.
+Global `--harness all --execute` processes its roots sequentially and is not
+atomic. All uninstalls remove only intact manifest-owned files.
+
+`--json` emits one document containing the native exit code, stdout, and stderr.
+Mutating native errors, timeouts (300 s), or interruption are reported as
+`unconfirmed`/exit 4 when partial effects cannot be ruled out; inspect the target
+before retrying. The bounded PowerShell version probe times out after 10 s. No
+automatic retry is performed. Native temporary/cache activity is distinct from
+source/target writes; project/global resources are not modified by successful
+previews.
+
 ## Installation safety
 
 - Install only into a repository you trust. Project scope requires the Git worktree root.

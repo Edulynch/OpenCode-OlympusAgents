@@ -154,7 +154,8 @@ function Invoke-RestMethod {
     return $global:OlympusInstallerUxRelease
 }
 
-function Invoke-MockedLauncher([string]$Action, [string]$Scope, [string]$Harness, [string]$Target) {
+function Invoke-MockedLauncher([string]$Action, [string]$Scope, [string]$Harness, [string]$Target,
+    [string]$Version = '', [switch]$DryRun) {
     $global:OlympusInstallerUxInstallerDownloadCount = 0
     $global:OlympusInstallerUxInstallerUrl = $null
         $global:OlympusInstallerUxApiOrder = @()
@@ -162,9 +163,12 @@ function Invoke-MockedLauncher([string]$Action, [string]$Scope, [string]$Harness
     $global:OlympusInstallerUxLauncherFixtureMode = $true
     $global:LASTEXITCODE = 0
     $launcherScript = [scriptblock]::Create([IO.File]::ReadAllText((Join-Path $script:source 'scripts/launch-latest.ps1')))
+    $parameters = @{ Action = $Action; Scope = $Scope; Harness = $Harness; Target = $Target }
+    if ($Version) { $parameters.Version = $Version }
+    if ($DryRun) { $parameters.DryRun = $true }
     $text = ''
     try {
-        $text = (& $launcherScript -Action $Action -Scope $Scope -Harness $Harness -Target $Target 2>&1 | Out-String)
+        $text = (& $launcherScript @parameters 2>&1 | Out-String)
         if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $text } }
         return [pscustomobject]@{ Code = 0; Text = $text }
     } catch {
@@ -585,13 +589,52 @@ exit /b 0
             $validLaunch.Text -match "OLYMPUS_RELEASE_EXECUTING: tag=$releaseTag" -and
             $validLaunch.Text -match "OLYMPUS_RELEASE_EXECUTED: tag=$releaseTag exit_code=0" -and
             $validDispatch -match "-Version $releaseTag" -and $validDispatch -match "-Harness opencode" -and
+            $validDispatch -notmatch '-DryRun' -and
             $validDispatch -match [regex]::Escape($otherTarget))
 
         $validUninstall = Invoke-MockedLauncher 'uninstall' 'project' 'all' $otherTarget
         $uninstallDispatch = [IO.File]::ReadAllText($dispatchLog)
         Check 'LAUNCHER_EXECUTES_SELECTED_RELEASE_FOR_UNINSTALL' ($validUninstall.Code -eq 0 -and
             $uninstallDispatch -match "-Version $releaseTag" -and $uninstallDispatch -match '-Uninstall' -and
+            $uninstallDispatch -notmatch '-DryRun' -and
             $validUninstall.Text -match "OLYMPUS_RELEASE_EXECUTING: tag=$releaseTag")
+
+        $explicitDryRun = Invoke-MockedLauncher 'install' 'project' 'opencode' $otherTarget $releaseTag -DryRun
+        $explicitDispatch = [IO.File]::ReadAllText($dispatchLog)
+        Check 'LAUNCHER_EXACT_TAG_ENDPOINT_AND_DRY_RUN_FORWARDING' ($explicitDryRun.Code -eq 0 -and
+            $global:OlympusInstallerUxMetadataUrl -eq "https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/tags/$releaseTag" -and
+            ($global:OlympusInstallerUxApiOrder -join ',') -ceq 'release-metadata,installer-download' -and
+            $explicitDispatch -match "-Version $releaseTag" -and $explicitDispatch -match '-DryRun' -and
+            $explicitDispatch -match '-NonInteractive' -and
+            $global:OlympusInstallerUxInstallerUrl -eq "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$releaseTag/install.ps1")
+
+        $beforeExplicitUninstallDryRun = [IO.File]::ReadAllText($dispatchLog)
+        $explicitUninstallDryRun = Invoke-MockedLauncher 'uninstall' 'project' 'opencode' $otherTarget $releaseTag -DryRun
+        Check 'LAUNCHER_REJECTS_UNINSTALL_DRY_RUN_BEFORE_NETWORK' ($explicitUninstallDryRun.Code -ne 0 -and
+            $explicitUninstallDryRun.Text -match 'DRY_RUN_UNSUPPORTED' -and
+            $global:OlympusInstallerUxApiOrder.Count -eq 0 -and
+            [IO.File]::ReadAllText($dispatchLog) -ceq $beforeExplicitUninstallDryRun)
+
+        $global:OlympusInstallerUxRelease = [pscustomobject]@{
+            tag_name = 'v9.8.6'; immutable = $true; draft = $false; prerelease = $false; published_at = $publishedAt
+        }
+        $beforeTagMismatch = [IO.File]::ReadAllText($dispatchLog)
+        $tagMismatch = Invoke-MockedLauncher 'install' 'project' 'opencode' $otherTarget $releaseTag
+        Check 'LAUNCHER_REJECTS_EXPLICIT_METADATA_TAG_MISMATCH_BEFORE_DOWNLOAD' ($tagMismatch.Code -ne 0 -and
+            $tagMismatch.Text -match 'LATEST_RELEASE_TAG_MISMATCH' -and
+            $global:OlympusInstallerUxMetadataUrl -eq "https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/tags/$releaseTag" -and
+            $global:OlympusInstallerUxInstallerDownloadCount -eq 0 -and
+            [IO.File]::ReadAllText($dispatchLog) -ceq $beforeTagMismatch)
+
+        $global:OlympusInstallerUxRelease = [pscustomobject]@{
+            tag_name = $releaseTag; immutable = $false; draft = $false; prerelease = $false; published_at = $publishedAt
+        }
+        $beforeExplicitMutable = [IO.File]::ReadAllText($dispatchLog)
+        $explicitMutable = Invoke-MockedLauncher 'install' 'project' 'opencode' $otherTarget $releaseTag
+        Check 'LAUNCHER_REJECTS_MUTABLE_EXPLICIT_RELEASE_BEFORE_DOWNLOAD' ($explicitMutable.Code -ne 0 -and
+            $explicitMutable.Text -match 'LATEST_RELEASE_MUTABLE' -and
+            $global:OlympusInstallerUxInstallerDownloadCount -eq 0 -and
+            [IO.File]::ReadAllText($dispatchLog) -ceq $beforeExplicitMutable)
 
         $global:OlympusInstallerUxInstallerText = "[string]`$Version = '$releaseTag'`n`$ReleaseVersion = '$releaseTag'`n scripts/project-uninstall.ps1`n"
         foreach ($timestampCase in $validTimestampCases) {

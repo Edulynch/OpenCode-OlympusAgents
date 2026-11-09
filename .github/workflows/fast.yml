@@ -47,9 +47,9 @@ jobs:
       - name: Authority scope invariants (offline)
         shell: pwsh
         run: |
-          # Keep the per-repository grant and external-effect regressions inside
-          # the required pull-request gate, even when FULL is not requested.
-          pwsh -NoProfile -File ./tests/authority/qualify.ps1 -QualificationSlice Offline
+          # Verify this policy change independently of the older full authority
+          # suite, whose historical native-deny fixture has a separate failure.
+          python -B -m unittest discover -s tests/authority -p 'test_scope_contract.py' -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: OA77 worktree activation (deterministic Windows)

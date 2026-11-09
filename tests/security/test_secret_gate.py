@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
+import os
 import secrets
 import string
 import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest import mock
 
@@ -131,12 +134,128 @@ class SecretGateTests(unittest.TestCase):
 
     def test_download_integrity_mismatch_is_rejected_before_extraction(self) -> None:
         with tempfile.TemporaryDirectory(prefix="olympus-gitleaks-bad-archive-") as directory:
-            with mock.patch.object(secret_gate.platform, "system", return_value="Windows"), mock.patch.object(
+            # Ignore a warm CI cache here: the test must exercise rejection of
+            # the mocked network payload, not reuse a trusted earlier archive.
+            with mock.patch.dict(os.environ, {secret_gate.CACHE_DIR_ENV: ""}), mock.patch.object(
+                secret_gate.platform, "system", return_value="Windows"
+            ), mock.patch.object(
                 secret_gate.platform, "machine", return_value="AMD64"
             ), mock.patch.object(secret_gate.urllib.request, "urlopen", return_value=io.BytesIO(b"tampered archive")):
                 with self.assertRaisesRegex(secret_gate.GateError, "SHA-256"):
                     secret_gate.ensure_binary(Path(directory))
             self.assertEqual(list(Path(directory).iterdir()), [])
+
+
+class GitleaksAcquisitionTests(unittest.TestCase):
+    """Check network and cache failures without downloading or running Gitleaks."""
+
+    @staticmethod
+    def expected_hash(data: bytes) -> str:
+        return hashlib.sha256(data).hexdigest()
+
+    def test_transient_download_retries_then_verifies_archive(self) -> None:
+        payload = b"synthetic Gitleaks archive"
+        with mock.patch.dict(os.environ, {secret_gate.CACHE_DIR_ENV: ""}), mock.patch.object(
+            secret_gate.urllib.request, "urlopen",
+            side_effect=[urllib.error.URLError("temporary connection error"), io.BytesIO(payload)],
+        ) as download, mock.patch.object(secret_gate.time, "sleep") as pause:
+            result = secret_gate._download_asset("linux_x64.tar.gz", self.expected_hash(payload))
+        self.assertEqual(result, payload)
+        self.assertEqual(download.call_count, 2)
+        pause.assert_called_once_with(1)
+
+    def test_permanent_http_failure_does_not_retry(self) -> None:
+        missing = urllib.error.HTTPError("https://example.invalid", 404, "missing", None, None)
+        with mock.patch.dict(os.environ, {secret_gate.CACHE_DIR_ENV: ""}), mock.patch.object(
+            secret_gate.urllib.request, "urlopen", side_effect=missing,
+        ) as download, mock.patch.object(secret_gate.time, "sleep") as pause:
+            with self.assertRaisesRegex(secret_gate.GateError, "HTTP 404"):
+                secret_gate._download_asset("linux_x64.tar.gz", self.expected_hash(b"unused"))
+        download.assert_called_once()
+        pause.assert_not_called()
+
+    def test_network_retries_are_bounded_and_redacted(self) -> None:
+        # The underlying transport error might contain sensitive URL details;
+        # the gate only reports a short, fixed failure description.
+        with mock.patch.dict(os.environ, {secret_gate.CACHE_DIR_ENV: ""}), mock.patch.object(
+            secret_gate.urllib.request, "urlopen", side_effect=urllib.error.URLError("token=synthetic-secret"),
+        ) as download, mock.patch.object(secret_gate.time, "sleep") as pause:
+            with self.assertRaises(secret_gate.GateError) as caught:
+                secret_gate._download_asset("linux_x64.tar.gz", self.expected_hash(b"unused"))
+        self.assertNotIn("synthetic-secret", str(caught.exception))
+        self.assertEqual(download.call_count, secret_gate.DOWNLOAD_ATTEMPTS)
+        self.assertEqual([call.args[0] for call in pause.call_args_list], [1, 3])
+
+    def test_verified_cache_is_reused_without_network(self) -> None:
+        payload = b"synthetic verified release archive"
+        with tempfile.TemporaryDirectory(prefix="olympus-gitleaks-cache-test-") as directory:
+            with mock.patch.dict(os.environ, {secret_gate.CACHE_DIR_ENV: directory}), mock.patch.object(
+                secret_gate.urllib.request, "urlopen", return_value=io.BytesIO(payload),
+            ) as download:
+                first = secret_gate._download_asset("linux_x64.tar.gz", self.expected_hash(payload))
+                second = secret_gate._download_asset("linux_x64.tar.gz", self.expected_hash(payload))
+            self.assertEqual((first, second), (payload, payload))
+            # Only a verified artifact may be published to the on-disk cache.
+            self.assertEqual(download.call_count, 1)
+            cache = Path(directory) / f"gitleaks_{secret_gate.VERSION}_linux_x64.tar.gz"
+            self.assertEqual(cache.read_bytes(), payload)
+
+    def test_tampered_cache_fails_closed_without_network(self) -> None:
+        payload = b"original synthetic release archive"
+        with tempfile.TemporaryDirectory(prefix="olympus-gitleaks-tamper-test-") as directory:
+            cache = Path(directory) / f"gitleaks_{secret_gate.VERSION}_linux_x64.tar.gz"
+            cache.write_bytes(b"modified archive")
+            with mock.patch.dict(os.environ, {secret_gate.CACHE_DIR_ENV: directory}), mock.patch.object(
+                secret_gate.urllib.request, "urlopen",
+            ) as download:
+                with self.assertRaisesRegex(secret_gate.GateError, "SHA-256"):
+                    secret_gate._download_asset("linux_x64.tar.gz", self.expected_hash(payload))
+            download.assert_not_called()
+
+    def test_cache_symlink_is_never_followed(self) -> None:
+        payload = b"synthetic trusted archive"
+        with tempfile.TemporaryDirectory(prefix="olympus-gitleaks-link-test-") as directory:
+            target = Path(directory) / "outside-cache"
+            target.write_bytes(payload)
+            cache = Path(directory) / f"gitleaks_{secret_gate.VERSION}_linux_x64.tar.gz"
+            try:
+                cache.symlink_to(target)
+            except (OSError, NotImplementedError):
+                self.skipTest("local filesystem does not permit symlink fixtures")
+            with mock.patch.dict(os.environ, {secret_gate.CACHE_DIR_ENV: directory}), mock.patch.object(
+                secret_gate.urllib.request, "urlopen",
+            ) as download:
+                with self.assertRaisesRegex(secret_gate.GateError, "cache"):
+                    secret_gate._download_asset("linux_x64.tar.gz", self.expected_hash(payload))
+            download.assert_not_called()
+
+    def test_uncontained_cache_path_is_rejected(self) -> None:
+        with mock.patch.dict(os.environ, {secret_gate.CACHE_DIR_ENV: "relative/../cache"}):
+            with self.assertRaisesRegex(secret_gate.GateError, "absolute, contained"):
+                secret_gate._download_asset("linux_x64.tar.gz", self.expected_hash(b"unused"))
+
+    def test_mismatched_download_cannot_seed_cache(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="olympus-gitleaks-invalid-test-") as directory:
+            with mock.patch.dict(os.environ, {secret_gate.CACHE_DIR_ENV: directory}), mock.patch.object(
+                secret_gate.urllib.request, "urlopen", return_value=io.BytesIO(b"unexpected payload"),
+            ):
+                with self.assertRaisesRegex(secret_gate.GateError, "SHA-256"):
+                    secret_gate._download_asset("linux_x64.tar.gz", self.expected_hash(b"trusted payload"))
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+
+class LocalHookConfigTests(unittest.TestCase):
+    def test_opt_in_hook_pins_official_gitleaks_and_preserves_ci(self) -> None:
+        hook = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "secrets.yml").read_text(encoding="utf-8")
+        self.assertIn("repo: https://github.com/gitleaks/gitleaks", hook)
+        self.assertIn("rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e", hook)
+        self.assertIn("- id: gitleaks", hook)
+        # An optional commit-time check cannot silently replace the history
+        # and current-file security scan that already runs on CI.
+        self.assertIn("python -B scripts/secret_gate.py", workflow)
+        self.assertIn("OLYMPUS_GITLEAKS_CACHE_DIR", workflow)
+        self.assertIn("actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", workflow)
 
 
 class DocumentationLinkGateTests(unittest.TestCase):

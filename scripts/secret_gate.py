@@ -57,9 +57,20 @@ def _cache_file(asset: str) -> Path | None:
 
 def _read_verified_cache(path: Path, expected_sha256: str) -> bytes | None:
     try:
-        # Do not follow a restored symlink, even if a cache entry changes
-        # between the initial lookup and the actual read.
-        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+        initial_info = path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise GateError("The optional Gitleaks archive cache cannot be inspected.") from None
+    # Inspect the name before opening it: a FIFO would otherwise block a
+    # normal read-only open. Only a single regular file is a valid cache hit.
+    if (not stat.S_ISREG(initial_info.st_mode) or initial_info.st_nlink != 1 or
+            initial_info.st_size > MAX_ARCHIVE_BYTES):
+        raise GateError("The cached Gitleaks archive has an unsafe file identity or size.")
+    try:
+        # NONBLOCK covers a concurrent replacement with a FIFO on systems
+        # that support it; NOFOLLOW prevents following a swapped-in symlink.
+        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0)
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         descriptor = os.open(path, flags)
@@ -75,6 +86,7 @@ def _read_verified_cache(path: Path, expected_sha256: str) -> bytes | None:
         if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or
                 info.st_size > MAX_ARCHIVE_BYTES or
                 not stat.S_ISREG(link_info.st_mode) or
+                (info.st_dev, info.st_ino) != (initial_info.st_dev, initial_info.st_ino) or
                 (info.st_dev, info.st_ino) != (link_info.st_dev, link_info.st_ino)):
             raise GateError("The cached Gitleaks archive has an unsafe file identity or size.")
         with os.fdopen(descriptor, "rb") as stream:
@@ -141,7 +153,12 @@ def _download_asset(asset: str, expected_sha256: str) -> bytes:
                 raise GateError("The downloaded Gitleaks archive exceeded the size limit.")
             _verify_sha256(payload, expected_sha256)
             if cache is not None:
-                _store_verified_cache(cache, payload)
+                try:
+                    _store_verified_cache(cache, payload)
+                except GateError:
+                    # The archive has already passed the pinned hash check.
+                    # An optional cache-write failure must not block scanning.
+                    pass
             return payload
         time.sleep(RETRY_DELAYS_SECONDS[attempt])
     raise GateError("Pinned Gitleaks download attempts were exhausted.")

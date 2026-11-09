@@ -26,11 +26,11 @@ git status --short --branch
 git branch --show-current
 
 py -m pip install --user pre-commit
-pre-commit install
+pre-commit install --allow-missing-config
 pre-commit run gitleaks
 ```
 
-The hook checks staged changes, not the entire repository or historical commits. A hook can also be bypassed locally, so the independent CI secret gate remains mandatory. CI scans tracked and non-ignored current files plus the selected Git history. Its pinned release archive is downloaded with bounded retries and may be cached by the workflow; every cached or newly downloaded archive must pass the expected SHA-256 check before execution. A missing or invalid archive fails the gate closed. No credentials, findings, or executable files are shared with the local hook.
+The hook checks staged changes, not the entire repository or historical commits. `--allow-missing-config` skips the hook in older worktrees that lack this file; it does **not** provide secret scanning for those worktrees. A hook can also be bypassed locally, so the independent CI secret gate remains mandatory. CI scans tracked and non-ignored current files plus the selected Git history. Its pinned release archive is downloaded with bounded retries and may be cached by the workflow; every cached or newly downloaded archive must pass the expected SHA-256 check before execution. A missing or invalid archive fails the gate closed. A cache-write failure after a verified download does not abort scanning, because caching is optional. No credentials, findings, or executable files are shared with the local hook.
 
 ## Architecture
 

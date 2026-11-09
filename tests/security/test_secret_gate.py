@@ -8,6 +8,7 @@ import io
 import json
 import os
 import secrets
+import stat
 import string
 import subprocess
 import sys
@@ -212,6 +213,17 @@ class GitleaksAcquisitionTests(unittest.TestCase):
                     secret_gate._download_asset("linux_x64.tar.gz", self.expected_hash(payload))
             download.assert_not_called()
 
+    def test_special_cache_entry_is_rejected_before_opening(self) -> None:
+        # Opening a FIFO in blocking mode can hang the security job. Prove
+        # the file-type check happens before any attempt to open the entry.
+        unsafe_info = mock.Mock(st_mode=stat.S_IFIFO | 0o600, st_nlink=1, st_size=0)
+        with mock.patch.object(Path, "lstat", return_value=unsafe_info), mock.patch.object(
+            secret_gate.os, "open"
+        ) as open_file:
+            with self.assertRaisesRegex(secret_gate.GateError, "unsafe file identity"):
+                secret_gate._read_verified_cache(Path("unsafe-cache-entry"), self.expected_hash(b"unused"))
+        open_file.assert_not_called()
+
     def test_cache_symlink_is_never_followed(self) -> None:
         payload = b"synthetic trusted archive"
         with tempfile.TemporaryDirectory(prefix="olympus-gitleaks-link-test-") as directory:
@@ -228,6 +240,17 @@ class GitleaksAcquisitionTests(unittest.TestCase):
                 with self.assertRaisesRegex(secret_gate.GateError, "cache"):
                     secret_gate._download_asset("linux_x64.tar.gz", self.expected_hash(payload))
             download.assert_not_called()
+
+    def test_cache_write_error_does_not_discard_verified_download(self) -> None:
+        payload = b"synthetic verified archive despite a read-only cache"
+        with tempfile.TemporaryDirectory(prefix="olympus-gitleaks-cache-write-test-") as directory:
+            with mock.patch.dict(os.environ, {secret_gate.CACHE_DIR_ENV: directory}), mock.patch.object(
+                secret_gate.urllib.request, "urlopen", return_value=io.BytesIO(payload),
+            ), mock.patch.object(secret_gate.os, "replace", side_effect=PermissionError("cache is read-only")):
+                result = secret_gate._download_asset("linux_x64.tar.gz", self.expected_hash(payload))
+            self.assertEqual(result, payload)
+            # Atomic-cache temporary files must be removed after a failed save.
+            self.assertEqual(list(Path(directory).iterdir()), [])
 
     def test_uncontained_cache_path_is_rejected(self) -> None:
         with mock.patch.dict(os.environ, {secret_gate.CACHE_DIR_ENV: "relative/../cache"}):
@@ -256,6 +279,7 @@ class LocalHookConfigTests(unittest.TestCase):
         self.assertIn("python -B scripts/secret_gate.py", workflow)
         self.assertIn("OLYMPUS_GITLEAKS_CACHE_DIR", workflow)
         self.assertIn("actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", workflow)
+        self.assertIn("pre-commit install --allow-missing-config", (ROOT / "docs" / "DEVELOPMENT.md").read_text(encoding="utf-8"))
 
 
 class DocumentationLinkGateTests(unittest.TestCase):

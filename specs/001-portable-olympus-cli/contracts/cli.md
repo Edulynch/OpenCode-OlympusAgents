@@ -1,6 +1,6 @@
 # Contrato propuesto de CLI
 
-**Estado de esta rama**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C1 preview read-only, C3 apply explícito project y C4 doctor project implementados en esta rama; C4 aún requiere CI final. C3 no habilita scope global ni instalaciones reales durante las pruebas. macOS **NOT VERIFIED**.
+**Estado de esta rama**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C1 preview read-only, C3 apply explícito project, C4 doctor project y C5 install/uninstall routing implementados. La cualificación focal de C5 queda registrada por separado; macOS **NOT VERIFIED**.
 
 ## Entrada, contexto y soporte
 
@@ -9,15 +9,15 @@
 - `--source <absolute-path>` es opción global anterior al subcomando; default de launcher es su checkout. No buscar automáticamente otro Core en el proyecto destino. Error si origen no existe, no contiene fuentes/renderer o es ambiguo.
 - Proyecto: `--scope project --target <absolute-worktree-root>`. Global: `--scope global`, usando resolución segura del motor, sin interpretar un target de proyecto como destino global. Para contexto de override global, identificarlo explícitamente sin modificarlo.
 - `--harness opencode|codex|all` selecciona representación/operación cuando aplique. Listado incluye ambos; check default all; mutaciones instaladas no usan un default silencioso.
-- Sintaxis inválida/opciones incompatibles se rechazan antes de cualquier escritura. No `--force`, bypass de drift, proveedor nuevo o modo automático Aegis.
-- Consultas/preview no crean tempfiles, locks, backups, caches ni directorios. Excepción C4: PowerShell corre con `USERPROFILE` temporal para contener su cache de inicio; se elimina al salir y no persiste en source/target/perfil real. Un scratch previo se informa, no se repara. También propagar `PYTHONDONTWRITEBYTECODE=1` a hijos.
+- Sintaxis inválida/opciones incompatibles se rechazan antes de iniciar un motor nativo. No `--force`, bypass de drift, proveedor nuevo ni instalación automática.
+- Consultas/preview no crean tempfiles, locks, backups, caches ni directorios, salvo las excepciones nativas explícitas. Excepción C4: PowerShell corre con `USERPROFILE` temporal para contener su cache de inicio; se elimina al salir y no persiste en source/target/perfil real. Excepción C5: el probe usa un perfil temporal y la adquisición oficial/ejecución nativa puede usar temp/cache, sin escribir recursos de instalación en preview. Un scratch previo se informa, no se repara. También propagar `PYTHONDONTWRITEBYTECODE=1` a hijos.
 
 ## Superficie de comandos
 
 | Comando propuesto | Slice / semántica | Escritura / condición |
 |---|---|---|
 | `--version`, `--help` | A; versión de herramienta y ayuda | Ninguna |
-| `models list [--json]` | A; doce roles, familia/esfuerzo y IDs de ambos adaptadores | Ninguna |
+| `models list [--json]` | A; once roles, familia/esfuerzo y IDs de ambos adaptadores | Ninguna |
 | `status [--scope ... --target ... --harness ...] [--json]` | A; origen y estado local/manifest disponible, no Verify profundo propio | Ninguna; sin descubrir destinos arbitrarios |
 | `config check [--harness ...] [--json]` | A; validación de fuentes y drift renderer | Ninguna; comparar expected en memoria |
 | `models set-family <existing> --opencode <id> --codex <id> [--dry-run [--json]]` | B; editar los dos IDs de esa familia | Preview sin escribir; ejecución una orden explícita |
@@ -27,8 +27,16 @@
 | `config apply --scope project --target <root> --harness ... --dry-run [--json]` | C1; preview read-only de recursos de una instalación existente | Exige manifiesto válido y hashes sin drift; no instala harnesses ausentes ni llama bootstrap/install |
 | `config apply --scope project --target <root> --harness ... --execute` | C3; actualización explícita de recursos ya administrados | Exclusión estable del target, revalidación bajo lock y journal PREPARING/PREPARED/COMMITTED; sólo escritura humana, nunca `--force` |
 | `config recover --scope project --target <root>` | C3; recuperación explícita del journal de apply project | Abre sólo el lock existente; PREPARED revierte estados new verificados y COMMITTED limpia evidencia; divergencias preservan journal y bloquean |
-| `install --scope ... [--target ...] --harness ... --version <release> [--dry-run]` | C; delegación de release oficial | Windows cualificado; no instala silenciosamente sources personalizados |
-| `uninstall --scope ... [--target ...] --harness ...` | C; delegación de retiro administrado | Windows cualificado, ownership/hash del motor |
+| `install --scope project|global [--target <root>] --harness ... --version <exact-tag> (--dry-run|--execute) [--json]` | C5; delegación de release oficial publicado e inmutable | Windows + PowerShell 7; el target sólo aplica a project; sin source/archive override |
+| `uninstall --scope project|global [--target <root>] --harness ... (--dry-run|--execute) [--json]` | C5; delegación a los uninstallers existentes | Windows + PowerShell 7; project dry-run bloqueado, global dry-run soportado |
+
+### Routing de instalación y retiro — Slice C5
+
+- `install --version` es distinto de la opción raíz `olympus --version`: requiere un tag Olympus exacto según el patrón release existente (`vMAJOR.MINOR.PATCH` con sufijo sintáctico opcional `alpha|beta|rc.N`); las banderas del release deben seguir calificándolo como estable (`prerelease=false`). Sólo se adquieren releases oficiales. El launcher solicita `releases/tags/<tag>` y exige tag devuelto idéntico, `immutable=true`, `draft=false`, `prerelease=false`, timestamp publicado válido e identidad coincidente del installer/archive. Omitir `Version` en los callers históricos conserva la selección `releases/latest`; la CLI siempre fija el tag solicitado. No `--SourceRoot`, `--SourceArchive` ni `--force` desde esta CLI.
+- Project requiere `--target` absoluto, existente y exactamente raíz de un Git worktree, validada en read-only antes de PowerShell. Global rechaza `--target`: sus raíces sólo las descubre el motor oficial. El cwd heredado sigue siendo contexto de sólo lectura para comprobaciones de override del motor; no es el destino global ni se suplanta `USERPROFILE`.
+- Instalar llama `scripts/launch-latest.ps1`, que conserva adquisición y validación del installer oficial; `--dry-run` se reenvía a `install.ps1`. Desinstalar project llama el `scripts/project-uninstall.ps1` local; global llama `scripts/global-install.ps1 -Uninstall`, sin descarga de release. `--dry-run` de project se bloquea con exit 3 antes de PowerShell porque ese motor no ofrece preview; global usa su `-DryRun`. `--harness all` global se ejecuta secuencialmente, no es atómico.
+- Sólo Windows con PowerShell 7. Preflight de `pwsh` está acotado a 10 s y el motor a 300 s; los argumentos se pasan como argv, sin `shell` ni script interpolado. Los previews no escriben recursos target/global, pero la adquisición oficial, PowerShell y sus caches pueden usar temp/cache. No se cambia permisos de source/target ni se usa perfil real para la prueba de versión.
+- JSON es un único documento stdout e incluye `native_exit_code`, `native_stdout` y `native_stderr`; la salida del motor no se mezcla fuera del documento. Dry-run nativo exitoso da `result=preview`, no `installed/removed`. Fallo nativo de una mutación, timeout o interrupción da exit 4/unconfirmed cuando no puede probarse ausencia de efectos; conserva código/salida nativa y nunca reintenta. Un error de preview read-only da exit 1. No se promete atomicidad de los motores oficiales.
 
 `--json` de edición sólo se ofrece con `--dry-run` inicialmente; ejecución humana muestra preview antes de escribir y luego resumen. Esto evita mezclar varios documentos JSON en stdout sin introducir un protocolo de eventos. No se exige JSON de edición real por FR-004. Diagnóstico/listado/preview comparten datos equivalentes entre formatos.
 
@@ -42,7 +50,7 @@ Todos los IDs existentes utilizados por el candidato y los IDs propuestos deben 
 
 Vacío, comillas, backslashes, espacios, controles, saltos, `#`, braces y cualquier carácter fuera del alfabeto se rechazan con exit 2 **antes de cualquier staging o escritura, incluida creación del lock**. Un ID existente no conforme rechaza la operación B con el mismo exit 2, sin repararlo; no modifica el comportamiento read-only de A. El renderer existente no cambia. Sintaxis válida no acredita disponibilidad, soporte live ni autenticación; no consultar proveedores. Es una restricción inicial de B, no una limitación universal de OpenCode o Codex.
 
-Familias/roles de fuente. Esfuerzo inicial extraído del conjunto de esfuerzos presente en el documento canónico; no registry de esfuerzos/proveedor adicional. Aegis se puede configurar en Core, pero sólo materializa OpenCode.
+Familias/roles de fuente. Esfuerzo inicial extraído del conjunto de esfuerzos presente en el documento canónico; no registry de esfuerzos/proveedor adicional. Kael es el único orquestador y la CLI no agrega roles.
 
 ### Exclusión y recovery — contrato de operador
 
@@ -63,7 +71,7 @@ T019 Windows y T020 Linux acreditaron la selección integrada y el protocolo loc
 
 Salida humana concisa con origen/contexto, afectados, ambos IDs y valores old/new antes de mutar. Errores nombran recurso/causa y corrección disponible; no emitir credenciales o logs nativos completos por defecto.
 
-JSON de comando permitido es un documento único en stdout; diagnósticos de proceso/presentación van a stderr. Envoltorio `schema_version=1`, `operation`, `result`, `context`, `data`, `issues`. Los datos usan los mismos objetos del formato humano, sin segundo resolver. `result` puede ser `ok`, `no_changes`, `absent`, `failed`, `blocked`, `unconfirmed`.
+JSON de comando permitido es un documento único en stdout; diagnósticos de proceso/presentación van a stderr. Envoltorio `schema_version=1`, `operation`, `result`, `context`, `data`, `issues`. Los datos usan los mismos objetos del formato humano, sin segundo resolver. `result` puede ser `ok`, `no_changes`, `absent`, `preview` (C5: dry-run nativo completado, sin ejecutar instalación/retiro), `failed`, `blocked`, `unconfirmed`.
 
 - Listado: `data.roles` con `role`, `identity`, `family`, `effort`, `models.opencode`, `models.codex`, y representación de cada harness (`agent`, `root`, `absent`).
 - Preview: affected roles, old/new intención/resolución, recursos cambiantes relativos y bloqueos; no tabla de mappings persistente.

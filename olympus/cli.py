@@ -24,7 +24,7 @@ class Parser(argparse.ArgumentParser):
 def parser() -> Parser:
     root = Parser(
         prog="olympus",
-        description="Offline Olympus CLI. Python 3.11+; trusted checkout; no provider calls.",
+        description="Portable Olympus CLI. Python 3.11+; trusted checkout; no model-provider calls.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=("Examples:\n"
                 "  olympus models list --json\n"
@@ -34,6 +34,8 @@ def parser() -> Parser:
                 "  olympus config check\n"
                 "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --dry-run\n"
                 "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --execute\n"
+                "  olympus install --scope project --target <absolute-worktree-root> --harness opencode --version <release-tag> --dry-run\n"
+                "  olympus uninstall --scope project --target <absolute-worktree-root> --harness opencode --execute\n"
                 "  olympus doctor --scope project --target <absolute-worktree-root> --harness all [--json]\n"
                 "  olympus status --scope project --target <absolute-worktree-root>\n"
                 "Source edits affect only the canonical checkout; project config apply writes only with --execute.\n"
@@ -78,6 +80,23 @@ def parser() -> Parser:
     mode.add_argument("--dry-run", action="store_true", help="read-only preview; no target writes")
     mode.add_argument("--execute", action="store_true", help="explicitly apply the previewed project configuration")
     apply.add_argument("--json", action="store_true", help="emit a single JSON preview")
+    install = commands.add_parser("install", help="install an immutable official release through the existing installer", allow_abbrev=False)
+    install.add_argument("--scope", choices=("project", "global"), required=True)
+    install.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
+    install.add_argument("--harness", choices=("opencode", "codex", "all"), required=True)
+    install.add_argument("--version", dest="release_version", required=True, help="exact immutable release tag")
+    install_mode = install.add_mutually_exclusive_group(required=True)
+    install_mode.add_argument("--dry-run", action="store_true", help="preview through the official installer")
+    install_mode.add_argument("--execute", action="store_true", help="execute the official installer")
+    install.add_argument("--json", action="store_true", help="emit one JSON result with captured native output")
+    uninstall = commands.add_parser("uninstall", help="remove only manifest-owned resources through the existing engine", allow_abbrev=False)
+    uninstall.add_argument("--scope", choices=("project", "global"), required=True)
+    uninstall.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
+    uninstall.add_argument("--harness", choices=("opencode", "codex", "all"), required=True)
+    uninstall_mode = uninstall.add_mutually_exclusive_group(required=True)
+    uninstall_mode.add_argument("--dry-run", action="store_true", help="preview when the native engine supports it")
+    uninstall_mode.add_argument("--execute", action="store_true", help="execute the existing uninstall engine")
+    uninstall.add_argument("--json", action="store_true", help="emit one JSON result with captured native output")
     doctor = commands.add_parser("doctor", help="read-only diagnostic for a managed project installation", allow_abbrev=False)
     doctor.add_argument("--scope", choices=("project",), required=True)
     doctor.add_argument("--target", type=Path, required=True, help="absolute existing Git worktree root")
@@ -495,6 +514,10 @@ def main(argv: list[str] | None = None) -> int:
                                    source_query=source_query)
             emit(response, as_json)
             return code
+        if response["operation"] in ("install", "uninstall"):
+            from . import install_routing
+
+            return install_routing.run(source, args, response, emit=emit, as_json=as_json)
         code = installation_status(args, response)
         emit(response, as_json)
         return code
@@ -517,18 +540,31 @@ def main(argv: list[str] | None = None) -> int:
         emit(response, as_json)
         return 1
     except KeyboardInterrupt:
+        code = 4
         response["result"] = "unconfirmed"
         message = "Operation interrupted; inspect/recover pending source-edit state explicitly."
         if response.get("operation") == "config apply":
             target = str(getattr(locals().get("args", None), "target", "unknown"))
             message = ("Project config apply interrupted; inspect and explicitly recover the pending project state "
                        f"with config recover --scope project --target {target}.")
+        elif response.get("operation") in ("install", "uninstall"):
+            if response.get("data", {}).get("engine", "not_started") == "not_started":
+                code = 3
+                response["result"] = "blocked"
+                response["data"].update({"state": "not_started", "effects": "none_confirmed"})
+                message = "Install/uninstall preflight was interrupted; no native engine was started."
+            else:
+                response["data"].update({
+                    "state": "unconfirmed",
+                    "effects": "unconfirmed; descendant processes may continue",
+                })
+                message = "Native install/uninstall was interrupted; effects are unconfirmed. Inspect the selected installation before retrying."
         response["issues"].append({
-            "code": "unconfirmed",
+            "code": "unconfirmed" if code == 4 else "preflight_interrupted",
             "message": message,
         })
         emit(response, as_json)
-        return 4
+        return code
 
 
 if __name__ == "__main__":

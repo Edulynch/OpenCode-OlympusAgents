@@ -9,6 +9,7 @@ import re
 import stat
 import subprocess
 import sys
+import tomllib
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
@@ -294,12 +295,212 @@ def _blank_data() -> dict[str, Any]:
         "preview_only": True,
         "apply_available": True,
         "preview_state": "blocked",
+        "assignments": _unknown_assignments(),
         "changes": [],
         "unchanged": [],
         "preserved": {"harnesses": [], "resources": []},
         "conflicts": [],
         "checks": [],
     }
+
+
+def _unknown_assignments() -> dict[str, Any]:
+    return {
+        "status": "unknown",
+        "evidence": "not_verified",
+        "family": "unknown",
+        "proposal_source": "unknown",
+        "roles": [],
+        "roots": {
+            "opencode": {"state": "unknown", "current_status": "unknown", "current": None, "proposed": None},
+            "codex": {"state": "unknown", "current_status": "unknown", "current": None, "proposed": None},
+        },
+    }
+
+
+_MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]*\Z")
+
+
+def _opencode_scalar(value: str) -> dict[str, str] | None:
+    if (len(value) < 3 or not value.startswith('"') or not value.endswith('"')
+            or "\\" in value):
+        return None
+    value = value[1:-1]
+    parts = value.split("#")
+    if len(parts) > 2 or not _MODEL_ID.fullmatch(parts[0]):
+        return None
+    if len(parts) == 2 and not _MODEL_ID.fullmatch(parts[1]):
+        return None
+    return {"model": parts[0], **({"effort": parts[1]} if len(parts) == 2 else {})}
+
+
+def _frontmatter(text: str) -> str | None:
+    if not text.startswith("---\n"):
+        return None
+    closing = text.find("\n---\n", 4)
+    return text[:closing + 5] if closing >= 0 else None
+
+
+def _verified_opencode_agent(raw: bytes, expected: bytes) -> dict[str, str] | None:
+    try:
+        actual_text, expected_text = raw.decode("utf-8"), expected.decode("utf-8")
+    except UnicodeError:
+        return None
+    actual, template = _frontmatter(actual_text), _frontmatter(expected_text)
+    if actual is None or template is None:
+        return None
+    pattern = re.compile(r"(?m)^model: ([^\r\n]*)$")
+    actual_matches, template_matches = list(pattern.finditer(actual)), list(pattern.finditer(template))
+    if len(actual_matches) != 1 or len(template_matches) != 1:
+        return None
+    assignment = _opencode_scalar(actual_matches[0].group(1))
+    if assignment is None or actual[:actual_matches[0].start(1)] != template[:template_matches[0].start(1)]:
+        return None
+    if actual[actual_matches[0].end(1):] != template[template_matches[0].end(1):]:
+        return None
+    return assignment
+
+
+def _verified_opencode_root(raw: bytes, expected: bytes) -> dict[str, str] | None:
+    try:
+        actual_text, template_text = raw.decode("utf-8"), expected.decode("utf-8")
+    except UnicodeError:
+        return None
+    pattern = re.compile(r'(?m)^  "model": ("(?:[^"\\]|\\.)*"),$')
+    actual_matches, template_matches = list(pattern.finditer(actual_text)), list(pattern.finditer(template_text))
+    if len(actual_matches) != 1 or len(template_matches) != 1:
+        return None
+    actual_literal = actual_matches[0].group(1)
+    try:
+        model = json.loads(actual_literal)
+    except json.JSONDecodeError:
+        return None
+    if (not isinstance(model, str) or json.dumps(model, ensure_ascii=False) != actual_literal
+            or not _MODEL_ID.fullmatch(model)):
+        return None
+    actual_rebuilt = actual_text[:actual_matches[0].start(1)] + template_matches[0].group(1) + actual_text[actual_matches[0].end(1):]
+    template_rebuilt = template_text[:template_matches[0].start(1)] + template_matches[0].group(1) + template_text[template_matches[0].end(1):]
+    if actual_rebuilt != template_rebuilt:
+        return None
+    return {"model": model}
+
+
+def _verified_codex(raw: bytes) -> dict[str, str] | None:
+    try:
+        data = tomllib.loads(raw.decode("utf-8"))
+    except (UnicodeError, tomllib.TOMLDecodeError):
+        return None
+    model, effort = data.get("model"), data.get("model_reasoning_effort")
+    if (not isinstance(model, str) or not _MODEL_ID.fullmatch(model)
+            or not isinstance(effort, str) or not _MODEL_ID.fullmatch(effort)):
+        return None
+    return {"model": model, "effort": effort}
+
+
+def _assignment_preview(installed: tuple[str, ...], selected: tuple[str, ...], current: dict[str, bytes],
+                        expected_by_harness: dict[str, dict[str, bytes]], renderer, source: Path,
+                        assignment_query: Callable | None) -> dict[str, Any]:
+    result = _unknown_assignments()
+    if assignment_query is None:
+        return result
+    try:
+        canonical = assignment_query(renderer, source) if assignment_query is not None else None
+        rows = canonical.get("roles") if isinstance(canonical, dict) else None
+        if not isinstance(rows, list):
+            return result
+        by_role = {row["role"]: row for row in rows if isinstance(row, dict) and isinstance(row.get("role"), str)}
+        if not rows or len(by_role) != len(rows):
+            return result
+    except Exception:
+        return result
+
+    def state_for(harness: str) -> str:
+        return "not_installed" if harness not in installed else "selected" if harness in selected else "preserved"
+
+    def current_for(harness: str, relative: str, root: bool = False) -> tuple[str, dict[str, str] | None]:
+        if harness not in installed:
+            return "not_installed", None
+        raw, expected = current.get(relative), expected_by_harness.get(harness, {}).get(relative)
+        if raw is None or expected is None:
+            return "unsupported", None
+        if harness == "opencode":
+            value = (_verified_opencode_root(raw, expected) if root
+                     else _verified_opencode_agent(raw, expected))
+        else:
+            value = _verified_codex(raw)
+        return ("verified", value) if value is not None else ("unsupported", None)
+
+    roles: list[dict[str, Any]] = []
+    statuses: list[str] = []
+    for role in sorted(by_role):
+        row = by_role[role]
+        representations: dict[str, Any] = {}
+        for harness in ("opencode", "codex"):
+            representation = row.get("representation", {}).get(harness, "unknown")
+            state = state_for(harness)
+            if harness == "codex" and representation == "root":
+                representations[harness] = {"representation": "root", "state": state}
+                continue
+            relative = (f".opencode/agents/{role}.md" if harness == "opencode"
+                        else f".codex/agents/{role}.toml")
+            current_status, current_value = current_for(harness, relative)
+            if harness in installed:
+                statuses.append(current_status)
+            models = row.get("models", {})
+            proposed = ({"model": models.get(harness), "effort": row.get("effort")}
+                        if harness in selected and isinstance(models, dict) else None)
+            representations[harness] = {
+                "representation": representation,
+                "state": state,
+                "current_status": current_status,
+                "current": current_value,
+                "proposed": proposed,
+            }
+        proposed_family = row.get("family") if any(harness in selected for harness in installed) else None
+        roles.append({
+            "role": role,
+            "identity": row.get("identity"),
+            "family": {"current": "unknown", "proposed": proposed_family},
+            "harnesses": representations,
+        })
+
+    root_specs = {
+        "opencode": ("opencode.jsonc", "opencode", "kael"),
+        "codex": (".codex/config.toml", "codex", "kael"),
+    }
+    roots: dict[str, Any] = {}
+    for harness, (relative, _, role) in root_specs.items():
+        state = state_for(harness)
+        current_status, current_value = current_for(harness, relative, root=True)
+        if harness in installed:
+            statuses.append(current_status)
+        row = by_role.get(role, {})
+        models = row.get("models", {}) if isinstance(row, dict) else {}
+        proposed = None
+        if harness in selected and isinstance(models, dict):
+            proposed = {"model": models.get(harness)}
+            if harness == "codex":
+                proposed["effort"] = row.get("effort")
+        roots[harness] = {
+            "state": state,
+            "current_status": current_status,
+            "current": current_value,
+            "proposed": proposed,
+        }
+
+    verified = statuses.count("verified")
+    unsupported = statuses.count("unsupported")
+    result.update({
+        "status": "verified" if not unsupported else "partial" if verified else "unsupported",
+        "evidence": "managed_hash_verified_bytes",
+        "family": "unknown",
+        "proposal_source": "canonical_renderer" if by_role else "unknown",
+        "selected_harnesses": [item for item in installed if item in selected],
+        "preserved_harnesses": [item for item in installed if item not in selected],
+        "roles": roles,
+        "roots": roots,
+    })
+    return result
 
 
 def _blocked(response: dict, blockers: list[dict[str, str]], data: dict[str, Any] | None = None) -> int:
@@ -360,7 +561,7 @@ def _updated_manifest_bytes(record: ProjectManifest, raw: bytes, selected: tuple
 
 
 def preview(source: Path, args, response: dict, *, source_query: Callable, load_renderer: Callable,
-            release_version: Callable) -> int:
+            release_version: Callable, assignment_query: Callable | None = None) -> int:
     response["operation"] = "config apply"
     response["context"] = {
         "source": str(source),
@@ -493,6 +694,10 @@ def preview(source: Path, args, response: dict, *, source_query: Callable, load_
                 },
             })
 
+        assignments = _assignment_preview(
+            installed, tuple(selected), current, expected_by_harness, renderer, source, assignment_query,
+        )
+
         changes: list[dict[str, str]] = []
         unchanged: list[dict[str, str]] = []
         preserved_resources: list[dict[str, str]] = []
@@ -540,6 +745,7 @@ def preview(source: Path, args, response: dict, *, source_query: Callable, load_
             "source_commit": source_commit,
             "installed_harnesses": list(installed),
             "selected_harnesses": list(selected),
+            "assignments": assignments,
             "changes": changes,
             "unchanged": unchanged,
             "preserved": {"harnesses": preserved_harnesses, "resources": preserved_resources},
@@ -645,6 +851,7 @@ def execute(source: Path, args, response: dict, *, source_query: Callable, load_
 
     code = preview(source, args, response, source_query=source_query,
                    load_renderer=load_renderer, release_version=release_version)
+    response.get("data", {}).pop("assignments", None)
     if code:
         emit_preview(response, False)
         return code
@@ -753,6 +960,8 @@ def emit_preview(response: dict, as_json: bool) -> None:
     for key in ("source_version", "installed_harnesses", "selected_harnesses", "manifest"):
         if key in data:
             print(f"{key}: {json.dumps(data[key], ensure_ascii=False)}")
+    if "assignments" in data:
+        print(f"assignments: {json.dumps(data['assignments'], ensure_ascii=False)}")
     for key, label in (("changes", "resources_to_update"), ("unchanged", "resources_unchanged")):
         print(f"{label}:")
         for item in data.get(key, []):

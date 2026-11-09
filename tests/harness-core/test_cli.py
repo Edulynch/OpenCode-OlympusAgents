@@ -26,7 +26,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from olympus import config_apply, config_apply_transaction, doctor, install_routing, source_edit
-from olympus.cli import load_renderer as cli_load_renderer, main as cli_main, parser as cli_parser, release_version, source_query as cli_source_query
+from olympus.cli import load_renderer as cli_load_renderer, main as cli_main, model_assignments as cli_model_assignments, parser as cli_parser, release_version, source_query as cli_source_query
 
 
 def load_file(name: str, path: Path):
@@ -130,7 +130,8 @@ class SliceA(unittest.TestCase):
         response = {"schema_version": 1, "operation": "config apply", "result": "ok",
                     "context": {}, "data": {}, "issues": []}
         code = config_apply.preview(self.source, args, response, source_query=cli_source_query,
-                                    load_renderer=cli_load_renderer, release_version=release_version)
+                                    load_renderer=cli_load_renderer, release_version=release_version,
+                                    assignment_query=cli_model_assignments)
         self.assertEqual(0, code, response)
         return args, response, config_apply._execution_plan(
             self.source, args, response, load_renderer=cli_load_renderer,
@@ -182,6 +183,21 @@ class SliceA(unittest.TestCase):
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
         return manifest_path
+
+    def update_managed_bytes(self, relative, raw):
+        path = self.target / relative
+        path.write_bytes(raw)
+        manifest_path = self.target / ".opencode/orchestrator-install.json"
+        if not manifest_path.exists():
+            manifest_path = self.target / ".codex/orchestrator-install.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        entry = next(item for item in manifest["managed_files"] if item["path"] == relative)
+        entry["sha256"] = hashlib.sha256(raw).hexdigest()
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+
+    def canonical_role(self, role):
+        return next(item for item in cli_model_assignments(self.renderer, self.source)["roles"]
+                    if item["role"] == role)
 
     def config_apply_arguments(self, harness="opencode", target=None):
         return ("config", "apply", "--scope", "project", "--target", str(target or self.target),
@@ -392,6 +408,245 @@ class SliceA(unittest.TestCase):
         self.assertIn("resources_to_update:", human.stdout)
         self.assertIn(".opencode/agents/kael.md", human.stdout)
         self.assertIn("no target writes", human.stdout)
+
+    def test_slice_c6_opencode_reports_custom_agent_and_independent_root_assignments(self):
+        self.create_managed_install(("opencode",))
+        veyra = self.canonical_role("veyra")
+        kael = self.canonical_role("kael")
+        agent_relative = ".opencode/agents/veyra.md"
+        agent = self.outputs[self.source / agent_relative].replace(
+            f'model: "{veyra["models"]["opencode"]}#{veyra["effort"]}"',
+            'model: "vendor/custom-veyra#medium"', 1,
+        ).encode("utf-8")
+        self.assertIn(f'model: "{veyra["models"]["opencode"]}#{veyra["effort"]}"',
+                      self.outputs[self.source / agent_relative])
+        root_relative = "opencode.jsonc"
+        root = self.outputs[self.source / root_relative].replace(
+            f'  "model": "{kael["models"]["opencode"]}",',
+            '  "model": "vendor/custom-root",', 1,
+        ).encode("utf-8")
+        self.update_managed_bytes(agent_relative, agent)
+        self.update_managed_bytes(root_relative, root)
+
+        response = self.json_query(*self.config_apply_arguments("opencode"))
+        assignments = response["data"]["assignments"]
+        role = next(item for item in assignments["roles"] if item["role"] == "veyra")
+        self.assertEqual("partial", assignments["status"])
+        self.assertEqual("managed_hash_verified_bytes", assignments["evidence"])
+        self.assertEqual("unknown", assignments["family"])
+        self.assertEqual({"model": "vendor/custom-veyra", "effort": "medium"},
+                         role["harnesses"]["opencode"]["current"])
+        self.assertEqual({"model": veyra["models"]["opencode"], "effort": veyra["effort"]},
+                         role["harnesses"]["opencode"]["proposed"])
+        self.assertEqual("unknown", role["family"]["current"])
+        self.assertEqual(veyra["family"], role["family"]["proposed"])
+        self.assertEqual({"model": "vendor/custom-root"}, assignments["roots"]["opencode"]["current"])
+        self.assertEqual({"model": kael["models"]["opencode"]}, assignments["roots"]["opencode"]["proposed"])
+        self.assertIn(f'  "model": "{kael["models"]["opencode"]}",',
+                      self.outputs[self.source / root_relative])
+        kael_role = next(item for item in assignments["roles"] if item["role"] == "kael")
+        self.assertEqual("agent", kael_role["harnesses"]["opencode"]["representation"])
+        self.assertEqual("selected", assignments["roots"]["opencode"]["state"])
+
+        human = self.query(*self.config_apply_arguments("opencode"))
+        self.assertEqual(0, human.returncode, human.stdout + human.stderr)
+        self.assertIn(f"assignments: {json.dumps(assignments, ensure_ascii=False)}", human.stdout)
+
+    def test_slice_c6_codex_specialist_and_kael_root_are_separate(self):
+        self.create_managed_install(("codex",))
+        veyra = self.canonical_role("veyra")
+        kael = self.canonical_role("kael")
+        agent_relative = ".codex/agents/veyra.toml"
+        agent = self.outputs[self.source / agent_relative].replace(
+            f'model = "{veyra["models"]["codex"]}"\nmodel_reasoning_effort = "{veyra["effort"]}"',
+            'model = "vendor/custom-veyra"\nmodel_reasoning_effort = "medium"', 1,
+        ).encode("utf-8")
+        self.assertIn(f'model = "{veyra["models"]["codex"]}"\nmodel_reasoning_effort = "{veyra["effort"]}"',
+                      self.outputs[self.source / agent_relative])
+        root_relative = ".codex/config.toml"
+        root = self.outputs[self.source / root_relative].replace(
+            f'model = "{kael["models"]["codex"]}"\nmodel_reasoning_effort = "{kael["effort"]}"',
+            'model = "vendor/custom-root"\nmodel_reasoning_effort = "low"', 1,
+        ).encode("utf-8")
+        self.update_managed_bytes(agent_relative, agent)
+        self.update_managed_bytes(root_relative, root)
+
+        response = self.json_query(*self.config_apply_arguments("codex"))
+        assignments = response["data"]["assignments"]
+        role = next(item for item in assignments["roles"] if item["role"] == "veyra")
+        self.assertEqual("verified", role["harnesses"]["codex"]["current_status"])
+        self.assertEqual({"model": "vendor/custom-veyra", "effort": "medium"},
+                         role["harnesses"]["codex"]["current"])
+        self.assertEqual({"model": veyra["models"]["codex"], "effort": veyra["effort"]},
+                         role["harnesses"]["codex"]["proposed"])
+        self.assertEqual({"model": "vendor/custom-root", "effort": "low"},
+                         assignments["roots"]["codex"]["current"])
+        self.assertEqual({"model": kael["models"]["codex"], "effort": kael["effort"]},
+                         assignments["roots"]["codex"]["proposed"])
+        self.assertIn(f'model = "{kael["models"]["codex"]}"\nmodel_reasoning_effort = "{kael["effort"]}"',
+                      self.outputs[self.source / root_relative])
+        kael_codex = next(item for item in assignments["roles"] if item["role"] == "kael")["harnesses"]["codex"]
+        self.assertEqual({"representation": "root", "state": "selected"}, kael_codex)
+
+    def test_slice_c6_selected_and_preserved_harness_assignments_are_distinct(self):
+        self.create_managed_install(("opencode", "codex"))
+        for selected, preserved in (("opencode", "codex"), ("codex", "opencode")):
+            with self.subTest(selected=selected):
+                data = self.json_query(*self.config_apply_arguments(selected))["data"]
+                assignments = data["assignments"]
+                self.assertEqual("unknown", assignments["family"])
+                self.assertEqual([selected], assignments["selected_harnesses"])
+                self.assertEqual([preserved], assignments["preserved_harnesses"])
+                row = next(item for item in assignments["roles"] if item["role"] == "veyra")
+                self.assertEqual("selected", row["harnesses"][selected]["state"])
+                self.assertIsNotNone(row["harnesses"][selected]["proposed"])
+                self.assertEqual("preserved", row["harnesses"][preserved]["state"])
+                self.assertIsNone(row["harnesses"][preserved]["proposed"])
+                self.assertEqual("verified", row["harnesses"][preserved]["current_status"])
+                root = assignments["roots"][preserved]
+                self.assertEqual("preserved", root["state"])
+                self.assertIsNotNone(root["current"])
+                self.assertIsNone(root["proposed"])
+
+        both = self.json_query(*self.config_apply_arguments("all"))["data"]["assignments"]
+        self.assertEqual(11, len(both["roles"]))
+        self.assertNotIn("aegis", {item["role"] for item in both["roles"]})
+        self.assertEqual(["opencode", "codex"], both["selected_harnesses"])
+        row = next(item for item in both["roles"] if item["role"] == "veyra")
+        self.assertEqual("selected", row["harnesses"]["opencode"]["state"])
+        self.assertEqual("selected", row["harnesses"]["codex"]["state"])
+        self.assertEqual("selected", both["roots"]["opencode"]["state"])
+        self.assertEqual("selected", both["roots"]["codex"]["state"])
+
+    def test_slice_c6_unsupported_opencode_envelopes_never_guess_values(self):
+        self.create_managed_install(("opencode",))
+        relative = ".opencode/agents/veyra.md"
+        expected = self.outputs[self.source / relative]
+        model = self.canonical_role("veyra")
+        scalar = f'model: "{model["models"]["opencode"]}#{model["effort"]}"'
+        variants = {
+            "extra_field": expected.replace("\n---\n", "\nextra: true\n---\n", 1),
+            "duplicate_model": expected.replace(scalar, scalar + "\nmodel: vendor/other", 1),
+            "single_quoted_scalar": expected.replace(scalar, "model: 'vendor/quoted'", 1),
+            "escaped_quoted_scalar": expected.replace(scalar, 'model: "vendor\\/quoted"', 1),
+            "ambiguous_effort": expected.replace(scalar, 'model: "vendor/model#high#max"', 1),
+            "bare_boolean": expected.replace(scalar, "model: true", 1),
+            "bare_null": expected.replace(scalar, "model: null", 1),
+            "bare_numeric": expected.replace(scalar, "model: 123", 1),
+            "bare_identifier": expected.replace(scalar, "model: vendor/bare", 1),
+            "missing_model": expected.replace(scalar + "\n", "", 1),
+        }
+        for name, value in variants.items():
+            with self.subTest(case=name):
+                self.update_managed_bytes(relative, value.encode("utf-8"))
+                response = self.json_query(*self.config_apply_arguments("opencode"))
+                self.assertEqual("ok", response["result"])
+                self.assertTrue(response["data"]["apply_available"])
+                data = response["data"]["assignments"]
+                row = next(item for item in data["roles"] if item["role"] == "veyra")
+                self.assertEqual("unsupported", row["harnesses"]["opencode"]["current_status"])
+                self.assertIsNone(row["harnesses"]["opencode"]["current"])
+
+        root_relative = "opencode.jsonc"
+        root = self.outputs[self.source / root_relative]
+        kael = self.canonical_role("kael")
+        root_line = f'  "model": "{kael["models"]["opencode"]}",'
+        malformed_root = root.replace(root_line, root_line + "\n  \"model\": \"vendor/duplicate\",", 1)
+        self.update_managed_bytes(root_relative, malformed_root.encode("utf-8"))
+        response = self.json_query(*self.config_apply_arguments("opencode"))
+        self.assertEqual("ok", response["result"])
+        self.assertTrue(response["data"]["apply_available"])
+        assignments = response["data"]["assignments"]
+        self.assertEqual("unsupported", assignments["roots"]["opencode"]["current_status"])
+        self.assertIsNone(assignments["roots"]["opencode"]["current"])
+
+    def test_slice_c6_quoted_boolean_like_opencode_model_is_a_string(self):
+        self.create_managed_install(("opencode",))
+        relative = ".opencode/agents/veyra.md"
+        expected = self.outputs[self.source / relative]
+        role = self.canonical_role("veyra")
+        scalar = f'model: "{role["models"]["opencode"]}#{role["effort"]}"'
+        self.update_managed_bytes(relative, expected.replace(scalar, 'model: "true"', 1).encode("utf-8"))
+        response = self.json_query(*self.config_apply_arguments("opencode"))
+        self.assertEqual("ok", response["result"])
+        current = next(item for item in response["data"]["assignments"]["roles"] if item["role"] == "veyra")
+        self.assertEqual("verified", current["harnesses"]["opencode"]["current_status"])
+        self.assertEqual({"model": "true"}, current["harnesses"]["opencode"]["current"])
+
+    def test_slice_c6_malformed_codex_assignments_are_unknown_not_guessed(self):
+        self.create_managed_install(("codex",))
+        role_relative = ".codex/agents/veyra.toml"
+        role = self.canonical_role("veyra")
+        original = self.outputs[self.source / role_relative]
+        model_line = f'model = "{role["models"]["codex"]}"'
+        effort_line = f'model_reasoning_effort = "{role["effort"]}"'
+        variants = {
+            "duplicate": original.replace(model_line, model_line + '\nmodel = "vendor/duplicate"', 1),
+            "wrong_type": original.replace(model_line, "model = 42", 1),
+            "missing": original.replace(effort_line + "\n", "", 1),
+            "nested_only": original.replace(model_line + "\n", "", 1).replace(
+                effort_line + "\n", "", 1).replace("[agents]\n", "[agents]\nmodel = \"vendor/nested\"\n", 1),
+            "malformed": original.replace(model_line, 'model = "unterminated', 1),
+        }
+        for name, value in variants.items():
+            with self.subTest(case=name):
+                self.update_managed_bytes(role_relative, value.encode("utf-8"))
+                response = self.json_query(*self.config_apply_arguments("codex"))
+                self.assertEqual("ok", response["result"])
+                self.assertTrue(response["data"]["apply_available"])
+                assignments = response["data"]["assignments"]
+                current = next(item for item in assignments["roles"] if item["role"] == "veyra")["harnesses"]["codex"]
+                self.assertEqual("unsupported", current["current_status"])
+                self.assertIsNone(current["current"])
+
+        root_relative = ".codex/config.toml"
+        root = self.outputs[self.source / root_relative]
+        kael = self.canonical_role("kael")
+        root_model = f'model = "{kael["models"]["codex"]}"'
+        root_effort = f'model_reasoning_effort = "{kael["effort"]}"'
+        malformed_root = root.replace(root_effort, "model_reasoning_effort = 7", 1)
+        self.update_managed_bytes(root_relative, malformed_root.encode("utf-8"))
+        response = self.json_query(*self.config_apply_arguments("codex"))
+        self.assertEqual("ok", response["result"])
+        self.assertTrue(response["data"]["apply_available"])
+        assignments = response["data"]["assignments"]
+        self.assertEqual("unsupported", assignments["roots"]["codex"]["current_status"])
+        self.assertIsNone(assignments["roots"]["codex"]["current"])
+
+        nested_root = root.replace(root_model + "\n", "", 1).replace(root_effort + "\n", "", 1).replace(
+            "[agents]\n", '[agents]\nmodel = "vendor/nested"\nmodel_reasoning_effort = "high"\n', 1)
+        self.update_managed_bytes(root_relative, nested_root.encode("utf-8"))
+        response = self.json_query(*self.config_apply_arguments("codex"))
+        self.assertEqual("ok", response["result"])
+        self.assertTrue(response["data"]["apply_available"])
+        assignments = response["data"]["assignments"]
+        self.assertEqual("unsupported", assignments["roots"]["codex"]["current_status"])
+        self.assertIsNone(assignments["roots"]["codex"]["current"])
+
+    def test_slice_c6_blocked_inventory_keeps_assignments_unknown(self):
+        self.create_managed_install(("opencode",))
+        resource = self.target / ".opencode/agents/veyra.md"
+        resource.write_bytes(resource.read_bytes() + b"drift\n")
+        response = self.json_query(*self.config_apply_arguments("opencode"), code=3)
+        assignments = response["data"]["assignments"]
+        self.assertEqual("unknown", assignments["status"])
+        self.assertEqual("not_verified", assignments["evidence"])
+        self.assertEqual([], assignments["roles"])
+        self.assertIsNone(assignments["roots"]["opencode"]["current"])
+        self.assertIn("managed_file_drift", {issue["code"] for issue in response["issues"]})
+
+    def test_slice_c6_noop_assignments_leave_execution_plan_unchanged(self):
+        manifest_path = self.create_managed_install(("opencode",), version="local")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["installed_from_commit"] = "unknown"
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        response = self.json_query(*self.config_apply_arguments("opencode"))
+        self.assertEqual("no_changes", response["result"])
+        self.assertEqual("no_changes", response["data"]["preview_state"])
+        self.assertEqual("partial", response["data"]["assignments"]["status"])
+        _, plan_response, plan = self.execution_plan()
+        self.assertEqual((), plan[0])
+        self.assertEqual("no_changes", plan_response["data"]["preview_state"])
 
     def test_slice_c2_3_schema1_provenance_preview_is_read_only(self):
         manifest_path = self.create_managed_install(("opencode", "codex"))

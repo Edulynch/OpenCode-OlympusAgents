@@ -166,6 +166,41 @@ automatic retry is performed. Native temporary/cache activity is distinct from
 source/target writes; project/global resources are not modified by successful
 previews.
 
+## Global CLI inspection (Slice C7)
+
+The portable CLI now provides read-only `status`, `doctor` and `config apply
+--dry-run` for global OpenCode and Codex installations. These commands never
+adopt an unowned resource or perform a global update. OpenCode uses
+`OPENCODE_CONFIG_DIR` or the current `opencode debug paths` result; Codex uses
+`CODEX_HOME` or its user configuration directory. Each root must have its own
+`olympus/orchestrator-install.json` with its own complete official inventory.
+
+```powershell
+python -B -m olympus status --scope global --harness all --json
+python -B -m olympus doctor --scope global --harness codex --json
+python -B -m olympus config apply --scope global --harness all --dry-run --json
+```
+
+Status reports metadata without asserting integrity. Doctor checks the exact
+managed file inventory and SHA-256 values before invoking the official native
+`-VerifyOnly` script on Windows with PowerShell 7; Linux/macOS native verification
+is not qualified. The dry-run compares verified managed bytes with the canonical
+renderer and reports model assignments only in supported formats. OpenCode's
+global root model is not managed; Codex's Kael root lives in its Olympus profile.
+Installed model families remain unknown, and unrecognized formats remain
+unsupported. Global `config apply --execute` and global recovery are blocked:
+neither operation has a qualified writer/rollback protocol. Global `--harness
+all` is not evidence of runtime/provider integration or transactional writes.
+
+For a mixed installed/absent `--harness all` selection, `result=absent` and
+`data.selection_state=partial` identify incomplete coverage; the combined
+assignment preview remains unknown. A changed managed file is reported as
+`global_managed_file_drift` (exit 1), while unrecognized manifest versions and
+Codex global `AGENTS.override.md` precedence conflicts block with exit 3.
+Doctor preserves recognized native VerifyOnly failure categories; an unavailable
+or unrecognized native result never counts as a pass. No user-owned override
+contents are read or modified.
+
 ## Installation safety
 
 - Install only into a repository you trust. Project scope requires the Git worktree root.

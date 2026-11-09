@@ -1624,6 +1624,14 @@ class SliceA(unittest.TestCase):
         self.assertEqual("partial", preview["data"]["selection_state"])
         self.assertEqual("unknown", preview["data"]["assignments"]["status"])
         self.assertFalse(preview["data"]["apply_available"])
+        # A drifted installed harness must still fail even when its peer is absent.
+        (Path(self.env["OPENCODE_CONFIG_DIR"]) / "agents/kael.md").write_text("drift", encoding="utf-8")
+        mixed_failure = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--dry-run", code=1)
+        self.assertEqual("failed", mixed_failure["result"])
+        self.assertEqual("partial", mixed_failure["data"]["selection_state"])
+        self.assertEqual("drift", mixed_failure["data"]["harnesses"]["opencode"]["state"])
+        self.assertEqual({"global_managed_file_drift", "harness_absent"},
+                         {issue["code"] for issue in mixed_failure["issues"]})
 
     def test_slice_c7_global_codex_override_and_unknown_version_block_preview(self):
         manifests = self.create_global_managed_install(("codex",))

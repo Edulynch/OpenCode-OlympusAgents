@@ -44,6 +44,14 @@ jobs:
           pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FAST
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Authority scope invariants (offline)
+        shell: pwsh
+        run: |
+          # Keep the per-repository grant and external-effect regressions inside
+          # the required pull-request gate, even when FULL is not requested.
+          pwsh -NoProfile -File ./tests/authority/qualify.ps1 -QualificationSlice Offline
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: OA77 worktree activation (deterministic Windows)
         shell: pwsh
         run: |

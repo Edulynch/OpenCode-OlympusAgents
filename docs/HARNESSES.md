@@ -124,9 +124,14 @@ manifest is safely written. During that same pending install, already-written
 managed agents/plugins may roll forward **only** if their bytes match the
 current canonical source exactly; an unknown edit or missing retired file
 still requires manual reconciliation, preserving all original bytes. The guard
-itself is created with exclusive `CreateNew` semantics, so a config appearing
-after preflight cannot be overwritten. A collision may leave the ownership
-intent pending and must be resolved manually after preserving the user config.
+itself is created with exclusive `CreateNew` semantics, so a `.jsonc` config
+appearing after preflight cannot be overwritten. The installer also rechecks
+the competing `.json` name around manifest publication and refuses to report
+success if it appears. A collision may leave the ownership intent pending and
+must be resolved manually after preserving the user config. The intent and a
+matching hash prove recoverable bytes, not cryptographic authorship if another
+process creates **identical** bytes between intent and guard creation; avoid
+concurrent global config writers during installation or recovery.
 `VerifyOnly` and uninstall fail closed while an
 unreconciled intent exists; run the regular installer to recover first. This
 guard-specific recovery does not claim full transactionality for all global

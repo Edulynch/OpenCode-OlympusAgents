@@ -164,6 +164,8 @@ try {
         @{ Name='double-wildcard-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"**","effect":"allow"}]}' },
         @{ Name='wildcard-question-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"deny"},{"action":"*","resource":"?*","effect":"allow"}]}' },
         @{ Name='wildcard-path-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"*/**","effect":"allow"}]}' },
+        @{ Name='drive-wildcard-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"?:/**","effect":"allow"}]}' },
+        @{ Name='colon-wildcard-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"*:*","effect":"allow"}]}' },
         @{ Name='malformed'; Text='{"permissions":[' }
     )) {
         $unsafeRoot = Join-Path $run ('OpenCode Unsafe ' + $unsafeCase.Name)
@@ -185,7 +187,7 @@ try {
     $safeBroadRoot = Join-Path $run 'OpenCode Safe Broad Restoration'
     [IO.Directory]::CreateDirectory($safeBroadRoot) | Out-Null
     $safeBroadFile = Join-Path $safeBroadRoot 'opencode.jsonc'
-    $safeBroadText = '{"permissions":[{"action":"external_directory","resource":"**","effect":"allow"},{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"C:/fixture/prohibited/*","effect":"deny"}]}'
+    $safeBroadText = '{"permissions":[{"action":"external_directory","resource":"**","effect":"allow"},{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"C:/fixture/authorized/*","effect":"allow"},{"action":"external_directory","resource":"C:/fixture/prohibited/*","effect":"deny"}]}'
     [IO.File]::WriteAllText($safeBroadFile, $safeBroadText, $utf8)
     $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $safeBroadRoot
     $safeBroadInstall = Global-Install $project 'opencode'
@@ -376,6 +378,38 @@ try {
     Check 'GLOBAL_GUARD_EXCLUSIVE_CREATE_WRITES_NEW_FILE' (
         [IO.File]::ReadAllText($freshConfigPath) -ceq $guardSourceText
     )
+
+    # The second config format can appear after an exclusive .jsonc create.
+    # Exercise the production post-write collision check without changing
+    # existing fixture files or depending on a nondeterministic timing race.
+    $collisionFunctions = @($installerAst.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Assert-NoOpenCodeConfigCollision'
+    }, $true))
+    Check 'GLOBAL_GUARD_FORMAT_COLLISION_CHECK_PARSES' ($collisionFunctions.Count -eq 1)
+    $formatProbe = [scriptblock]::Create(
+        'param([string]$root)' + "`n" +
+        'function Assert-SafeDestination([string]$root, [string]$relative) { Join-Path $root $relative }' + "`n" +
+        'function Fail([string]$code, [string]$message) { throw "$code`: $message" }' + "`n" +
+        $collisionFunctions[0].Extent.Text + "`n" +
+        'Assert-NoOpenCodeConfigCollision $root'
+    )
+    $formatCollisionRoot = Join-Path $run 'post-create-format-collision'
+    [IO.Directory]::CreateDirectory($formatCollisionRoot) | Out-Null
+    $formatCollisionJson = Join-Path $formatCollisionRoot 'opencode.json'
+    $formatCollisionJsonc = Join-Path $formatCollisionRoot 'opencode.jsonc'
+    [IO.File]::WriteAllText($formatCollisionJsonc, $guardSourceText, $utf8)
+    [IO.File]::WriteAllText($formatCollisionJson, '{"permissions":[]}', $utf8)
+    $formatCollisionBefore = Snapshot $formatCollisionRoot
+    $formatCollisionRejected = $false
+    try { & $formatProbe $formatCollisionRoot }
+    catch { $formatCollisionRejected = $_.Exception.Message -match 'GLOBAL_EXTERNAL_GUARD_UNSAFE' }
+    Check 'GLOBAL_GUARD_SECOND_CONFIG_APPEARING_AFTER_CREATE_REJECTED' (
+        $formatCollisionRejected -and (Snapshot $formatCollisionRoot) -ceq $formatCollisionBefore
+    )
+    [IO.File]::Delete($formatCollisionJson)
+    & $formatProbe $formatCollisionRoot
+    Check 'GLOBAL_GUARD_NO_SECOND_CONFIG_ACCEPTED' (Test-Path -LiteralPath $formatCollisionJsonc -PathType Leaf)
 
     # A crash after manifest replacement but before intent cleanup must also
     # be idempotently reconciled, and only an owned guard is removed on uninstall.

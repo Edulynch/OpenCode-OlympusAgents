@@ -157,11 +157,19 @@ function Assert-OpenCodeUserGuard([string]$Path) {
             # V2 patterns support * and ? only; PowerShell -like also accepts
             # bracket expressions, which would produce a false safety PASS.
             $actionPattern = '\A' + [regex]::Escape($action).Replace('\*', '.*').Replace('\?', '.') + '\z'
-            # Repeated wildcards (including **, ?*, and */**) can match
-            # essentially every normalized external path. A later broad ALLOW
-            # therefore defeats an earlier '*' ASK even though the text differs.
+            # Repeated wildcards and drive-agnostic patterns (including **,
+            # ?*, */**, and ?:/**) can cover effectively every external path.
+            # Treat an unanchored ALLOW as a fallback override; only an ALLOW
+            # rooted at an explicit drive, Unix directory, UNC share, or home
+            # may count as a deliberately scoped user exception.
             $wildcardOnly = $resource.Replace('/', '').Replace('\', '')
-            if ('external_directory' -cmatch $actionPattern -and $wildcardOnly -match '^[*?]+$') {
+            $normalizedResource = $resource.Replace('\', '/')
+            $scoped = $normalizedResource -match '^[A-Za-z]:/' -or
+                $normalizedResource -match '^/[^/*?]+' -or
+                $normalizedResource -match '^//[^/*?]+/[^/*?]+' -or
+                $normalizedResource -match '^(~/|\$HOME/)'
+            if ('external_directory' -cmatch $actionPattern -and
+                ($wildcardOnly -match '^[*?]+$' -or ($effect -ceq 'allow' -and -not $scoped))) {
                 $fallback = $effect
             }
         }
@@ -318,6 +326,16 @@ function Write-NewOpenCodeGuard([string]$Path, [string]$Content) {
         $stream.Write($bytes, 0, $bytes.Length)
         $stream.Flush($true)
     } finally { $stream.Dispose() }
+}
+
+function Assert-NoOpenCodeConfigCollision([string]$Root) {
+    # A second OpenCode config can appear under a *different* filename while
+    # CreateNew safely reserves opencode.jsonc. Recheck the competing name
+    # around manifest publication so this run never silently certifies both.
+    $otherFormat = Assert-SafeDestination $Root 'opencode.json'
+    if (Test-Path -LiteralPath $otherFormat) {
+        Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'A competing opencode.json appeared during managed guard installation; preserve both configs for manual reconciliation.'
+    }
 }
 
 function Write-GlobalManifest([string]$Path, [string]$Content) {
@@ -489,7 +507,13 @@ function Invoke-OneHarness([string]$SelectedHarness) {
             }
         }
     }
+    if ($SelectedHarness -eq 'opencode' -and $outputs.Contains($OpenCodeConfigRelative)) {
+        Assert-NoOpenCodeConfigCollision $root
+    }
     if ($manifestChanged) { Write-GlobalManifest $manifestPath $manifestText }
+    if ($SelectedHarness -eq 'opencode' -and $outputs.Contains($OpenCodeConfigRelative)) {
+        Assert-NoOpenCodeConfigCollision $root
+    }
     if ($null -ne $guardIntent) {
         # Manifest ownership is now durable; the recovery marker is redundant.
         [IO.File]::Delete((Assert-SafeDestination $root $OpenCodeGuardIntentRelative))

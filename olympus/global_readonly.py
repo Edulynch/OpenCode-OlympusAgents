@@ -307,11 +307,16 @@ def _unowned_opencode_guard(root: Path) -> str:
             # V2 documents only * and ? wildcards; fnmatch's bracket classes
             # would incorrectly accept a pattern V2 treats as literal.
             action_pattern = re.escape(rule["action"]).replace(r"\*", ".*").replace(r"\?", ".")
-            # '*' is not the only broad V2 wildcard. Patterns made entirely
-            # from wildcards and path separators (such as '**' or '*/**')
-            # can override a previous ASK for essentially every external path.
+            # Unanchored ALLOW patterns can cover every external path even if
+            # they contain punctuation (for example '?:/**' on Windows).
+            # Only an explicit drive, Unix directory, UNC share, or home root
+            # qualifies as a deliberately scoped user exception.
             broad_resource = rule["resource"].replace("/", "").replace("\\", "")
-            if (broad_resource and set(broad_resource) <= {"*", "?"}
+            normalized_resource = rule["resource"].replace("\\", "/")
+            scoped = bool(re.match(r"^(?:[A-Za-z]:/|/[^/*?]+|//[^/*?]+/[^/*?]+|~/|\$HOME/)",
+                                   normalized_resource))
+            universal = bool(broad_resource) and set(broad_resource) <= {"*", "?"}
+            if ((universal or (rule["effect"] == "allow" and not scoped))
                     and re.fullmatch(action_pattern, "external_directory")):
                 fallback = rule["effect"]
         if fallback not in ("ask", "deny"):

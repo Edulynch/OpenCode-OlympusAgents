@@ -1551,7 +1551,7 @@ class SliceA(unittest.TestCase):
         self.assertEqual("global_external_guard_unsafe", again["issues"][0]["code"])
 
     def test_slice_c7_global_legacy_ambiguous_wildcards_do_not_bypass_ask(self):
-        # V2 treats '**', '?*', and '*/**' as broad matches on external paths.
+        # V2 treats '**', '?*', '*/**', and '?:/**' as broad matches on paths.
         # A later ALLOW must not be certified as an ASK/DENY fallback.
         manifests = self.create_global_managed_install(("opencode",))
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
@@ -1560,7 +1560,7 @@ class SliceA(unittest.TestCase):
                                      if item["path"] != "opencode.jsonc"]
         manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
         user_config = root / "opencode.jsonc"
-        cases = ("**", "?*", "*/**", "***")
+        cases = ("**", "?*", "*/**", "***", "?:/**", "*:*")
         for broad in cases:
             with self.subTest(pattern=broad):
                 text = json.dumps({"permissions": [
@@ -1578,6 +1578,7 @@ class SliceA(unittest.TestCase):
         safe_text = json.dumps({"permissions": [
             {"action": "external_directory", "resource": "**", "effect": "allow"},
             {"action": "external_directory", "resource": "*", "effect": "ask"},
+            {"action": "external_directory", "resource": "C:/fixture/authorized/*", "effect": "allow"},
             {"action": "external_directory", "resource": "C:/fixture/prohibited/*", "effect": "deny"},
         ]})
         user_config.write_text(safe_text, encoding="utf-8")

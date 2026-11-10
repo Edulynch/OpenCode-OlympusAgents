@@ -14,6 +14,7 @@ $ErrorActionPreference = 'Stop'
 $SourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $Utf8NoBom = [Text.UTF8Encoding]::new($false)
 $ManifestRelative = 'olympus/orchestrator-install.json'
+$OpenCodeConfigRelative = 'opencode.jsonc'
 $script:ProjectOverrideDetected = $false
 
 function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
@@ -128,6 +129,83 @@ function Get-GlobalOutputs([string]$SelectedHarness) {
     return ,$outputs
 }
 
+function Assert-OpenCodeUserGuard([string]$Path) {
+    # Inspect the effective fallback, not merely the presence of a permission
+    # entry. V2 uses the last matching rule, and otherwise ALLOWs external paths.
+    $options = [Text.Json.JsonDocumentOptions]::new()
+    $options.CommentHandling = [Text.Json.JsonCommentHandling]::Skip
+    $options.AllowTrailingCommas = $true
+    $document = $null
+    try {
+        $document = [Text.Json.JsonDocument]::Parse([IO.File]::ReadAllText($Path), $options)
+        if ($document.RootElement.ValueKind -ne [Text.Json.JsonValueKind]::Object) {
+            Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Global OpenCode config must contain a JSON object.'
+        }
+        $rules = $document.RootElement.GetProperty('permissions')
+        if ($rules.ValueKind -ne [Text.Json.JsonValueKind]::Array) {
+            Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Global OpenCode permissions must be an ordered V2 array.'
+        }
+        $fallback = 'allow'
+        foreach ($rule in $rules.EnumerateArray()) {
+            $action = $rule.GetProperty('action').GetString()
+            $resource = $rule.GetProperty('resource').GetString()
+            $effect = $rule.GetProperty('effect').GetString()
+            if ('external_directory' -like $action -and $resource -ceq '*') {
+                $fallback = $effect
+            }
+        }
+        if ($fallback -notin @('ask', 'deny')) {
+            Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Global OpenCode config does not end with an ASK or DENY fallback for external_directory. Put {"action":"external_directory","resource":"*","effect":"ask"} before any narrower exceptions, or use DENY.'
+        }
+    } catch {
+        if ($_.Exception.Message -match 'GLOBAL_EXTERNAL_GUARD_UNSAFE') { throw }
+        Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Cannot validate the existing OpenCode global JSONC permissions; refusing installation without modifying user configuration.'
+    } finally {
+        if ($null -ne $document) { $document.Dispose() }
+    }
+}
+
+function Add-OpenCodeGlobalGuard([string]$Root, [System.Collections.IDictionary]$OldEntries, [System.Collections.IDictionary]$Outputs) {
+    $json = Assert-SafeDestination $Root 'opencode.json'
+    $jsonc = Assert-SafeDestination $Root $OpenCodeConfigRelative
+    $hasJson = Test-Path -LiteralPath $json
+    $hasJsonc = Test-Path -LiteralPath $jsonc
+    if ($hasJson -and $hasJsonc) {
+        Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Both OpenCode global config formats exist; cannot establish which permissions win. Resolve this before global installation.'
+    }
+    if ($OldEntries.ContainsKey($OpenCodeConfigRelative)) {
+        if ($hasJson) { Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'An unmanaged opencode.json now conflicts with the Olympus-managed opencode.jsonc.' }
+        # The manifest hash was already checked; always retain the pinned
+        # guard as a managed output so VerifyOnly and uninstall verify ownership.
+        $Outputs[$OpenCodeConfigRelative] = Get-OpenCodeDefaultGuard
+        return
+    }
+    if ($hasJson -or $hasJsonc) {
+        $userPath = if ($hasJson) { $json } else { $jsonc }
+        if (-not (Test-Path -LiteralPath $userPath -PathType Leaf)) {
+            Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Existing OpenCode global config path is not a file.'
+        }
+        Assert-OpenCodeUserGuard $userPath
+        return
+    }
+    # No user config exists. Olympus owns only this new minimal config, not
+    # the user's future default agent, models, MCP settings, or global plugins.
+    $Outputs[$OpenCodeConfigRelative] = Get-OpenCodeDefaultGuard
+}
+
+function Get-OpenCodeDefaultGuard {
+    return @'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    // Ask before using paths outside the active project. Keep exceptions
+    // after this fallback: OpenCode V2 uses the last matching rule.
+    { "action": "external_directory", "resource": "*", "effect": "ask" }
+  ]
+}
+'@ + "`n"
+}
+
 function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required) {
     $path = Assert-SafeDestination $Root $ManifestRelative
     if (-not (Test-Path -LiteralPath $path)) {
@@ -226,15 +304,18 @@ function Invoke-OneHarness([string]$SelectedHarness) {
         return
     }
 
+    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:$VerifyOnly
+    $oldEntries = Get-ManifestEntryMap $manifest
     $outputs = Get-GlobalOutputs $SelectedHarness
+    if ($SelectedHarness -eq 'opencode') {
+        Add-OpenCodeGlobalGuard $root $oldEntries $outputs
+    }
     if ($SelectedHarness -eq 'codex') {
         $higherPrecedenceInstructions = Assert-SafeDestination $root 'AGENTS.override.md'
         if (Test-Path -LiteralPath $higherPrecedenceInstructions) {
             Fail 'GLOBAL_INSTALL_CONFLICT' 'User-owned global AGENTS.override.md takes precedence over AGENTS.md; refusing an inactive Olympus global root.'
         }
     }
-    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:$VerifyOnly
-    $oldEntries = Get-ManifestEntryMap $manifest
     $newEntries = @{}
     $create = [System.Collections.Generic.List[string]]::new()
     $update = [System.Collections.Generic.List[string]]::new()
@@ -300,7 +381,7 @@ function Invoke-OneHarness([string]$SelectedHarness) {
     Write-Output "OLYMPUS_GLOBAL_INSTALL: $rootLabel $SourceVersion $status ($($outputs.Count) managed resources; root=$root)"
     if ($script:ProjectOverrideDetected) { Write-Output 'OLYMPUS_GLOBAL_MIGRATION: GLOBAL_INSTALLED PROJECT_LOCAL_REMAINS_AS_OVERRIDE' }
     if ($SelectedHarness -eq 'opencode') {
-        Write-Output 'GLOBAL_DEFAULT_AGENT: unchanged; select Kael explicitly to preserve user-owned global config.'
+        Write-Output 'GLOBAL_DEFAULT_AGENT: unchanged; user config preserved or minimal external-directory ASK config manifest-managed.'
     } else {
         Write-Output 'GLOBAL_CODEX_PROFILE: codex --profile olympus; base config.toml is not modified.'
     }

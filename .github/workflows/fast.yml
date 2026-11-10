@@ -60,6 +60,14 @@ jobs:
           pwsh -NoProfile -File ./tests/authority/qualify.ps1 -QualificationSlice Offline
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Global OpenCode permission guard (isolated Windows fixtures)
+        shell: pwsh
+        run: |
+          # Qualify ASK/DENY precedence and global-only install ownership without
+          # touching the runner's actual OpenCode or Codex user configuration.
+          pwsh -NoProfile -File ./tests/global-installer/qualify.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: OA77 worktree activation (deterministic Windows)
         shell: pwsh
         run: |

@@ -66,6 +66,33 @@ function Snapshot([string]$Root) {
     ) -join "`n"
 }
 
+function Get-ExternalFallback([string]$ConfigPath) {
+    # Model only the V2 last-matching wildcard fallback; runtime ASK and user
+    # approval must still be observed separately in a native host smoke test.
+    $jsonc = [IO.File]::ReadAllText($ConfigPath) -replace '(?m)^\s*//[^\r\n]*', ''
+    $config = $jsonc | ConvertFrom-Json -Depth 30
+    $effect = 'allow'
+    foreach ($rule in @($config.permissions)) {
+        if ('external_directory' -like $rule.action -and $rule.resource -ceq '*') {
+            $effect = [string]$rule.effect
+        }
+    }
+    return $effect
+}
+
+function Resolve-SyntheticExternalDecision([string]$ConfigPath, [string]$ExternalPath, [object[]]$ExtraRules = @()) {
+    # This is an explicit ordered-rule model, not evidence of a native dialog.
+    $jsonc = [IO.File]::ReadAllText($ConfigPath) -replace '(?m)^\s*//[^\r\n]*', ''
+    $config = $jsonc | ConvertFrom-Json -Depth 30
+    $decision = 'allow'
+    foreach ($rule in (@($config.permissions) + @($ExtraRules))) {
+        if ('external_directory' -like [string]$rule.action -and $ExternalPath -like [string]$rule.resource) {
+            $decision = [string]$rule.effect
+        }
+    }
+    return $decision
+}
+
 try {
     if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'PLATFORM_UNQUALIFIED: global install qualification is Windows-only.' }
     [IO.Directory]::CreateDirectory($run) | Out-Null
@@ -86,7 +113,10 @@ try {
 
     $openUserConfig = Join-Path $openCodeRoot 'opencode.json'
     $codexUserConfig = Join-Path $codexHome 'config.toml'
-    [IO.File]::WriteAllText($openUserConfig, '{"user_owned":true}' + "`n", $utf8)
+    # A user-owned V2 config with an ASK fallback and a later narrow DENY is
+    # safe to preserve byte-for-byte; no manifest should claim ownership.
+    $safeUserConfig = '{"user_owned":true,"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"C:/fixture/prohibited/*","effect":"deny"}]}' + "`n"
+    [IO.File]::WriteAllText($openUserConfig, $safeUserConfig, $utf8)
     [IO.File]::WriteAllText($codexUserConfig, "model = 'user-choice'`n", $utf8)
     $openUserHash = (Get-FileHash -LiteralPath $openUserConfig -Algorithm SHA256).Hash
     $codexUserHash = (Get-FileHash -LiteralPath $codexUserConfig -Algorithm SHA256).Hash
@@ -119,7 +149,61 @@ try {
         (Test-Path (Join-Path $codexHome 'AGENTS.md')) -and
         (Get-Content (Join-Path $codexHome 'olympus.config.toml') -Raw).Contains('model = "gpt-6.1-sol"'))
     Check 'GLOBAL_USER_CONFIG_PROTECTED' ((Get-FileHash -LiteralPath $openUserConfig -Algorithm SHA256).Hash -eq $openUserHash -and
-        (Get-FileHash -LiteralPath $codexUserConfig -Algorithm SHA256).Hash -eq $codexUserHash)
+        (Get-FileHash -LiteralPath $codexUserConfig -Algorithm SHA256).Hash -eq $codexUserHash -and
+        -not (Test-Path (Join-Path $openCodeRoot 'opencode.jsonc')))
+    Check 'GLOBAL_USER_SPECIFIC_DENY_REMAINS_LAST' ((Get-ExternalFallback $openUserConfig) -eq 'ask' -and
+        (Resolve-SyntheticExternalDecision $openUserConfig 'C:/fixture/prohibited/sentinel.txt') -eq 'deny' -and
+        (Resolve-SyntheticExternalDecision $openUserConfig 'C:/fixture/authorized/sentinel.txt') -eq 'ask')
+
+    # Unsafe user-owned configs must fail before creating an agent, manifest,
+    # or alternative config file; the user must correct their own settings.
+    foreach ($unsafeCase in @(
+        @{ Name='missing-permissions'; Text='{"user_owned":true}' },
+        @{ Name='default-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"allow"}]}' },
+        @{ Name='last-rule-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"*","resource":"*","effect":"allow"}]}' },
+        @{ Name='malformed'; Text='{"permissions":[' }
+    )) {
+        $unsafeRoot = Join-Path $run ('OpenCode Unsafe ' + $unsafeCase.Name)
+        [IO.Directory]::CreateDirectory($unsafeRoot) | Out-Null
+        $unsafeFile = Join-Path $unsafeRoot 'opencode.jsonc'
+        [IO.File]::WriteAllText($unsafeFile, $unsafeCase.Text, $utf8)
+        $unsafeBefore = Snapshot $unsafeRoot
+        $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $unsafeRoot
+        $unsafeInstall = Run-Installer $project @('-Scope','global','-Harness','opencode')
+        Check ('GLOBAL_UNSAFE_USER_CONFIG_' + $unsafeCase.Name.ToUpperInvariant().Replace('-','_')) (
+            $unsafeInstall.Code -ne 0 -and
+            $unsafeInstall.Text -match 'GLOBAL_EXTERNAL_GUARD_UNSAFE' -and
+            (Snapshot $unsafeRoot) -ceq $unsafeBefore
+        ) ("exit=$($unsafeInstall.Code)`n$($unsafeInstall.Text)")
+    }
+
+    # A JSONC user config with trailing commas and an explicit DENY fallback
+    # is a supported safe case; never rewrite it or adopt it into the manifest.
+    $userDenyRoot = Join-Path $run 'OpenCode User Global DENY'
+    [IO.Directory]::CreateDirectory($userDenyRoot) | Out-Null
+    $userDenyPath = Join-Path $userDenyRoot 'opencode.jsonc'
+    $userDenyText = "{`n // user-owned`n `"permissions`": [{`"action`":`"external_directory`",`"resource`":`"*`",`"effect`":`"deny`"},],`n}`n"
+    [IO.File]::WriteAllText($userDenyPath, $userDenyText, $utf8)
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $userDenyRoot
+    $denyInstall = Run-Installer $project @('-Scope','global','-Harness','opencode')
+    $denyManifest = if ($denyInstall.Code -eq 0) { Get-Content (Join-Path $userDenyRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json } else { $null }
+    Check 'GLOBAL_USER_JSONC_DENY_PRESERVED' (
+        $denyInstall.Code -eq 0 -and
+        $null -ne $denyManifest -and $denyManifest.managed_files.Count -eq 13 -and
+        @($denyManifest.managed_files | Where-Object { $_.path -eq 'opencode.jsonc' }).Count -eq 0 -and
+        [IO.File]::ReadAllText($userDenyPath) -ceq $userDenyText
+    ) ("exit=$($denyInstall.Code)`n$($denyInstall.Text)")
+    # Reproduce an older 13-file global install with no config. Upgrading it
+    # must establish the missing guard without disturbing its owned agents.
+    [IO.File]::Delete($userDenyPath)
+    $legacyNoConfigUpgrade = Global-Install $project 'opencode'
+    $legacyUpgradedManifest = Get-Content (Join-Path $userDenyRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
+    Check 'GLOBAL_13_FILE_UPGRADE_ADDS_MANAGED_ASK' (
+        $legacyNoConfigUpgrade.Code -eq 0 -and
+        $legacyUpgradedManifest.managed_files.Count -eq 14 -and
+        (Get-ExternalFallback $userDenyPath) -eq 'ask'
+    ) ("exit=$($legacyNoConfigUpgrade.Code)`n$($legacyNoConfigUpgrade.Text)")
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeRoot
 
     $conflictCodexHome = Join-Path $run 'Codex User Instructions Conflict'
     [IO.Directory]::CreateDirectory($conflictCodexHome) | Out-Null
@@ -151,7 +235,48 @@ try {
     $openCodeOnlyManifest = Get-Content (Join-Path $openCodeOnlyRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
     Check 'GLOBAL_OPENCODE_ONLY_SELECTOR' ($openCodeOnly.Code -eq 0 -and $openCodeOnlyManifest.scope -eq 'global' -and
         $openCodeOnlyManifest.installed_harnesses.Count -eq 1 -and $openCodeOnlyManifest.installed_harnesses[0] -eq 'opencode' -and
-        $openCodeOnlyManifest.managed_files.Count -eq 13)
+        $openCodeOnlyManifest.managed_files.Count -eq 14)
+    $ownedGuardPath = Join-Path $openCodeOnlyRoot 'opencode.jsonc'
+    Check 'GLOBAL_ONLY_EXTERNAL_ASK_MANAGED' (
+        (Get-ExternalFallback $ownedGuardPath) -eq 'ask' -and
+        @($openCodeOnlyManifest.managed_files | Where-Object { $_.path -eq 'opencode.jsonc' }).Count -eq 1 -and
+        (Global-Verify $project 'opencode').Code -eq 0
+    )
+    # ASK requires approval (a rejected approval blocks the read). A following
+    # explicit specific DENY rejects without prompting; these are modeled
+    # outcomes, not a native observation of either prompt or rejection.
+    $externalProbe = 'C:/fixture/prohibited/sentinel.txt'
+    $explicitDeny = [pscustomobject]@{ action='external_directory'; resource='C:/fixture/prohibited/*'; effect='deny' }
+    $askDecision = Resolve-SyntheticExternalDecision $ownedGuardPath $externalProbe
+    $denyDecision = Resolve-SyntheticExternalDecision $ownedGuardPath $externalProbe @($explicitDeny)
+    Check 'GLOBAL_ONLY_ASK_AND_SPECIFIC_DENY_SYNTHETIC' (
+        $askDecision -eq 'ask' -and $denyDecision -eq 'deny' -and
+        $askDecision -ne 'allow'
+    )
+
+    $doubleConfigRoot = Join-Path $run 'OpenCode Ambiguous Config'
+    [IO.Directory]::CreateDirectory($doubleConfigRoot) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $doubleConfigRoot 'opencode.json'), $safeUserConfig, $utf8)
+    [IO.File]::WriteAllText((Join-Path $doubleConfigRoot 'opencode.jsonc'), $safeUserConfig, $utf8)
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $doubleConfigRoot
+    $doubleBefore = Snapshot $doubleConfigRoot
+    $doubleInstall = Global-Install $project 'opencode'
+    Check 'GLOBAL_AMBIGUOUS_USER_CONFIG_FAIL_CLOSED' ($doubleInstall.Code -ne 0 -and
+        $doubleInstall.Text -match 'GLOBAL_EXTERNAL_GUARD_UNSAFE' -and
+        (Snapshot $doubleConfigRoot) -ceq $doubleBefore)
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeOnlyRoot
+
+    $ownedGuardOriginal = [IO.File]::ReadAllText($ownedGuardPath)
+    [IO.File]::AppendAllText($ownedGuardPath, "// user changed managed guard`n", $utf8)
+    $guardDriftBefore = Snapshot $openCodeOnlyRoot
+    $guardDriftVerify = Global-Verify $project 'opencode'
+    $guardDriftUninstall = Run-Installer $project @('-Scope','global','-Harness','opencode','-Uninstall')
+    Check 'GLOBAL_MANAGED_GUARD_DRIFT_PRESERVED' (
+        $guardDriftVerify.Code -ne 0 -and $guardDriftVerify.Text -match 'GLOBAL_MANAGED_FILE_DRIFT' -and
+        $guardDriftUninstall.Code -ne 0 -and $guardDriftUninstall.Text -match 'GLOBAL_MANAGED_FILE_DRIFT' -and
+        (Snapshot $openCodeOnlyRoot) -ceq $guardDriftBefore
+    )
+    [IO.File]::WriteAllText($ownedGuardPath, $ownedGuardOriginal, $utf8)
 
     # A clean-break update retires the previous Aegis/command only when the old
     # global manifest still owns their exact bytes.
@@ -174,7 +299,14 @@ try {
     Check 'GLOBAL_RETIRED_RESOURCES_HASH_VERIFIED_REMOVAL' ($globalMigration.Code -eq 0 -and
         -not (Test-Path (Join-Path $openCodeOnlyRoot 'agents/aegis.md')) -and
         -not (Test-Path (Join-Path $openCodeOnlyRoot 'commands/maintain.md')) -and
-        $migratedGlobalManifest.managed_files.Count -eq 13)
+        $migratedGlobalManifest.managed_files.Count -eq 14)
+
+    $ownedGuardUninstall = Run-Installer $project @('-Scope','global','-Harness','opencode','-Uninstall')
+    Check 'GLOBAL_OWNED_ONLY_GUARD_REMOVED_ON_UNINSTALL' (
+        $ownedGuardUninstall.Code -eq 0 -and
+        -not (Test-Path $ownedGuardPath) -and
+        -not (Test-Path $openCodeOnlyManifestPath)
+    )
 
     $openCodeDriftRoot = Join-Path $run 'OpenCode Global Retired Drift'
     [IO.Directory]::CreateDirectory($openCodeDriftRoot) | Out-Null

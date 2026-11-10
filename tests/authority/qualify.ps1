@@ -1174,6 +1174,21 @@ try {
         (Native-Decision (@($globalWithDeny) + @($unsafeWildcardAsk)) 'external_directory' $prohibitedPath) -eq 'ASK'
     )
 
+    # V2 preserves rule order across configuration layers. A later project ASK
+    # can still override an earlier global-user DENY. This predates PR #121 and
+    # is not covered by removing agent-level wildcard rules.
+    $globalUserSpecificDeny = @($explicitExternalDeny)
+    $projectWildcardAsk = @($config.permissions | Where-Object {
+        $_.action -eq 'external_directory' -and $_.resource -eq '*'
+    })
+    $globalThenProject = @($globalUserSpecificDeny) + @($projectWildcardAsk)
+    $projectThenSpecificDeny = @($projectWildcardAsk) + @($explicitExternalDeny)
+    Check 'AUTH10F_GLOBAL_DENY_BEFORE_PROJECT_ASK_LIMITATION' (
+        $projectWildcardAsk.Count -eq 1 -and
+        (Native-Decision $globalThenProject 'external_directory' $prohibitedPath) -eq 'ASK' -and
+        (Native-Decision $projectThenSpecificDeny 'external_directory' $prohibitedPath) -eq 'DENY'
+    )
+
     # A grant for one repository must never silently authorize the same relative
     # path in a sibling repository; an exact second grant can reach native ASK.
     $otherRoot = 'C:\fixture\other-project'

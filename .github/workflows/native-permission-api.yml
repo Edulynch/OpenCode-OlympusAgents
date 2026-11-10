@@ -1,0 +1,53 @@
+name: Native V2 / Permission API
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-v2-permission-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  global-permission-api:
+    name: Global-only ASK/DENY / Windows V2 API
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - name: Checkout without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install current stable OpenCode V2
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # The native smoke checks the same npm stable tag again immediately
+          # before launch; no beta/dev channel is used as an authority source.
+          npm install --global @opencode/cli@latest --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          opencode --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Exercise isolated native permission API (no model or UI)
+        shell: pwsh
+        run: |
+          # This tests the V2 permission engine, NOT an attempted tool read;
+          # a scripted reject is never called user-observed approval.
+          pwsh -NoProfile -File ./tests/global-installer/native-permission-api-smoke.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Confirm checkout unchanged
+        shell: pwsh
+        run: |
+          $changes = @(git status --porcelain --untracked-files=all)
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify checkout integrity.' }
+          if ($changes.Count -ne 0) {
+            $changes | Out-Host
+            throw 'Native permission API smoke modified the checkout.'
+          }

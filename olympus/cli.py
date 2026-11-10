@@ -518,6 +518,7 @@ def main(argv: list[str] | None = None) -> int:
                 return config_apply.execute(
                     source, args, response, source_query=source_query,
                     load_renderer=load_renderer, release_version=release_version,
+                    assignment_query=model_assignments,
                 )
             code = config_apply.preview(source, args, response, source_query=source_query,
                                         load_renderer=load_renderer, release_version=release_version,

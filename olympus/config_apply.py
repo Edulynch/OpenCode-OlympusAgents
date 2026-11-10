@@ -844,14 +844,14 @@ def _plan_fingerprint(response: dict) -> tuple:
 
 
 def execute(source: Path, args, response: dict, *, source_query: Callable, load_renderer: Callable,
-            release_version: Callable) -> int:
+            release_version: Callable, assignment_query: Callable) -> int:
     """Explicitly apply one previewed project plan under the shared target lock."""
     from . import config_apply_transaction as transaction
     from . import source_edit
 
     code = preview(source, args, response, source_query=source_query,
-                   load_renderer=load_renderer, release_version=release_version)
-    response.get("data", {}).pop("assignments", None)
+                   load_renderer=load_renderer, release_version=release_version,
+                   assignment_query=assignment_query)
     if code:
         emit_preview(response, False)
         return code
@@ -878,7 +878,8 @@ def execute(source: Path, args, response: dict, *, source_query: Callable, load_
             latest = {"schema_version": 1, "operation": "config apply", "result": "ok",
                       "context": {}, "data": {}, "issues": []}
             latest_code = preview(source, args, latest, source_query=source_query,
-                                  load_renderer=load_renderer, release_version=release_version)
+                                  load_renderer=load_renderer, release_version=release_version,
+                                  assignment_query=assignment_query)
             if latest_code:
                 raise transaction.TransactionError(
                     "Locked project revalidation failed: " + "; ".join(item["message"] for item in latest["issues"]),

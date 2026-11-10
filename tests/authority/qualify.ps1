@@ -16,14 +16,18 @@ function Covers([string]$scope, [string]$path) {
     return $p.Equals($s, [StringComparison]::OrdinalIgnoreCase)
 }
 
-function Is-OlympusOwned([string]$path, [string[]]$manifestPaths = @()) {
+function Is-OlympusOwned([string]$path, [string[]]$manifestPaths = @(),
+                         [bool]$canonicalSourceTarget = $false) {
     $p = $path.Replace('\','/').TrimStart('/').ToLowerInvariant()
     $fixed = @('.opencode/agents/',
         '.opencode/plugins/olympus-activity/', '.opencode/scripts/worktree-setup.ps1',
         '.opencode/orchestrator-install.json',
         '.opencode/opencode.json', '.opencode/opencode.jsonc', '.codex/', 'CODEX.md',
         'olympus/', 'scripts/render_harnesses.py', 'opencode.jsonc', 'opencode.json')
-    if (@($fixed | Where-Object { $p.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { return $true }
+    # Canonical source is editable only when OlympusAgents is the proven task
+    # target; installed runtime resources stay protected in every repository.
+    $canonicalSource = $canonicalSourceTarget -and ($p.StartsWith('olympus/') -or $p -eq 'scripts/render_harnesses.py')
+    if (-not $canonicalSource -and @($fixed | Where-Object { $p.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { return $true }
     foreach ($entry in $manifestPaths) {
         $declared = $entry.Replace('\','/').TrimStart('/').ToLowerInvariant()
         if ($p -eq $declared -or $p.StartsWith($declared.TrimEnd('/') + '/', [StringComparison]::OrdinalIgnoreCase)) { return $true }
@@ -34,11 +38,12 @@ function Is-OlympusOwned([string]$path, [string[]]$manifestPaths = @()) {
 function Decide([string]$agent, [string]$operation, [string]$path, [string]$normalScope,
                  [string]$repositoryRoot, $grant, [bool]$taskActive = $true,
                  [bool]$projectOwned = $true, [bool]$explicitProhibition = $false,
-                 [string[]]$manifestPaths = @(), [string]$nativeDecision = 'ALLOW') {
+                 [string[]]$manifestPaths = @(), [string]$nativeDecision = 'ALLOW',
+                 [bool]$canonicalSourceTarget = $false) {
     # A null grant models an omitted AUTHORITY_GRANT; nativeDecision models the
     # confirmed effective permission and normalScope the validated assignment scope.
     if ($explicitProhibition) { return [pscustomobject]@{ decision='DENY'; question=0; reason='USER_PROHIBITION' } }
-    if (Is-OlympusOwned $path $manifestPaths) { return [pscustomobject]@{ decision='DENY'; question=0; reason='OLYMPUS_OWNED' } }
+    if (Is-OlympusOwned $path $manifestPaths $canonicalSourceTarget) { return [pscustomobject]@{ decision='DENY'; question=0; reason='OLYMPUS_OWNED' } }
     if (-not $projectOwned) { return [pscustomobject]@{ decision='DENY'; question=0; reason='OWNERSHIP_UNPROVEN' } }
     $normal = Covers $normalScope $path
     $valid = $false
@@ -235,9 +240,9 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                 $externalAllow = @($permissions | Where-Object {
                     $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'allow'
                 }).Count
-                $permissionEvidence = "edit_*_deny=$editWildcardDeny/0, edit_plugins_ask=$editPluginsAsk/1, activity_deny=$activityDeny/1, external_ask=$externalAsk/>0, external_allow=$externalAllow/0"
+                $permissionEvidence = "edit_*_deny=$editWildcardDeny/0, edit_plugins_ask=$editPluginsAsk/1, activity_deny=$activityDeny/1, external_ask=$externalAsk/inherited, external_allow=$externalAllow/0"
                 if ($editWildcardDeny -ne 0 -or $editPluginsAsk -ne 1 -or $activityDeny -ne 1 -or
-                    $externalAsk -le 0 -or $externalAllow -ne 0) {
+                    $externalAllow -ne 0) {
                     $failures.Add('effective_permission_rules_mismatch (' + $permissionEvidence + ')')
                 }
             } catch {
@@ -1054,20 +1059,40 @@ try {
 
     foreach ($path in @('.opencode/agents/kovan.md',
         '.opencode/orchestrator-install.json','.opencode/opencode.json','.opencode/opencode.jsonc',
-        '.codex/agents/kovan.toml','.codex/config.toml','CODEX.md','olympus/core/models.toml',
-        'olympus/roles/kael.md','olympus/policies/authority.md','scripts/render_harnesses.py',
+        '.codex/agents/kovan.toml','.codex/config.toml','CODEX.md',
         'opencode.json','opencode.jsonc')) {
         Check ('AUTH9_NATIVE_DENY_' + ($path -replace '[^A-Za-z0-9]','_')) ((Native-Decision $nativeRules 'edit' $path) -eq 'DENY')
     }
-    $normalAgents = @(Get-ChildItem -LiteralPath (Join-Path $root '.opencode/agents') -Filter '*.md' -File)
-    $coreProtectionValid = @($normalAgents | Where-Object {
+
+    # Kael and Kovan can maintain canonical OlympusAgents source when task identity
+    # and WRITE_SCOPE are exact. This is a scoped policy decision, not native DENY.
+    $canonicalPath = 'olympus/core/models.toml'
+    $canonicalDeniedWithoutIdentity = Decide 'kovan' $operation $canonicalPath 'olympus/core/**' $rootPath $null
+    $canonicalDeniedWithoutScope = Decide 'kovan' $operation $canonicalPath 'src/**' $rootPath $null $true $true $false @() 'ALLOW' $true
+    $canonicalAllowed = Decide 'kovan' $operation $canonicalPath 'olympus/core/**' $rootPath $null $true $true $false @() 'ALLOW' $true
+    $canonicalNativeDenied = Decide 'kovan' $operation $canonicalPath 'olympus/core/**' $rootPath $null $true $true $false @() 'DENY' $true
+    Check 'AUTH9_CANONICAL_SOURCE_REQUIRES_IDENTITY_SCOPE_AND_NATIVE_PERMISSION' (
+        $canonicalDeniedWithoutIdentity.decision -eq 'DENY' -and
+        $canonicalDeniedWithoutScope.decision -eq 'NEED_AUTHORITY' -and
+        $canonicalAllowed.decision -eq 'ALLOW' -and
+        $canonicalNativeDenied.decision -eq 'DENY' -and
+        (Native-Decision $nativeRules 'edit' $canonicalPath) -eq 'ALLOW' -and
+        (Native-Decision $kaelNativeRules 'edit' $canonicalPath) -eq 'ALLOW' -and
+        $kael -match 'Canonical Olympus source is writable only when target repository'
+    )
+
+    # Read-only specialists retain native DENY for source and generated assets;
+    # Kael/Kovan use exact task authority for canonical source instead.
+    $readOnlyAgents = @(Get-ChildItem -LiteralPath (Join-Path $root '.opencode/agents') -Filter '*.md' -File |
+        Where-Object { $_.BaseName -notin @('kael','kovan') })
+    $coreProtectionValid = @($readOnlyAgents | Where-Object {
         $agentRules = Read-NativeRules ([IO.File]::ReadAllText($_.FullName)) @($config.permissions)
         @('olympus/core/models.toml','olympus/roles/kael.md','olympus/policies/authority.md',
           '.codex/config.toml','CODEX.md','scripts/render_harnesses.py' | Where-Object {
             (Native-Decision $agentRules 'edit' $_) -ne 'DENY'
         }).Count -gt 0
     }).Count -eq 0
-    Check 'AUTH9_CORE_AND_GENERATOR_PROTECTED_FOR_NORMAL_AGENTS' $coreProtectionValid
+    Check 'AUTH9_CORE_AND_GENERATOR_PROTECTED_FOR_READ_ONLY_SPECIALISTS' ($readOnlyAgents.Count -gt 0 -and $coreProtectionValid)
     # Match scripts/bootstrap.ps1:Get-GeneratedHarnessOutputs: agent files are
     # inventoried only in their dedicated directories, while other generated
     # destinations are explicit. Do not recurse whole adapter trees, where
@@ -1124,6 +1149,71 @@ try {
     $kaelExternalDecision = Native-Decision $kaelNativeRules 'external_directory' $siblingRepoPath
     Check 'AUTH10_EXTERNAL_SIBLING_REQUIRES_ASK' ($externalDecision -eq 'ASK' -and $kaelExternalDecision -eq 'ASK' -and
         @($nativeRules | Where-Object { $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'allow' }).Count -eq 0)
+
+    # An agent-level wildcard ASK follows project rules and can silently
+    # downgrade a user's specific DENY. Guard every installed agent against
+    # that precedence regression, including read-only delegates.
+    $prohibitedPattern = 'C:/fixture/prohibited/*'
+    $prohibitedPath = 'C:/fixture/prohibited/deny-probe.txt'
+    $explicitExternalDeny = [pscustomobject]@{
+        action = 'external_directory'; resource = $prohibitedPattern; effect = 'deny'
+    }
+    $globalWithDeny = @($config.permissions) + @($explicitExternalDeny)
+    $rolesThatOverrideDeny = [Collections.Generic.List[string]]::new()
+    foreach ($role in @('kael', 'kovan', 'nox', 'orin', 'vera', 'veyra', 'thales')) {
+        $roleRules = Read-NativeRules (Text ('.opencode/agents/' + $role + '.md')) $globalWithDeny
+        if ((Native-Decision $roleRules 'external_directory' $prohibitedPath) -ne 'DENY') {
+            $rolesThatOverrideDeny.Add($role)
+        }
+    }
+    $unsafeWildcardAsk = [pscustomobject]@{
+        action = 'external_directory'; resource = '*'; effect = 'ask'
+    }
+    Check 'AUTH10E_SPECIFIC_EXTERNAL_DENY_SURVIVES_AGENT_PRECEDENCE' (
+        $rolesThatOverrideDeny.Count -eq 0 -and
+        (Native-Decision (@($globalWithDeny) + @($unsafeWildcardAsk)) 'external_directory' $prohibitedPath) -eq 'ASK'
+    )
+
+    # V2 preserves rule order across configuration layers. A later project ASK
+    # can still override an earlier global-user DENY. This predates PR #121 and
+    # is not covered by removing agent-level wildcard rules.
+    $globalUserSpecificDeny = @($explicitExternalDeny)
+    $projectWildcardAsk = @($config.permissions | Where-Object {
+        $_.action -eq 'external_directory' -and $_.resource -eq '*'
+    })
+    $globalThenProject = @($globalUserSpecificDeny) + @($projectWildcardAsk)
+    $projectThenSpecificDeny = @($projectWildcardAsk) + @($explicitExternalDeny)
+    Check 'AUTH10F_GLOBAL_DENY_BEFORE_PROJECT_ASK_LIMITATION' (
+        $projectWildcardAsk.Count -eq 1 -and
+        (Native-Decision $globalThenProject 'external_directory' $prohibitedPath) -eq 'ASK' -and
+        (Native-Decision $projectThenSpecificDeny 'external_directory' $prohibitedPath) -eq 'DENY'
+    )
+
+    # A grant for one repository must never silently authorize the same relative
+    # path in a sibling repository; an exact second grant can reach native ASK.
+    $otherRoot = 'C:\fixture\other-project'
+    $firstRootGrant = New-Grant 'kovan' $operation 'src/**' $rootPath 'NATIVE_ASK'
+    $secondRootGrant = New-Grant 'kovan' $operation 'src/**' $otherRoot 'NATIVE_ASK'
+    $crossRootAttempt = Decide 'kovan' $operation 'src/feature.ts' 'docs/**' $otherRoot $firstRootGrant $true $true $false @() 'ASK'
+    $secondRootAttempt = Decide 'kovan' $operation 'src/feature.ts' 'docs/**' $otherRoot $secondRootGrant $true $true $false @() 'ASK'
+    Check 'AUTH10C_MULTI_REPO_REQUIRES_SEPARATE_ROOT_AND_SCOPE' (
+        $crossRootAttempt.decision -eq 'NEED_AUTHORITY' -and
+        $secondRootAttempt.decision -eq 'NATIVE_ASK' -and
+        $kael -match 'One repository''s WRITE_SCOPE never authorizes another root' -and
+        $kovan -match 'Do not source-edit another repository' -and
+        $docs -match 'a scope for one\s+root cannot grant access to another'
+    )
+
+    # External artifacts and hooks are distinct from source editing. Keeping
+    # that distinction explicit prevents both false denials and silent widening.
+    Check 'AUTH10D_EXTERNAL_EFFECTS_REQUIRE_EXACT_AUTHORITY' (
+        $kael -match 'Non-source external operations' -and
+        $kael -match 'separately\s+declared exact target, operation, effect' -and
+        $kael -match 'Native DENY remains final' -and
+        $kovan -match 'separately assigned non-source external effect' -and
+        $docs -match 'Separately requested non-source external\s+effects' -and
+        $kael -notmatch 'Master verifies every requested target is within the active repository'
+    )
 
     Check 'AUTH10B_EXPLICIT_PROHIBITION_OVERRIDES_NATIVE_ASK' ((Native-Decision $nativeRules 'edit' $pluginResource $true) -eq 'DENY' -and
         -not (Write-Decision 'DENY' 'APPROVE_ONCE') -and $kael -match '(?s)Explicit user prohibitions.*?override every other outcome')
@@ -1214,7 +1304,7 @@ try {
         -not $prohibitionFlow.attempted -and $prohibited.reason -eq 'USER_PROHIBITION' -and
         (Classify-NewScope 'ASK' $true $true) -eq 'DENY')
 
-    $validRuntimeFixture = '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"allow"},{"action":"edit","resource":".opencode/plugins/**","effect":"ask"},{"action":"edit","resource":".opencode/plugins/olympus-activity/**","effect":"deny"},{"action":"external_directory","resource":"*","effect":"ask"}]}]'
+    $validRuntimeFixture = '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"allow"},{"action":"edit","resource":".opencode/plugins/**","effect":"ask"},{"action":"edit","resource":".opencode/plugins/olympus-activity/**","effect":"deny"}]}]'
     $failedRuntimeProbe = Inspect-EffectiveRules 17 $validRuntimeFixture 'fixture runtime error'
     Check 'AUTH14_RUNTIME_COMMAND_FAILURE_HAS_EVIDENCE' (-not $failedRuntimeProbe.passed -and
         $failedRuntimeProbe.evidence -match 'runtime_exit=17' -and $failedRuntimeProbe.evidence -match 'stderr=fixture runtime error')

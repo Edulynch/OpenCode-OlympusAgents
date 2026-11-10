@@ -44,6 +44,30 @@ jobs:
           pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FAST
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Authority scope invariants (offline)
+        shell: pwsh
+        run: |
+          # Verify this policy change independently of the older full authority
+          # suite so a failure can be attributed to the exact contract being tested.
+          python -B -m unittest discover -s tests/authority -p 'test_scope_contract.py' -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Authority grants (offline)
+        shell: pwsh
+        run: |
+          # Confirm native DENY for installed assets and scoped ownership for
+          # canonical source, including the older authority-grant scenarios.
+          pwsh -NoProfile -File ./tests/authority/qualify.ps1 -QualificationSlice Offline
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Global OpenCode permission guard (isolated Windows fixtures)
+        shell: pwsh
+        run: |
+          # Qualify ASK/DENY precedence and global-only install ownership without
+          # touching the runner's actual OpenCode or Codex user configuration.
+          pwsh -NoProfile -File ./tests/global-installer/qualify.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: OA77 worktree activation (deterministic Windows)
         shell: pwsh
         run: |
@@ -240,7 +264,7 @@ jobs:
           $testOutput | Out-Host
           if ($testExitCode -ne 0) { exit $testExitCode }
           $transcript = $testOutput -join "`n"
-          if ($transcript -notmatch '(?m)^Ran 13 tests in ' -or
+          if ($transcript -notmatch '(?m)^Ran 19 tests in ' -or
               $transcript -notmatch '(?m)^OK$' -or $transcript -match 'skipped') {
             throw 'Slice C7 Windows global read-only tests must all pass without skips.'
           }

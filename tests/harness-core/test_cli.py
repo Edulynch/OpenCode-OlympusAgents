@@ -1495,8 +1495,137 @@ class SliceA(unittest.TestCase):
             self.assertEqual("unverified", item["integrity"])
             self.assertEqual("synthetic-commit", item["installed_from_commit"])
             self.assertEqual(str(manifest.parent.parent), item["root"])
-            self.assertEqual(13 if harness == "opencode" else 12, item["managed_files"])
+            self.assertEqual(14 if harness == "opencode" else 12, item["managed_files"])
         self.assertEqual("not_performed", response["data"]["runtime_discovery"])
+
+    def test_slice_c7_global_legacy_user_config_is_not_adopted(self):
+        # Previously installed global resources may use the 13-file inventory.
+        # A safe user config remains unowned; the read-only CLI must not try to
+        # silently replace it with Olympus' managed 14th resource.
+        manifests = self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
+        manifest["managed_files"] = [entry for entry in manifest["managed_files"]
+                                     if entry["path"] != "opencode.jsonc"]
+        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        user_config = '{"permissions":[{"action":"external_directory","resource":"*","effect":"deny"}]}\n'
+        (root / "opencode.jsonc").write_text(user_config, encoding="utf-8")
+        preview = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
+        self.assertEqual("no_changes", preview["result"])
+        self.assertEqual([], preview["data"]["changes"])
+        self.assertEqual(13, preview["data"]["harnesses"]["opencode"]["managed_files"])
+        self.assertEqual(user_config, (root / "opencode.jsonc").read_text(encoding="utf-8"))
+
+    def test_slice_c7_global_legacy_missing_guard_is_a_preview_change(self):
+        # A historical 13-file install with no user config is unguarded.
+        # The read-only CLI must propose the missing guard, not report no_changes.
+        manifests = self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
+        manifest["managed_files"] = [item for item in manifest["managed_files"]
+                                     if item["path"] != "opencode.jsonc"]
+        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        (root / "opencode.jsonc").unlink()
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
+        self.assertEqual("ok", response["result"])
+        self.assertEqual("missing", response["data"]["harnesses"]["opencode"]["external_guard"])
+        self.assertEqual(["opencode.jsonc"], [change["path"] for change in response["data"]["changes"]])
+        self.assertEqual("create", response["data"]["changes"][0]["action"])
+        self.assertFalse((root / "opencode.jsonc").exists())
+
+    def test_slice_c7_global_legacy_unsafe_user_config_blocks_preview(self):
+        # Do not conceal a global ALLOW fallback behind a valid 13-file manifest.
+        manifests = self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
+        manifest["managed_files"] = [item for item in manifest["managed_files"]
+                                     if item["path"] != "opencode.jsonc"]
+        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        (root / "opencode.jsonc").write_text('{"permissions":[{"action":"external_directory","resource":"*","effect":"allow"}]}', encoding="utf-8")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
+        self.assertEqual("blocked", response["result"])
+        self.assertEqual("global_external_guard_unsafe", response["issues"][0]["code"])
+        # An alternative JSON file makes ownership/precedence ambiguous too.
+        (root / "opencode.json").write_text('{"permissions":[]}', encoding="utf-8")
+        again = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
+        self.assertEqual("global_external_guard_unsafe", again["issues"][0]["code"])
+
+    def test_slice_c7_global_legacy_ambiguous_wildcards_do_not_bypass_ask(self):
+        # V2 treats '**', '?*', '*/**', and '?:/**' as broad matches on paths.
+        # A later ALLOW must not be certified as an ASK/DENY fallback.
+        manifests = self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
+        manifest["managed_files"] = [item for item in manifest["managed_files"]
+                                     if item["path"] != "opencode.jsonc"]
+        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        user_config = root / "opencode.jsonc"
+        cases = ("**", "?*", "*/**", "***", "?:/**", "*:*")
+        for broad in cases:
+            with self.subTest(pattern=broad):
+                text = json.dumps({"permissions": [
+                    {"action": "external_directory", "resource": "*", "effect": "ask"},
+                    {"action": "external_directory", "resource": broad, "effect": "allow"},
+                ]})
+                user_config.write_text(text, encoding="utf-8")
+                response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode",
+                                           "--dry-run", code=3)
+                self.assertEqual("global_external_guard_unsafe", response["issues"][0]["code"])
+                self.assertEqual(text, user_config.read_text(encoding="utf-8"))
+
+        # '?' and '??' are not catchalls: they cannot restore a safe fallback
+        # after a prior ALLOW on full absolute external paths.
+        for pattern, effect in (("?", "deny"), ("??", "ask")):
+            with self.subTest(false_fallback=pattern):
+                text = json.dumps({"permissions": [
+                    {"action": "external_directory", "resource": "*", "effect": "allow"},
+                    {"action": "external_directory", "resource": pattern, "effect": effect},
+                ]})
+                user_config.write_text(text, encoding="utf-8")
+                response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode",
+                                           "--dry-run", code=3)
+                self.assertEqual("global_external_guard_unsafe", response["issues"][0]["code"])
+
+        # The effective last broad rule can restore ASK, while a narrow DENY
+        # remains a user-owned exception and is never claimed by Olympus.
+        safe_text = json.dumps({"permissions": [
+            {"action": "external_directory", "resource": "**", "effect": "allow"},
+            {"action": "external_directory", "resource": "*", "effect": "ask"},
+            {"action": "external_directory", "resource": "C:/fixture/authorized/*", "effect": "allow"},
+            {"action": "external_directory", "resource": r"C:\fixture\authorized-extra\*", "effect": "allow"},
+            {"action": "external_directory", "resource": "C:/fixture/prohibited/*", "effect": "deny"},
+        ]})
+        user_config.write_text(safe_text, encoding="utf-8")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
+        self.assertEqual("no_changes", response["result"])
+        self.assertEqual("safe_user_config", response["data"]["harnesses"]["opencode"]["external_guard"])
+        self.assertEqual(safe_text, user_config.read_text(encoding="utf-8"))
+
+    def test_slice_c7_global_legacy_safe_jsonc_is_preserved(self):
+        # Comments, URLs in strings, and trailing commas are supported by V2.
+        manifests = self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
+        manifest["managed_files"] = [item for item in manifest["managed_files"]
+                                     if item["path"] != "opencode.jsonc"]
+        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        safe = '{"url":"https://local.invalid/a,b",/* user guard */"permissions":[{"action":"external_directory","resource":"*","effect":"ask",},],}'
+        (root / "opencode.jsonc").write_text(safe, encoding="utf-8")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
+        self.assertEqual("no_changes", response["result"])
+        self.assertEqual("safe_user_config", response["data"]["harnesses"]["opencode"]["external_guard"])
+        self.assertEqual(safe, (root / "opencode.jsonc").read_text(encoding="utf-8"))
+
+    def test_slice_c7_global_pending_guard_recovery_blocks_preview(self):
+        # An unfinished native install is not equivalent to a complete manifest.
+        self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        intent = root / "olympus/opencode-guard-pending.json"
+        intent.write_text('{"schema_version":1}', encoding="utf-8")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
+        self.assertEqual("blocked", response["result"])
+        self.assertEqual("global_guard_recovery_pending", response["issues"][0]["code"])
+        self.assertTrue(intent.exists())
 
     def test_slice_c7_global_preview_both_harnesses_assignments_and_human_output(self):
         self.create_global_managed_install()

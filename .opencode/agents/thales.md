@@ -7,9 +7,8 @@ permissions:
   - action: "*"
     resource: "*"
     effect: deny
-  - action: external_directory
-    resource: "*"
-    effect: ask
+  # External access stays denied for this diagnostic-only role. An ASK here
+  # would override a narrower project DENY under OpenCode's rule ordering.
   - action: edit
     resource: "*"
     effect: deny

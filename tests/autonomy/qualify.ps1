@@ -62,8 +62,8 @@ try {
         $a = @($agents | Where-Object id -eq $case[1])[0]
         Check $case[0] ((Has $a shell deny) -and (Has $a edit deny) -and -not (Has $a shell allow))
     }
-    Check AU11_STATIC ((Has $k external_directory ask) -and (Has $n external_directory ask) -and
-        -not (Has $k external_directory allow) -and -not (Has $n external_directory allow) -and
+    Check AU11_STATIC (@($k.permissions + $n.permissions | Where-Object { $_.action -eq 'external_directory' }).Count -eq 0 -and
+        ([IO.File]::ReadAllText((Join-Path $fixture 'opencode.jsonc')) -match '(?s)"action":\s*"external_directory"\s*,\s*"resource":\s*"\*"\s*,\s*"effect":\s*"ask"') -and
         @($k.permissions + $n.permissions | Where-Object { $_.action -eq 'shell' -and $_.effect -eq 'ask' }).Count -eq 0)
     }
     if ($QualificationSlice -ne 'Runtime') {

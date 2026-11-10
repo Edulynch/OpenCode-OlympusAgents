@@ -22,6 +22,7 @@ from . import config_apply, install_routing
 
 
 _MANIFEST = "olympus/orchestrator-install.json"
+_OPENCODE_GUARD_INTENT = "olympus/opencode-guard-pending.json"
 _HASH = re.compile(r"[0-9a-fA-F]{64}\Z")
 _POWERSHELL_VERSION = re.compile(r"(?m)^PowerShell ([0-9]+)\.")
 _CONFIG_PATH = re.compile(r"(?m)^\s*config\s{2,}(?P<path>.+?)\s*$")
@@ -128,7 +129,14 @@ def _expected(source: Path, renderer, selected: tuple[str, ...]) -> dict[str, di
             content = _CODEX_INTRO.sub(_GLOBAL_INTRO, content, count=1)
         if harness in outputs:
             outputs[harness][destination] = content.encode("utf-8")
-    if ("opencode" in outputs and len(outputs["opencode"]) != 13) or ("codex" in outputs and len(outputs["codex"]) != 12):
+    if "opencode" in outputs:
+        # The native global installer owns this guard only when no user config
+        # existed. Both the installer and read-only CLI use these exact bytes.
+        guard_path = source / "olympus/harnesses/opencode/global-permissions.jsonc"
+        if not guard_path.is_file():
+            raise GlobalFault("source_invalid", "Global permission guard template is missing.", 1)
+        outputs["opencode"]["opencode.jsonc"] = guard_path.read_bytes()
+    if ("opencode" in outputs and len(outputs["opencode"]) != 14) or ("codex" in outputs and len(outputs["codex"]) != 12):
         raise GlobalFault("source_inventory_unsupported", "Global renderer inventory differs from the official engine.")
     return outputs
 
@@ -179,8 +187,14 @@ def _manifest(root: Path, harness: str, expected: dict[str, bytes] | None):
         if expected is not None and path not in expected:
             raise GlobalFault("unsupported_global_inventory", "Global manifest owns a resource outside the current adapter inventory.")
         entries[path] = digest.lower()
-    if expected is not None and set(entries) != set(expected):
-        raise GlobalFault("unsupported_global_inventory", "Global manifest inventory does not match the current adapter inventory.")
+    if expected is not None:
+        allowed_inventory = {frozenset(expected)}
+        if harness == "opencode":
+            # A pre-existing safe user-owned config is intentionally absent
+            # from the manifest; older 13-resource installs use the same shape.
+            allowed_inventory.add(frozenset(set(expected) - {"opencode.jsonc"}))
+        if frozenset(entries) not in allowed_inventory:
+            raise GlobalFault("unsupported_global_inventory", "Global manifest inventory does not match the current adapter inventory.")
     return data, entries, {"sha256": hashlib.sha256(raw).hexdigest(), "path": _MANIFEST}
 
 
@@ -192,6 +206,125 @@ def _verified_files(root: Path, entries: dict[str, str]) -> dict[str, bytes]:
             raise GlobalFault("global_managed_file_drift", f"Global managed resource is missing or changed: {path}", 1)
         current[path] = raw
     return current
+
+
+def _jsonc_without_comments(raw: bytes) -> str:
+    """Discard JSONC comments and trailing commas without touching string data."""
+    text = raw.decode("utf-8")
+    output: list[str] = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(text):
+        char = text[index]
+        next_char = text[index + 1] if index + 1 < len(text) else ""
+        if in_string:
+            output.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+            output.append(char)
+        elif char == "/" and next_char == "/":
+            # Retain line endings so comments cannot merge adjacent tokens.
+            while index < len(text) and text[index] not in "\r\n":
+                output.append(" ")
+                index += 1
+            continue
+        elif char == "/" and next_char == "*":
+            end = text.find("*/", index + 2)
+            if end < 0:
+                raise ValueError("Unterminated JSONC block comment")
+            output.extend("\n" if c == "\n" else " " for c in text[index:end + 2])
+            index = end + 2
+            continue
+        else:
+            output.append(char)
+        index += 1
+    cleaned = "".join(output)
+    result: list[str] = []
+    in_string = escaped = False
+    for index, char in enumerate(cleaned):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char == ",":
+            # Avoid allocating a full suffix for every comma in an untrusted
+            # global config, which could otherwise produce quadratic work.
+            lookahead = index + 1
+            while lookahead < len(cleaned) and cleaned[lookahead].isspace():
+                lookahead += 1
+            if lookahead < len(cleaned) and cleaned[lookahead] in "}]":
+                char = " "
+        result.append(char)
+    return "".join(result)
+
+
+def _unowned_opencode_guard(root: Path) -> str:
+    """Match the installer's safe-user-config contract before trusting a legacy inventory."""
+    json_file = _read(root, "opencode.json")
+    jsonc_file = _read(root, "opencode.jsonc")
+    if json_file is not None and jsonc_file is not None:
+        raise GlobalFault("global_external_guard_unsafe", "Both global OpenCode config formats exist; precedence is ambiguous.")
+    raw = json_file if json_file is not None else jsonc_file
+    if raw is None:
+        return "missing"
+    try:
+        def unique_pairs(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("Duplicate JSONC field")
+                result[key] = value
+            return result
+
+        def invalid_constant(value):
+            raise ValueError(f"Invalid JSONC constant {value}")
+
+        config = json.loads(_jsonc_without_comments(raw), object_pairs_hook=unique_pairs,
+                            parse_constant=invalid_constant)
+        rules = config["permissions"]
+        if not isinstance(config, dict) or not isinstance(rules, list):
+            raise ValueError("Global permissions must be an ordered V2 array")
+        fallback = "allow"
+        for rule in rules:
+            if not isinstance(rule, dict) or not all(isinstance(rule.get(key), str)
+                                                      for key in ("action", "resource", "effect")):
+                raise ValueError("Malformed V2 global permission rule")
+            if (not rule["action"] or not rule["resource"]
+                    or rule["effect"] not in ("allow", "ask", "deny")):
+                raise ValueError("Unsupported V2 global permission rule")
+            # V2 documents only * and ? wildcards; fnmatch's bracket classes
+            # would incorrectly accept a pattern V2 treats as literal.
+            action_pattern = re.escape(rule["action"]).replace(r"\*", ".*").replace(r"\?", ".")
+            # Unanchored ALLOW patterns can cover every external path even if
+            # they contain punctuation (for example '?:/**' on Windows).
+            # Only an explicit drive, Unix directory, UNC share, or home root
+            # qualifies as a deliberately scoped user exception.
+            normalized_resource = rule["resource"].replace("\\", "/")
+            scoped = bool(re.match(r"^(?:[A-Za-z]:/|/[^/*?]+|//[^/*?]+/[^/*?]+|~/|\$HOME/)",
+                                   normalized_resource))
+            # '?' consumes exactly one character; it cannot establish a
+            # global protective fallback after an earlier wildcard ALLOW.
+            universal = bool(re.fullmatch(r"\*+", rule["resource"]))
+            if ((universal or (rule["effect"] == "allow" and not scoped))
+                    and re.fullmatch(action_pattern, "external_directory")):
+                fallback = rule["effect"]
+        if fallback not in ("ask", "deny"):
+            raise ValueError("External directory fallback resolves to ALLOW")
+    except (UnicodeError, ValueError, KeyError, TypeError) as error:
+        raise GlobalFault("global_external_guard_unsafe", "Existing user OpenCode global config does not establish an external_directory ASK/DENY fallback.") from error
+    return "safe_user_config"
 
 
 def _assignments(installed: dict[str, dict[str, bytes]], expected: dict[str, dict[str, bytes]],
@@ -333,6 +466,17 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                 current = _verified_files(root, entries)
                 current_by_harness[harness] = current
                 item["integrity"] = "hash_verified"
+                if harness == "opencode":
+                    if _read(root, _OPENCODE_GUARD_INTENT) is not None:
+                        # The Windows writer owns pending recovery; a read-only
+                        # preview must not declare an interrupted install done.
+                        raise GlobalFault("global_guard_recovery_pending", "An OpenCode guard transaction is pending; rerun the global installer to reconcile ownership.")
+                    if "opencode.jsonc" not in entries:
+                        guard_state = _unowned_opencode_guard(root)
+                        item["external_guard"] = guard_state
+                        if guard_state == "missing" and operation == "config apply":
+                            changes.append({"harness": "opencode", "path": "opencode.jsonc", "action": "create",
+                                            "proposed_sha256": hashlib.sha256(expected[harness]["opencode.jsonc"]).hexdigest()})
                 if harness == "codex":
                     # The native installer refuses this user-owned, higher-priority
                     # instruction file, even if every Olympus-managed byte matches.
@@ -353,6 +497,11 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                 else:
                     item["state"] = "ready"
                     for path, desired in sorted(expected[harness].items()):
+                        if path not in current:
+                            # Preserve pre-existing user config and historical
+                            # 13-file inventories; native VerifyOnly handles
+                            # their safety in the supported Windows runtime.
+                            continue
                         if current[path] != desired:
                             changes.append({"harness": harness, "path": path, "action": "update",
                                             "current_sha256": hashlib.sha256(current[path]).hexdigest(),

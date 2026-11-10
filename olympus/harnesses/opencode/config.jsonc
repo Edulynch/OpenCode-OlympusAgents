@@ -25,7 +25,8 @@
     }
   },
   "permissions": [
-    // External paths require native user approval; do not grant every path.
+    // External paths ask by default. Keep this rule at the project level:
+    // an agent-level wildcard ASK would override a more-specific user DENY.
     {
       "action": "external_directory",
       "resource": "*",

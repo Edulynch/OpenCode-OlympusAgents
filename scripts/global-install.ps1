@@ -14,6 +14,8 @@ $ErrorActionPreference = 'Stop'
 $SourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $Utf8NoBom = [Text.UTF8Encoding]::new($false)
 $ManifestRelative = 'olympus/orchestrator-install.json'
+$OpenCodeConfigRelative = 'opencode.jsonc'
+$OpenCodeGuardIntentRelative = 'olympus/opencode-guard-pending.json'
 $script:ProjectOverrideDetected = $false
 
 function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
@@ -128,7 +130,149 @@ function Get-GlobalOutputs([string]$SelectedHarness) {
     return ,$outputs
 }
 
-function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required) {
+function Assert-OpenCodeUserGuard([string]$Path) {
+    # Inspect the effective fallback, not merely the presence of a permission
+    # entry. V2 uses the last matching rule, and otherwise ALLOWs external paths.
+    $options = [Text.Json.JsonDocumentOptions]::new()
+    $options.CommentHandling = [Text.Json.JsonCommentHandling]::Skip
+    $options.AllowTrailingCommas = $true
+    $document = $null
+    try {
+        $document = [Text.Json.JsonDocument]::Parse([IO.File]::ReadAllText($Path), $options)
+        if ($document.RootElement.ValueKind -ne [Text.Json.JsonValueKind]::Object) {
+            Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Global OpenCode config must contain a JSON object.'
+        }
+        $rules = $document.RootElement.GetProperty('permissions')
+        if ($rules.ValueKind -ne [Text.Json.JsonValueKind]::Array) {
+            Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Global OpenCode permissions must be an ordered V2 array.'
+        }
+        $fallback = 'allow'
+        foreach ($rule in $rules.EnumerateArray()) {
+            $action = $rule.GetProperty('action').GetString()
+            $resource = $rule.GetProperty('resource').GetString()
+            $effect = $rule.GetProperty('effect').GetString()
+            if (-not $action -or -not $resource -or $effect -cnotin @('allow', 'ask', 'deny')) {
+                Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Malformed OpenCode V2 global permission rule.'
+            }
+            # V2 patterns support * and ? only; PowerShell -like also accepts
+            # bracket expressions, which would produce a false safety PASS.
+            $actionPattern = '\A' + [regex]::Escape($action).Replace('\*', '.*').Replace('\?', '.') + '\z'
+            # Repeated wildcards and drive-agnostic patterns (including **,
+            # ?*, */**, and ?:/**) can cover effectively every external path.
+            # Treat an unanchored ALLOW as a fallback override; only an ALLOW
+            # rooted at an explicit drive, Unix directory, UNC share, or home
+            # may count as a deliberately scoped user exception.
+            $normalizedResource = $resource.Replace('\', '/')
+            $scoped = $normalizedResource -match '^[A-Za-z]:/' -or
+                $normalizedResource -match '^/[^/*?]+' -or
+                $normalizedResource -match '^//[^/*?]+/[^/*?]+' -or
+                $normalizedResource -match '^(~/|\$HOME/)'
+            # Only pure '*' wildcards match *every* possible resource. A lone
+            # '?' DENY matches one character and cannot repair a prior ALLOW.
+            $universal = $resource -match '^\*+$'
+            if ('external_directory' -cmatch $actionPattern -and
+                ($universal -or ($effect -ceq 'allow' -and -not $scoped))) {
+                $fallback = $effect
+            }
+        }
+        if ($fallback -notin @('ask', 'deny')) {
+            Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Global OpenCode config does not end with an ASK or DENY fallback for external_directory. Put {"action":"external_directory","resource":"*","effect":"ask"} before any narrower exceptions, or use DENY.'
+        }
+    } catch {
+        if ($_.Exception.Message -match 'GLOBAL_EXTERNAL_GUARD_UNSAFE') { throw }
+        Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Cannot validate the existing OpenCode global JSONC permissions; refusing installation without modifying user configuration.'
+    } finally {
+        if ($null -ne $document) { $document.Dispose() }
+    }
+}
+
+function Add-OpenCodeGlobalGuard([string]$Root, [System.Collections.IDictionary]$OldEntries, [System.Collections.IDictionary]$Outputs) {
+    $json = Assert-SafeDestination $Root 'opencode.json'
+    $jsonc = Assert-SafeDestination $Root $OpenCodeConfigRelative
+    $hasJson = Test-Path -LiteralPath $json
+    $hasJsonc = Test-Path -LiteralPath $jsonc
+    if ($hasJson -and $hasJsonc) {
+        Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Both OpenCode global config formats exist; cannot establish which permissions win. Resolve this before global installation.'
+    }
+    if ($OldEntries.ContainsKey($OpenCodeConfigRelative)) {
+        if ($hasJson) { Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'An unmanaged opencode.json now conflicts with the Olympus-managed opencode.jsonc.' }
+        # The manifest hash was already checked; always retain the pinned
+        # guard as a managed output so VerifyOnly and uninstall verify ownership.
+        $Outputs[$OpenCodeConfigRelative] = Get-OpenCodeDefaultGuard
+        return
+    }
+    if ($null -ne (Read-OpenCodeGuardIntent $Root)) {
+        # A durable intent predates the first guard write. Only an exact match
+        # can be reclaimed after an interrupted install; never adopt an
+        # unrelated user config because its contents happen to look safe.
+        if ($hasJson) { Fail 'GLOBAL_GUARD_RECOVERY_CONFLICT' 'A user opencode.json conflicts with pending Olympus guard recovery.' }
+        if ($hasJsonc -and (Get-FileHashText $jsonc) -cne (Get-TextHash (Get-OpenCodeDefaultGuard))) {
+            Fail 'GLOBAL_GUARD_RECOVERY_CONFLICT' 'Pending global guard differs from the recorded Olympus source; preserve the file for manual review.'
+        }
+        $Outputs[$OpenCodeConfigRelative] = Get-OpenCodeDefaultGuard
+        return
+    }
+    if ($hasJson -or $hasJsonc) {
+        $userPath = if ($hasJson) { $json } else { $jsonc }
+        if (-not (Test-Path -LiteralPath $userPath -PathType Leaf)) {
+            Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Existing OpenCode global config path is not a file.'
+        }
+        Assert-OpenCodeUserGuard $userPath
+        return
+    }
+    # No user config exists. Olympus owns only this new minimal config, not
+    # the user's future default agent, models, MCP settings, or global plugins.
+    $Outputs[$OpenCodeConfigRelative] = Get-OpenCodeDefaultGuard
+}
+
+function Read-OpenCodeGuardIntent([string]$Root) {
+    $path = Assert-SafeDestination $Root $OpenCodeGuardIntentRelative
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        Fail 'GLOBAL_GUARD_RECOVERY_CONFLICT' 'Pending guard intent is not a regular file.'
+    }
+    try { $intent = [IO.File]::ReadAllText($path) | ConvertFrom-Json -Depth 10 -ErrorAction Stop }
+    catch { Fail 'GLOBAL_GUARD_RECOVERY_CONFLICT' 'Pending guard intent is incomplete or invalid; preserve it for manual review.' }
+    $expectedHash = Get-TextHash (Get-OpenCodeDefaultGuard)
+    if ($intent.schema_version -ne 1 -or $intent.harness -cne 'opencode' -or
+        $intent.resource -cne $OpenCodeConfigRelative -or $intent.sha256 -cne $expectedHash) {
+        Fail 'GLOBAL_GUARD_RECOVERY_CONFLICT' 'Pending guard intent does not match the expected Olympus guard; refusing recovery.'
+    }
+    return $intent
+}
+
+function Write-OpenCodeGuardIntent([string]$Root) {
+    $path = Assert-SafeDestination $Root $OpenCodeGuardIntentRelative
+    $intent = ([ordered]@{
+        schema_version = 1
+        harness = 'opencode'
+        resource = $OpenCodeConfigRelative
+        sha256 = (Get-TextHash (Get-OpenCodeDefaultGuard))
+    } | ConvertTo-Json -Depth 5) + "`n"
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $path)) | Out-Null
+    # CreateNew means a concurrent or pre-existing marker is never overwritten.
+    # Flush the ownership intent before any write to the actual guard begins.
+    $stream = [IO.FileStream]::new($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write,
+        [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough)
+    try {
+        $bytes = $Utf8NoBom.GetBytes($intent)
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
+    } finally { $stream.Dispose() }
+}
+
+function Get-OpenCodeDefaultGuard {
+    $source = Join-Path $SourceRoot 'olympus/harnesses/opencode/global-permissions.jsonc'
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+        Fail 'SOURCE_FILE_MISSING' 'OpenCode global guard template is missing.'
+    }
+    # Use the same source bytes as the read-only Python CLI expects, so a
+    # manifest-owned guard is verifiable without rewriting user configuration.
+    Assert-OpenCodeUserGuard $source
+    return [IO.File]::ReadAllText($source)
+}
+
+function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required, [System.Collections.IDictionary]$RecoverOutputs = $null) {
     $path = Assert-SafeDestination $Root $ManifestRelative
     if (-not (Test-Path -LiteralPath $path)) {
         if ($Required) { Fail 'GLOBAL_MANIFEST_MISSING' "No Olympus global ownership manifest exists for $Harness." }
@@ -149,7 +293,13 @@ function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required)
         $full = Assert-SafeDestination $Root $relative
         if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Managed global file is missing: $relative" }
         if ((Get-FileHashText $full) -cne ([string]$entry.sha256).ToLowerInvariant()) {
-            Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Managed global file changed: $relative"
+            # Only during a pending, hash-verified guard install may a retry
+            # roll forward an agent already written from this exact source.
+            # Unknown edits still block without touching the user's bytes.
+            if ($null -eq $RecoverOutputs -or -not $RecoverOutputs.Contains($relative) -or
+                (Get-FileHashText $full) -cne (Get-TextHash ([string]$RecoverOutputs[$relative]))) {
+                Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Managed global file changed: $relative"
+            }
         }
     }
     return $manifest
@@ -167,9 +317,51 @@ function Write-GlobalResource([string]$Path, [string]$Content) {
     [IO.File]::WriteAllText($Path, $Content, $Utf8NoBom)
 }
 
+function Write-NewOpenCodeGuard([string]$Path, [string]$Content) {
+    # The earlier preflight cannot reserve this name. CreateNew prevents a
+    # user config appearing during installation from ever being truncated.
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $Path)) | Out-Null
+    $stream = [IO.FileStream]::new($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write,
+        [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough)
+    try {
+        $bytes = $Utf8NoBom.GetBytes($Content)
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
+    } finally { $stream.Dispose() }
+}
+
+function Assert-NoOpenCodeConfigCollision([string]$Root) {
+    # Either supported config format may be user-owned. Recheck both names
+    # around publication even when Olympus did not create a managed guard.
+    $json = Assert-SafeDestination $Root 'opencode.json'
+    $jsonc = Assert-SafeDestination $Root $OpenCodeConfigRelative
+    if ((Test-Path -LiteralPath $json) -and (Test-Path -LiteralPath $jsonc)) {
+        Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Both global OpenCode config formats now exist; preserve both for manual reconciliation.'
+    }
+}
+
+function Write-GlobalManifest([string]$Path, [string]$Content) {
+    $parent = Split-Path -Parent $Path
+    [IO.Directory]::CreateDirectory($parent) | Out-Null
+    $staged = Join-Path $parent ('.olympus-manifest-' + [guid]::NewGuid().ToString('N') + '.tmp')
+    # Flush a complete manifest in the same directory before replacing the
+    # ownership record. An interruption must never leave half a JSON manifest.
+    $stream = [IO.FileStream]::new($staged, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write,
+        [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough)
+    try {
+        $bytes = $Utf8NoBom.GetBytes($Content)
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
+    } finally { $stream.Dispose() }
+    try { [IO.File]::Move($staged, $Path, $true) }
+    finally { if (Test-Path -LiteralPath $staged) { [IO.File]::Delete($staged) } }
+}
+
 function Get-ProjectOverride([string]$Harness, [string]$GlobalVersion) {
-    $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue
-    if (-not $git -or -not (Test-Path -LiteralPath $ProjectTarget -PathType Container)) { return }
+    $gitCommands = @(Get-Command git -CommandType Application -ErrorAction SilentlyContinue)
+    if ($gitCommands.Count -eq 0 -or -not (Test-Path -LiteralPath $ProjectTarget -PathType Container)) { return }
+    # Windows PATH may expose multiple Git shims. Invoke exactly one binary.
+    $git = $gitCommands[0]
     $projectRoot = (& $git.Source -C $ProjectTarget rev-parse --show-toplevel 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $projectRoot) { return }
     # A dual-harness project stores the union manifest at .opencode; a
@@ -207,8 +399,12 @@ function Invoke-OneHarness([string]$SelectedHarness) {
     $root = if ($SelectedHarness -eq 'opencode') { Get-OpenCodeRoot } else { Get-CodexRoot }
     if (-not [IO.Path]::IsPathFullyQualified($root)) { Fail 'GLOBAL_PATH_INVALID' 'Resolved global root is not absolute.' }
     $manifestPath = Assert-SafeDestination $root $ManifestRelative
+    $guardIntent = if ($SelectedHarness -eq 'opencode') { Read-OpenCodeGuardIntent $root } else { $null }
 
     if ($Uninstall) {
+        if ($null -ne $guardIntent) {
+            Fail 'GLOBAL_GUARD_RECOVERY_PENDING' 'Complete the interrupted OpenCode global install before uninstalling its managed resources.'
+        }
         $manifest = Read-GlobalManifest $root $SelectedHarness -Required
         $entryMap = Get-ManifestEntryMap $manifest
         if ($DryRun) {
@@ -226,15 +422,19 @@ function Invoke-OneHarness([string]$SelectedHarness) {
         return
     }
 
+    $recoverOutputs = if ($null -ne $guardIntent -and -not $VerifyOnly) { Get-GlobalOutputs $SelectedHarness } else { $null }
+    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:$VerifyOnly -RecoverOutputs $recoverOutputs
+    $oldEntries = Get-ManifestEntryMap $manifest
     $outputs = Get-GlobalOutputs $SelectedHarness
+    if ($SelectedHarness -eq 'opencode') {
+        Add-OpenCodeGlobalGuard $root $oldEntries $outputs
+    }
     if ($SelectedHarness -eq 'codex') {
         $higherPrecedenceInstructions = Assert-SafeDestination $root 'AGENTS.override.md'
         if (Test-Path -LiteralPath $higherPrecedenceInstructions) {
             Fail 'GLOBAL_INSTALL_CONFLICT' 'User-owned global AGENTS.override.md takes precedence over AGENTS.md; refusing an inactive Olympus global root.'
         }
     }
-    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:$VerifyOnly
-    $oldEntries = Get-ManifestEntryMap $manifest
     $newEntries = @{}
     $create = [System.Collections.Generic.List[string]]::new()
     $update = [System.Collections.Generic.List[string]]::new()
@@ -246,7 +446,9 @@ function Invoke-OneHarness([string]$SelectedHarness) {
         if (-not (Test-Path -LiteralPath $full)) { $create.Add($relative); continue }
         if ($oldEntries.ContainsKey($relative)) {
             if ((Get-FileHashText $full) -cne ([string]$oldEntries[$relative].sha256).ToLowerInvariant()) {
-                Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Refusing to overwrite modified managed global resource: $relative"
+                if ($null -eq $recoverOutputs -or (Get-FileHashText $full) -cne (Get-TextHash ([string]$outputs[$relative]))) {
+                    Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Refusing to overwrite modified managed global resource: $relative"
+                }
             }
             if ((Get-FileHashText $full) -cne (Get-TextHash ([string]$outputs[$relative]))) { $update.Add($relative) }
         } elseif ((Get-FileHashText $full) -cne (Get-TextHash ([string]$outputs[$relative]))) {
@@ -257,6 +459,9 @@ function Invoke-OneHarness([string]$SelectedHarness) {
     foreach ($relative in $remove) { [void](Assert-SafeDestination $root $relative) }
 
     if ($VerifyOnly) {
+        if ($null -ne $guardIntent) {
+            Fail 'GLOBAL_GUARD_RECOVERY_PENDING' 'Pending OpenCode guard ownership must be reconciled by a regular install.'
+        }
         if ($null -ne $manifest -and [string]$manifest.installed_version -cne $SourceVersion) {
             Fail 'GLOBAL_VERSION_DRIFT' "Global manifest records '$($manifest.installed_version)'; requested '$SourceVersion'."
         }
@@ -287,20 +492,41 @@ function Invoke-OneHarness([string]$SelectedHarness) {
     } | ConvertTo-Json -Depth 20) + "`n"
     $manifestHash = Get-TextHash $manifestText
     $manifestChanged = -not (Test-Path -LiteralPath $manifestPath) -or (Get-FileHashText $manifestPath) -cne $manifestHash
+    if ($SelectedHarness -eq 'opencode' -and $null -eq $guardIntent -and $OpenCodeConfigRelative -in $create) {
+        # A crash between writing an unowned config and the manifest used to
+        # orphan the guard. This durable intent makes that state recoverable.
+        Write-OpenCodeGuardIntent $root
+        $guardIntent = Read-OpenCodeGuardIntent $root
+    }
     foreach ($relative in $remove) { [IO.File]::Delete((Assert-SafeDestination $root $relative)) }
     foreach ($relative in @($outputs.Keys | Sort-Object)) {
         if ($relative -in $create -or $relative -in $update) {
-            Write-GlobalResource (Assert-SafeDestination $root $relative) ([string]$outputs[$relative])
+            $destination = Assert-SafeDestination $root $relative
+            if ($SelectedHarness -eq 'opencode' -and $relative -ceq $OpenCodeConfigRelative -and $relative -in $create) {
+                Write-NewOpenCodeGuard $destination ([string]$outputs[$relative])
+            } else {
+                Write-GlobalResource $destination ([string]$outputs[$relative])
+            }
         }
     }
-    if ($manifestChanged) { Write-GlobalResource $manifestPath $manifestText }
+    if ($SelectedHarness -eq 'opencode') {
+        Assert-NoOpenCodeConfigCollision $root
+    }
+    if ($manifestChanged) { Write-GlobalManifest $manifestPath $manifestText }
+    if ($SelectedHarness -eq 'opencode') {
+        Assert-NoOpenCodeConfigCollision $root
+    }
+    if ($null -ne $guardIntent) {
+        # Manifest ownership is now durable; the recovery marker is redundant.
+        [IO.File]::Delete((Assert-SafeDestination $root $OpenCodeGuardIntentRelative))
+    }
     Get-ProjectOverride $SelectedHarness $SourceVersion
     $status = if (-not ($create.Count -or $update.Count -or $remove.Count -or $manifestChanged)) { 'NO_CHANGES' } else { 'READY' }
     $rootLabel = if ($SelectedHarness -eq 'opencode') { 'OPENCODE' } else { 'CODEX' }
     Write-Output "OLYMPUS_GLOBAL_INSTALL: $rootLabel $SourceVersion $status ($($outputs.Count) managed resources; root=$root)"
     if ($script:ProjectOverrideDetected) { Write-Output 'OLYMPUS_GLOBAL_MIGRATION: GLOBAL_INSTALLED PROJECT_LOCAL_REMAINS_AS_OVERRIDE' }
     if ($SelectedHarness -eq 'opencode') {
-        Write-Output 'GLOBAL_DEFAULT_AGENT: unchanged; select Kael explicitly to preserve user-owned global config.'
+        Write-Output 'GLOBAL_DEFAULT_AGENT: unchanged; user config preserved or minimal external-directory ASK config manifest-managed.'
     } else {
         Write-Output 'GLOBAL_CODEX_PROFILE: codex --profile olympus; base config.toml is not modified.'
     }

@@ -83,7 +83,7 @@ Path evidence gathered for this foundation:
 
 | Harness | Windows evidence | Unix-like evidence | Global resources used |
 |---|---|---|---|
-| OpenCode | Fresh CLI child `opencode debug paths` reported home/config/data/cache/state/tmp/log within isolated HOME, four XDG roots, and TEMP. `OPENCODE_CONFIG_DIR` selects the config layer only; it is not a sandbox for all global paths. | Official current docs specify `~/.config/opencode`; no Unix runtime was available. | Official agent/plugin docs identify `~/.config/opencode/agents/` and `~/.config/opencode/plugins/`; global commands use the same config-root `commands/` convention. The user-owned `opencode.json` is not overwritten; Kael is available by explicit selection, but no global default-agent change is made. |
+| OpenCode | Fresh CLI child `opencode debug paths` reported home/config/data/cache/state/tmp/log within isolated HOME, four XDG roots, and TEMP. `OPENCODE_CONFIG_DIR` selects the config layer only; it is not a sandbox for all global paths. | Official current docs specify `~/.config/opencode`; no Unix runtime was available. | Official agent/plugin docs identify `~/.config/opencode/agents/` and `~/.config/opencode/plugins/`; global commands use the same config-root `commands/` convention. User-owned `opencode.json` / `opencode.jsonc` is not overwritten. An empty global config root receives a minimal manifest-owned `opencode.jsonc` with `external_directory * ASK`; no global default-agent change is made. |
 | Codex | Current CLI help resolves user configuration from `~/.codex/config.toml`; the current CLI accepts `CODEX_HOME` and profiles at `$CODEX_HOME/<name>.config.toml`. | Current official docs specify `~/.codex` unless `CODEX_HOME` is set; no Unix runtime was available. | Global custom agents at `~/.codex/agents/`, profile `olympus.config.toml`, and the global instructions file `AGENTS.md`. The existing base `config.toml` is not modified; use `codex --profile olympus`. Existing `AGENTS.md` is a user-owned conflict and is never overwritten. |
 
 Current official path/config references (consulted 2026-09-30): [OpenCode
@@ -96,21 +96,84 @@ Codex's global `AGENTS.override.md` also takes precedence over `AGENTS.md`; the
 installer treats an existing global override as a conflict rather than writing
 an inactive Olympus root.
 
-The installer remains Windows-qualified. `-Scope global` defaults to no user-data
-overwrite, records `scope = global`, `installed_harnesses`, `installed_version`,
-and hash-owned `managed_files`, and `-VerifyOnly` verifies one scope at a time.
-OpenCode global `opencode.json` and Codex base `config.toml` remain untouched.
-Updates refuse drift, preserve unrelated user config, and do not remove
+The installer remains Windows-qualified. `-Scope global` does not overwrite
+user-owned configuration, records `scope = global`, `installed_harnesses`,
+`installed_version`, and hash-owned `managed_files`, and `-VerifyOnly` verifies
+one scope at a time. Codex base `config.toml` remains untouched. OpenCode's
+global `opencode.json` or `opencode.jsonc`, **if already user-owned**, remains
+untouched, but the installer must validate an ordered V2 `permissions` array
+with an effective `external_directory * ASK` or `DENY` fallback. It refuses an
+unprotected, malformed, or ambiguous existing global config **before writing**
+OpenCode resources, with `GLOBAL_EXTERNAL_GUARD_UNSAFE`. The user must fix the
+config; the installer does not silently patch it. If neither global config
+exists, it creates a minimal `opencode.jsonc` as a **14th managed resource**
+(11 agents, 2 plugin files, 1 guard), without setting a default agent or
+changing models/MCP configuration. This guard is hash-verified on update and
+`VerifyOnly`, and removed on uninstall only while unmodified. If a user edits
+it, verification and uninstall fail safely rather than deleting their edits.
+With a pre-existing safe user config, only the original 13 OpenCode assets are
+manifest-owned. Updates refuse drift, preserve unrelated user config, and do not remove
 project-local installs; the explicit migration result is `GLOBAL_INSTALLED
 PROJECT_LOCAL_REMAINS_AS_OVERRIDE`. A project-local Olympus manifest in the
 current Git root is reported, including version/hash drift. Other repositories
-are not scanned or modified. Static global installer qualification passes, but
+are not scanned or modified. Before the first guard write, the installer persists
+an Olympus-only `olympus/opencode-guard-pending.json` ownership intent. If interrupted
+before the manifest is committed, the next installation reclaims **only** an
+exact-hash guard, rejects altered bytes, and removes the intent after the
+manifest is safely written. During that same pending install, already-written
+managed agents/plugins may roll forward **only** if their bytes match the
+current canonical source exactly; an unknown edit or missing retired file
+still requires manual reconciliation, preserving all original bytes. The guard
+itself is created with exclusive `CreateNew` semantics, so a `.jsonc` config
+appearing after preflight cannot be overwritten. The installer also rechecks
+the competing `.json` name around manifest publication and refuses to report
+success if it appears. A collision may leave the ownership intent pending and
+must be resolved manually after preserving the user config. The intent and a
+matching hash prove recoverable bytes, not cryptographic authorship if another
+process creates **identical** bytes between intent and guard creation; avoid
+concurrent global config writers during installation or recovery.
+`VerifyOnly` and uninstall fail closed while an
+unreconciled intent exists; run the regular installer to recover first. This
+guard-specific recovery does not claim full transactionality for all global
+agent/plugin resources.
+
+The read-only global CLI does not silently report `no_changes` for a historical
+13-resource inventory with no global config: it proposes the missing managed
+guard. It blocks on an unsafe or ambiguous user config, while still preserving
+safe JSON/JSONC user configs outside Olympus ownership. Static global installer
+qualification passes, but
 runtime discovery is a separate contract:
 
 | Harness | Global support | Runtime evidence and blocker |
 |---|---|---|
 | OpenCode | **SUPPORTED — Windows V2.0.26 (isolated)** | Historical real `v0.4.6` global install: 15 managed resources; `VerifyOnly` read-only PASS; `opencode.config.agent` `active`; 12/12 agents plus 2/2 independent controls. The current 11-role candidate has not yet been included in that runtime evidence. [Issue #7 acceptance](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/7#issuecomment-6106396436). |
 | Codex | **SUPPORTED** | The user-provided Codex runtime evidence classifies `CODEX_GLOBAL_RUNTIME: SUPPORTED`. It was accepted as supplied and not re-run during this continuation; contextual Olympus maintenance and `DENY` remain declared gaps. |
+
+**Permission precedence limit:** V2 resolves the **last matching rule**, not
+the narrowest resource. A global-user specific `external_directory DENY`
+followed by a project `external_directory * ASK` can therefore resolve to ASK;
+this existing project-configuration behavior was **not** introduced or fixed
+by the agent-level rules change in PR #121. Conversely, a later path-specific
+DENY remains effective and Olympus agents do not append their own wildcard ASK
+over it. User-configured exceptions may still permit deliberate external
+access. `policies.tool.use` hard-deny is a separate mechanism. Shell execution
+has host authority and is not a filesystem sandbox. Static fixture tests cover
+both orderings, global-only ASK versus specific DENY, user-config preservation,
+and failure/ownership cases; they do **not** establish a live native global-only
+permission prompt or denial. Native global-only qualification remains required
+before making a blanket runtime security claim. An optional
+`tests/global-installer/native-permission-api-smoke.ps1` probes the isolated V2
+server permission API: it records native ASK, replies programmatically with
+`reject`, and checks automatic specific DENY **without interactive dialogs**.
+The default invocation checks permission-engine behavior only; the Windows CI
+workflow supplies `-NativeToolRead` and also triggers an actual OpenCode `read`
+against synthetic external sentinels with a local deterministic model fixture.
+That native tool-read check has observed a denied read and no sentinel-content
+exposure under its isolated settings, **not** a human-observed rejection,
+an interactive TUI prompt, or a general alternative-tool/shell sandbox claim.
+See the official
+[V2 permissions](https://opencode.ai/docs/permissions/) and
+[server permission API](https://opencode.ai/docs/api) references.
 
 OpenCode's official current config docs confirm global agents under
 `~/.config/opencode/agents/`, `OPENCODE_CONFIG_DIR` as a custom config directory,
@@ -128,8 +191,9 @@ harnesses, on different evidence: OpenCode was tested in an isolated Windows
 V2.0.26 instance; Codex uses previously supplied global runtime PASS evidence.
 OpenCode qualification established agent registration and configuration-level
 Kael selection, **not** a model-backed conversation, universal V2 compatibility,
-or automatic replacement of a user's default. The installer intentionally
-preserves global `opencode.json` / `opencode.jsonc`. For interactive
+or automatic replacement of a user's default. The installer preserves any
+pre-existing safe user-owned global `opencode.json` / `opencode.jsonc`, or
+creates a minimal managed guard if neither exists. For interactive
 selection, start `opencode --standalone` (or `opencode` with your usual
 service) and choose visible primary **Kael** using the V2 agent list
 (**Ctrl+X**, then **A** by default) or cycle agents with **Shift+Tab**.

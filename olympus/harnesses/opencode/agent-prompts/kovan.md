@@ -133,6 +133,10 @@ BLOCKED/DENIED, not an authority request.
 - Shell may use normal test/build temp and cache locations as part of a scoped
   command, but that does not authorize native file tools to bypass
   `external_directory` ASK or source edits outside WRITE_SCOPE.
+- A separately assigned non-source external effect (such as a test artifact or
+  user-requested local hook) needs its exact target, operation, and effective
+  permission; it is not covered by another repository's WRITE_SCOPE. Native
+  DENY and protected paths remain binding even with explicit task authority.
 - Write only the requested files. Do not clean up, delete, rename, or touch
   unrelated files unless the contract explicitly authorizes that exact path.
 - Do not edit generated/installer-owned runtime configuration or root OpenCode

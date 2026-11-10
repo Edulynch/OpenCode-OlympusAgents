@@ -3,9 +3,6 @@ description: Source-read-only trusted-project validation specialist with practic
 mode: subagent
 model: "{{opencode_model}}#{{effort}}"
 permissions:
-  - action: external_directory
-    resource: "*"
-    effect: ask
   - action: edit
     resource: "*"
     effect: deny

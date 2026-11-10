@@ -19,7 +19,6 @@ $envNames = @('OPENCODE_CONFIG_DIR', 'OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG
 $previous = @{}
 $serverProcess = $null
 $client = $null
-$askTask = $null
 $sessionId = ''
 $base = ''
 $completed = $false
@@ -43,6 +42,19 @@ function PermissionRecords($Response) {
     if ($null -eq $Response) { return @() }
     $items = if ('data' -in @($Response.PSObject.Properties.Name)) { $Response.data } else { $Response }
     return @($items)
+}
+
+function PermissionOutcome($Response, [string]$Label) {
+    # Native V2 evaluates a request immediately. An ASK returns its request ID
+    # and remains in the pending list until the client replies separately.
+    if ($null -eq $Response) { Fail "$Label returned no permission outcome." }
+    $outcome = if ('data' -in @($Response.PSObject.Properties.Name)) { $Response.data } else { $Response }
+    if ($null -eq $outcome -or
+        'effect' -notin @($outcome.PSObject.Properties.Name) -or
+        'id' -notin @($outcome.PSObject.Properties.Name)) {
+        Fail "$Label did not return the native permission ID and effect."
+    }
+    return $outcome
 }
 
 function Post-Json([Net.Http.HttpClient]$Client, [string]$Uri, $Body) {
@@ -154,40 +166,19 @@ try {
     $allowedPattern = $allowedRoot.Replace('\', '/').TrimEnd('/') + '/*'
     $forbiddenPattern = $forbiddenRoot.Replace('\', '/').TrimEnd('/') + '/*'
     $askRequest = @{ agent='kovan'; action='external_directory'; resources=@($allowedPattern); save=@($allowedPattern) }
-    # A native ASK leaves an outstanding request; the script itself sends the
-    # explicit reject and never asks a human to inspect an ambiguous dialog.
-    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
-    $askTask = $client.PostAsync("$base/api/session/$sessionId/permission", (JsonContent $askRequest))
-    $pendingId = ''
-    while ([DateTime]::UtcNow -lt $deadline -and -not $pendingId) {
-        $pending = @(PermissionRecords (Get-Json $client "$base/api/session/$sessionId/permission"))
-        foreach ($request in $pending) {
-            if ($null -eq $request -or 'action' -notin @($request.PSObject.Properties.Name)) { continue }
-            if ($request.action -eq 'external_directory' -and $allowedPattern -in @($request.resources)) {
-                $pendingId = [string]$request.id
-                break
-            }
-        }
-        if (-not $pendingId -and $askTask.IsCompleted) {
-            try {
-                $earlyReply = $askTask.GetAwaiter().GetResult()
-                $status = [int]$earlyReply.StatusCode
-                $earlyBody = $earlyReply.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-                $bodyKind = 'empty_or_non_json'
-                try {
-                    $parsedEarly = ConvertFrom-Json -InputObject $earlyBody -Depth 10 -ErrorAction Stop
-                    $bodyKind = @($parsedEarly.PSObject.Properties.Name) -join ','
-                } catch { }
-                Fail "Permission request completed before an ASK was listed (HTTP $status; response keys=$bodyKind)."
-            } catch [Net.Http.HttpRequestException] {
-                Fail 'Permission request failed before an ASK was listed (HTTP transport failure).'
-            }
-        }
-        if (-not $pendingId) { Start-Sleep -Milliseconds 150 }
-    }
-    if (-not $pendingId) { Fail 'Timed out without observing the native ASK request.' }
-    $reject = Post-Json $client "$base/api/session/$sessionId/permission/$pendingId/reply" @{ decision='reject' }
-    if (-not $askTask.Wait([TimeSpan]::FromSeconds(5))) { Fail 'The rejected permission call did not finish.' }
+    # A native ASK returns immediately; its ID must then be present among
+    # pending requests. Reject through the official API without a GUI prompt.
+    $askOutcome = PermissionOutcome (Post-Json $client "$base/api/session/$sessionId/permission" $askRequest) 'Global ASK'
+    if ($askOutcome.effect -cne 'ask') { Fail "Global request resolved to '$($askOutcome.effect)' instead of ASK." }
+    $pendingId = [string]$askOutcome.id
+    $pending = @(PermissionRecords (Get-Json $client "$base/api/session/$sessionId/permission"))
+    $matching = @($pending | Where-Object {
+        $null -ne $_ -and 'id' -in @($_.PSObject.Properties.Name) -and
+        $_.id -eq $pendingId -and $_.action -eq 'external_directory' -and
+        $allowedPattern -in @($_.resources)
+    })
+    if ($matching.Count -ne 1) { Fail 'Native ASK outcome did not create the expected pending request.' }
+    $null = Post-Json $client "$base/api/session/$sessionId/permission/$pendingId/reply" @{ decision='reject' }
     $remaining = @(PermissionRecords (Get-Json $client "$base/api/session/$sessionId/permission"))
     if (@($remaining | Where-Object { $null -ne $_ -and 'id' -in @($_.PSObject.Properties.Name) -and $_.id -eq $pendingId }).Count -ne 0) {
         Fail 'Rejected native permission request is still pending.'
@@ -202,11 +193,11 @@ try {
     $denyUpdate.Content = $denyJson
     $updateResponse = $client.SendAsync($denyUpdate).GetAwaiter().GetResult()
     if (-not $updateResponse.IsSuccessStatusCode) { Fail 'Cannot set the isolated session-specific DENY.' }
-    $denyResponse = $client.PostAsync("$base/api/session/$sessionId/permission", (JsonContent @{
+    $denyOutcome = PermissionOutcome (Post-Json $client "$base/api/session/$sessionId/permission" @{
         agent='kovan'; action='external_directory'; resources=@($forbiddenPattern); save=@($forbiddenPattern)
-    })).GetAwaiter().GetResult()
+    }) 'Specific DENY'
     $denyPending = @(PermissionRecords (Get-Json $client "$base/api/session/$sessionId/permission"))
-    if ($denyResponse.IsSuccessStatusCode -or @($denyPending | Where-Object { $null -ne $_ -and 'resources' -in @($_.PSObject.Properties.Name) -and $forbiddenPattern -in @($_.resources) }).Count) {
+    if ($denyOutcome.effect -cne 'deny' -or @($denyPending | Where-Object { $null -ne $_ -and 'resources' -in @($_.PSObject.Properties.Name) -and $forbiddenPattern -in @($_.resources) }).Count) {
         Fail 'Specific DENY was not an automatic native rejection.'
     }
     Write-Output 'NATIVE_PERMISSION_API_SPECIFIC_DENY: AUTOMATIC'

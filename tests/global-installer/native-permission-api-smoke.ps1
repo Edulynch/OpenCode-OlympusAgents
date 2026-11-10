@@ -123,6 +123,13 @@ try {
                         $context.Response.Close()
                         continue
                     }
+                    if ($route -eq '/shutdown') {
+                        # End the listener through its own loop so normal
+                        # failures do not leave a blocked background job.
+                        $context.Response.StatusCode = 200
+                        $context.Response.Close()
+                        break
+                    }
                     if ($route -ne '/v1/chat/completions' -or $context.Request.HttpMethod -ne 'POST') {
                         $context.Response.StatusCode = 404
                         $context.Response.Close()
@@ -352,12 +359,12 @@ try {
         if (-not $readyModel) { Fail 'The isolated fake-model server did not become ready.' }
         # Select the fake provider explicitly: Kovan's normal model must not
         # call a network service or consume any configured API credentials.
-        $null = Post-Json $client "$base/api/session/$sessionId/model" @{ providerID='oa121local'; id='reader' }
+        $null = Post-Json $client "$base/api/session/$sessionId/model" @{
+            model=@{ providerID='oa121local'; id='reader' }
+        }
         $null = Post-Json $client "$base/api/session/$sessionId/agent" @{ agent='kovan' }
         $null = Post-Json $client "$base/api/session/$sessionId/prompt" @{
-            agent='kovan'
-            model=@{ providerID='oa121local'; id='reader' }
-            parts=@(@{ type='text'; text='Read the specified synthetic file using the native read tool only.' })
+            text='Read the specified synthetic file using the native read tool only.'
         }
         $readObserved = $false
         $deniedRead = $false
@@ -399,7 +406,18 @@ try {
 } finally {
     if ($null -ne $client) { $client.Dispose() }
     if ($null -ne $modelJob) {
-        if ($modelJob.State -eq 'Running') { Stop-Job -Job $modelJob -ErrorAction SilentlyContinue }
+        if ($modelJob.State -eq 'Running') {
+            $shutdown = $null
+            try {
+                $shutdown = [Net.Http.HttpClient]::new()
+                $shutdown.Timeout = [TimeSpan]::FromSeconds(2)
+                $null = $shutdown.GetAsync("http://127.0.0.1:$modelPort/shutdown").GetAwaiter().GetResult()
+            } catch { } finally {
+                if ($null -ne $shutdown) { $shutdown.Dispose() }
+            }
+            $null = Wait-Job -Job $modelJob -Timeout 3
+            if ($modelJob.State -eq 'Running') { Stop-Job -Job $modelJob -ErrorAction SilentlyContinue }
+        }
         Remove-Job -Job $modelJob -Force -ErrorAction SilentlyContinue
     }
     if ($null -ne $serverProcess) {

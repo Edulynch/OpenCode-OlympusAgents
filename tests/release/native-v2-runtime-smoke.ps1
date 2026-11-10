@@ -58,15 +58,16 @@ function New-IsolatedProject([string]$Name) {
 
 function New-IsolatedEnvironment([string]$Name) {
     $base = Join-Path $run ($Name + '-environment')
-    $home = Join-Path $base 'home'
-    $drive = [IO.Path]::GetPathRoot($home).TrimEnd('\')
+    # HOME is a protected automatic PowerShell variable, so use a distinct local name.
+    $isolatedHome = Join-Path $base 'home'
+    $drive = [IO.Path]::GetPathRoot($isolatedHome).TrimEnd('\')
     $paths = @{
-        HOME = $home
-        USERPROFILE = $home
+        HOME = $isolatedHome
+        USERPROFILE = $isolatedHome
         HOMEDRIVE = $drive
-        HOMEPATH = $home.Substring($drive.Length)
-        APPDATA = (Join-Path $home 'AppData/Roaming')
-        LOCALAPPDATA = (Join-Path $home 'AppData/Local')
+        HOMEPATH = $isolatedHome.Substring($drive.Length)
+        APPDATA = (Join-Path $isolatedHome 'AppData/Roaming')
+        LOCALAPPDATA = (Join-Path $isolatedHome 'AppData/Local')
         XDG_CONFIG_HOME = (Join-Path $base 'xdg-config')
         XDG_DATA_HOME = (Join-Path $base 'xdg-data')
         XDG_CACHE_HOME = (Join-Path $base 'xdg-cache')

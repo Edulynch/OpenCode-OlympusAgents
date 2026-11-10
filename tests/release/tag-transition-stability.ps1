@@ -414,13 +414,16 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
     }
     $openCodeGlobal = $openCodeStates['GLOBAL_RUNTIME_DISCOVERY']
     $codexGlobal = $codexStates['GLOBAL_RUNTIME_DISCOVERY']
-    $readmeOpenMaintenanceClaim = $readme -match '(?i)OpenCode supports this contextual workflow'
-    $readmeCodexMaintenanceGapClaim = $readme -match '(?i)Codex currently declares it a capability gap'
+    # The README stays example-first; the linked workflow guide carries the
+    # extended operator-facing capability explanation.
+    $workflowGuide = [string]$Docs['docs/WORKFLOWS.md']
+    $workflowOpenMaintenanceClaim = $workflowGuide -match '(?i)OpenCode supports the current contextual maintenance workflow'
+    $workflowCodexMaintenanceGapClaim = $workflowGuide -match '(?i)Codex currently declares it a capability gap'
     $roadmapOpenGlobal = '(?i)OpenCode V2[^\r\n]*GLOBAL_RUNTIME_DISCOVERY\s*=\s*`?' + [regex]::Escape([string]$openCodeGlobal) + '`?'
     $roadmapCodexGlobal = '(?i)Codex remains\s+`?' + [regex]::Escape([string]$codexGlobal) + '`?\s+on separately supplied evidence'
     if ($capabilityMismatch -or -not $openCodeGlobal -or -not $codexGlobal -or
-        $readmeOpenMaintenanceClaim -ne ($openCodeStates['CONTEXTUAL_OLYMPUS_MAINTENANCE'] -eq 'SUPPORTED') -or
-        $readmeCodexMaintenanceGapClaim -ne ($codexStates['CONTEXTUAL_OLYMPUS_MAINTENANCE'] -eq 'GAP') -or
+        $workflowOpenMaintenanceClaim -ne ($openCodeStates['CONTEXTUAL_OLYMPUS_MAINTENANCE'] -eq 'SUPPORTED') -or
+        $workflowCodexMaintenanceGapClaim -ne ($codexStates['CONTEXTUAL_OLYMPUS_MAINTENANCE'] -eq 'GAP') -or
         -not [regex]::IsMatch($roadmap, $roadmapOpenGlobal) -or
         -not [regex]::IsMatch($roadmap, $roadmapCodexGlobal)) {
         $errors.Add('DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH')

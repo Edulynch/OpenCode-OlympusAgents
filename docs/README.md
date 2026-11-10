@@ -1,12 +1,13 @@
 # Documentation index
 
-Start with the root [README](../README.md) for installation and the short product overview. This index maps current guidance to its source of truth and keeps completed work and old decisions easy to find.
+Start with the icon-first [README](../README.md) for quick commands and task examples, then open the guide for the subject you need. This index maps current guidance to its source of truth and keeps completed work and old decisions easy to find.
 
 ## Sources of truth
 
 | Subject | Canonical source | Use |
 | --- | --- | --- |
 | First install and removal | [README](../README.md) and [installation guide](INSTALLATION.md) | The README has the two first-run commands; the guide explains supported platforms, parameters, safeguards, and troubleshooting. |
+| Using the agents, task modes, and prompt examples | [Workflow guide](WORKFLOWS.md) | The README shows the first task; this guide owns the operator-facing NORMAL/FAST and experimental modifier explanations. Canonical behavior stays in Core. |
 | Olympus roles, routing, authority, and policies | [Olympus Core](../olympus/README.md) | Edit the canonical Core or adapter source when behavior changes. Generated harness files are outputs. |
 | Harness capabilities and support status | [Capability source](../olympus/harnesses/capabilities.toml), [capability matrix](HARNESS-CAPABILITIES.md), and [Codex compatibility policy](CODEX-COMPATIBILITY.md) | The TOML file owns capability data; the rendered matrix is a read-only view. Codex remains at its documented frozen baseline. |
 | Feature requirements and evidence | [`specs/`](../specs/README.md) | Keep implemented and retrospective contracts there. `specs/future/` is a proposal register, not implementation authority. |
@@ -18,7 +19,7 @@ Issue #91 keeps documentation versioned in this repository. Enabling or publishi
 
 ## Current guidance and release records
 
-The files below include the 10 existing top-level documents (nine from the historical governance inventory plus the operational issue ledger) and the v0.5.0 candidate release record. No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
+The files below include the 10 documents from the prior governance inventory (nine historical top-level entries plus the operational issue ledger), the v0.5.0 candidate release record, and the operator workflow guide. No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
 
 | Document | Purpose and audience | State, relationship, and incoming references | Proposed owner |
 | --- | --- | --- | --- |
@@ -30,6 +31,7 @@ The files below include the 10 existing top-level documents (nine from the histo
 | [ISSUE-LEDGER.md](ISSUE-LEDGER.md) | Maintainer-facing snapshot of issue decisions, evidence limits, next gates, and Git/WIP lifecycle | **Vigente, operativo (snapshot).** Links to live GitHub issues/PRs; not a second source of truth, requirements catalog, or release record. | Repository maintainers |
 | [ROADMAP.md](ROADMAP.md) | Directional shipped, in-validation, and proposed work | **Vigente, directional.** Not a release promise or implementation authorization; links to closed Phase 12 results. | Repository maintainers |
 | [WORKTREES.md](WORKTREES.md) | Worktree setup and use | **Vigente.** Operational guidance; related retrospective behavior is recorded under `specs/`. | Repository maintainers |
+| [WORKFLOWS.md](WORKFLOWS.md) | Examples, team overview, modes, and practical operator limits | **Vigente.** Extended user guide linked from the concise README; Olympus Core remains the canonical source for policy. | Repository maintainers |
 | [RELEASE-v0.4.8.md](RELEASE-v0.4.8.md) | v0.4.8 release record | **Histórico.** Preserved release facts; superseded as current-version guidance by later release records. | Release maintainer (proposed role) |
 | [RELEASE-v0.4.9.md](RELEASE-v0.4.9.md) | v0.4.9 release record | **Histórico.** Preserved release facts; remains linked from the constitution as a dated example. | Release maintainer (proposed role) |
 | [RELEASE-v0.5.0.md](RELEASE-v0.5.0.md) | Bounded CLI v0.5.0 candidate and support matrix | **Candidato, no publicado.** Claims and remaining gate recorded without creating a tag/release. | Release maintainer (proposed role) |

@@ -47,15 +47,17 @@ try {
     $nox = Text '.opencode/agents/nox.md'
     $maintenance = Text 'olympus/policies/maintenance-context.md'
     $readme = Text 'README.md'
+    $workflows = Text 'docs/WORKFLOWS.md'
     $docs = Text 'docs/DEVELOPMENT.md'
 
-    # The user-facing README can describe normal Git routing in prose or a
-    # table. Require the actual Git/release/Kael boundary, not exact wording.
+    # Keep the landing page brief while ensuring the linked operator guide
+    # still makes the same maintenance boundary explicit.
     Check 'POLICY_CONTEXTUAL_MAINTENANCE_NORMAL' ($kael -match 'Ordinary Git work in a trusted project belongs to Kael.s normal workflow' -and
         $kovan -match 'Kovan is the normal-plane Git writer for an explicitly requested operation' -and
         $maintenance -match 'Kael is the only root orchestrator' -and
         $maintenance -match 'There is no separate maintenance role, command' -and
-        $readme -match 'Maintenance is a task context, not a separate role or command')
+        $readme -match '\[.*?\]\(docs/WORKFLOWS\.md\)' -and
+        $workflows -match 'There is no active Aegis role or `/maintain` command')
     Check 'POLICY_GIT_IMPACT_AUTHORIZATION' ($kael -match '(?s)Destructive or high-impact Git\s+operations require explicit, proportionate user authorization' -and
         $kovan -match '(?s)History rewrites, force-pushes.*operations require explicit user authority.*proportionate preflight')
     Check 'POLICY_GIT_ONLY_OWNERSHIP' ($kael -match 'TASK_TYPE: GIT_ONLY or\s+MIXED' -and

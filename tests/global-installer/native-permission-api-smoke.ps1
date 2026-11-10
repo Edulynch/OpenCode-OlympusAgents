@@ -147,6 +147,20 @@ try {
         Fail 'The native config document does not expose the required external-directory ASK fallback.'
     }
     Write-Output 'NATIVE_GLOBAL_GUARD_DOCUMENT: DISCOVERED'
+    # Confirm Kovan is registered in this same location. A missing agent would
+    # trigger V2's implicit blanket DENY and invalidate the ASK exercise.
+    $agentResponse = Get-Json $client "$base/api/agent/kovan"
+    $agent = if ('data' -in @($agentResponse.PSObject.Properties.Name)) { $agentResponse.data } else { $agentResponse }
+    if ($null -eq $agent -or 'permissions' -notin @($agent.PSObject.Properties.Name)) {
+        Fail 'Native Kovan agent is not registered with a readable permission ruleset.'
+    }
+    $nativeExternalRules = @($agent.permissions | Where-Object {
+        $null -ne $_ -and $_.action -in @('*', 'external_directory')
+    })
+    $nativeRuleSummary = (@($nativeExternalRules | ForEach-Object {
+        "$($_.action):$($_.resource):$($_.effect)"
+    }) -join ',')
+    Write-Output "NATIVE_KOVAN_EXTERNAL_RULES: $nativeRuleSummary"
     $session = Post-Json $client "$base/api/session" @{ title='OA121 isolated global permission API' }
     if ($null -eq $session) { Fail 'Session creation returned an empty response.' }
     $sessionKeys = @($session.PSObject.Properties.Name)

@@ -388,11 +388,13 @@ try {
                         } else {
                             # Report only the structured error category. Keep
                             # filenames and any tool content out of CI logs.
-                            $errorType = @([string]$part.state.error.type, [string]$part.state.error._tag) |
-                                Where-Object { $_ } | Select-Object -First 1
-                            $errorKind = if ($errorType) { [string]$errorType } else { 'unspecified' }
-                            $errorKeys = @($part.state.error.PSObject.Properties.Name) -join ','
-                            $details = ([string]$part.state.error.message).Replace($run, '[isolated-root]').Replace($sentinel, '[redacted]')
+                            $errorFields = @($part.state.error.PSObject.Properties.Name)
+                            $errorKind = if ('type' -in $errorFields) { [string]$part.state.error.type }
+                                elseif ('_tag' -in $errorFields) { [string]$part.state.error._tag }
+                                else { 'unspecified' }
+                            $errorKeys = $errorFields -join ','
+                            $details = if ('message' -in $errorFields) { [string]$part.state.error.message } else { 'not supplied' }
+                            $details = $details.Replace($run, '[isolated-root]').Replace($sentinel, '[redacted]')
                             if ($details.Length -gt 240) { $details = $details.Substring(0, 240) }
                             Fail "Native read was not confirmed denied (error kind=$errorKind; keys=$errorKeys; detail=$details)."
                         }

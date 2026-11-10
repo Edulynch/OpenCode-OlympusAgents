@@ -385,7 +385,17 @@ try {
                         $errorText = $part.state | ConvertTo-Json -Depth 15 -Compress
                         if ($errorText -match 'permission\.rejected|Permission denied: external_directory') {
                             $deniedRead = $true
-                        } else { Fail 'Native read failed for a reason other than external_directory DENY.' }
+                        } else {
+                            # Report only the structured error category. Keep
+                            # filenames and any tool content out of CI logs.
+                            $errorType = @([string]$part.state.error.type, [string]$part.state.error._tag) |
+                                Where-Object { $_ } | Select-Object -First 1
+                            $errorKind = if ($errorType) { [string]$errorType } else { 'unspecified' }
+                            $errorKeys = @($part.state.error.PSObject.Properties.Name) -join ','
+                            $details = ([string]$part.state.error.message).Replace($run, '[isolated-root]').Replace($sentinel, '[redacted]')
+                            if ($details.Length -gt 240) { $details = $details.Substring(0, 240) }
+                            Fail "Native read was not confirmed denied (error kind=$errorKind; keys=$errorKeys; detail=$details)."
+                        }
                     }
                 }
             }

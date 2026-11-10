@@ -34,12 +34,13 @@ jobs:
           opencode --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Exercise isolated native permission API (no model or UI)
+      - name: Exercise isolated native permission API and denied read
         shell: pwsh
         run: |
-          # This tests the V2 permission engine, NOT an attempted tool read;
-          # a scripted reject is never called user-observed approval.
-          pwsh -NoProfile -File ./tests/global-installer/native-permission-api-smoke.ps1
+          # The first checks cover native ASK and automatic DENY. A separate
+          # deterministic loopback model then calls V2's real read tool; no
+          # human decision or real provider is involved.
+          pwsh -NoProfile -File ./tests/global-installer/native-permission-api-smoke.ps1 -NativeToolRead
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Confirm checkout unchanged

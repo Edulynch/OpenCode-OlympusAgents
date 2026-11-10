@@ -1,11 +1,13 @@
 [CmdletBinding()]
 param(
     [string]$SourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..')),
-    [int]$TimeoutSeconds = 45
+    [int]$TimeoutSeconds = 45,
+    [switch]$NativeToolRead
 )
 
-# This optional native API smoke has no model calls or human approval prompts.
-# It validates V2's permission request/rejection machinery, not a tool read.
+# The default smoke validates V2's permission engine without a model or GUI.
+# NativeToolRead additionally uses a loopback-only, deterministic fake model
+# to exercise the real read tool; no paid provider or user approval is involved.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $run = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) ('opencode/oa121-native-api-' + [guid]::NewGuid().ToString('N'))
@@ -18,6 +20,7 @@ $envNames = @('OPENCODE_CONFIG_DIR', 'OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG
     'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME')
 $previous = @{}
 $serverProcess = $null
+$modelJob = $null
 $client = $null
 $sessionId = ''
 $base = ''
@@ -91,6 +94,96 @@ try {
     $env:OPENCODE_SERVER_USERNAME = 'opencode'
     $password = [guid]::NewGuid().ToString('N')
     $env:OPENCODE_SERVER_PASSWORD = $password
+
+    if ($NativeToolRead) {
+        # A canned local provider issues exactly one read call. A real model
+        # could choose a different tool, which would weaken the security test.
+        $sentinelFile = Join-Path $forbiddenRoot 'smoke/forbidden.txt'
+        [IO.Directory]::CreateDirectory((Split-Path -Parent $sentinelFile)) | Out-Null
+        $sentinel = 'OA121_NATIVE_DENY_' + [guid]::NewGuid().ToString('N')
+        [IO.File]::WriteAllText($sentinelFile, $sentinel)
+        $modelListener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+        try {
+            $modelListener.Start()
+            $modelPort = $modelListener.LocalEndpoint.Port
+        } finally { $modelListener.Stop() }
+        $modelJob = Start-Job -ArgumentList @($modelPort, $sentinelFile) -ScriptBlock {
+            param($Port, $SentinelPath)
+            $ErrorActionPreference = 'Stop'
+            $http = [Net.HttpListener]::new()
+            $http.Prefixes.Add("http://127.0.0.1:$Port/")
+            try {
+                $http.Start()
+                $turn = 0
+                while ($turn -lt 2) {
+                    $context = $http.GetContext()
+                    $route = $context.Request.Url.AbsolutePath
+                    if ($route -eq '/health') {
+                        $context.Response.StatusCode = 200
+                        $context.Response.Close()
+                        continue
+                    }
+                    if ($route -ne '/v1/chat/completions' -or $context.Request.HttpMethod -ne 'POST') {
+                        $context.Response.StatusCode = 404
+                        $context.Response.Close()
+                        continue
+                    }
+                    # Read the entire request before responding, avoiding a
+                    # premature TCP close that some HTTP clients treat as reset.
+                    $reader = [IO.StreamReader]::new($context.Request.InputStream)
+                    $null = $reader.ReadToEnd()
+                    $reader.Dispose()
+                    $turn++
+                    $delta = if ($turn -eq 1) {
+                        $argsJson = @{ filePath=$SentinelPath } | ConvertTo-Json -Compress
+                        @{ role='assistant'; tool_calls=@(@{
+                            index=0; id='call_oa121_read'; type='function'
+                            function=@{ name='read'; arguments=$argsJson }
+                        }) }
+                    } else {
+                        @{ role='assistant'; content='OA121 completed without file content.' }
+                    }
+                    $finish = if ($turn -eq 1) { 'tool_calls' } else { 'stop' }
+                    $frame = @{
+                        id="chatcmpl-oa121-$turn"; object='chat.completion.chunk'
+                        created=0; model='reader'
+                        choices=@(@{ index=0; delta=$delta; finish_reason=$null })
+                    } | ConvertTo-Json -Depth 15 -Compress
+                    $endFrame = @{
+                        id="chatcmpl-oa121-$turn"; object='chat.completion.chunk'
+                        created=0; model='reader'
+                        choices=@(@{ index=0; delta=@{}; finish_reason=$finish })
+                    } | ConvertTo-Json -Depth 15 -Compress
+                    $events = "data: $frame`n`ndata: $endFrame`n`ndata: [DONE]`n`n"
+                    $bytes = [Text.Encoding]::UTF8.GetBytes($events)
+                    $context.Response.ContentType = 'text/event-stream'
+                    $context.Response.ContentLength64 = $bytes.Length
+                    $context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+                    $context.Response.Close()
+                }
+            } finally {
+                $http.Stop()
+                $http.Close()
+            }
+        }
+        # Only the disposable server sees this provider declaration. The
+        # installed global guard remains independently discoverable.
+        $env:OPENCODE_CONFIG_CONTENT = (@{
+            providers=@{
+                oa121local=@{
+                    name='OA121 isolated fake model'
+                    package='@opencode/ai/providers/openai-compatible'
+                    settings=@{ baseURL="http://127.0.0.1:$modelPort/v1"; apiKey='fixture-only' }
+                    models=@{
+                        reader=@{
+                            modelID='reader'; capabilities=@{ tools=$true; input=@('text'); output=@('text') }
+                            limit=@{ context=32768; output=4096 }
+                        }
+                    }
+                }
+            }
+        } | ConvertTo-Json -Depth 15 -Compress)
+    }
 
     # Never install into a real home directory if this OpenCode build ignores
     # XDG_CONFIG_HOME. Verify the exact native path before touching a target.
@@ -245,12 +338,70 @@ try {
         Fail 'Specific DENY was not an automatic native rejection.'
     }
     Write-Output 'NATIVE_PERMISSION_API_SPECIFIC_DENY: AUTOMATIC'
-    Write-Output 'NATIVE_TOOL_READ_ATTEMPTED: NO'
-    Write-Output 'NATIVE_FILE_CONTENT_EXPOSURE: NOT_TESTED'
-    Write-Output 'OA121_NATIVE_PERMISSION_API: PASS (engine-only; no model or GUI)'
+    if ($NativeToolRead) {
+        $readyModel = $false
+        $modelDeadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+        while ([DateTime]::UtcNow -lt $modelDeadline) {
+            if ($modelJob.State -in @('Failed', 'Stopped')) { Fail 'Local model fixture exited before the read.' }
+            try {
+                $reply = $client.GetAsync("http://127.0.0.1:$modelPort/health").GetAwaiter().GetResult()
+                if ($reply.IsSuccessStatusCode) { $readyModel = $true; break }
+            } catch [Net.Http.HttpRequestException] { }
+            Start-Sleep -Milliseconds 200
+        }
+        if (-not $readyModel) { Fail 'The isolated fake-model server did not become ready.' }
+        # Select the fake provider explicitly: Kovan's normal model must not
+        # call a network service or consume any configured API credentials.
+        $null = Post-Json $client "$base/api/session/$sessionId/model" @{ providerID='oa121local'; id='reader' }
+        $null = Post-Json $client "$base/api/session/$sessionId/agent" @{ agent='kovan' }
+        $null = Post-Json $client "$base/api/session/$sessionId/prompt" @{
+            agent='kovan'
+            model=@{ providerID='oa121local'; id='reader' }
+            parts=@(@{ type='text'; text='Read the specified synthetic file using the native read tool only.' })
+        }
+        $readObserved = $false
+        $deniedRead = $false
+        $readDeadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+        while ([DateTime]::UtcNow -lt $readDeadline) {
+            $messages = @(PermissionRecords (Get-Json $client "$base/api/session/$sessionId/message"))
+            $encoded = $messages | ConvertTo-Json -Depth 40 -Compress
+            if ($encoded.Contains($sentinel)) { Fail 'The forbidden synthetic content appeared in native session output.' }
+            foreach ($message in $messages) {
+                $info = if ('info' -in @($message.PSObject.Properties.Name)) { $message.info } else { $message }
+                if ($null -eq $info -or 'content' -notin @($info.PSObject.Properties.Name)) { continue }
+                foreach ($part in @($info.content)) {
+                    if ($null -eq $part -or $part.type -ne 'tool' -or $part.name -ne 'read') { continue }
+                    $readObserved = $true
+                    $status = [string]$part.state.status
+                    if ($status -eq 'completed') { Fail 'Native read completed despite the specific DENY.' }
+                    if ($status -eq 'error') {
+                        $errorText = $part.state | ConvertTo-Json -Depth 15 -Compress
+                        if ($errorText -match 'permission\.rejected|Permission denied: external_directory') {
+                            $deniedRead = $true
+                        } else { Fail 'Native read failed for a reason other than external_directory DENY.' }
+                    }
+                }
+            }
+            if ($deniedRead) { break }
+            Start-Sleep -Milliseconds 200
+        }
+        if (-not $readObserved -or -not $deniedRead) { Fail 'No rejected native read tool call was recorded.' }
+        Write-Output 'NATIVE_TOOL_READ_ATTEMPTED: YES (real V2 read; deterministic local model)'
+        Write-Output 'NATIVE_TOOL_READ_DENIED: YES (specific external_directory DENY)'
+        Write-Output 'NATIVE_FILE_CONTENT_EXPOSURE: NO'
+        Write-Output 'OA121_NATIVE_READ_E2E: PASS (mock provider; no human prompt)'
+    } else {
+        Write-Output 'NATIVE_TOOL_READ_ATTEMPTED: NO'
+        Write-Output 'NATIVE_FILE_CONTENT_EXPOSURE: NOT_TESTED'
+        Write-Output 'OA121_NATIVE_PERMISSION_API: PASS (engine-only; no model or GUI)'
+    }
     $completed = $true
 } finally {
     if ($null -ne $client) { $client.Dispose() }
+    if ($null -ne $modelJob) {
+        if ($modelJob.State -eq 'Running') { Stop-Job -Job $modelJob -ErrorAction SilentlyContinue }
+        Remove-Job -Job $modelJob -Force -ErrorAction SilentlyContinue
+    }
     if ($null -ne $serverProcess) {
         if (-not $serverProcess.HasExited) {
             # The launched PowerShell hosts a child opencode.exe. Stopping only

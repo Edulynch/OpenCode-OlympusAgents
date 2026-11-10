@@ -252,11 +252,34 @@ try {
 } finally {
     if ($null -ne $client) { $client.Dispose() }
     if ($null -ne $serverProcess) {
-        if (-not $serverProcess.HasExited) { Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue }
+        if (-not $serverProcess.HasExited) {
+            # The launched PowerShell hosts a child opencode.exe. Stopping only
+            # its shell leaves that child holding the temporary Git directory.
+            # Terminate this invocation's exact process tree, never a broad name.
+            $null = & taskkill.exe /PID $serverProcess.Id /T /F 2>&1
+            if ($LASTEXITCODE -ne 0 -and -not $serverProcess.HasExited) {
+                Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
+            }
+        }
+        $null = $serverProcess.WaitForExit(5000)
         $serverProcess.Dispose()
     }
     foreach ($name in $envNames) { [Environment]::SetEnvironmentVariable($name, $previous[$name], 'Process') }
     # Delete only this invocation's GUID-named fixture after success. Failed
     # fixtures remain available for debugging and are never promoted to global.
-    if ($completed -and (Test-Path -LiteralPath $run)) { Remove-Item -LiteralPath $run -Recurse -Force }
+    if ($completed -and (Test-Path -LiteralPath $run)) {
+        # Windows can release child process handles shortly after taskkill
+        # returns. Retry only this known GUID fixture for a bounded interval.
+        for ($attempt = 0; $attempt -lt 10; $attempt++) {
+            try {
+                Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop
+                break
+            } catch [IO.IOException] {
+                Start-Sleep -Milliseconds 300
+            } catch [UnauthorizedAccessException] {
+                Start-Sleep -Milliseconds 300
+            }
+        }
+        if (Test-Path -LiteralPath $run) { Fail 'Native test passed, but temporary fixture cleanup remains locked.' }
+    }
 }

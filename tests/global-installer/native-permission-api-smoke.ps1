@@ -39,6 +39,12 @@ function Get-Json([Net.Http.HttpClient]$Client, [string]$Uri) {
     return ConvertFrom-Json -InputObject $text -Depth 40
 }
 
+function PermissionRecords($Response) {
+    if ($null -eq $Response) { return @() }
+    $items = if ('data' -in @($Response.PSObject.Properties.Name)) { $Response.data } else { $Response }
+    return @($items)
+}
+
 function Post-Json([Net.Http.HttpClient]$Client, [string]$Uri, $Body) {
     $reply = $Client.PostAsync($Uri, (JsonContent $Body)).GetAwaiter().GetResult()
     if (-not $reply.IsSuccessStatusCode) { Fail "POST $Uri returned HTTP $([int]$reply.StatusCode)." }
@@ -113,8 +119,20 @@ try {
     }
     if (-not $ready) { Fail "Isolated OpenCode server did not become ready (last HTTP status=$lastReadinessStatus)." }
     $session = Post-Json $client "$base/api/session" @{ title='OA121 isolated global permission API' }
-    $sessionId = [string]$session.id
-    if (-not $sessionId) { Fail 'Session creation did not return an ID.' }
+    if ($null -eq $session) { Fail 'Session creation returned an empty response.' }
+    $sessionKeys = @($session.PSObject.Properties.Name)
+    $sessionObject = $session
+    if ('data' -in $sessionKeys) { $sessionObject = $session.data }
+    elseif ('session' -in $sessionKeys) { $sessionObject = $session.session }
+    elseif ('info' -in $sessionKeys) { $sessionObject = $session.info }
+    $sessionObjectKeys = if ($null -ne $sessionObject) { @($sessionObject.PSObject.Properties.Name) } else { @() }
+    if ('id' -notin $sessionObjectKeys) {
+        # Field names suffice to diagnose API envelopes without logging any
+        # credentials or session content from the disposable host.
+        Fail "Session creation did not expose an ID (keys=$($sessionKeys -join ','); nested=$($sessionObjectKeys -join ','))."
+    }
+    $sessionId = [string]$sessionObject.id
+    if (-not $sessionId) { Fail 'Session creation returned a blank ID.' }
 
     $allowedPattern = $allowedRoot.Replace('\', '/').TrimEnd('/') + '/*'
     $forbiddenPattern = $forbiddenRoot.Replace('\', '/').TrimEnd('/') + '/*'
@@ -125,8 +143,9 @@ try {
     $askTask = $client.PostAsync("$base/api/session/$sessionId/permission", (JsonContent $askRequest))
     $pendingId = ''
     while ([DateTime]::UtcNow -lt $deadline -and -not $pendingId) {
-        $pending = @(Get-Json $client "$base/api/session/$sessionId/permission")
+        $pending = @(PermissionRecords (Get-Json $client "$base/api/session/$sessionId/permission"))
         foreach ($request in $pending) {
+            if ($null -eq $request -or 'action' -notin @($request.PSObject.Properties.Name)) { continue }
             if ($request.action -eq 'external_directory' -and $allowedPattern -in @($request.resources)) {
                 $pendingId = [string]$request.id
                 break
@@ -138,8 +157,8 @@ try {
     if (-not $pendingId) { Fail 'Timed out without observing the native ASK request.' }
     $reject = Post-Json $client "$base/api/session/$sessionId/permission/$pendingId/reply" @{ decision='reject' }
     if (-not $askTask.Wait([TimeSpan]::FromSeconds(5))) { Fail 'The rejected permission call did not finish.' }
-    $remaining = @(Get-Json $client "$base/api/session/$sessionId/permission")
-    if (@($remaining | Where-Object { $_.id -eq $pendingId }).Count -ne 0) {
+    $remaining = @(PermissionRecords (Get-Json $client "$base/api/session/$sessionId/permission"))
+    if (@($remaining | Where-Object { $null -ne $_ -and 'id' -in @($_.PSObject.Properties.Name) -and $_.id -eq $pendingId }).Count -ne 0) {
         Fail 'Rejected native permission request is still pending.'
     }
     Write-Output 'NATIVE_PERMISSION_API_ASK_OBSERVED: YES'
@@ -155,8 +174,8 @@ try {
     $denyResponse = $client.PostAsync("$base/api/session/$sessionId/permission", (JsonContent @{
         action='external_directory'; resources=@($forbiddenPattern); save=@($forbiddenPattern)
     })).GetAwaiter().GetResult()
-    $denyPending = @(Get-Json $client "$base/api/session/$sessionId/permission")
-    if ($denyResponse.IsSuccessStatusCode -or @($denyPending | Where-Object { $forbiddenPattern -in @($_.resources) }).Count) {
+    $denyPending = @(PermissionRecords (Get-Json $client "$base/api/session/$sessionId/permission"))
+    if ($denyResponse.IsSuccessStatusCode -or @($denyPending | Where-Object { $null -ne $_ -and 'resources' -in @($_.PSObject.Properties.Name) -and $forbiddenPattern -in @($_.resources) }).Count) {
         Fail 'Specific DENY was not an automatic native rejection.'
     }
     Write-Output 'NATIVE_PERMISSION_API_SPECIFIC_DENY: AUTOMATIC'

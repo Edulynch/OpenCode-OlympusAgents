@@ -99,15 +99,19 @@ try {
     $client.DefaultRequestHeaders.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Basic', $credentials)
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     $ready = $false
+    $lastReadinessStatus = 'not_reached'
     while ([DateTime]::UtcNow -lt $deadline) {
         if ($serverProcess.HasExited) { Fail 'Isolated OpenCode server exited during startup.' }
         try {
-            $health = $client.GetAsync("$base/api/health").GetAwaiter().GetResult()
+            # /api/location is a documented V2 readiness route; the legacy
+            # /api/health path is not part of the current V2 API contract.
+            $health = $client.GetAsync("$base/api/location").GetAwaiter().GetResult()
+            $lastReadinessStatus = [string][int]$health.StatusCode
             if ($health.IsSuccessStatusCode) { $ready = $true; break }
-        } catch [Net.Http.HttpRequestException] { }
+        } catch [Net.Http.HttpRequestException] { $lastReadinessStatus = 'connection_pending' }
         Start-Sleep -Milliseconds 200
     }
-    if (-not $ready) { Fail 'Isolated OpenCode server did not become ready.' }
+    if (-not $ready) { Fail "Isolated OpenCode server did not become ready (last HTTP status=$lastReadinessStatus)." }
     $session = Post-Json $client "$base/api/session" @{ title='OA121 isolated global permission API' }
     $sessionId = [string]$session.id
     if (-not $sessionId) { Fail 'Session creation did not return an ID.' }

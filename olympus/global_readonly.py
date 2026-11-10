@@ -22,6 +22,7 @@ from . import config_apply, install_routing
 
 
 _MANIFEST = "olympus/orchestrator-install.json"
+_OPENCODE_GUARD_INTENT = "olympus/opencode-guard-pending.json"
 _HASH = re.compile(r"[0-9a-fA-F]{64}\Z")
 _POWERSHELL_VERSION = re.compile(r"(?m)^PowerShell ([0-9]+)\.")
 _CONFIG_PATH = re.compile(r"(?m)^\s*config\s{2,}(?P<path>.+?)\s*$")
@@ -207,6 +208,111 @@ def _verified_files(root: Path, entries: dict[str, str]) -> dict[str, bytes]:
     return current
 
 
+def _jsonc_without_comments(raw: bytes) -> str:
+    """Discard JSONC comments and trailing commas without touching string data."""
+    text = raw.decode("utf-8")
+    output: list[str] = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(text):
+        char = text[index]
+        next_char = text[index + 1] if index + 1 < len(text) else ""
+        if in_string:
+            output.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+            output.append(char)
+        elif char == "/" and next_char == "/":
+            # Retain line endings so comments cannot merge adjacent tokens.
+            while index < len(text) and text[index] not in "\r\n":
+                output.append(" ")
+                index += 1
+            continue
+        elif char == "/" and next_char == "*":
+            end = text.find("*/", index + 2)
+            if end < 0:
+                raise ValueError("Unterminated JSONC block comment")
+            output.extend("\n" if c == "\n" else " " for c in text[index:end + 2])
+            index = end + 2
+            continue
+        else:
+            output.append(char)
+        index += 1
+    cleaned = "".join(output)
+    result: list[str] = []
+    in_string = escaped = False
+    for index, char in enumerate(cleaned):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char == ",":
+            # Avoid allocating a full suffix for every comma in an untrusted
+            # global config, which could otherwise produce quadratic work.
+            lookahead = index + 1
+            while lookahead < len(cleaned) and cleaned[lookahead].isspace():
+                lookahead += 1
+            if lookahead < len(cleaned) and cleaned[lookahead] in "}]":
+                char = " "
+        result.append(char)
+    return "".join(result)
+
+
+def _unowned_opencode_guard(root: Path) -> str:
+    """Match the installer's safe-user-config contract before trusting a legacy inventory."""
+    json_file = _read(root, "opencode.json")
+    jsonc_file = _read(root, "opencode.jsonc")
+    if json_file is not None and jsonc_file is not None:
+        raise GlobalFault("global_external_guard_unsafe", "Both global OpenCode config formats exist; precedence is ambiguous.")
+    raw = json_file if json_file is not None else jsonc_file
+    if raw is None:
+        return "missing"
+    try:
+        def unique_pairs(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("Duplicate JSONC field")
+                result[key] = value
+            return result
+
+        def invalid_constant(value):
+            raise ValueError(f"Invalid JSONC constant {value}")
+
+        config = json.loads(_jsonc_without_comments(raw), object_pairs_hook=unique_pairs,
+                            parse_constant=invalid_constant)
+        rules = config["permissions"]
+        if not isinstance(config, dict) or not isinstance(rules, list):
+            raise ValueError("Global permissions must be an ordered V2 array")
+        fallback = "allow"
+        for rule in rules:
+            if not isinstance(rule, dict) or not all(isinstance(rule.get(key), str)
+                                                      for key in ("action", "resource", "effect")):
+                raise ValueError("Malformed V2 global permission rule")
+            # V2 documents only * and ? wildcards; fnmatch's bracket classes
+            # would incorrectly accept a pattern V2 treats as literal.
+            action_pattern = re.escape(rule["action"]).replace(r"\*", ".*").replace(r"\?", ".")
+            if rule["resource"] == "*" and re.fullmatch(action_pattern, "external_directory"):
+                fallback = rule["effect"]
+        if fallback not in ("ask", "deny"):
+            raise ValueError("External directory fallback resolves to ALLOW")
+    except (UnicodeError, ValueError, KeyError, TypeError) as error:
+        raise GlobalFault("global_external_guard_unsafe", "Existing user OpenCode global config does not establish an external_directory ASK/DENY fallback.") from error
+    return "safe_user_config"
+
+
 def _assignments(installed: dict[str, dict[str, bytes]], expected: dict[str, dict[str, bytes]],
                  canonical: dict) -> dict:
     rows = []
@@ -346,6 +452,17 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                 current = _verified_files(root, entries)
                 current_by_harness[harness] = current
                 item["integrity"] = "hash_verified"
+                if harness == "opencode":
+                    if _read(root, _OPENCODE_GUARD_INTENT) is not None:
+                        # The Windows writer owns pending recovery; a read-only
+                        # preview must not declare an interrupted install done.
+                        raise GlobalFault("global_guard_recovery_pending", "An OpenCode guard transaction is pending; rerun the global installer to reconcile ownership.")
+                    if "opencode.jsonc" not in entries:
+                        guard_state = _unowned_opencode_guard(root)
+                        item["external_guard"] = guard_state
+                        if guard_state == "missing" and operation == "config apply":
+                            changes.append({"harness": "opencode", "path": "opencode.jsonc", "action": "create",
+                                            "proposed_sha256": hashlib.sha256(expected[harness]["opencode.jsonc"]).hexdigest()})
                 if harness == "codex":
                     # The native installer refuses this user-owned, higher-priority
                     # instruction file, even if every Olympus-managed byte matches.

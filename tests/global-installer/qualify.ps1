@@ -254,6 +254,80 @@ try {
         $askDecision -ne 'allow'
     )
 
+    # Simulate a process interruption after the minimal guard was written but
+    # before its ownership manifest. The durable intent must let a later
+    # install adopt only the exact expected bytes and then retire the marker.
+    $recoverRoot = Join-Path $run 'OpenCode Guard Interrupted Install'
+    [IO.Directory]::CreateDirectory((Join-Path $recoverRoot 'olympus')) | Out-Null
+    $recoverGuardPath = Join-Path $recoverRoot 'opencode.jsonc'
+    $guardSourcePath = Join-Path $source 'olympus/harnesses/opencode/global-permissions.jsonc'
+    $guardSourceText = [IO.File]::ReadAllText($guardSourcePath)
+    $guardSourceHash = (Get-FileHash -LiteralPath $guardSourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $recoverIntentPath = Join-Path $recoverRoot 'olympus/opencode-guard-pending.json'
+    $recoverIntent = ([ordered]@{
+        schema_version = 1
+        harness = 'opencode'
+        resource = 'opencode.jsonc'
+        sha256 = $guardSourceHash
+    } | ConvertTo-Json -Depth 5) + "`n"
+    [IO.File]::WriteAllText($recoverIntentPath, $recoverIntent, $utf8)
+    [IO.File]::WriteAllText($recoverGuardPath, $guardSourceText, $utf8)
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $recoverRoot
+    $recoverVerifyBefore = Global-Verify $project 'opencode'
+    $recoverInstall = Global-Install $project 'opencode'
+    $recoverManifestPath = Join-Path $recoverRoot 'olympus/orchestrator-install.json'
+    $recoverManifest = if ($recoverInstall.Code -eq 0) { Get-Content -LiteralPath $recoverManifestPath -Raw | ConvertFrom-Json } else { $null }
+    Check 'GLOBAL_INTERRUPTED_GUARD_RECOVERED_AND_OWNED' (
+        $recoverVerifyBefore.Code -ne 0 -and
+        $recoverInstall.Code -eq 0 -and $null -ne $recoverManifest -and
+        $recoverManifest.managed_files.Count -eq 14 -and
+        @($recoverManifest.managed_files | Where-Object { $_.path -eq 'opencode.jsonc' }).Count -eq 1 -and
+        (Get-FileHash -LiteralPath $recoverGuardPath -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $guardSourceHash -and
+        -not (Test-Path -LiteralPath $recoverIntentPath) -and
+        (Global-Verify $project 'opencode').Code -eq 0
+    ) ("exit=$($recoverInstall.Code)`n$($recoverInstall.Text)")
+
+    # A crash after manifest replacement but before intent cleanup must also
+    # be idempotently reconciled, and only an owned guard is removed on uninstall.
+    [IO.File]::WriteAllText($recoverIntentPath, $recoverIntent, $utf8)
+    $recoverNoop = Global-Install $project 'opencode'
+    $recoverUninstall = Run-Installer $project @('-Scope','global','-Harness','opencode','-Uninstall')
+    Check 'GLOBAL_INTERRUPTED_GUARD_CLEANUP_AND_UNINSTALL' (
+        $recoverNoop.Code -eq 0 -and $recoverUninstall.Code -eq 0 -and
+        -not (Test-Path -LiteralPath $recoverIntentPath) -and
+        -not (Test-Path -LiteralPath $recoverGuardPath) -and
+        -not (Test-Path -LiteralPath $recoverManifestPath)
+    ) ("install=$($recoverNoop.Code)`n$($recoverNoop.Text)`nuninstall=$($recoverUninstall.Code)`n$($recoverUninstall.Text)")
+
+    # Intent persisted before any guard bytes were written is safe to resume.
+    $intentOnlyRoot = Join-Path $run 'OpenCode Guard Intent Only'
+    [IO.Directory]::CreateDirectory((Join-Path $intentOnlyRoot 'olympus')) | Out-Null
+    $intentOnlyMarker = Join-Path $intentOnlyRoot 'olympus/opencode-guard-pending.json'
+    [IO.File]::WriteAllText($intentOnlyMarker, $recoverIntent, $utf8)
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $intentOnlyRoot
+    $intentOnlyInstall = Global-Install $project 'opencode'
+    Check 'GLOBAL_INTERRUPTED_BEFORE_GUARD_WRITE_RECOVERED' (
+        $intentOnlyInstall.Code -eq 0 -and
+        -not (Test-Path -LiteralPath $intentOnlyMarker) -and
+        (Get-FileHash -LiteralPath (Join-Path $intentOnlyRoot 'opencode.jsonc') -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $guardSourceHash
+    ) ("exit=$($intentOnlyInstall.Code)`n$($intentOnlyInstall.Text)")
+
+    # An altered guard with the same pending marker cannot be adopted. A
+    # failed recovery must leave the caller's current bytes untouched.
+    $recoverConflictRoot = Join-Path $run 'OpenCode Guard Interrupted Conflict'
+    [IO.Directory]::CreateDirectory((Join-Path $recoverConflictRoot 'olympus')) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $recoverConflictRoot 'olympus/opencode-guard-pending.json'), $recoverIntent, $utf8)
+    [IO.File]::WriteAllText((Join-Path $recoverConflictRoot 'opencode.jsonc'), '{"permissions":[]}', $utf8)
+    $recoverConflictBefore = Snapshot $recoverConflictRoot
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $recoverConflictRoot
+    $recoverConflict = Global-Install $project 'opencode'
+    Check 'GLOBAL_INTERRUPTED_GUARD_CONFLICT_FAIL_CLOSED' (
+        $recoverConflict.Code -ne 0 -and
+        $recoverConflict.Text -match 'GLOBAL_GUARD_RECOVERY_CONFLICT' -and
+        (Snapshot $recoverConflictRoot) -ceq $recoverConflictBefore
+    ) ("exit=$($recoverConflict.Code)`n$($recoverConflict.Text)")
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeOnlyRoot
+
     $doubleConfigRoot = Join-Path $run 'OpenCode Ambiguous Config'
     [IO.Directory]::CreateDirectory($doubleConfigRoot) | Out-Null
     [IO.File]::WriteAllText((Join-Path $doubleConfigRoot 'opencode.json'), $safeUserConfig, $utf8)

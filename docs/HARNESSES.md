@@ -116,7 +116,20 @@ manifest-owned. Updates refuse drift, preserve unrelated user config, and do not
 project-local installs; the explicit migration result is `GLOBAL_INSTALLED
 PROJECT_LOCAL_REMAINS_AS_OVERRIDE`. A project-local Olympus manifest in the
 current Git root is reported, including version/hash drift. Other repositories
-are not scanned or modified. Static global installer qualification passes, but
+are not scanned or modified. Before the first guard write, the installer persists
+an Olympus-only `olympus/opencode-guard-pending.json` ownership intent. If interrupted
+before the manifest is committed, the next installation reclaims **only** an
+exact-hash guard, rejects altered bytes, and removes the intent after the
+manifest is safely written. `VerifyOnly` and uninstall fail closed while an
+unreconciled intent exists; run the regular installer to recover first. This
+guard-specific recovery does not claim full transactionality for all global
+agent/plugin resources.
+
+The read-only global CLI does not silently report `no_changes` for a historical
+13-resource inventory with no global config: it proposes the missing managed
+guard. It blocks on an unsafe or ambiguous user config, while still preserving
+safe JSON/JSONC user configs outside Olympus ownership. Static global installer
+qualification passes, but
 runtime discovery is a separate contract:
 
 | Harness | Global support | Runtime evidence and blocker |
@@ -136,9 +149,16 @@ has host authority and is not a filesystem sandbox. Static fixture tests cover
 both orderings, global-only ASK versus specific DENY, user-config preservation,
 and failure/ownership cases; they do **not** establish a live native global-only
 permission prompt or denial. Native global-only qualification remains required
-before making a blanket runtime security claim. See the official
+before making a blanket runtime security claim. An optional
+`tests/global-installer/native-permission-api-smoke.ps1` probes the isolated V2
+server permission API: it can record native ASK, reply programmatically with
+`reject`, and check automatic specific DENY **without interactive dialogs**.
+It is an engine-level test, not a native tool-read test; never label its
+programmatic rejection as user-observed or its absence of file content as a
+verified tool containment result. Until executed on supported V2, its result
+is **NOT_OBSERVABLE**. See the official
 [V2 permissions](https://opencode.ai/docs/permissions/) and
-[policies](https://opencode.ai/docs/policies/) references.
+[server permission API](https://opencode.ai/docs/api) references.
 
 OpenCode's official current config docs confirm global agents under
 `~/.config/opencode/agents/`, `OPENCODE_CONFIG_DIR` as a custom config directory,

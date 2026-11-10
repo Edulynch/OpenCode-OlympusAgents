@@ -1516,6 +1516,66 @@ class SliceA(unittest.TestCase):
         self.assertEqual(13, preview["data"]["harnesses"]["opencode"]["managed_files"])
         self.assertEqual(user_config, (root / "opencode.jsonc").read_text(encoding="utf-8"))
 
+    def test_slice_c7_global_legacy_missing_guard_is_a_preview_change(self):
+        # A historical 13-file install with no user config is unguarded.
+        # The read-only CLI must propose the missing guard, not report no_changes.
+        manifests = self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
+        manifest["managed_files"] = [item for item in manifest["managed_files"]
+                                     if item["path"] != "opencode.jsonc"]
+        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        (root / "opencode.jsonc").unlink()
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
+        self.assertEqual("ok", response["result"])
+        self.assertEqual("missing", response["data"]["harnesses"]["opencode"]["external_guard"])
+        self.assertEqual(["opencode.jsonc"], [change["path"] for change in response["data"]["changes"]])
+        self.assertEqual("create", response["data"]["changes"][0]["action"])
+        self.assertFalse((root / "opencode.jsonc").exists())
+
+    def test_slice_c7_global_legacy_unsafe_user_config_blocks_preview(self):
+        # Do not conceal a global ALLOW fallback behind a valid 13-file manifest.
+        manifests = self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
+        manifest["managed_files"] = [item for item in manifest["managed_files"]
+                                     if item["path"] != "opencode.jsonc"]
+        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        (root / "opencode.jsonc").write_text('{"permissions":[{"action":"external_directory","resource":"*","effect":"allow"}]}', encoding="utf-8")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
+        self.assertEqual("blocked", response["result"])
+        self.assertEqual("global_external_guard_unsafe", response["issues"][0]["code"])
+        # An alternative JSON file makes ownership/precedence ambiguous too.
+        (root / "opencode.json").write_text('{"permissions":[]}', encoding="utf-8")
+        again = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
+        self.assertEqual("global_external_guard_unsafe", again["issues"][0]["code"])
+
+    def test_slice_c7_global_legacy_safe_jsonc_is_preserved(self):
+        # Comments, URLs in strings, and trailing commas are supported by V2.
+        manifests = self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
+        manifest["managed_files"] = [item for item in manifest["managed_files"]
+                                     if item["path"] != "opencode.jsonc"]
+        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        safe = '{"url":"https://local.invalid/a,b",/* user guard */"permissions":[{"action":"external_directory","resource":"*","effect":"ask",},],}'
+        (root / "opencode.jsonc").write_text(safe, encoding="utf-8")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
+        self.assertEqual("no_changes", response["result"])
+        self.assertEqual("safe_user_config", response["data"]["harnesses"]["opencode"]["external_guard"])
+        self.assertEqual(safe, (root / "opencode.jsonc").read_text(encoding="utf-8"))
+
+    def test_slice_c7_global_pending_guard_recovery_blocks_preview(self):
+        # An unfinished native install is not equivalent to a complete manifest.
+        self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        intent = root / "olympus/opencode-guard-pending.json"
+        intent.write_text('{"schema_version":1}', encoding="utf-8")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
+        self.assertEqual("blocked", response["result"])
+        self.assertEqual("global_guard_recovery_pending", response["issues"][0]["code"])
+        self.assertTrue(intent.exists())
+
     def test_slice_c7_global_preview_both_harnesses_assignments_and_human_output(self):
         self.create_global_managed_install()
         arguments = ("config", "apply", "--scope", "global", "--harness", "all", "--dry-run")

@@ -2,7 +2,12 @@
 
 ## [Unreleased]
 
-Changes after the latest published release go here.
+### v0.5.0 CLI candidate — not yet published
+
+- Complete the bounded Python CLI A/B and project C1–C6 workflow, including assignment disclosure before managed project apply, and global C7 read-only inspection/preview. Global write/recovery remains deferred to #122.
+- Refresh first-time README onboarding, no-clone Fast Install/Uninstall guidance and checkout-bound CLI examples without changing the existing installer engines or immutable-release selection.
+- Record operation-by-platform qualifications, the Windows native project smoke PASS, the separate install-time OpenCode port-validation failure, and remaining publication gates in [release candidate notes](docs/RELEASE-v0.5.0.md).
+- No `v0.5.0` tag, standalone CLI package, native Linux/macOS installer parity, or full runtime/provider acceptance is claimed by these documentation updates.
 
 ## v0.4.12
 

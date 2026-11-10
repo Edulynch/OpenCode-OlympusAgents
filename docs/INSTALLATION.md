@@ -1,5 +1,13 @@
 # Installation and uninstallation
 
+## Start here: two commands, two choices
+
+For a first installation, start with [Fast Install in the README](../README.md#fast-install); use [Fast Uninstall](../README.md#fast-uninstall) for removal. Both public entrypoints work **without cloning OlympusAgents** on the qualified Windows platform. The interactive prompts ask where to operate (**current project**, **another project**, or **global**) and which harness to use (**OpenCode**, **Codex**, or **both**). Project is not an implicit global installation.
+
+For scripts and automation, pass the PowerShell selectors directly: `-Project -Here`, `-ProjectPath 'C:\path with spaces\project'`, or `-Global`, together with `-Harness opencode|codex|all`. The examples below show the complete executable syntax; these are **PowerShell parameters**, not portable CLI flags. The checkout-bound CLI uses `install --scope project --target <absolute-path> --harness ... --execute` on qualified Windows systems, as explained later in this guide.
+
+The publicly hosted script is executable code. The Fast path uses a published versioned bootstrap and resolves a qualifying release; it is not equivalent to an independently verified cryptographic signature. Operators who need to inspect each downloaded stage should follow the separate inspection procedure below.
+
 ## Requirements and platform limits
 
 - Windows; this is the only currently qualified installer platform. Linux and macOS are not qualified.
@@ -126,6 +134,11 @@ need an explicit mode and machine-readable result. It delegates to the existing
 PowerShell engines; it does not replace their release, manifest, ownership, hash,
 or target safety checks. This surface is qualified only on Windows with PowerShell
 7 (`pwsh`).
+
+Unlike the no-checkout public Fast entrypoints, the current portable CLI launcher
+is **bound to a trusted Olympus source checkout** and requires Python 3.11+.
+It does not install a system-wide `olympus` executable or silently inherit a
+project/global target from the current directory.
 
 ```powershell
 $sourceCheckout = 'C:\Path\to\trusted\OpenCode-OlympusAgents'

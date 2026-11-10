@@ -18,7 +18,7 @@ Issue #91 keeps documentation versioned in this repository. Enabling or publishi
 
 ## Current guidance and release records
 
-The files below are the 10 documents retained at the top of `docs/` (nine from the historical governance inventory plus this operational issue ledger). No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
+The files below include the 10 existing top-level documents (nine from the historical governance inventory plus the operational issue ledger) and the v0.5.0 candidate release record. No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
 
 | Document | Purpose and audience | State, relationship, and incoming references | Proposed owner |
 | --- | --- | --- | --- |
@@ -32,6 +32,7 @@ The files below are the 10 documents retained at the top of `docs/` (nine from t
 | [WORKTREES.md](WORKTREES.md) | Worktree setup and use | **Vigente.** Operational guidance; related retrospective behavior is recorded under `specs/`. | Repository maintainers |
 | [RELEASE-v0.4.8.md](RELEASE-v0.4.8.md) | v0.4.8 release record | **Histórico.** Preserved release facts; superseded as current-version guidance by later release records. | Release maintainer (proposed role) |
 | [RELEASE-v0.4.9.md](RELEASE-v0.4.9.md) | v0.4.9 release record | **Histórico.** Preserved release facts; remains linked from the constitution as a dated example. | Release maintainer (proposed role) |
+| [RELEASE-v0.5.0.md](RELEASE-v0.5.0.md) | Bounded CLI v0.5.0 candidate and support matrix | **Candidato, no publicado.** Claims and remaining gate recorded without creating a tag/release. | Release maintainer (proposed role) |
 
 ## Historical records
 

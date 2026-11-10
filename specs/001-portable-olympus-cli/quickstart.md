@@ -232,7 +232,9 @@ el manifest, el preview se bloquea en vez de instalarlo. `--json` emite un únic
 documento con `changes`, `unchanged`, `preserved`, verificaciones y conflictos.
 Un preview exitoso sólo describe el estado observado; no habilita ni ejecuta
 aplicación. Para mutar, omite `--json` y usa explícitamente `--execute`; `--dry-run`
-y `--execute` son mutuamente excluyentes. Después de una interrupción usa:
+y `--execute` son mutuamente excluyentes. La ejecución muestra antes de escribir
+las mismas asignaciones actuales/propuestas del preview, sin inferir familias
+instaladas ni disponibilidad de proveedores. Después de una interrupción usa:
 
 ```powershell
 & "$sourceCheckout\scripts\olympus.cmd" --source $sourceCheckout config recover --scope project --target $targetProject

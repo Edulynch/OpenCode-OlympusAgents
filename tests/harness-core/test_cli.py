@@ -484,6 +484,40 @@ class SliceA(unittest.TestCase):
         self.assertEqual(0, human.returncode, human.stdout + human.stderr)
         self.assertIn(f"assignments: {json.dumps(assignments, ensure_ascii=False)}", human.stdout)
 
+    def test_slice_c_fr008_execute_discloses_the_dry_run_assignments_before_writing(self):
+        self.create_managed_install(("opencode",))
+        veyra = self.canonical_role("veyra")
+        relative = ".opencode/agents/veyra.md"
+        canonical = self.outputs[self.source / relative]
+        custom = canonical.replace(
+            f'model: "{veyra["models"]["opencode"]}#{veyra["effort"]}"',
+            'model: "vendor/custom-veyra#medium"', 1,
+        )
+        self.assertNotEqual(canonical, custom)
+        self.update_managed_bytes(relative, custom.encode("utf-8"))
+
+        # The explicit execution must show the same verified values as the read-only preview.
+        arguments = self.config_apply_arguments("opencode")
+        expected = self.json_query(*arguments)["data"]["assignments"]
+        role = next(row for row in expected["roles"] if row["role"] == "veyra")
+        self.assertEqual("vendor/custom-veyra", role["harnesses"]["opencode"]["current"]["model"])
+
+        applied = self.invoke_cli(*arguments[:-1], "--execute")
+        self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
+        disclosure = next(line.removeprefix("assignments: ") for line in applied.stdout.splitlines()
+                          if line.startswith("assignments: "))
+        self.assertEqual(expected, json.loads(disclosure))
+        self.assertLess(applied.stdout.index("assignments: "), applied.stdout.index("execution: committed"))
+        self.assertEqual(canonical.encode("utf-8"), (self.target / relative).read_bytes())
+
+        # A no-op remains informative without rewriting the managed target.
+        before_noop = self.snapshot()
+        repeated = self.invoke_cli(*arguments[:-1], "--execute")
+        self.assertEqual(0, repeated.returncode, repeated.stdout + repeated.stderr)
+        self.assertIn("assignments: ", repeated.stdout)
+        self.assertIn("execution: no_changes", repeated.stdout)
+        self.assertEqual(before_noop, self.snapshot())
+
     def test_slice_c6_codex_specialist_and_kael_root_are_separate(self):
         self.create_managed_install(("codex",))
         veyra = self.canonical_role("veyra")

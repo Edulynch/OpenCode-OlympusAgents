@@ -143,8 +143,9 @@ No se cambia el proyecto ni se instalan/reparan recursos. Ejemplo Windows:
 $LASTEXITCODE
 ```
 
-La aplicación C1/C3 sigue siendo una operación separada; `doctor` no completa
-los valores de asignación que FR-016 aún exige al preview.
+La aplicación C1/C3 sigue siendo una operación separada: `doctor` no deduce
+asignaciones instaladas. El preview C6 las compara desde recursos administrados
+verificados, y FR-008 también las muestra antes del `--execute` de proyecto.
 
 ### Install y uninstall mediante motores oficiales (Slice C5)
 

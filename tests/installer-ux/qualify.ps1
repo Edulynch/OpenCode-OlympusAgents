@@ -522,7 +522,8 @@ exit /b 0
         )) {
             $nonInteractive = Invoke-NonInteractiveEntry $entry.Path
             Check $entry.Id ($nonInteractive.Code -ne 0 -and $nonInteractive.Text -match 'ARGUMENTS_REQUIRED' -and
-                $nonInteractive.Text -notmatch 'Choose 1, 2, or 3')
+                $nonInteractive.Text -notmatch 'Choose 1, 2, or 3') (
+                    "exit=$($nonInteractive.Code); output=$($nonInteractive.Text.Trim())")
         }
 
         foreach ($entry in @(
@@ -531,7 +532,8 @@ exit /b 0
         )) {
             $nonInteractivePartial = Invoke-NonInteractiveEntry $entry.Path @('-Project', '-Here')
             Check $entry.Id ($nonInteractivePartial.Code -ne 0 -and $nonInteractivePartial.Text -match 'ARGUMENTS_REQUIRED' -and
-                $nonInteractivePartial.Text -notmatch 'Choose 1, 2, or 3')
+                $nonInteractivePartial.Text -notmatch 'Choose 1, 2, or 3') (
+                    "exit=$($nonInteractivePartial.Code); output=$($nonInteractivePartial.Text.Trim())")
         }
 
         $nonInteractiveInstall = Invoke-MockedEntry -Entry $installEntry -Parameters @{ Project = $true; Here = $true; Harness = 'codex' }

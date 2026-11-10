@@ -1,6 +1,6 @@
-# CLI portátil Olympus — quickstart (Slices A, B, C1, C3, C4 y C5)
+# CLI portátil Olympus — quickstart (v0.5.0 candidate)
 
-**Estado de esta rama**: Slice A **SHIPPED**; Slice B **ACEPTADA** tras T019 Windows y T020 Linux (G2 PASS). C3 implementa `config apply --execute` sólo para instalaciones project existentes. C4 agrega `doctor` read-only y C5 enruta install/uninstall a los motores oficiales. No se probaron instalaciones reales; macOS **NOT VERIFIED**. [Evidencia histórica de A/B/C4](tasks.md).
+**Alcance del candidato**: Slice A (consulta) y B (edición canónica) aceptadas en Windows/Linux; C1–C6 para instalaciones **project** con preview de asignaciones también antes de `--execute`, doctor y routing de install/uninstall sólo donde estén cualificados; C7 para `status`, `doctor` y preview **global read-only**. Global `config apply --execute` y recovery no están soportados (seguimiento en [#122](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/122)). macOS **NOT VERIFIED**. No se declara cualificación genérica de instaladores ni runtime fuera de la matriz de [v0.5.0](../../docs/RELEASE-v0.5.0.md). [Evidencia histórica de A/B/C4](tasks.md).
 
 ## Requisitos y contexto
 
@@ -8,7 +8,7 @@ Python **3.11+ real**. Slice A usa sólo biblioteca estándar y no carga TOML Ki
 
 Se necesita un checkout confiable de Olympus con fuentes y renderer. La CLI carga el renderer de ese origen; no ejecuta código encontrado en el destino. No requiere OpenCode/Codex, WSL, Docker, Node ni credenciales.
 
-La entrada de módulo se usa desde el checkout con -B. Los launchers apuntan a su propio checkout y funcionan desde otro directorio. La opción global --source acepta otro origen **absoluto y confiable**, antes del subcomando; el cwd del destino no selecciona otra fuente automáticamente. `olympus --version` informa la release declarada por la fuente en `install.ps1`, actualmente `v0.4.12`: no certifica publicación ni integridad de la fuente.
+La entrada de módulo se usa desde el checkout con -B. Los launchers apuntan a su propio checkout y funcionan desde otro directorio. La opción global --source acepta otro origen **absoluto y confiable**, antes del subcomando; el cwd del destino no selecciona otra fuente automáticamente. `olympus --version` informa la release declarada por la fuente en `install.ps1`, actualmente `v0.4.12`: no certifica publicación ni integridad de la fuente. **No existe todavía una distribución standalone ni un comando `olympus` universal instalado.** La instalación pública de primer uso sin clonar se explica por separado en el [README](../../README.md#fast-install).
 
 ## Comandos disponibles
 
@@ -143,8 +143,9 @@ No se cambia el proyecto ni se instalan/reparan recursos. Ejemplo Windows:
 $LASTEXITCODE
 ```
 
-La aplicación C1/C3 sigue siendo una operación separada; `doctor` no completa
-los valores de asignación que FR-016 aún exige al preview.
+La aplicación C1/C3 sigue siendo una operación separada: `doctor` no deduce
+asignaciones instaladas. El preview C6 las compara desde recursos administrados
+verificados, y FR-008 también las muestra antes del `--execute` de proyecto.
 
 ### Install y uninstall mediante motores oficiales (Slice C5)
 

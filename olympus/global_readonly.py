@@ -301,10 +301,18 @@ def _unowned_opencode_guard(root: Path) -> str:
             if not isinstance(rule, dict) or not all(isinstance(rule.get(key), str)
                                                       for key in ("action", "resource", "effect")):
                 raise ValueError("Malformed V2 global permission rule")
+            if (not rule["action"] or not rule["resource"]
+                    or rule["effect"] not in ("allow", "ask", "deny")):
+                raise ValueError("Unsupported V2 global permission rule")
             # V2 documents only * and ? wildcards; fnmatch's bracket classes
             # would incorrectly accept a pattern V2 treats as literal.
             action_pattern = re.escape(rule["action"]).replace(r"\*", ".*").replace(r"\?", ".")
-            if rule["resource"] == "*" and re.fullmatch(action_pattern, "external_directory"):
+            # '*' is not the only broad V2 wildcard. Patterns made entirely
+            # from wildcards and path separators (such as '**' or '*/**')
+            # can override a previous ASK for essentially every external path.
+            broad_resource = rule["resource"].replace("/", "").replace("\\", "")
+            if (broad_resource and set(broad_resource) <= {"*", "?"}
+                    and re.fullmatch(action_pattern, "external_directory")):
                 fallback = rule["effect"]
         if fallback not in ("ask", "deny"):
             raise ValueError("External directory fallback resolves to ALLOW")

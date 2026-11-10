@@ -1550,6 +1550,42 @@ class SliceA(unittest.TestCase):
         again = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
         self.assertEqual("global_external_guard_unsafe", again["issues"][0]["code"])
 
+    def test_slice_c7_global_legacy_ambiguous_wildcards_do_not_bypass_ask(self):
+        # V2 treats '**', '?*', and '*/**' as broad matches on external paths.
+        # A later ALLOW must not be certified as an ASK/DENY fallback.
+        manifests = self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
+        manifest["managed_files"] = [item for item in manifest["managed_files"]
+                                     if item["path"] != "opencode.jsonc"]
+        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        user_config = root / "opencode.jsonc"
+        cases = ("**", "?*", "*/**", "***")
+        for broad in cases:
+            with self.subTest(pattern=broad):
+                text = json.dumps({"permissions": [
+                    {"action": "external_directory", "resource": "*", "effect": "ask"},
+                    {"action": "external_directory", "resource": broad, "effect": "allow"},
+                ]})
+                user_config.write_text(text, encoding="utf-8")
+                response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode",
+                                           "--dry-run", code=3)
+                self.assertEqual("global_external_guard_unsafe", response["issues"][0]["code"])
+                self.assertEqual(text, user_config.read_text(encoding="utf-8"))
+
+        # The effective last broad rule can restore ASK, while a narrow DENY
+        # remains a user-owned exception and is never claimed by Olympus.
+        safe_text = json.dumps({"permissions": [
+            {"action": "external_directory", "resource": "**", "effect": "allow"},
+            {"action": "external_directory", "resource": "*", "effect": "ask"},
+            {"action": "external_directory", "resource": "C:/fixture/prohibited/*", "effect": "deny"},
+        ]})
+        user_config.write_text(safe_text, encoding="utf-8")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
+        self.assertEqual("no_changes", response["result"])
+        self.assertEqual("safe_user_config", response["data"]["harnesses"]["opencode"]["external_guard"])
+        self.assertEqual(safe_text, user_config.read_text(encoding="utf-8"))
+
     def test_slice_c7_global_legacy_safe_jsonc_is_preserved(self):
         # Comments, URLs in strings, and trailing commas are supported by V2.
         manifests = self.create_global_managed_install(("opencode",))

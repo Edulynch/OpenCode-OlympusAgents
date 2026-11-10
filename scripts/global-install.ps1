@@ -151,10 +151,17 @@ function Assert-OpenCodeUserGuard([string]$Path) {
             $action = $rule.GetProperty('action').GetString()
             $resource = $rule.GetProperty('resource').GetString()
             $effect = $rule.GetProperty('effect').GetString()
+            if (-not $action -or -not $resource -or $effect -cnotin @('allow', 'ask', 'deny')) {
+                Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Malformed OpenCode V2 global permission rule.'
+            }
             # V2 patterns support * and ? only; PowerShell -like also accepts
             # bracket expressions, which would produce a false safety PASS.
             $actionPattern = '\A' + [regex]::Escape($action).Replace('\*', '.*').Replace('\?', '.') + '\z'
-            if ('external_directory' -cmatch $actionPattern -and $resource -ceq '*') {
+            # Repeated wildcards (including **, ?*, and */**) can match
+            # essentially every normalized external path. A later broad ALLOW
+            # therefore defeats an earlier '*' ASK even though the text differs.
+            $wildcardOnly = $resource.Replace('/', '').Replace('\', '')
+            if ('external_directory' -cmatch $actionPattern -and $wildcardOnly -match '^[*?]+$') {
                 $fallback = $effect
             }
         }
@@ -255,7 +262,7 @@ function Get-OpenCodeDefaultGuard {
     return [IO.File]::ReadAllText($source)
 }
 
-function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required) {
+function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required, [System.Collections.IDictionary]$RecoverOutputs = $null) {
     $path = Assert-SafeDestination $Root $ManifestRelative
     if (-not (Test-Path -LiteralPath $path)) {
         if ($Required) { Fail 'GLOBAL_MANIFEST_MISSING' "No Olympus global ownership manifest exists for $Harness." }
@@ -276,7 +283,13 @@ function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required)
         $full = Assert-SafeDestination $Root $relative
         if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Managed global file is missing: $relative" }
         if ((Get-FileHashText $full) -cne ([string]$entry.sha256).ToLowerInvariant()) {
-            Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Managed global file changed: $relative"
+            # Only during a pending, hash-verified guard install may a retry
+            # roll forward an agent already written from this exact source.
+            # Unknown edits still block without touching the user's bytes.
+            if ($null -eq $RecoverOutputs -or -not $RecoverOutputs.Contains($relative) -or
+                (Get-FileHashText $full) -cne (Get-TextHash ([string]$RecoverOutputs[$relative]))) {
+                Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Managed global file changed: $relative"
+            }
         }
     }
     return $manifest
@@ -292,6 +305,19 @@ function Write-GlobalResource([string]$Path, [string]$Content) {
     $parent = Split-Path -Parent $Path
     [IO.Directory]::CreateDirectory($parent) | Out-Null
     [IO.File]::WriteAllText($Path, $Content, $Utf8NoBom)
+}
+
+function Write-NewOpenCodeGuard([string]$Path, [string]$Content) {
+    # The earlier preflight cannot reserve this name. CreateNew prevents a
+    # user config appearing during installation from ever being truncated.
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $Path)) | Out-Null
+    $stream = [IO.FileStream]::new($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write,
+        [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough)
+    try {
+        $bytes = $Utf8NoBom.GetBytes($Content)
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
+    } finally { $stream.Dispose() }
 }
 
 function Write-GlobalManifest([string]$Path, [string]$Content) {
@@ -376,7 +402,8 @@ function Invoke-OneHarness([string]$SelectedHarness) {
         return
     }
 
-    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:$VerifyOnly
+    $recoverOutputs = if ($null -ne $guardIntent -and -not $VerifyOnly) { Get-GlobalOutputs $SelectedHarness } else { $null }
+    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:$VerifyOnly -RecoverOutputs $recoverOutputs
     $oldEntries = Get-ManifestEntryMap $manifest
     $outputs = Get-GlobalOutputs $SelectedHarness
     if ($SelectedHarness -eq 'opencode') {
@@ -399,7 +426,9 @@ function Invoke-OneHarness([string]$SelectedHarness) {
         if (-not (Test-Path -LiteralPath $full)) { $create.Add($relative); continue }
         if ($oldEntries.ContainsKey($relative)) {
             if ((Get-FileHashText $full) -cne ([string]$oldEntries[$relative].sha256).ToLowerInvariant()) {
-                Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Refusing to overwrite modified managed global resource: $relative"
+                if ($null -eq $recoverOutputs -or (Get-FileHashText $full) -cne (Get-TextHash ([string]$outputs[$relative]))) {
+                    Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Refusing to overwrite modified managed global resource: $relative"
+                }
             }
             if ((Get-FileHashText $full) -cne (Get-TextHash ([string]$outputs[$relative]))) { $update.Add($relative) }
         } elseif ((Get-FileHashText $full) -cne (Get-TextHash ([string]$outputs[$relative]))) {
@@ -452,7 +481,12 @@ function Invoke-OneHarness([string]$SelectedHarness) {
     foreach ($relative in $remove) { [IO.File]::Delete((Assert-SafeDestination $root $relative)) }
     foreach ($relative in @($outputs.Keys | Sort-Object)) {
         if ($relative -in $create -or $relative -in $update) {
-            Write-GlobalResource (Assert-SafeDestination $root $relative) ([string]$outputs[$relative])
+            $destination = Assert-SafeDestination $root $relative
+            if ($SelectedHarness -eq 'opencode' -and $relative -ceq $OpenCodeConfigRelative -and $relative -in $create) {
+                Write-NewOpenCodeGuard $destination ([string]$outputs[$relative])
+            } else {
+                Write-GlobalResource $destination ([string]$outputs[$relative])
+            }
         }
     }
     if ($manifestChanged) { Write-GlobalManifest $manifestPath $manifestText }

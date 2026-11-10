@@ -120,7 +120,14 @@ are not scanned or modified. Before the first guard write, the installer persist
 an Olympus-only `olympus/opencode-guard-pending.json` ownership intent. If interrupted
 before the manifest is committed, the next installation reclaims **only** an
 exact-hash guard, rejects altered bytes, and removes the intent after the
-manifest is safely written. `VerifyOnly` and uninstall fail closed while an
+manifest is safely written. During that same pending install, already-written
+managed agents/plugins may roll forward **only** if their bytes match the
+current canonical source exactly; an unknown edit or missing retired file
+still requires manual reconciliation, preserving all original bytes. The guard
+itself is created with exclusive `CreateNew` semantics, so a config appearing
+after preflight cannot be overwritten. A collision may leave the ownership
+intent pending and must be resolved manually after preserving the user config.
+`VerifyOnly` and uninstall fail closed while an
 unreconciled intent exists; run the regular installer to recover first. This
 guard-specific recovery does not claim full transactionality for all global
 agent/plugin resources.
@@ -151,12 +158,15 @@ and failure/ownership cases; they do **not** establish a live native global-only
 permission prompt or denial. Native global-only qualification remains required
 before making a blanket runtime security claim. An optional
 `tests/global-installer/native-permission-api-smoke.ps1` probes the isolated V2
-server permission API: it can record native ASK, reply programmatically with
-`reject`, and check automatic specific DENY **without interactive dialogs**.
-It is an engine-level test, not a native tool-read test; never label its
-programmatic rejection as user-observed or its absence of file content as a
-verified tool containment result. Until executed on supported V2, its result
-is **NOT_OBSERVABLE**. See the official
+server permission API: it records native ASK, replies programmatically with
+`reject`, and checks automatic specific DENY **without interactive dialogs**.
+The default invocation checks permission-engine behavior only; the Windows CI
+workflow supplies `-NativeToolRead` and also triggers an actual OpenCode `read`
+against synthetic external sentinels with a local deterministic model fixture.
+That native tool-read check has observed a denied read and no sentinel-content
+exposure under its isolated settings, **not** a human-observed rejection,
+an interactive TUI prompt, or a general alternative-tool/shell sandbox claim.
+See the official
 [V2 permissions](https://opencode.ai/docs/permissions/) and
 [server permission API](https://opencode.ai/docs/api) references.
 

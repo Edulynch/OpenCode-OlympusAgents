@@ -161,6 +161,9 @@ try {
         @{ Name='missing-permissions'; Text='{"user_owned":true}' },
         @{ Name='default-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"allow"}]}' },
         @{ Name='last-rule-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"*","resource":"*","effect":"allow"}]}' },
+        @{ Name='double-wildcard-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"**","effect":"allow"}]}' },
+        @{ Name='wildcard-question-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"deny"},{"action":"*","resource":"?*","effect":"allow"}]}' },
+        @{ Name='wildcard-path-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"*/**","effect":"allow"}]}' },
         @{ Name='malformed'; Text='{"permissions":[' }
     )) {
         $unsafeRoot = Join-Path $run ('OpenCode Unsafe ' + $unsafeCase.Name)
@@ -176,6 +179,21 @@ try {
             (Snapshot $unsafeRoot) -ceq $unsafeBefore
         ) ("exit=$($unsafeInstall.Code)`n$($unsafeInstall.Text)")
     }
+
+    # A later universal ASK restores the safe fallback. Narrow user DENYs
+    # remain intact; the validator must follow ordered rules, not first-match.
+    $safeBroadRoot = Join-Path $run 'OpenCode Safe Broad Restoration'
+    [IO.Directory]::CreateDirectory($safeBroadRoot) | Out-Null
+    $safeBroadFile = Join-Path $safeBroadRoot 'opencode.jsonc'
+    $safeBroadText = '{"permissions":[{"action":"external_directory","resource":"**","effect":"allow"},{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"C:/fixture/prohibited/*","effect":"deny"}]}'
+    [IO.File]::WriteAllText($safeBroadFile, $safeBroadText, $utf8)
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $safeBroadRoot
+    $safeBroadInstall = Global-Install $project 'opencode'
+    Check 'GLOBAL_LATER_ASK_AND_NARROW_DENY_PRESERVED' (
+        $safeBroadInstall.Code -eq 0 -and
+        [IO.File]::ReadAllText($safeBroadFile) -ceq $safeBroadText -and
+        (Resolve-SyntheticExternalDecision $safeBroadFile 'C:/fixture/prohibited/sentinel.txt') -eq 'deny'
+    ) ("exit=$($safeBroadInstall.Code)`n$($safeBroadInstall.Text)")
 
     # A JSONC user config with trailing commas and an explicit DENY fallback
     # is a supported safe case; never rewrite it or adopt it into the manifest.
@@ -286,6 +304,78 @@ try {
         -not (Test-Path -LiteralPath $recoverIntentPath) -and
         (Global-Verify $project 'opencode').Code -eq 0
     ) ("exit=$($recoverInstall.Code)`n$($recoverInstall.Text)")
+
+    # A legacy 13-file upgrade can be interrupted after an old managed agent
+    # was replaced with the canonical bytes but before manifest publication.
+    # Unrecognized edits are never adopted, even with a valid guard intent.
+    $upgradeRoot = Join-Path $run 'OpenCode Interrupted Managed Upgrade'
+    [IO.Directory]::CreateDirectory($upgradeRoot) | Out-Null
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $upgradeRoot
+    $upgradeSeed = Global-Install $project 'opencode'
+    if ($upgradeSeed.Code -ne 0) { throw "Interrupted upgrade fixture install failed: $($upgradeSeed.Text)" }
+    $upgradeManifestPath = Join-Path $upgradeRoot 'olympus/orchestrator-install.json'
+    $upgradeManifest = Get-Content -LiteralPath $upgradeManifestPath -Raw | ConvertFrom-Json
+    $upgradeAgent = Join-Path $upgradeRoot 'agents/kael.md'
+    $currentAgentText = [IO.File]::ReadAllText($upgradeAgent)
+    $priorAgentText = $currentAgentText + "`n# prior managed version`n"
+    [IO.File]::WriteAllText($upgradeAgent, $priorAgentText, $utf8)
+    $upgradeAgentEntry = @($upgradeManifest.managed_files | Where-Object { $_.path -eq 'agents/kael.md' })[0]
+    $upgradeAgentEntry.sha256 = (Get-FileHash -LiteralPath $upgradeAgent -Algorithm SHA256).Hash.ToLowerInvariant()
+    $upgradeManifest.managed_files = @($upgradeManifest.managed_files | Where-Object { $_.path -ne 'opencode.jsonc' })
+    $upgradeManifest.installed_version = 'historical-13-file-version'
+    [IO.File]::WriteAllText($upgradeManifestPath, (($upgradeManifest | ConvertTo-Json -Depth 20) + "`n"), $utf8)
+    [IO.File]::Delete((Join-Path $upgradeRoot 'opencode.jsonc'))
+    [IO.File]::WriteAllText((Join-Path $upgradeRoot 'olympus/opencode-guard-pending.json'), $recoverIntent, $utf8)
+    [IO.File]::WriteAllText((Join-Path $upgradeRoot 'opencode.jsonc'), $guardSourceText, $utf8)
+    [IO.File]::WriteAllText($upgradeAgent, 'unrecognized user edit', $utf8)
+    $unknownUpgradeBefore = Snapshot $upgradeRoot
+    $unknownUpgrade = Global-Install $project 'opencode'
+    Check 'GLOBAL_PENDING_UPGRADE_UNKNOWN_DRIFT_FAILS_CLOSED' (
+        $unknownUpgrade.Code -ne 0 -and $unknownUpgrade.Text -match 'GLOBAL_MANAGED_FILE_DRIFT' -and
+        (Snapshot $upgradeRoot) -ceq $unknownUpgradeBefore
+    ) ("exit=$($unknownUpgrade.Code)`n$($unknownUpgrade.Text)")
+    [IO.File]::WriteAllText($upgradeAgent, $currentAgentText, $utf8)
+    $upgradeRecovered = Global-Install $project 'opencode'
+    $upgradeRecoveredManifest = if ($upgradeRecovered.Code -eq 0) { Get-Content -LiteralPath $upgradeManifestPath -Raw | ConvertFrom-Json } else { $null }
+    Check 'GLOBAL_PENDING_13_TO_14_MANAGED_AGENT_ROLLFORWARD' (
+        $upgradeRecovered.Code -eq 0 -and $null -ne $upgradeRecoveredManifest -and
+        $upgradeRecoveredManifest.managed_files.Count -eq 14 -and
+        -not (Test-Path (Join-Path $upgradeRoot 'olympus/opencode-guard-pending.json')) -and
+        (Global-Verify $project 'opencode').Code -eq 0
+    ) ("exit=$($upgradeRecovered.Code)`n$($upgradeRecovered.Text)")
+
+    # Exercise the exact production writer in isolation. The concurrent-file
+    # case is modeled at the final create syscall, where CreateNew must fail
+    # without replacing existing config bytes.
+    $nativeInstallerPath = Join-Path $source 'scripts/global-install.ps1'
+    $parseTokens = $null
+    $parseErrors = $null
+    $installerAst = [System.Management.Automation.Language.Parser]::ParseFile($nativeInstallerPath, [ref]$parseTokens, [ref]$parseErrors)
+    $guardWriters = @($installerAst.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Write-NewOpenCodeGuard'
+    }, $true))
+    Check 'GLOBAL_GUARD_EXCLUSIVE_WRITER_PARSES' ($parseErrors.Count -eq 0 -and $guardWriters.Count -eq 1)
+    $exclusiveProbe = [scriptblock]::Create(
+        'param([string]$path, [string]$text)' + "`n" +
+        '$Utf8NoBom = [Text.UTF8Encoding]::new($false)' + "`n" +
+        $guardWriters[0].Extent.Text + "`n" +
+        'Write-NewOpenCodeGuard $path $text'
+    )
+    $raceConfigPath = Join-Path $run 'exclusive-writer-user-config.jsonc'
+    $raceUserBytes = '{"user_owned":true,"permissions":[]}'
+    [IO.File]::WriteAllText($raceConfigPath, $raceUserBytes, $utf8)
+    $raceRejected = $false
+    try { & $exclusiveProbe $raceConfigPath $guardSourceText }
+    catch { $raceRejected = $true }
+    Check 'GLOBAL_GUARD_EXCLUSIVE_CREATE_PRESERVES_RACING_USER_CONFIG' (
+        $raceRejected -and [IO.File]::ReadAllText($raceConfigPath) -ceq $raceUserBytes
+    )
+    $freshConfigPath = Join-Path $run 'exclusive-writer-fresh-guard.jsonc'
+    & $exclusiveProbe $freshConfigPath $guardSourceText
+    Check 'GLOBAL_GUARD_EXCLUSIVE_CREATE_WRITES_NEW_FILE' (
+        [IO.File]::ReadAllText($freshConfigPath) -ceq $guardSourceText
+    )
 
     # A crash after manifest replacement but before intent cleanup must also
     # be idempotently reconciled, and only an owned guard is removed on uninstall.

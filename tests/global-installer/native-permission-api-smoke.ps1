@@ -142,7 +142,9 @@ try {
                     $reader.Dispose()
                     $turn++
                     $delta = if ($turn -eq 1) {
-                        $argsJson = @{ filePath=$SentinelPath } | ConvertTo-Json -Compress
+                        # V2's read contract names the parameter `path`.
+                        # The legacy `filePath` field is not accepted here.
+                        $argsJson = @{ path=$SentinelPath } | ConvertTo-Json -Compress
                         @{ role='assistant'; tool_calls=@(@{
                             index=0; id='call_oa121_read'; type='function'
                             function=@{ name='read'; arguments=$argsJson }

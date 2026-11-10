@@ -136,7 +136,7 @@ try {
 
     $allowedPattern = $allowedRoot.Replace('\', '/').TrimEnd('/') + '/*'
     $forbiddenPattern = $forbiddenRoot.Replace('\', '/').TrimEnd('/') + '/*'
-    $askRequest = @{ action='external_directory'; resources=@($allowedPattern); save=@($allowedPattern) }
+    $askRequest = @{ agent='kovan'; action='external_directory'; resources=@($allowedPattern); save=@($allowedPattern) }
     # A native ASK leaves an outstanding request; the script itself sends the
     # explicit reject and never asks a human to inspect an ambiguous dialog.
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
@@ -151,7 +151,15 @@ try {
                 break
             }
         }
-        if (-not $pendingId -and $askTask.IsCompleted) { Fail 'Permission request completed without an observable native ASK.' }
+        if (-not $pendingId -and $askTask.IsCompleted) {
+            try {
+                $earlyReply = $askTask.GetAwaiter().GetResult()
+                $status = [int]$earlyReply.StatusCode
+                Fail "Permission request completed before an ASK was listed (HTTP $status)."
+            } catch [Net.Http.HttpRequestException] {
+                Fail 'Permission request failed before an ASK was listed (HTTP transport failure).'
+            }
+        }
         if (-not $pendingId) { Start-Sleep -Milliseconds 150 }
     }
     if (-not $pendingId) { Fail 'Timed out without observing the native ASK request.' }
@@ -172,7 +180,7 @@ try {
     $updateResponse = $client.SendAsync($denyUpdate).GetAwaiter().GetResult()
     if (-not $updateResponse.IsSuccessStatusCode) { Fail 'Cannot set the isolated session-specific DENY.' }
     $denyResponse = $client.PostAsync("$base/api/session/$sessionId/permission", (JsonContent @{
-        action='external_directory'; resources=@($forbiddenPattern); save=@($forbiddenPattern)
+        agent='kovan'; action='external_directory'; resources=@($forbiddenPattern); save=@($forbiddenPattern)
     })).GetAwaiter().GetResult()
     $denyPending = @(PermissionRecords (Get-Json $client "$base/api/session/$sessionId/permission"))
     if ($denyResponse.IsSuccessStatusCode -or @($denyPending | Where-Object { $null -ne $_ -and 'resources' -in @($_.PSObject.Properties.Name) -and $forbiddenPattern -in @($_.resources) }).Count) {

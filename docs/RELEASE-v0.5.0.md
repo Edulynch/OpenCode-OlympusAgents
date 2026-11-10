@@ -1,13 +1,15 @@
 # OlympusAgents v0.5.0 — release candidate
 
-**Status: NOT PUBLISHED.** This is the bounded CLI/release-readiness record for [issue #64](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/64). Do not interpret this document as evidence of a `v0.5.0` tag, released installer or universal CLI packaging. The checkout's current installer/version declaration remains `v0.4.12` until a separately approved release transition.
+**Pre-publication record; not proof of a GitHub Release.** This document tracks the bounded CLI/release-readiness evidence for [issue #64](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/64). Publishing a tag and GitHub Release remains a separate maintainer decision.
+
+The checkout's installer default and release marker declare `v0.5.0`; the twelve legacy wrapper sources reference the same tag. This identifies a candidate source tree, not a published artifact or a universal CLI package.
 
 ## What the candidate delivers
 
 - **Slices A/B:** lightweight Python 3.11+ source-checkout CLI for offline queries, canonical model-family/role edits, previews, validation and bounded source recovery; no model API calls are required.
 - **Slices C1–C6, project:** managed installed-state preview/apply and recovery, read-only doctor, routing to existing native install/uninstall engines, and current/proposed assignments disclosed **before** project `config apply --execute` writes. Exact managed ownership, manifest, hash and drift guards remain in force.
 - **Slice C7, global:** read-only `status`, `doctor` and `config apply --dry-run`; no global `--execute` or recovery. Global writes are deferred to [#122](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/122).
-- **Operator UX:** two no-checkout Fast PowerShell entrypoints in the [README](../README.md), interactive project/path/global and harness selection, and advanced copyable CLI commands in the [installation guide](INSTALLATION.md) and [CLI quickstart](../specs/001-portable-olympus-cli/quickstart.md).
+- **Operator UX:** icon-first, example-led [README](../README.md), two no-checkout Fast PowerShell entrypoints, interactive project/path/global and harness selection, the [workflow guide](WORKFLOWS.md) for detailed roles/modes, and copyable advanced CLI commands in [installation](INSTALLATION.md) and the [CLI quickstart](../specs/001-portable-olympus-cli/quickstart.md).
 
 There are **11 canonical roles**: 11 OpenCode agents; Codex has Kael as root plus 10 specialists. Aegis and `/maintain` are retired. OpenCode V2 is the actively developed harness; Codex is frozen compatibility, not capability parity.
 
@@ -43,7 +45,8 @@ The portable CLI launchers remain **source-checkout-bound** (`scripts/olympus.cm
 ## Evidence and publication gate
 
 - Merged CLI baseline: `master` commit [`1f11640490eef7af05e10fecce8ee0eb6444f8cd`](https://github.com/Edulynch/OpenCode-OlympusAgents/commit/1f11640490eef7af05e10fecce8ee0eb6444f8cd) (PR #123).
+- [Onboarding PR #124](https://github.com/Edulynch/OpenCode-OlympusAgents/pull/124) and [icon-first README PR #125](https://github.com/Edulynch/OpenCode-OlympusAgents/pull/125) are integrated into `master`; #125 had all three GitHub workflows green. PowerShell-only documentation contract tests were not separately run in the Linux editing environment.
 - [Bounded native Windows project integration](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/64#issuecomment-6776438959): official `VerifyOnly` PASS; `OA64_POST_APPLY`, `OA64_DRIFT_REJECTION` and `OA64_PROJECT_INTEGRATION` PASS. The same evidence records the separate OpenCode port-related native-validation failure.
-- Existing FAST/Security/native-permission CI on reviewed PR #123 passed; no unrelated full-suite repetition is required for this documentation-only candidate.
+- Existing FAST/Security/native-permission CI on reviewed PR #123 passed; the final version-transition candidate still requires its own targeted release identity and regression gates.
 
-**Release gate still pending:** review and merge these docs against a current `master`, reconcile the unexpected GitHub closed state of #64 with the outstanding release gate, verify the final candidate's exact release/version identity and required CI, and obtain explicit maintainer approval before creating any `v0.5.0` tag or GitHub Release. Do not silently expand supported platforms or global write capabilities to satisfy a broad checklist.
+**Publication gate:** verify the exact final candidate SHA, run the targeted Windows PowerShell release/version contract and native installer checks with honest port-28894 outcome classification, reconcile outstanding evidence in the reopened issue, and obtain explicit maintainer approval before creating any tag or GitHub Release. Do not silently expand supported platforms or global write capabilities to satisfy a broad checklist.

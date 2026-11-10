@@ -749,8 +749,8 @@ exit /b 0
         Check 'README_HAS_EXACTLY_TWO_PUBLIC_COMMANDS' ($readmeCommands.Count -eq 2 -and
             $readmeCommands[0].Value.Trim() -ceq $expectedPublicCommands[0] -and
             $readmeCommands[1].Value.Trim() -ceq $expectedPublicCommands[1] -and
-            -not $readmeText.Contains('/v0.4.12/install-olympus.ps1') -and
-            -not $readmeText.Contains('/v0.4.12/uninstall-olympus.ps1'))
+            -not $readmeText.Contains('/v0.5.0/install-olympus.ps1') -and
+            -not $readmeText.Contains('/v0.5.0/uninstall-olympus.ps1'))
         $requirementsIndex = $readmeText.IndexOf('## Requirements', [StringComparison]::Ordinal)
         $firstCommandIndex = if ($readmeCommands.Count -gt 0) { $readmeCommands[0].Index } else { -1 }
         Check 'README_PREREQUISITES_PRECEDE_FIRST_COMMAND' ($requirementsIndex -ge 0 -and $firstCommandIndex -gt $requirementsIndex)

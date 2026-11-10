@@ -207,7 +207,7 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
     $versionRegex = [regex]::Escape($Version)
     $bootstrapVersion = 'v0.4.11'
     $bootstrapVersionRegex = [regex]::Escape($bootstrapVersion)
-    if ($Version -cne 'v0.4.12') { $errors.Add('DOC_TARGET_IDENTITY_NOT_V0412') }
+    if ($Version -cne 'v0.5.0') { $errors.Add('DOC_TARGET_IDENTITY_NOT_V050') }
     if ($Version -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$') {
         $errors.Add('DOC_TARGET_NOT_STABLE_VERSION')
     }
@@ -535,7 +535,7 @@ try {
 
     $badTargetIdentity = Copy-ReleaseDocs $docs
     $badTargetIdentity['install.ps1'] = ([string]$badTargetIdentity['install.ps1']).Replace("[string]`$Version = '$version'", "[string]`$Version = 'v0.4.11'").Replace("`$ReleaseVersion = '$version'", "`$ReleaseVersion = 'v0.4.11'")
-    Assert-Rejected $badTargetIdentity 'v0.4.11' 'PRE_TAG' 'DOC_TARGET_IDENTITY_NOT_V0412' 'REGRESSION_REJECTS_NON_V0412_TARGET'
+    Assert-Rejected $badTargetIdentity 'v0.4.11' 'PRE_TAG' 'DOC_TARGET_IDENTITY_NOT_V050' 'REGRESSION_REJECTS_NON_V050_TARGET'
 
     $tagBase = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' + $version + '/'
     $bootstrapBase = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/'

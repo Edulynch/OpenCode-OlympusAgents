@@ -8,7 +8,7 @@ Python **3.11+ real**. Slice A usa sólo biblioteca estándar y no carga TOML Ki
 
 Se necesita un checkout confiable de Olympus con fuentes y renderer. La CLI carga el renderer de ese origen; no ejecuta código encontrado en el destino. No requiere OpenCode/Codex, WSL, Docker, Node ni credenciales.
 
-La entrada de módulo se usa desde el checkout con -B. Los launchers apuntan a su propio checkout y funcionan desde otro directorio. La opción global --source acepta otro origen **absoluto y confiable**, antes del subcomando; el cwd del destino no selecciona otra fuente automáticamente. `olympus --version` informa la release declarada por la fuente en `install.ps1`, actualmente `v0.4.12`: no certifica publicación ni integridad de la fuente. **No existe todavía una distribución standalone ni un comando `olympus` universal instalado.** La instalación pública de primer uso sin clonar se explica por separado en el [README](../../README.md#fast-install).
+La entrada de módulo se usa desde el checkout con -B. Los launchers apuntan a su propio checkout y funcionan desde otro directorio. La opción global --source acepta otro origen **absoluto y confiable**, antes del subcomando; el cwd del destino no selecciona otra fuente automáticamente. `olympus --version` informa la release declarada por la fuente en `install.ps1`, actualmente `v0.5.0`: no certifica publicación ni integridad de la fuente. **No existe todavía una distribución standalone ni un comando `olympus` universal instalado.** La instalación pública de primer uso sin clonar se explica por separado en el [README](../../README.md#fast-install).
 
 ## Comandos disponibles
 

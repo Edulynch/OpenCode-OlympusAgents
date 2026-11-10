@@ -166,10 +166,21 @@ try {
         Fail 'The native config document does not expose the required external-directory ASK fallback.'
     }
     Write-Output 'NATIVE_GLOBAL_GUARD_DOCUMENT: DISCOVERED'
-    # Confirm Kovan is registered in this same location. A missing agent would
-    # trigger V2's implicit blanket DENY and invalidate the ASK exercise.
-    $agentResponse = Get-Json $client "$base/api/agent/kovan"
-    $agent = if ('data' -in @($agentResponse.PSObject.Properties.Name)) { $agentResponse.data } else { $agentResponse }
+    # Agent registration can finish after the location endpoint becomes ready.
+    # Observe the actual catalog, and fail with IDs only if Kovan never appears.
+    $agentDeadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    $agent = $null
+    $registeredAgentIds = @()
+    while ([DateTime]::UtcNow -lt $agentDeadline) {
+        $agents = @(PermissionRecords (Get-Json $client "$base/api/agent"))
+        $registeredAgentIds = @($agents | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_.id })
+        $matches = @($agents | Where-Object { $null -ne $_ -and $_.id -eq 'kovan' })
+        if ($matches.Count -eq 1) { $agent = $matches[0]; break }
+        Start-Sleep -Milliseconds 500
+    }
+    if ($null -eq $agent) {
+        Fail "Native Kovan missing from the agent catalog (registered IDs=$($registeredAgentIds -join ','))."
+    }
     if ($null -eq $agent -or 'permissions' -notin @($agent.PSObject.Properties.Name)) {
         Fail 'Native Kovan agent is not registered with a readable permission ruleset.'
     }

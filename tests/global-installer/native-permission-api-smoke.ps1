@@ -118,6 +118,23 @@ try {
         Start-Sleep -Milliseconds 200
     }
     if (-not $ready) { Fail "Isolated OpenCode server did not become ready (last HTTP status=$lastReadinessStatus)." }
+    # Establish that the native server actually discovered the isolated global
+    # guard. Merely creating the file via the installer is insufficient.
+    $configEntries = @(PermissionRecords (Get-Json $client "$base/api/config"))
+    $guardDocuments = @($configEntries | Where-Object {
+        $null -ne $_ -and 'path' -in @($_.PSObject.Properties.Name) -and
+        ([string]$_.path).Replace('\', '/') -like '*/opencode.jsonc'
+    })
+    if ($guardDocuments.Count -ne 1) {
+        Fail "Native config discovery did not identify exactly one isolated global guard (found=$($guardDocuments.Count))."
+    }
+    $guardRules = @($guardDocuments[0].info.permissions)
+    if (@($guardRules | Where-Object {
+        $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'ask'
+    }).Count -ne 1) {
+        Fail 'The native config document does not expose the required external-directory ASK fallback.'
+    }
+    Write-Output 'NATIVE_GLOBAL_GUARD_DOCUMENT: DISCOVERED'
     $session = Post-Json $client "$base/api/session" @{ title='OA121 isolated global permission API' }
     if ($null -eq $session) { Fail 'Session creation returned an empty response.' }
     $sessionKeys = @($session.PSObject.Properties.Name)
@@ -155,7 +172,13 @@ try {
             try {
                 $earlyReply = $askTask.GetAwaiter().GetResult()
                 $status = [int]$earlyReply.StatusCode
-                Fail "Permission request completed before an ASK was listed (HTTP $status)."
+                $earlyBody = $earlyReply.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+                $bodyKind = 'empty_or_non_json'
+                try {
+                    $parsedEarly = ConvertFrom-Json -InputObject $earlyBody -Depth 10 -ErrorAction Stop
+                    $bodyKind = @($parsedEarly.PSObject.Properties.Name) -join ','
+                } catch { }
+                Fail "Permission request completed before an ASK was listed (HTTP $status; response keys=$bodyKind)."
             } catch [Net.Http.HttpRequestException] {
                 Fail 'Permission request failed before an ASK was listed (HTTP transport failure).'
             }

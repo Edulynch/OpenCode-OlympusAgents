@@ -311,11 +311,12 @@ def _unowned_opencode_guard(root: Path) -> str:
             # they contain punctuation (for example '?:/**' on Windows).
             # Only an explicit drive, Unix directory, UNC share, or home root
             # qualifies as a deliberately scoped user exception.
-            broad_resource = rule["resource"].replace("/", "").replace("\\", "")
             normalized_resource = rule["resource"].replace("\\", "/")
             scoped = bool(re.match(r"^(?:[A-Za-z]:/|/[^/*?]+|//[^/*?]+/[^/*?]+|~/|\$HOME/)",
                                    normalized_resource))
-            universal = bool(broad_resource) and set(broad_resource) <= {"*", "?"}
+            # '?' consumes exactly one character; it cannot establish a
+            # global protective fallback after an earlier wildcard ALLOW.
+            universal = bool(re.fullmatch(r"\*+", rule["resource"]))
             if ((universal or (rule["effect"] == "allow" and not scoped))
                     and re.fullmatch(action_pattern, "external_directory")):
                 fallback = rule["effect"]

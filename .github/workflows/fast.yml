@@ -264,7 +264,7 @@ jobs:
           $testOutput | Out-Host
           if ($testExitCode -ne 0) { exit $testExitCode }
           $transcript = $testOutput -join "`n"
-          if ($transcript -notmatch '(?m)^Ran 18 tests in ' -or
+          if ($transcript -notmatch '(?m)^Ran 19 tests in ' -or
               $transcript -notmatch '(?m)^OK$' -or $transcript -match 'skipped') {
             throw 'Slice C7 Windows global read-only tests must all pass without skips.'
           }

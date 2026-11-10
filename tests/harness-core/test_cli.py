@@ -1573,12 +1573,26 @@ class SliceA(unittest.TestCase):
                 self.assertEqual("global_external_guard_unsafe", response["issues"][0]["code"])
                 self.assertEqual(text, user_config.read_text(encoding="utf-8"))
 
+        # '?' and '??' are not catchalls: they cannot restore a safe fallback
+        # after a prior ALLOW on full absolute external paths.
+        for pattern, effect in (("?", "deny"), ("??", "ask")):
+            with self.subTest(false_fallback=pattern):
+                text = json.dumps({"permissions": [
+                    {"action": "external_directory", "resource": "*", "effect": "allow"},
+                    {"action": "external_directory", "resource": pattern, "effect": effect},
+                ]})
+                user_config.write_text(text, encoding="utf-8")
+                response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode",
+                                           "--dry-run", code=3)
+                self.assertEqual("global_external_guard_unsafe", response["issues"][0]["code"])
+
         # The effective last broad rule can restore ASK, while a narrow DENY
         # remains a user-owned exception and is never claimed by Olympus.
         safe_text = json.dumps({"permissions": [
             {"action": "external_directory", "resource": "**", "effect": "allow"},
             {"action": "external_directory", "resource": "*", "effect": "ask"},
             {"action": "external_directory", "resource": "C:/fixture/authorized/*", "effect": "allow"},
+            {"action": "external_directory", "resource": r"C:\fixture\authorized-extra\*", "effect": "allow"},
             {"action": "external_directory", "resource": "C:/fixture/prohibited/*", "effect": "deny"},
         ]})
         user_config.write_text(safe_text, encoding="utf-8")

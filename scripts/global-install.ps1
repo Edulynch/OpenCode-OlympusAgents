@@ -162,14 +162,16 @@ function Assert-OpenCodeUserGuard([string]$Path) {
             # Treat an unanchored ALLOW as a fallback override; only an ALLOW
             # rooted at an explicit drive, Unix directory, UNC share, or home
             # may count as a deliberately scoped user exception.
-            $wildcardOnly = $resource.Replace('/', '').Replace('\', '')
             $normalizedResource = $resource.Replace('\', '/')
             $scoped = $normalizedResource -match '^[A-Za-z]:/' -or
                 $normalizedResource -match '^/[^/*?]+' -or
                 $normalizedResource -match '^//[^/*?]+/[^/*?]+' -or
                 $normalizedResource -match '^(~/|\$HOME/)'
+            # Only pure '*' wildcards match *every* possible resource. A lone
+            # '?' DENY matches one character and cannot repair a prior ALLOW.
+            $universal = $resource -match '^\*+$'
             if ('external_directory' -cmatch $actionPattern -and
-                ($wildcardOnly -match '^[*?]+$' -or ($effect -ceq 'allow' -and -not $scoped))) {
+                ($universal -or ($effect -ceq 'allow' -and -not $scoped))) {
                 $fallback = $effect
             }
         }
@@ -329,12 +331,12 @@ function Write-NewOpenCodeGuard([string]$Path, [string]$Content) {
 }
 
 function Assert-NoOpenCodeConfigCollision([string]$Root) {
-    # A second OpenCode config can appear under a *different* filename while
-    # CreateNew safely reserves opencode.jsonc. Recheck the competing name
-    # around manifest publication so this run never silently certifies both.
-    $otherFormat = Assert-SafeDestination $Root 'opencode.json'
-    if (Test-Path -LiteralPath $otherFormat) {
-        Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'A competing opencode.json appeared during managed guard installation; preserve both configs for manual reconciliation.'
+    # Either supported config format may be user-owned. Recheck both names
+    # around publication even when Olympus did not create a managed guard.
+    $json = Assert-SafeDestination $Root 'opencode.json'
+    $jsonc = Assert-SafeDestination $Root $OpenCodeConfigRelative
+    if ((Test-Path -LiteralPath $json) -and (Test-Path -LiteralPath $jsonc)) {
+        Fail 'GLOBAL_EXTERNAL_GUARD_UNSAFE' 'Both global OpenCode config formats now exist; preserve both for manual reconciliation.'
     }
 }
 
@@ -507,11 +509,11 @@ function Invoke-OneHarness([string]$SelectedHarness) {
             }
         }
     }
-    if ($SelectedHarness -eq 'opencode' -and $outputs.Contains($OpenCodeConfigRelative)) {
+    if ($SelectedHarness -eq 'opencode') {
         Assert-NoOpenCodeConfigCollision $root
     }
     if ($manifestChanged) { Write-GlobalManifest $manifestPath $manifestText }
-    if ($SelectedHarness -eq 'opencode' -and $outputs.Contains($OpenCodeConfigRelative)) {
+    if ($SelectedHarness -eq 'opencode') {
         Assert-NoOpenCodeConfigCollision $root
     }
     if ($null -ne $guardIntent) {

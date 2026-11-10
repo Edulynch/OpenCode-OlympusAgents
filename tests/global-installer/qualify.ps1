@@ -166,6 +166,8 @@ try {
         @{ Name='wildcard-path-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"*/**","effect":"allow"}]}' },
         @{ Name='drive-wildcard-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"?:/**","effect":"allow"}]}' },
         @{ Name='colon-wildcard-allow'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"*:*","effect":"allow"}]}' },
+        @{ Name='question-deny-false-fallback'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"allow"},{"action":"external_directory","resource":"?","effect":"deny"}]}' },
+        @{ Name='questions-ask-false-fallback'; Text='{"permissions":[{"action":"external_directory","resource":"*","effect":"allow"},{"action":"external_directory","resource":"??","effect":"ask"}]}' },
         @{ Name='malformed'; Text='{"permissions":[' }
     )) {
         $unsafeRoot = Join-Path $run ('OpenCode Unsafe ' + $unsafeCase.Name)
@@ -187,7 +189,7 @@ try {
     $safeBroadRoot = Join-Path $run 'OpenCode Safe Broad Restoration'
     [IO.Directory]::CreateDirectory($safeBroadRoot) | Out-Null
     $safeBroadFile = Join-Path $safeBroadRoot 'opencode.jsonc'
-    $safeBroadText = '{"permissions":[{"action":"external_directory","resource":"**","effect":"allow"},{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"C:/fixture/authorized/*","effect":"allow"},{"action":"external_directory","resource":"C:/fixture/prohibited/*","effect":"deny"}]}'
+    $safeBroadText = '{"permissions":[{"action":"external_directory","resource":"**","effect":"allow"},{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"C:/fixture/authorized/*","effect":"allow"},{"action":"external_directory","resource":"C:\\fixture\\authorized-extra\\*","effect":"allow"},{"action":"external_directory","resource":"C:/fixture/prohibited/*","effect":"deny"}]}'
     [IO.File]::WriteAllText($safeBroadFile, $safeBroadText, $utf8)
     $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $safeBroadRoot
     $safeBroadInstall = Global-Install $project 'opencode'
@@ -389,6 +391,7 @@ try {
     Check 'GLOBAL_GUARD_FORMAT_COLLISION_CHECK_PARSES' ($collisionFunctions.Count -eq 1)
     $formatProbe = [scriptblock]::Create(
         'param([string]$root)' + "`n" +
+        '$OpenCodeConfigRelative = ''opencode.jsonc''' + "`n" +
         'function Assert-SafeDestination([string]$root, [string]$relative) { Join-Path $root $relative }' + "`n" +
         'function Fail([string]$code, [string]$message) { throw "$code`: $message" }' + "`n" +
         $collisionFunctions[0].Extent.Text + "`n" +
@@ -410,6 +413,24 @@ try {
     [IO.File]::Delete($formatCollisionJson)
     & $formatProbe $formatCollisionRoot
     Check 'GLOBAL_GUARD_NO_SECOND_CONFIG_ACCEPTED' (Test-Path -LiteralPath $formatCollisionJsonc -PathType Leaf)
+
+    # A safe user-owned .json must receive the same collision protection if
+    # another process creates .jsonc while agents are being installed.
+    [IO.File]::Delete($formatCollisionJsonc)
+    [IO.File]::WriteAllText($formatCollisionJson, $safeUserConfig, $utf8)
+    & $formatProbe $formatCollisionRoot
+    [IO.File]::WriteAllText($formatCollisionJsonc, $guardSourceText, $utf8)
+    $unownedCollisionBefore = Snapshot $formatCollisionRoot
+    $unownedCollisionRejected = $false
+    try { & $formatProbe $formatCollisionRoot }
+    catch { $unownedCollisionRejected = $_.Exception.Message -match 'GLOBAL_EXTERNAL_GUARD_UNSAFE' }
+    Check 'GLOBAL_USER_OWNED_FORMAT_COLLISION_REJECTED' (
+        $unownedCollisionRejected -and (Snapshot $formatCollisionRoot) -ceq $unownedCollisionBefore
+    )
+
+    # The interrupted-install recovery fixture resumes in its own root;
+    # earlier upgrade and collision probes must not change its destination.
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $recoverRoot
 
     # A crash after manifest replacement but before intent cleanup must also
     # be idempotently reconciled, and only an owned guard is removed on uninstall.

@@ -9,7 +9,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $run = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) ('opencode/oa121-native-api-' + [guid]::NewGuid().ToString('N'))
-$configRoot = Join-Path $run 'config'
+$configRoot = Join-Path $run 'xdg-config/opencode'
 $appRoot = Join-Path $run 'app'
 $allowedRoot = Join-Path $run 'allowed'
 $forbiddenRoot = Join-Path $run 'forbidden'
@@ -79,8 +79,9 @@ try {
     & git -C $appRoot init --quiet
     if ($LASTEXITCODE -ne 0) { Fail 'Cannot initialize the temporary project.' }
 
-    # Keep the tested global config and all ordinary XDG state in unique roots.
-    $env:OPENCODE_CONFIG_DIR = $configRoot
+    # Model the standard global XDG directory, not an additional custom config
+    # directory: V2 may discover agents differently in the two locations.
+    Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue
     Remove-Item Env:OPENCODE_CONFIG_CONTENT -ErrorAction SilentlyContinue
     Remove-Item Env:OPENCODE_CONFIG -ErrorAction SilentlyContinue
     $env:XDG_CONFIG_HOME = Join-Path $run 'xdg-config'
@@ -91,10 +92,28 @@ try {
     $password = [guid]::NewGuid().ToString('N')
     $env:OPENCODE_SERVER_PASSWORD = $password
 
+    # Never install into a real home directory if this OpenCode build ignores
+    # XDG_CONFIG_HOME. Verify the exact native path before touching a target.
+    $debugPaths = @(opencode debug paths)
+    if ($LASTEXITCODE -ne 0) { Fail 'Cannot inspect native global configuration path.' }
+    $nativeRoots = @($debugPaths | ForEach-Object {
+        $match = [regex]::Match([string]$_, '^\s*config\s{2,}(?<path>.+?)\s*$')
+        if ($match.Success) { $match.Groups['path'].Value.Trim() }
+    } | Where-Object { $_ })
+    if ($nativeRoots.Count -ne 1 -or
+        -not [IO.Path]::GetFullPath($nativeRoots[0]).Equals([IO.Path]::GetFullPath($configRoot), [StringComparison]::OrdinalIgnoreCase)) {
+        Fail 'Native default global config path is not the isolated XDG root; refusing installation.'
+    }
+    Write-Output 'NATIVE_GLOBAL_XDG_ROOT: ISOLATED'
+
     # A global-only Olympus install is the subject of this test. No project
     # Olympus assets or user-global settings are installed or mutated.
     $installer = Join-Path $SourceRoot 'scripts/global-install.ps1'
+    # The installer override pins the already-verified root only for the copy.
+    # The server itself runs WITHOUT this override to exercise true global mode.
+    $env:OPENCODE_CONFIG_DIR = $configRoot
     $installText = (& pwsh -NoProfile -File $installer -Harness opencode -SourceVersion local -ProjectTarget $appRoot 2>&1 | Out-String)
+    Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue
     if ($LASTEXITCODE -ne 0) { Fail "Isolated global installation failed: $installText" }
     $manifest = Get-Content -LiteralPath (Join-Path $configRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
     if (@($manifest.managed_files).Count -ne 14) { Fail 'Global-only manifest does not own 14 expected resources.' }

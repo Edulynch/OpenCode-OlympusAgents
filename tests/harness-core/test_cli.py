@@ -1495,8 +1495,26 @@ class SliceA(unittest.TestCase):
             self.assertEqual("unverified", item["integrity"])
             self.assertEqual("synthetic-commit", item["installed_from_commit"])
             self.assertEqual(str(manifest.parent.parent), item["root"])
-            self.assertEqual(13 if harness == "opencode" else 12, item["managed_files"])
+            self.assertEqual(14 if harness == "opencode" else 12, item["managed_files"])
         self.assertEqual("not_performed", response["data"]["runtime_discovery"])
+
+    def test_slice_c7_global_legacy_user_config_is_not_adopted(self):
+        # Previously installed global resources may use the 13-file inventory.
+        # A safe user config remains unowned; the read-only CLI must not try to
+        # silently replace it with Olympus' managed 14th resource.
+        manifests = self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
+        manifest["managed_files"] = [entry for entry in manifest["managed_files"]
+                                     if entry["path"] != "opencode.jsonc"]
+        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        user_config = '{"permissions":[{"action":"external_directory","resource":"*","effect":"deny"}]}\n'
+        (root / "opencode.jsonc").write_text(user_config, encoding="utf-8")
+        preview = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
+        self.assertEqual("no_changes", preview["result"])
+        self.assertEqual([], preview["data"]["changes"])
+        self.assertEqual(13, preview["data"]["harnesses"]["opencode"]["managed_files"])
+        self.assertEqual(user_config, (root / "opencode.jsonc").read_text(encoding="utf-8"))
 
     def test_slice_c7_global_preview_both_harnesses_assignments_and_human_output(self):
         self.create_global_managed_install()

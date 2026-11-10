@@ -194,16 +194,14 @@ function Add-OpenCodeGlobalGuard([string]$Root, [System.Collections.IDictionary]
 }
 
 function Get-OpenCodeDefaultGuard {
-    return @'
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permissions": [
-    // Ask before using paths outside the active project. Keep exceptions
-    // after this fallback: OpenCode V2 uses the last matching rule.
-    { "action": "external_directory", "resource": "*", "effect": "ask" }
-  ]
-}
-'@ + "`n"
+    $source = Join-Path $SourceRoot 'olympus/harnesses/opencode/global-permissions.jsonc'
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+        Fail 'SOURCE_FILE_MISSING' 'OpenCode global guard template is missing.'
+    }
+    # Use the same source bytes as the read-only Python CLI expects, so a
+    # manifest-owned guard is verifiable without rewriting user configuration.
+    Assert-OpenCodeUserGuard $source
+    return [IO.File]::ReadAllText($source)
 }
 
 function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required) {
@@ -246,8 +244,10 @@ function Write-GlobalResource([string]$Path, [string]$Content) {
 }
 
 function Get-ProjectOverride([string]$Harness, [string]$GlobalVersion) {
-    $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue
-    if (-not $git -or -not (Test-Path -LiteralPath $ProjectTarget -PathType Container)) { return }
+    $gitCommands = @(Get-Command git -CommandType Application -ErrorAction SilentlyContinue)
+    if ($gitCommands.Count -eq 0 -or -not (Test-Path -LiteralPath $ProjectTarget -PathType Container)) { return }
+    # Windows PATH may expose multiple Git shims. Invoke exactly one binary.
+    $git = $gitCommands[0]
     $projectRoot = (& $git.Source -C $ProjectTarget rev-parse --show-toplevel 2>$null | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $projectRoot) { return }
     # A dual-harness project stores the union manifest at .opencode; a

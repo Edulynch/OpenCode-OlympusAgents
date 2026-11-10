@@ -128,7 +128,14 @@ def _expected(source: Path, renderer, selected: tuple[str, ...]) -> dict[str, di
             content = _CODEX_INTRO.sub(_GLOBAL_INTRO, content, count=1)
         if harness in outputs:
             outputs[harness][destination] = content.encode("utf-8")
-    if ("opencode" in outputs and len(outputs["opencode"]) != 13) or ("codex" in outputs and len(outputs["codex"]) != 12):
+    if "opencode" in outputs:
+        # The native global installer owns this guard only when no user config
+        # existed. Both the installer and read-only CLI use these exact bytes.
+        guard_path = source / "olympus/harnesses/opencode/global-permissions.jsonc"
+        if not guard_path.is_file():
+            raise GlobalFault("source_invalid", "Global permission guard template is missing.", 1)
+        outputs["opencode"]["opencode.jsonc"] = guard_path.read_bytes()
+    if ("opencode" in outputs and len(outputs["opencode"]) != 14) or ("codex" in outputs and len(outputs["codex"]) != 12):
         raise GlobalFault("source_inventory_unsupported", "Global renderer inventory differs from the official engine.")
     return outputs
 
@@ -179,8 +186,14 @@ def _manifest(root: Path, harness: str, expected: dict[str, bytes] | None):
         if expected is not None and path not in expected:
             raise GlobalFault("unsupported_global_inventory", "Global manifest owns a resource outside the current adapter inventory.")
         entries[path] = digest.lower()
-    if expected is not None and set(entries) != set(expected):
-        raise GlobalFault("unsupported_global_inventory", "Global manifest inventory does not match the current adapter inventory.")
+    if expected is not None:
+        allowed_inventory = {frozenset(expected)}
+        if harness == "opencode":
+            # A pre-existing safe user-owned config is intentionally absent
+            # from the manifest; older 13-resource installs use the same shape.
+            allowed_inventory.add(frozenset(set(expected) - {"opencode.jsonc"}))
+        if frozenset(entries) not in allowed_inventory:
+            raise GlobalFault("unsupported_global_inventory", "Global manifest inventory does not match the current adapter inventory.")
     return data, entries, {"sha256": hashlib.sha256(raw).hexdigest(), "path": _MANIFEST}
 
 
@@ -353,6 +366,11 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                 else:
                     item["state"] = "ready"
                     for path, desired in sorted(expected[harness].items()):
+                        if path not in current:
+                            # Preserve pre-existing user config and historical
+                            # 13-file inventories; native VerifyOnly handles
+                            # their safety in the supported Windows runtime.
+                            continue
                         if current[path] != desired:
                             changes.append({"harness": harness, "path": path, "action": "update",
                                             "current_sha256": hashlib.sha256(current[path]).hexdigest(),

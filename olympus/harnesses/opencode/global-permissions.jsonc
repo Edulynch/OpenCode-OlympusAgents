@@ -1,0 +1,8 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    // Ask before using paths outside the active project. Keep exceptions
+    // after this fallback: OpenCode V2 uses the last matching rule.
+    { "action": "external_directory", "resource": "*", "effect": "ask" }
+  ]
+}

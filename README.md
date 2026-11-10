@@ -14,6 +14,8 @@
 
 </div>
 
+<a id="your-first-task"></a>
+
 ## 🎯 Your First Task
 
 After installation, open OpenCode in your project and try a prompt:
@@ -40,6 +42,8 @@ After installation, open OpenCode in your project and try a prompt:
 
 🔒 The versioned `v0.4.11` bootstrap comes from a [published, immutable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.4.11). `releases/latest` metadata selects the published release tag; release metadata checks fail closed. GitHub's immutability flag is not independent cryptographic signature verification. [installation, parameters, safety, and troubleshooting](docs/INSTALLATION.md).
 
+<a id="normal-vs-fast"></a>
+
 ## 🧭 NORMAL vs FAST
 
 **NORMAL (default):** Kael uses parallel work only when useful for the task.
@@ -47,6 +51,8 @@ After installation, open OpenCode in your project and try a prompt:
 **FAST (explicit):** Up to four agents; keeps required checks and does not parallelize dependent tasks.
 
 **Optional OpenCode task modifiers:** `long-mode` · `fast-mode` · `surgical-mode` are task-scoped prompt markers, not a parser or a runtime guarantee. [Examples and rules →](docs/WORKFLOWS.md#optional-opencode-task-modifiers)
+
+<a id="portable-cli"></a>
 
 ## 🛠️ Portable CLI
 
@@ -67,6 +73,8 @@ python -B -m olympus config apply --scope project --target /path/to/project --ha
 ```powershell
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/uninstall-olympus.ps1')))
 ```
+
+<a id="guides"></a>
 
 ## 📚 Guides
 

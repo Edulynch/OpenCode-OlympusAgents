@@ -52,6 +52,17 @@ def validate_assignment(model_id: str, effort: str, source: Path, harness: str =
     if not isinstance(effort, str) or not _EFFORT.fullmatch(effort):
         raise CatalogError("Use a nonempty, syntactically valid reasoning effort.")
 
+    # Harness support is required even when the model is newer than our catalog.
+    capabilities_path = source / "olympus" / "harnesses" / "capabilities.toml"
+    try:
+        with capabilities_path.open("rb") as stream:
+            capabilities = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise CatalogError(f"Cannot read declared harness capabilities at {capabilities_path}: {error}") from error
+    declared = capabilities.get(harness, {})
+    if declared.get("PER_ROLE_MODEL") != "SUPPORTED" or declared.get("PER_ROLE_REASONING") != "SUPPORTED":
+        raise CatalogError(f"The {harness} harness does not declare per-role model and reasoning support.")
+
     catalog = load_catalog(str(catalog_path(source).resolve()))
     model = catalog["models"].get(model_id)
     if model is None:
@@ -69,13 +80,4 @@ def validate_assignment(model_id: str, effort: str, source: Path, harness: str =
         declared = ", ".join(efforts) if isinstance(efforts, list) and efforts else "none"
         raise CatalogError(f"{model_id} does not declare reasoning effort '{effort}'; declared efforts: {declared}.")
 
-    capabilities_path = source / "olympus" / "harnesses" / "capabilities.toml"
-    try:
-        with capabilities_path.open("rb") as stream:
-            capabilities = tomllib.load(stream)
-    except (OSError, tomllib.TOMLDecodeError) as error:
-        raise CatalogError(f"Cannot read declared harness capabilities at {capabilities_path}: {error}") from error
-    declared = capabilities.get(harness, {})
-    if declared.get("PER_ROLE_MODEL") != "SUPPORTED" or declared.get("PER_ROLE_REASONING") != "SUPPORTED":
-        raise CatalogError(f"The {harness} harness does not declare per-role model and reasoning support.")
     return model

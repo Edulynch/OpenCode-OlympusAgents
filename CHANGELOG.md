@@ -12,13 +12,13 @@
 
 ### Validation
 
-- Focused CLI/project evidence and the platform/operation support matrix are recorded in [the release record](docs/RELEASE-v0.5.0.md). GitHub FAST, security and native permission checks apply to the reviewed release source; local-source and synthetic tests are not public-tag or paid-provider evidence.
+- Focused CLI/project evidence and the platform/operation support matrix are recorded in [the release record](docs/RELEASE-v0.5.0.md). On candidate commit `7b8a08b`, GitHub FAST, security and native permission checks were green; the separate Windows native OpenCode v2.2.7 project install/discovery smoke also passed in an isolated `--standalone` environment. The final documentation-reconciled SHA needs its own release gate; local-source tests are not public-tag or paid-provider evidence.
 
 ### Capability limits
 
 - Windows with PowerShell 7 is the qualified native installer platform. Linux Python CLI checks do not qualify native Linux/macOS installation or runtime parity.
 - Global configuration execute/recovery remains unsupported and tracked in [#122](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/122); the CLI remains bound to an Olympus source checkout rather than a universally installed `olympus` executable.
-- The Windows isolated project smoke passed managed apply/verify/drift checks, but an earlier OpenCode v2.2.7 `debug config` validation failed to start its server on port 28894. No full native installer/runtime qualification is claimed from that run.
+- An earlier OpenCode v2.2.7 smoke encountered the user's pre-existing shared-service port 28894. The corrected **isolated standalone** clean-runtime and native project installer checks passed at `7b8a08b`, after separately verifying the required model IDs in the real host profile. Credentials were not copied; managed-service parity, provider inference, and full runtime/provider acceptance remain unqualified.
 - OpenCode V2 is in ACTIVE DEVELOPMENT. Codex remains in FROZEN COMPATIBILITY, without implied feature parity.
 
 ## Installation
@@ -27,7 +27,7 @@ See the [installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/
 
 ## Verify installation
 
-See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.5.0/docs/INSTALLATION.md#release-selection-identity-and-executable-source) and the read-only `VerifyOnly` instructions. A local candidate check does not establish published-source availability, integrity, or native runtime discovery.
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.5.0/docs/INSTALLATION.md#release-selection-identity-and-executable-source) and the read-only `VerifyOnly` instructions. A local candidate check does not establish published-source availability, integrity, shared-service parity or successful provider inference.
 
 ## v0.4.12
 

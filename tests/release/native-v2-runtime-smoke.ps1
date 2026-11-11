@@ -18,6 +18,7 @@ $run = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) (
     'olympus-v050-native-runtime-' + [guid]::NewGuid().ToString('N')
 )
 $passed = $false
+$script:OriginalOpenCodeCommand = ''
 
 function Assert-GitSource {
     $root = (& git -C $source rev-parse --show-toplevel 2>$null | Out-String).Trim()
@@ -85,14 +86,30 @@ function New-IsolatedEnvironment([string]$Name) {
         [IO.Directory]::CreateDirectory([string]$paths[$key]) | Out-Null
     }
 
-    # The test-only command shim makes the installer's nested OpenCode calls
-    # use private servers without changing the user's shared service or its port.
+    # npm can expose opencode.ps1 and opencode.cmd while keeping the binary
+    # outside PATH. Both temporary entrypoints call the already-qualified CLI.
     $shimDirectory = Join-Path $base 'standalone-shim'
     [IO.Directory]::CreateDirectory($shimDirectory) | Out-Null
-    $shimPath = Join-Path $shimDirectory 'opencode.cmd'
-    $shim = "@echo off`r`nopencode.exe --standalone %*`r`nexit /b %errorlevel%`r`n"
-    [IO.File]::WriteAllText($shimPath, $shim, [Text.Encoding]::ASCII)
-    $paths['OLYMPUS_QUALIFICATION_SHIM'] = $shimPath
+    $shimPs1 = Join-Path $shimDirectory 'opencode.ps1'
+    $shimCmd = Join-Path $shimDirectory 'opencode.cmd'
+    $psLiteralPath = $script:OriginalOpenCodeCommand.Replace("'", "''")
+    $psText = "# Private server is scoped to this qualification process.`r`n& '$psLiteralPath' --standalone @args`r`n"
+    [IO.File]::WriteAllText($shimPs1, $psText, $utf8)
+
+    # The batch entrypoint also covers callers that resolve opencode.cmd.
+    $batchPath = $script:OriginalOpenCodeCommand.Replace('%', '%%')
+    $extension = [IO.Path]::GetExtension($batchPath).ToLowerInvariant()
+    $batchCall = switch ($extension) {
+        '.ps1' { "pwsh -NoProfile -NonInteractive -File `"$batchPath`" --standalone %*" }
+        '.cmd' { "call `"$batchPath`" --standalone %*" }
+        '.bat' { "call `"$batchPath`" --standalone %*" }
+        '.exe' { "`"$batchPath`" --standalone %*" }
+        default { throw "OPENCODE_LAUNCHER_UNSUPPORTED: $extension" }
+    }
+    $cmdText = "@echo off`r`nsetlocal DisableDelayedExpansion`r`n$batchCall`r`nexit /b %errorlevel%`r`n"
+    [IO.File]::WriteAllText($shimCmd, $cmdText, [Text.Encoding]::ASCII)
+    $paths['OLYMPUS_QUALIFICATION_PS_SHIM'] = $shimPs1
+    $paths['OLYMPUS_QUALIFICATION_CMD_SHIM'] = $shimCmd
     return $paths
 }
 
@@ -124,11 +141,13 @@ function Invoke-BoundedProbe {
     foreach ($key in $IsolatedEnvironment.Keys) {
         $start.Environment[$key] = [string]$IsolatedEnvironment[$key]
     }
-    $shimPath = [string]$IsolatedEnvironment['OLYMPUS_QUALIFICATION_SHIM']
-    if (-not (Test-Path -LiteralPath $shimPath -PathType Leaf)) {
+    $shimPs1 = [string]$IsolatedEnvironment['OLYMPUS_QUALIFICATION_PS_SHIM']
+    $shimCmd = [string]$IsolatedEnvironment['OLYMPUS_QUALIFICATION_CMD_SHIM']
+    if (-not (Test-Path -LiteralPath $shimPs1 -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $shimCmd -PathType Leaf)) {
         throw "STANDALONE_SHIM_MISSING: $Name"
     }
-    $start.Environment['PATH'] = (Split-Path -Parent $shimPath) + ';' + $start.Environment['PATH']
+    $start.Environment['PATH'] = (Split-Path -Parent $shimPs1) + ';' + $start.Environment['PATH']
     $effectiveArguments = @('-NoProfile', '-NonInteractive') + @($Arguments)
     foreach ($argument in $effectiveArguments) {
         $start.ArgumentList.Add([string]$argument)
@@ -186,9 +205,13 @@ try {
         throw "OPENCODE_VERSION_MISMATCH: expected=$ExpectedOpenCode; actual=$openCodeVersion"
     }
     Write-Output "OPENCODE_VERSION: PASS ($openCodeVersion)"
-    if (-not (Get-Command opencode.exe -CommandType Application -ErrorAction SilentlyContinue)) {
-        throw 'OPENCODE_NATIVE_BINARY_MISSING: Standalone qualification requires opencode.exe on PATH.'
+    $resolvedCommand = Get-Command opencode -ErrorAction Stop | Select-Object -First 1
+    $script:OriginalOpenCodeCommand = [string]$resolvedCommand.Source
+    if (-not (Test-Path -LiteralPath $script:OriginalOpenCodeCommand -PathType Leaf) -or
+        [IO.Path]::GetExtension($script:OriginalOpenCodeCommand).ToLowerInvariant() -notin @('.ps1', '.cmd', '.bat', '.exe')) {
+        throw 'OPENCODE_LAUNCHER_UNSUPPORTED: Expected a resolvable PowerShell, batch or native OpenCode command.'
     }
+    Write-Output "OPENCODE_LAUNCHER: $($resolvedCommand.Name)"
     Write-Output 'OPENCODE_SERVICE_MODE: STANDALONE (user managed service untouched)'
 
     [IO.Directory]::CreateDirectory($run) | Out-Null
@@ -199,7 +222,7 @@ try {
     $cleanResult = Invoke-BoundedProbe -Name 'clean-debug-config' -Project $clean `
         -IsolatedEnvironment $cleanEnvironment `
         -Arguments @('-Command',
-            'if ((Get-Command opencode -CommandType Application).Source -ine $env:OLYMPUS_QUALIFICATION_SHIM) { throw "STANDALONE_SHIM_NOT_ACTIVE" }; & opencode debug config') `
+            'if ((Get-Command opencode).Source -notin @($env:OLYMPUS_QUALIFICATION_PS_SHIM, $env:OLYMPUS_QUALIFICATION_CMD_SHIM)) { throw "STANDALONE_SHIM_NOT_ACTIVE" }; & opencode debug config') `
         -TimeoutMilliseconds 45000
     if ($cleanResult.ExitCode -ne 0) {
         throw "CLEAN_RUNTIME_FAILED: exit=$($cleanResult.ExitCode); inspect clean-debug-config logs."

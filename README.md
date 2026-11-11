@@ -34,13 +34,13 @@ After installation, open OpenCode in your project and try a prompt:
 
 ## Fast Install
 
-⚡ **One command. No Olympus checkout.** PowerShell asks **where** (current project, another project, global) and **which harness** (OpenCode, Codex, both).
+⚡ **Installs the [latest stable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest)** (currently [v0.5.0](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.5.0)). One command, no Olympus checkout. PowerShell asks **where** (current project, another project, global) and **which harness** (OpenCode, Codex, both).
 
 ```powershell
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/install-olympus.ps1')))
 ```
 
-🔒 The versioned `v0.4.11` bootstrap comes from a [published, immutable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.4.11). `releases/latest` metadata selects the published release tag; release metadata checks fail closed. GitHub's immutability flag is not independent cryptographic signature verification. [installation, parameters, safety, and troubleshooting](docs/INSTALLATION.md).
+🔒 **Why does the URL say `v0.4.11`?** The versioned `v0.4.11` bootstrap comes from a [published, immutable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.4.11). `releases/latest` metadata selects the published release tag; release metadata checks fail closed. GitHub's immutability flag is not independent cryptographic signature verification. [Installation and safety details →](docs/INSTALLATION.md#release-selection-identity-and-executable-source).
 
 <a id="normal-vs-fast"></a>
 
@@ -68,7 +68,7 @@ python -B -m olympus config apply --scope project --target /path/to/project --ha
 
 ## Fast Uninstall
 
-🗑️ **One command.** Choose the installed scope and harness; managed-file safeguards remain active.
+🗑️ **One command, latest stable release.** The same fixed bootstrap selects the current release. Choose the installed scope and harness; managed-file safeguards remain active.
 
 ```powershell
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/uninstall-olympus.ps1')))
@@ -85,7 +85,7 @@ python -B -m olympus config apply --scope project --target /path/to/project --ha
 | 🛠️ **CLI** | [Commands and examples](specs/001-portable-olympus-cli/quickstart.md) |
 | 🧩 **Compatibility** | [Harness capabilities](docs/HARNESS-CAPABILITIES.md) · [Codex limitations](docs/CODEX-COMPATIBILITY.md) |
 | 🧑‍💻 **Contribute** | [Development](docs/DEVELOPMENT.md) · [Roadmap](docs/ROADMAP.md) · [Worktrees](docs/WORKTREES.md) |
-| 📦 **Releases** | [Published releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Changelog](CHANGELOG.md) · [v0.5.0 candidate](docs/RELEASE-v0.5.0.md) |
+| 📦 **Releases** | [Stable v0.5.0](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.5.0) · [All releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Changelog](CHANGELOG.md) · [Qualification record](docs/RELEASE-v0.5.0.md) |
 | 📖 **All docs** | [Documentation index](docs/README.md) · [License](LICENSE) |
 
 **🚦 Support:** OpenCode V2 is in **ACTIVE DEVELOPMENT**; Codex is in **FROZEN COMPATIBILITY**. Windows is the qualified installer platform; other native installers and complete runtime parity are not claimed. [Details →](docs/RELEASE-v0.5.0.md#supported-operation-matrix)

@@ -213,7 +213,7 @@ class GlobalCli(unittest.TestCase):
                 ownership = install_root / "path-entry.txt"
                 self.assertEqual(should_own, ownership.exists())
                 if should_own:
-                    self.assertEqual(str(bin_path), ownership.read_text(encoding="utf-8"))
+                    self.assertEqual(bin_path.resolve(), Path(ownership.read_text(encoding="utf-8")).resolve())
 
                 removed = self._cli_installer("uninstall", install_root, path_store)
                 self.assertEqual(0, removed.returncode, removed.stdout + removed.stderr)

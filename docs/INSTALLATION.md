@@ -19,6 +19,8 @@ OpenCode V2 is in **ACTIVE DEVELOPMENT**. Codex is in **FROZEN COMPATIBILITY**: 
 
 ## The two public Fast entrypoints
 
+⚡ **Version map:** `v0.4.11` is the fixed, trusted bootstrap; [`releases/latest`](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) selects the actual installer (currently [v0.5.0](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.5.0)). The older number in the command is not the installed version.
+
 The public commands below use the versioned `v0.4.11` bootstrap from the published, immutable [release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.4.11), whose tag points to commit `b82086d386e5c5077d9568e0d5a4ec2b3c3b46ff`. The pinned tag identifies the bootstrap source only; it does **not** preselect the final release installer tag. Each bootstrap consults GitHub's `releases/latest` metadata to select a published release and tag that passes its checks. The checkout's declared installer version is independent of this older, trusted public bootstrap.
 
 ```powershell
@@ -143,7 +145,7 @@ project/global target from the current directory.
 ```powershell
 $sourceCheckout = 'C:\Path\to\trusted\OpenCode-OlympusAgents'
 $targetProject = 'C:\Users\Ada Lovelace\source\Sample Project'
-$releaseTag = 'v0.4.11' # choose an official published release
+$releaseTag = 'v0.5.0' # choose the stable release tag to install
 & "$sourceCheckout\scripts\olympus.cmd" install --scope project --target $targetProject `
     --harness opencode --version $releaseTag --dry-run --json
 & "$sourceCheckout\scripts\olympus.cmd" install --scope project --target $targetProject `

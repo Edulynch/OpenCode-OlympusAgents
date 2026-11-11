@@ -19,7 +19,7 @@ Issue #91 keeps documentation versioned in this repository. Enabling or publishi
 
 ## Current guidance and release records
 
-The files below include the 10 documents from the prior governance inventory (nine historical top-level entries plus the operational issue ledger), the v0.5.0 candidate release record, and the operator workflow guide. No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
+The files below include the 10 documents from the prior governance inventory (nine historical top-level entries plus the operational issue ledger), the historical v0.5.0 qualification record, and the operator workflow guide. No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
 
 | Document | Purpose and audience | State, relationship, and incoming references | Proposed owner |
 | --- | --- | --- | --- |
@@ -34,7 +34,7 @@ The files below include the 10 documents from the prior governance inventory (ni
 | [WORKFLOWS.md](WORKFLOWS.md) | Examples, team overview, modes, and practical operator limits | **Vigente.** Extended user guide linked from the concise README; Olympus Core remains the canonical source for policy. | Repository maintainers |
 | [RELEASE-v0.4.8.md](RELEASE-v0.4.8.md) | v0.4.8 release record | **Histórico.** Preserved release facts; superseded as current-version guidance by later release records. | Release maintainer (proposed role) |
 | [RELEASE-v0.4.9.md](RELEASE-v0.4.9.md) | v0.4.9 release record | **Histórico.** Preserved release facts; remains linked from the constitution as a dated example. | Release maintainer (proposed role) |
-| [RELEASE-v0.5.0.md](RELEASE-v0.5.0.md) | Bounded CLI v0.5.0 candidate and support matrix | **Candidato, no publicado.** Claims and remaining gate recorded without creating a tag/release. | Release maintainer (proposed role) |
+| [RELEASE-v0.5.0.md](RELEASE-v0.5.0.md) | Bounded CLI qualification snapshot and support matrix | **Historical pre-publication evidence.** Preserved as recorded; the [stable v0.5.0 Release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.5.0) is the current publication reference. | Release maintainer (proposed role) |
 
 ## Historical records
 

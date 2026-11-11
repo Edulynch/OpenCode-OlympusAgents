@@ -19,7 +19,7 @@ OpenCode V2 is in **ACTIVE DEVELOPMENT**. Codex is in **FROZEN COMPATIBILITY**: 
 
 ## The two public Fast entrypoints
 
-The public commands below use the versioned `v0.4.11` bootstrap from the published, immutable [release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.4.11), whose tag points to commit `b82086d386e5c5077d9568e0d5a4ec2b3c3b46ff`. The pinned tag identifies the bootstrap source only; it does **not** preselect the final release installer tag. Each bootstrap consults GitHub's `releases/latest` metadata to select a published release and tag that passes its checks. The v0.4.12 work in this repository is a candidate, not the source of these public commands.
+The public commands below use the versioned `v0.4.11` bootstrap from the published, immutable [release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.4.11), whose tag points to commit `b82086d386e5c5077d9568e0d5a4ec2b3c3b46ff`. The pinned tag identifies the bootstrap source only; it does **not** preselect the final release installer tag. Each bootstrap consults GitHub's `releases/latest` metadata to select a published release and tag that passes its checks. The checkout's declared installer version is independent of this older, trusted public bootstrap.
 
 ```powershell
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/install-olympus.ps1')))
@@ -122,7 +122,7 @@ Maintainers may run `install.ps1` directly against a trusted local checkout inst
 $source = (Resolve-Path '.').Path
 $target = 'C:\Users\Ada Lovelace\source\Sample Project'
 pwsh -NoProfile -File (Join-Path $source 'install.ps1') `
-    -Version 'v0.4.12' -SourceRoot $source -Target $target -Scope project -Harness opencode
+    -Version 'v0.5.0' -SourceRoot $source -Target $target -Scope project -Harness opencode
 ```
 
 Use the version actually declared by the checkout; do not copy the example version blindly. Local-source installation is for advanced, trusted-checkout use and is not evidence that the corresponding release is published or immutable.

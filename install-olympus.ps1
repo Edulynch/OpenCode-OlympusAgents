@@ -56,7 +56,13 @@ function Assert-InteractiveInput {
     # A host-supplied Read-Host function can provide input without console stdin.
     $readHostProvider = Get-Command Read-Host -ErrorAction SilentlyContinue
     $hasPromptProvider = $null -ne $readHostProvider -and $readHostProvider.CommandType -eq 'Function'
-    if (-not [Environment]::UserInteractive -or ([Console]::IsInputRedirected -and -not $hasPromptProvider)) {
+    # -NonInteractive disables prompts even when stdin is attached to a real terminal.
+    # Inspect the pwsh process switches because Console.IsInputRedirected cannot detect that host mode.
+    $nonInteractiveHost = @([Environment]::GetCommandLineArgs() | Where-Object {
+        $_ -match '^(?i:-NonInteractive|-noni)$'
+    }).Count -gt 0
+    if (-not [Environment]::UserInteractive -or
+        (($nonInteractiveHost -or [Console]::IsInputRedirected) -and -not $hasPromptProvider)) {
         throw 'ARGUMENTS_REQUIRED: Selection is incomplete and interactive input is unavailable. Supply -Project -Here, -ProjectPath <path>, or -Global together with -Harness.'
     }
 }

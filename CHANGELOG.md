@@ -2,12 +2,32 @@
 
 ## [Unreleased]
 
-### v0.5.0 CLI candidate — not yet published
+## v0.5.0
 
-- Complete the bounded Python CLI A/B and project C1–C6 workflow, including assignment disclosure before managed project apply, and global C7 read-only inspection/preview. Global write/recovery remains deferred to #122.
-- Provide an icon-first, example-first README with the no-clone Fast Install/Uninstall commands; move role, workflow and experimental modifier explanations to the linked `docs/WORKFLOWS.md` without changing installer engines or immutable-release selection.
-- Record operation-by-platform qualifications, the Windows native project smoke PASS, the separate install-time OpenCode port-validation failure, and remaining publication gates in [release candidate notes](docs/RELEASE-v0.5.0.md).
-- No `v0.5.0` tag, standalone CLI package, native Linux/macOS installer parity, or full runtime/provider acceptance is claimed by these documentation updates.
+### Highlights
+
+- Deliver the bounded Python CLI A/B and managed project C1–C6 workflow, including current/proposed assignment disclosure before `config apply --execute`; provide C7 read-only global status, doctor and preview.
+- Make first-time onboarding icon-first and example-first, keep the two published no-clone Fast Install/Uninstall entrypoints, and link detailed modes and roles in [the workflow guide](docs/WORKFLOWS.md).
+- Keep installation ownership, hash/drift protection, `VerifyOnly`, exact source identity and immutable-release selection. The existing public bootstrap remains pinned to its published source; the installer and twelve compatibility wrappers declare the release version.
+
+### Validation
+
+- Focused CLI/project evidence and the platform/operation support matrix are recorded in [the release record](docs/RELEASE-v0.5.0.md). On candidate commit `7b8a08b`, GitHub FAST, security and native permission checks were green; the separate Windows native OpenCode v2.2.7 project install/discovery smoke also passed in an isolated `--standalone` environment. The final documentation-reconciled SHA needs its own release gate; local-source tests are not public-tag or paid-provider evidence.
+
+### Capability limits
+
+- Windows with PowerShell 7 is the qualified native installer platform. Linux Python CLI checks do not qualify native Linux/macOS installation or runtime parity.
+- Global configuration execute/recovery remains unsupported and tracked in [#122](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/122); the CLI remains bound to an Olympus source checkout rather than a universally installed `olympus` executable.
+- An earlier OpenCode v2.2.7 smoke encountered the user's pre-existing shared-service port 28894. The corrected **isolated standalone** clean-runtime and native project installer checks passed at `7b8a08b`, after separately verifying the required model IDs in the real host profile. Credentials were not copied; managed-service parity, provider inference, and full runtime/provider acceptance remain unqualified.
+- OpenCode V2 is in ACTIVE DEVELOPMENT. Codex remains in FROZEN COMPATIBILITY, without implied feature parity.
+
+## Installation
+
+See the [installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.5.0/docs/INSTALLATION.md) for Fast Install, Fast Uninstall, direct selectors, and safety limits.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.5.0/docs/INSTALLATION.md#release-selection-identity-and-executable-source) and the read-only `VerifyOnly` instructions. A local candidate check does not establish published-source availability, integrity, shared-service parity or successful provider inference.
 
 ## v0.4.12
 

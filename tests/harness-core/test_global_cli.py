@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -17,6 +18,14 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
+# Read the candidate's declared identity instead of pinning an older release;
+# reject inconsistent markers before exercising the installer and CLI.
+_installer_text = (ROOT / "install.ps1").read_text(encoding="utf-8")
+_default_version = re.search(r"(?m)^\s*\[string\]\$Version\s*=\s*'(v\d+\.\d+\.\d+)'", _installer_text)
+_release_marker = re.search(r"(?m)^\s*\$ReleaseVersion\s*=\s*'(v\d+\.\d+\.\d+)'", _installer_text)
+if not _default_version or not _release_marker or _default_version.group(1) != _release_marker.group(1):
+    raise RuntimeError("Installer release identity is unavailable or inconsistent.")
+RELEASE_VERSION = _default_version.group(1)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -62,7 +71,7 @@ class GlobalCli(unittest.TestCase):
 
     def _engine(self, *, update: bool, answer: str | None = None, noninteractive: bool = False):
         base = [self.pwsh, "-NoProfile"]
-        arguments = ["-Harness", "opencode", "-SourceVersion", "v0.6.0"]
+        arguments = ["-Harness", "opencode", "-SourceVersion", RELEASE_VERSION]
         if update:
             arguments.append("-Update")
         if answer is None:
@@ -87,16 +96,16 @@ class GlobalCli(unittest.TestCase):
         return json.loads(self.manifest_path.read_text(encoding="utf-8"))
 
     def _cli_installer(self, action: str, install_root: Path, path_store: Path):
-        source = install_root / "versions/v0.6.0" if action == "uninstall" else ROOT
+        source = install_root / "versions" / RELEASE_VERSION if action == "uninstall" else ROOT
         return subprocess.run(
             [self.pwsh, "-NoProfile", "-NonInteractive", "-File", str(ROOT / "scripts/install-cli.ps1"),
-             "-Action", action, "-Version", "v0.6.0", "-SourceRoot", str(source),
+             "-Action", action, "-Version", RELEASE_VERSION, "-SourceRoot", str(source),
              "-InstallRoot", str(install_root), "-PathStorePath", str(path_store)],
             cwd=ROOT, env=self.env, capture_output=True, text=True, encoding="utf-8",
             errors="replace", timeout=60, check=False,
         )
 
-    def _create_project(self, *, version: str = "v0.6.0") -> Path:
+    def _create_project(self, *, version: str = RELEASE_VERSION) -> Path:
         project = self.sandbox / ("project-" + uuid.uuid4().hex)
         project.mkdir()
         subprocess.run(["git", "init", "--quiet", str(project)], check=True,
@@ -124,7 +133,7 @@ class GlobalCli(unittest.TestCase):
 
     def _project_update(self, project: Path, *, answer: str | None = None, noninteractive: bool = False):
         script = ROOT / "scripts/bootstrap.ps1"
-        arguments = ["-Target", str(project), "-Harness", "opencode", "-SourceVersion", "v0.6.0", "-Update"]
+        arguments = ["-Target", str(project), "-Harness", "opencode", "-SourceVersion", RELEASE_VERSION, "-Update"]
         if answer is None:
             command = [self.pwsh, "-NoProfile"] + (["-NonInteractive"] if noninteractive else []) + ["-File", str(script), *arguments]
         else:
@@ -221,7 +230,7 @@ class GlobalCli(unittest.TestCase):
 
                 installed = self._cli_installer("install", install_root, path_store)
                 self.assertEqual(0, installed.returncode, installed.stdout + installed.stderr)
-                current = install_root / "versions/v0.6.0"
+                current = install_root / "versions" / RELEASE_VERSION
                 manifest = json.loads((current / "olympus-cli-manifest.json").read_text(encoding="utf-8"))
                 package_paths = {entry["path"] for entry in manifest["files"]}
                 self.assertTrue({".opencode/agents/kael.md", ".opencode/plugins/olympus-activity/activity.ts",
@@ -361,7 +370,7 @@ class GlobalCli(unittest.TestCase):
                     for role, content in originals.items():
                         self.assertEqual(content.decode("utf-8").replace("\r\n", "\n"),
                                          (project / f".opencode/agents/{role}.md").read_text(encoding="utf-8"))
-                    self.assertIn('"installed_version": "v0.6.0"',
+                    self.assertIn(f'"installed_version": "{RELEASE_VERSION}"',
                                   (project / ".opencode/orchestrator-install.json").read_text(encoding="utf-8"))
                 else:
                     self.assertEqual(before_manifest, (project / ".opencode/orchestrator-install.json").read_bytes())

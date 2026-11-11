@@ -77,6 +77,12 @@ jobs:
           pwsh -NoProfile -File ./tests/global-cli/smoke.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Issue132 installer post-install runtime gate (isolated Windows fixtures)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./tests/release/postinstall-runtime.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: OA77 worktree activation (deterministic Windows)
         shell: pwsh
         run: |

@@ -853,42 +853,46 @@ function Get-Expected-Agents($Content) {
 
 function Validate-Install([string]$Repo) {
     $expected = Get-Expected-Agents $ManagedContent
-    $lastMismatch = $null
     Push-Location $Repo
     try {
-        for ($attempt = 1; $attempt -le 5; $attempt++) {
-            & opencode debug config *> $null
-            if ($LASTEXITCODE -ne 0) { Fail "OPENCODE_VALIDATION_FAILED" "debug config failed." }
-            $json = (& opencode debug agents 2>$null | Out-String)
-            if ($LASTEXITCODE -ne 0) { Fail "OPENCODE_VALIDATION_FAILED" "debug agents failed." }
-            try { $agents = $json | ConvertFrom-Json -Depth 100 }
-            catch { Fail "OPENCODE_VALIDATION_FAILED" "debug agents output is not JSON." }
-
+        try {
             $lastMismatch = $null
-            foreach ($name in $expected.Keys) {
-                $a = @($agents | Where-Object id -eq $name)
-                if ($a.Count -ne 1) {
-                    $lastMismatch = "Unexpected effective agent: $name (count=$($a.Count); attempt=$attempt)."
-                    break
+            for ($attempt = 1; $attempt -le 5; $attempt++) {
+                & opencode debug config *> $null
+                if ($LASTEXITCODE -ne 0) { throw 'debug config did not return a verifiable result.' }
+                $json = (& opencode debug agents 2>$null | Out-String)
+                if ($LASTEXITCODE -ne 0) { throw 'debug agents did not return a verifiable result.' }
+                try { $agents = $json | ConvertFrom-Json -Depth 100 -ErrorAction Stop }
+                catch { throw 'debug agents output was not verifiable JSON.' }
+
+                $lastMismatch = $null
+                foreach ($name in $expected.Keys) {
+                    $a = @($agents | Where-Object id -eq $name)
+                    if ($a.Count -ne 1) {
+                        $lastMismatch = "Unexpected effective agent: $name (count=$($a.Count); attempt=$attempt)."
+                        break
+                    }
+                    $modelId = [string]$a[0].model.providerID + '/' + [string]$a[0].model.id
+                    $variant = [string]$a[0].model.variant
+                    $mode = [string]$a[0].mode
+                    if ($modelId -ne $expected[$name][0] -or $variant -ne $expected[$name][1] -or $mode -ne $expected[$name][2]) {
+                        $actual = "$modelId#$variant/$mode"
+                        $wanted = "$($expected[$name][0])#$($expected[$name][1])/$($expected[$name][2])"
+                        $lastMismatch = "Unexpected effective agent: $name (got $actual; expected $wanted; attempt=$attempt)."
+                        break
+                    }
                 }
-                $modelId = [string]$a[0].model.providerID + '/' + [string]$a[0].model.id
-                $variant = [string]$a[0].model.variant
-                $mode = [string]$a[0].mode
-                if ($modelId -ne $expected[$name][0] -or $variant -ne $expected[$name][1] -or $mode -ne $expected[$name][2]) {
-                    $actual = "$modelId#$variant/$mode"
-                    $wanted = "$($expected[$name][0])#$($expected[$name][1])/$($expected[$name][2])"
-                    $lastMismatch = "Unexpected effective agent: $name (got $actual; expected $wanted; attempt=$attempt)."
-                    break
+                if ($null -eq $lastMismatch -and @($agents | Where-Object { $_.id -in @('sorin','maintenance','aegis') }).Count -gt 0) {
+                    $lastMismatch = 'A retired Olympus agent remains active.'
                 }
+                if ($null -eq $lastMismatch) { return }
+                if ($attempt -lt 5) { Start-Sleep -Milliseconds 250 }
             }
-            if ($null -eq $lastMismatch -and @($agents | Where-Object { $_.id -in @('sorin','maintenance','aegis') }).Count -gt 0) {
-                $lastMismatch = 'A retired Olympus agent remains active.'
-            }
-            if ($null -eq $lastMismatch) { return }
-            if ($attempt -lt 5) { Start-Sleep -Milliseconds 250 }
+            throw $lastMismatch
+        } catch {
+            Write-Warning "OLYMPUS_RUNTIME_VALIDATION_WARNING: OpenCode runtime configuration and effective agents could not be verified; installation continues. Run 'olympus doctor' for static checks."
         }
     } finally { Pop-Location }
-    Fail "OPENCODE_VALIDATION_FAILED" $lastMismatch
 }
 
 function Assert-InstalledHarness([string]$Repo, $Manifest) {

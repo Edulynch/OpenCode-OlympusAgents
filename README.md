@@ -68,7 +68,7 @@ olympus config list
 olympus doctor
 ```
 
-Model IDs use the exact `provider/model-id` form from [Models.dev](https://models.dev). Effective values use project overrides, then global overrides, then canonical defaults. Olympus validates catalog-declared capabilities offline; it never checks credentials, subscriptions, or model access. Doctor is read-only; use `olympus install` for global JSON edits or `olympus update --scope project --target <worktree>` for project edits to apply them. `config list` prints absolute source paths. [Installation and safety →](docs/INSTALLATION.md)
+Model IDs use the exact `provider/model-id` form from [Models.dev](https://models.dev). Effective values use project overrides, then global overrides, then canonical defaults. Olympus validates known catalog-declared capabilities offline; a model absent from its bundled snapshot produces a compatibility warning, not an access check or rejection. It never checks credentials, subscriptions, or model access. Doctor is read-only; use `olympus install` for global JSON edits or `olympus update --scope project --target <worktree>` for project edits to apply them. `config list` prints absolute source paths. [Installation and safety →](docs/INSTALLATION.md)
 
 ## Fast Uninstall
 

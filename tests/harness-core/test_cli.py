@@ -237,7 +237,8 @@ class SliceA(unittest.TestCase):
     def test_slice_a_help_version(self):
         help_result = self.query("--help")
         self.assertEqual(0, help_result.returncode)
-        for text in ("--source", "models list --json", "config check", "status --scope project", "Python 3.11+"):
+        for text in ("--source", "models list --json", "config check", "status --scope project", "Python 3.11+",
+                     "olympus update", "olympus nox set-model openai/gpt-6-luna", "models.dev"):
             self.assertIn(text, help_result.stdout)
         for command in ("models set-family", "agents set-model", "config recover"):
             self.assertIn(command, help_result.stdout)
@@ -256,7 +257,9 @@ class SliceA(unittest.TestCase):
         version = self.query("--version")
         self.assertEqual(0, version.returncode)
         self.assertIn(f"olympus {self.source_version}", version.stdout)
-        self.assertIn(str(self.source), version.stdout)
+        self.assertNotIn(str(self.source), version.stdout)
+        self.assertIn(f"olympus {self.source_version}", self.query("version").stdout)
+        self.assertEqual(0, self.query("help").returncode)
 
     def test_slice_a_models_human_json_canonical_assignments(self):
         response = self.json_query("models", "list")
@@ -297,7 +300,7 @@ class SliceA(unittest.TestCase):
     def test_slice_a_invalid_arguments_and_unavailable_commands(self):
         for arguments in (("models", "missing"), ("models", "set-family", "sol"),
                           ("agents", "set-model", "kael"), ("config", "recover"),
-                          ("config", "apply"), ("doctor",), ("install",), ("uninstall",),
+                          ("config", "apply"), ("doctor", "--scope", "invalid"),
                           ("config", "check", "--harness", "invalid"), ("models", "list", "--force"),
                           ("--source", "relative", "models", "list"),
                           ("models", "list", "--source", str(self.source)),
@@ -1157,11 +1160,15 @@ class SliceA(unittest.TestCase):
         self.assertEqual("v1.2.3", args.release_version)
         self.assertTrue(args.dry_run)
         self.assertTrue(cli_parser().parse_args(("--version",)).version)
-        for arguments in (
-            ("install", "--scope", "global", "--harness", "all", "--version", "v1.2.3"),
-            ("uninstall", "--scope", "global", "--harness", "all"),
-            ("install", "--scope", "global", "--harness", "all", "--version", "v1.2.3", "--dry-run", "--execute"),
-        ):
+        install_defaults = cli_parser().parse_args(("install",))
+        self.assertEqual(("global", "opencode", None, False, False),
+                         (install_defaults.scope, install_defaults.harness, install_defaults.release_version,
+                          install_defaults.dry_run, install_defaults.execute))
+        uninstall_defaults = cli_parser().parse_args(("uninstall",))
+        self.assertEqual(("global", "opencode", False, False),
+                         (uninstall_defaults.scope, uninstall_defaults.harness,
+                          uninstall_defaults.dry_run, uninstall_defaults.execute))
+        for arguments in (("install", "--scope", "global", "--harness", "all", "--version", "v1.2.3", "--dry-run", "--execute"),):
             with self.subTest(arguments=arguments):
                 self.assertEqual(2, self.call_main(*arguments)[0])
 

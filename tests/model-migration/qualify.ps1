@@ -59,7 +59,8 @@ Check 'ROOT_DEFAULT_MODEL_FROM_CORE' ($config -match '(?m)^\s*"model"\s*:\s*"ope
 
 $installer = Text 'scripts/bootstrap.ps1'
 Check 'INSTALLER_DERIVES_MODELS_FROM_GENERATED_ROLES' ($installer -match 'function Get-Expected-Agents' -and
-    $installer -match 'Join-Path.*\.opencode/agents' -and $installer -match '\(\?m\)\^model:' -and
+    $installer.Contains('Get-Expected-Agents $ManagedContent') -and
+    $installer.Contains('^\.opencode/agents/[^/]+\.md$') -and $installer -match '\(\?m\)\^model:' -and
     $installer -notmatch '(?m)^\s*"(?:kael|thales|atlas|argus|talos|helios|veyra|orin|kovan|nox|vera)"=@\(')
 Check 'INSTALLER_MODEL_DISCOVERY' ($installer -notmatch '(?m)^\s*"(?:kael|thales|atlas|argus|talos|helios|veyra|orin|kovan|nox|vera)"=@\(')
 

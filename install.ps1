@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$')]
-    [string]$Version = 'v0.5.0',
+    [string]$Version = 'v0.6.0',
     [string]$Target = (Get-Location).Path,
     [ValidateSet('project', 'global')]
     [string]$Scope = 'project',
@@ -11,14 +11,18 @@ param(
     [switch]$DryRun,
     [switch]$VerifyOnly,
     [switch]$Uninstall,
+    [switch]$Update,
     # Qualification-only source overrides. Source identity is always checked.
     [string]$SourceRoot,
-    [string]$SourceArchive
+    [string]$SourceArchive,
+    # Qualification-only CLI destination overrides; normal installs use user defaults.
+    [string]$CliInstallRoot,
+    [string]$CliPathStorePath
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$ReleaseVersion = 'v0.5.0' # Must equal this installer's default and the release target tag.
+$ReleaseVersion = 'v0.6.0' # Must equal this installer's default and the release target tag.
 $owned = $null
 
 function Get-DeclaredReleaseVersion([string]$Source) {
@@ -46,6 +50,18 @@ function Get-ContentHash([string]$Path) {
     try {
         ([BitConverter]::ToString($sha.ComputeHash($utf8.GetBytes([IO.File]::ReadAllText($Path)))).Replace('-', ''))
     } finally { $sha.Dispose() }
+}
+
+function Set-UpGlobalCli([string]$Source, [string]$Version, [string]$Action,
+                         [string]$InstallRoot, [string]$PathStorePath) {
+    $cliInstaller = Join-Path $Source 'scripts/install-cli.ps1'
+    if (-not (Test-Path -LiteralPath $cliInstaller -PathType Leaf)) { throw 'SOURCE_INVALID: Global CLI installer is missing.' }
+    $cliArgs = @('-NoProfile', '-File', $cliInstaller, '-Action', $Action,
+        '-Version', $Version, '-SourceRoot', $Source)
+    if ($InstallRoot) { $cliArgs += @('-InstallRoot', $InstallRoot) }
+    if ($PathStorePath) { $cliArgs += @('-PathStorePath', $PathStorePath) }
+    & $pwsh.Source @cliArgs
+    if ($LASTEXITCODE -ne 0) { throw "GLOBAL_CLI_SETUP_FAILED: global CLI setup exited $LASTEXITCODE." }
 }
 
 function Get-LegacyManagedSourcePaths([string]$BootstrapPath) {
@@ -151,6 +167,9 @@ try {
     if ($Version -cne $Version.Trim()) { throw 'VERSION_INVALID: Whitespace is not allowed.' }
     if ($VerifyOnly -and $DryRun) { throw 'VERIFY_MODE_INVALID: -VerifyOnly and -DryRun cannot be combined.' }
     if ($VerifyOnly -and $Uninstall) { throw 'VERIFY_MODE_INVALID: -VerifyOnly and -Uninstall cannot be combined.' }
+    if ($Update -and ($Uninstall -or $DryRun -or $VerifyOnly)) {
+        throw 'UPDATE_MODE_INVALID: -Update cannot be combined with uninstall, dry-run, or VerifyOnly.'
+    }
     if ($SourceRoot -and $SourceArchive) { throw 'SOURCE_INVALID: Select only one qualification source override.' }
 
     $pwsh = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -242,8 +261,14 @@ try {
         if ($VerifyOnly) { $globalArgs += '-VerifyOnly' }
         if ($DryRun) { $globalArgs += '-DryRun' }
         if ($Uninstall) { $globalArgs += '-Uninstall' }
+        if ($Update) { $globalArgs += '-Update' }
         & $pwsh.Source @globalArgs
         if ($LASTEXITCODE -ne 0) { throw "GLOBAL_BOOTSTRAP_FAILED: global installer exited $LASTEXITCODE." }
+        if (-not $DryRun -and -not $VerifyOnly) {
+            $cliAction = if ($Uninstall) { 'uninstall' } else { 'install' }
+            Set-UpGlobalCli -Source $source -Version $resolvedVersion -Action $cliAction `
+                -InstallRoot $CliInstallRoot -PathStorePath $CliPathStorePath
+        }
         exit 0
     }
 
@@ -254,8 +279,13 @@ try {
         $args += @('-SourceVersion', $resolvedVersion)
     }
     if ($DryRun) { $args += '-DryRun' }
+    if ($Update) { $args += '-Update' }
     & $pwsh.Source @args
     if ($LASTEXITCODE -ne 0) { throw "BOOTSTRAP_FAILED: bootstrap exited $LASTEXITCODE; no installer cleanup touches the target." }
+    if (-not $DryRun) {
+        Set-UpGlobalCli -Source $source -Version $resolvedVersion -Action 'install' `
+            -InstallRoot $CliInstallRoot -PathStorePath $CliPathStorePath
+    }
     if ($DryRun) { Write-Output "OLYMPUS_INSTALL: $resolvedVersion DRY_RUN_READY" }
     else { Write-Output "OLYMPUS_INSTALL: $resolvedVersion READY_OR_NO_CHANGES" }
 } catch {

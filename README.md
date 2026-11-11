@@ -34,13 +34,13 @@ After installation, open OpenCode in your project and try a prompt:
 
 ## Fast Install
 
-⚡ **Installs the [latest stable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest)** (currently [v0.5.0](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.5.0)). One command, no Olympus checkout. PowerShell asks **where** (current project, another project, global) and **which harness** (OpenCode, Codex, both).
+⚡ **Olympus v0.6.0 is in release preparation and is not published yet.** The remote command below will work after publication; the same v0.6.0 release identifies both entrypoint and installer. No checkout is required. PowerShell asks **where** (current project, another project, global) and **which harness** (OpenCode, Codex, both). Every successful project or global install also sets up the per-user `olympus` command and adds only its `bin` folder to your user PATH.
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/install-olympus.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/install-olympus.ps1')))
 ```
 
-🔒 **Why does the URL say `v0.4.11`?** The versioned `v0.4.11` bootstrap comes from a [published, immutable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.4.11). `releases/latest` metadata selects the published release tag; release metadata checks fail closed. GitHub's immutability flag is not independent cryptographic signature verification. [Installation and safety details →](docs/INSTALLATION.md#release-selection-identity-and-executable-source).
+Open a new PowerShell 7 window, then use `olympus version` and `olympus update` to see and maintain the installed product version. [Installation and safety details →](docs/INSTALLATION.md).
 
 <a id="normal-vs-fast"></a>
 
@@ -54,24 +54,28 @@ After installation, open OpenCode in your project and try a prompt:
 
 <a id="portable-cli"></a>
 
-## 🛠️ Portable CLI
+## 🛠️ Olympus CLI
 
-🐍 **Python 3.11+**, from a trusted Olympus source checkout (not a system-wide installed command):
+From any directory in a new PowerShell 7 window:
 
 ```text
-python -B -m olympus models list
-python -B -m olympus config check
-python -B -m olympus config apply --scope project --target /path/to/project --harness opencode --dry-run
+olympus version
+olympus update
+olympus agents list
+olympus nox set-model openai/gpt-6-luna
+olympus nox set-effort high
+olympus config list
+olympus doctor
 ```
 
-🛡️ Global inspection/preview is **read-only**; global execute/recovery is unsupported. [More CLI examples →](specs/001-portable-olympus-cli/quickstart.md) · [Platform support →](docs/RELEASE-v0.5.0.md#supported-operation-matrix)
+Model IDs use the exact `provider/model-id` form from [Models.dev](https://models.dev). Effective values use project overrides, then global overrides, then canonical defaults. Olympus validates known catalog-declared capabilities offline; a model absent from its bundled snapshot produces a compatibility warning, not an access check or rejection. It never checks credentials, subscriptions, or model access. Doctor is read-only; use `olympus install` for global JSON edits or `olympus update --scope project --target <worktree>` for project edits to apply them. `config list` prints absolute source paths. [Installation and safety →](docs/INSTALLATION.md)
 
 ## Fast Uninstall
 
-🗑️ **One command, latest stable release.** The same fixed bootstrap selects the current release. Choose the installed scope and harness; managed-file safeguards remain active.
+🗑️ **Use `olympus uninstall`** to remove the global OpenCode installation and CLI, or choose a scope and harness in the entrypoint below. Uninstall removes only intact managed files and the Olympus PATH entry; user configuration and unrelated files are preserved.
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/uninstall-olympus.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/uninstall-olympus.ps1')))
 ```
 
 <a id="guides"></a>
@@ -82,12 +86,12 @@ python -B -m olympus config apply --scope project --target /path/to/project --ha
 | --- | --- |
 | ⚡ **Install / remove** | [Scopes, direct parameters and troubleshooting](docs/INSTALLATION.md) |
 | 🎯 **Use Olympus** | [Team, NORMAL/FAST, prompt examples and task modifiers](docs/WORKFLOWS.md) |
-| 🛠️ **CLI** | [Commands and examples](specs/001-portable-olympus-cli/quickstart.md) |
+| 🛠️ **CLI** | [Commands, model configuration, and diagnostics](docs/INSTALLATION.md#olympus-cli) |
 | 🧩 **Compatibility** | [Harness capabilities](docs/HARNESS-CAPABILITIES.md) · [Codex limitations](docs/CODEX-COMPATIBILITY.md) |
 | 🧑‍💻 **Contribute** | [Development](docs/DEVELOPMENT.md) · [Roadmap](docs/ROADMAP.md) · [Worktrees](docs/WORKTREES.md) |
-| 📦 **Releases** | [Stable v0.5.0](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.5.0) · [All releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Changelog](CHANGELOG.md) · [Qualification record](docs/RELEASE-v0.5.0.md) |
+| 📦 **Releases** | [Latest stable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) · [All releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Changelog](CHANGELOG.md) |
 | 📖 **All docs** | [Documentation index](docs/README.md) · [License](LICENSE) |
 
-**🚦 Support:** OpenCode V2 is in **ACTIVE DEVELOPMENT**; Codex is in **FROZEN COMPATIBILITY**. Windows is the qualified installer platform; other native installers and complete runtime parity are not claimed. [Details →](docs/RELEASE-v0.5.0.md#supported-operation-matrix)
+**🚦 Support:** OpenCode V2 is in **ACTIVE DEVELOPMENT**; Codex is in **FROZEN COMPATIBILITY**. Windows is the qualified installer platform; other native installers and complete runtime parity are not claimed. [Details →](docs/HARNESSES.md)
 
 <sub>Olympus is an independent orchestration system, not a fork. The specialized-team idea was informed in part by [codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).</sub>

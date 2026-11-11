@@ -743,8 +743,8 @@ exit /b 0
         $readmeText = [IO.File]::ReadAllText((Join-Path $script:source 'README.md'))
         $installationText = [IO.File]::ReadAllText((Join-Path $script:source 'docs/INSTALLATION.md'))
         $expectedPublicCommands = @(
-            "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/install-olympus.ps1')))"
-            "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/uninstall-olympus.ps1')))"
+            "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/install-olympus.ps1')))"
+            "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/uninstall-olympus.ps1')))"
         )
         $expectedPublicCommandPattern = '^(?:' + [regex]::Escape($expectedPublicCommands[0]) + '|' + [regex]::Escape($expectedPublicCommands[1]) + ')$'
         $readmeCommands = @([regex]::Matches($readmeText, '(?im)^.*$') | Where-Object { $_.Value.Trim() -match $expectedPublicCommandPattern })

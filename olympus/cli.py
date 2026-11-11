@@ -22,11 +22,27 @@ class Parser(argparse.ArgumentParser):
 
 
 def parser() -> Parser:
+    help_notes = (
+        "Model IDs use the exact provider/model-id form listed at https://models.dev. "
+        "Olympus validates declared catalog capabilities but never verifies model access, credentials, or subscriptions. "
+        "Use 'olympus config list' for absolute configuration paths and precedence. "
+        "Apply manual edits with 'olympus install' (global) or 'olympus update' (project); "
+        "then run 'olympus doctor', which only verifies configuration."
+    )
     root = Parser(
         prog="olympus",
-        description="Portable Olympus CLI. Python 3.11+; trusted checkout; no model-provider calls.",
+        description="Olympus global CLI. Python 3.11+ is used internally; no model-provider calls are made.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=("Examples:\n"
+                "  olympus version\n"
+                "  olympus update\n"
+                "  olympus agents list\n"
+                "  olympus nox set-model openai/gpt-6-luna\n"
+                "  olympus nox set-effort high\n"
+                "  olympus config list\n"
+                "  olympus doctor\n"
+                "  olympus install\n"
+                "  olympus uninstall\n"
                 "  olympus models list --json\n"
                 "  olympus models set-family sol --opencode openai/new-sol --codex codex/new-sol --dry-run --json\n"
                 "  olympus agents set-model veyra --effort high --dry-run\n"
@@ -39,16 +55,21 @@ def parser() -> Parser:
                 "  olympus doctor --scope project --target <absolute-worktree-root> --harness all [--json]\n"
                 "  olympus doctor --scope global --harness opencode [--json]\n"
                 "  olympus config apply --scope global --harness codex --dry-run --json\n"
-                "  olympus status --scope project --target <absolute-worktree-root>\n"
-                "Source edits affect only the canonical checkout; project config apply writes only with --execute.\n"
-                "Doctor uses project VerifyOnly where qualified; it does not run runtime discovery.\n"
-                "Queries do not verify model availability.\n"
-                "macOS is not verified."),
+                 "  olympus status --scope project --target <absolute-worktree-root>\n"
+                 "Source-edit and project-apply commands are advanced checkout operations.\n"
+                 "Project config apply writes only with --execute; global config apply is preview-only.\n"
+                 "Doctor performs static configuration checks; it never probes a model provider.\n"
+                 + help_notes),
         allow_abbrev=False,
     )
     root.add_argument("--source", type=Path, help="absolute trusted source checkout (before command)")
     root.add_argument("--version", action="store_true", help="show the source release version")
     commands = root.add_subparsers(dest="command", parser_class=Parser)
+    commands.add_parser("help", help="show Olympus commands and model configuration guidance", allow_abbrev=False)
+    commands.add_parser("version", help="show the installed Olympus product version", allow_abbrev=False)
+    update = commands.add_parser("update", aliases=["upgrade"], help="update the managed current project or global installation", allow_abbrev=False)
+    update.add_argument("--scope", choices=("project", "global"), help="select a managed project or global installation (default: effective scope)")
+    update.add_argument("--target", type=Path, help="absolute managed project worktree root; project scope only")
     models = commands.add_parser("models", help="query or explicitly edit canonical model assignments", allow_abbrev=False)
     model_commands = models.add_subparsers(dest="action", required=True, parser_class=Parser)
     listing = model_commands.add_parser("list", help="list all eleven roles and both adapters", allow_abbrev=False)
@@ -59,16 +80,38 @@ def parser() -> Parser:
     set_family.add_argument("--codex", required=True)
     set_family.add_argument("--dry-run", action="store_true")
     set_family.add_argument("--json", action="store_true", help="JSON preview; requires --dry-run")
-    agents = commands.add_parser("agents", help="edit canonical role model intent", allow_abbrev=False)
+    agents = commands.add_parser("agents", help="list effective agents or edit canonical role model intent", allow_abbrev=False)
     agent_commands = agents.add_subparsers(dest="action", required=True, parser_class=Parser)
+    agent_list = agent_commands.add_parser("list", help="list effective models, efforts, and sources", allow_abbrev=False)
+    agent_list.add_argument("--json", action="store_true")
+    agent_list.add_argument("--scope", choices=("project", "global"), help="select scope (default: effective scope)")
+    agent_list.add_argument("--target", type=Path, help="absolute managed project worktree root; project scope only")
     set_model = agent_commands.add_parser("set-model", help="explicitly edit an existing role", allow_abbrev=False)
     set_model.add_argument("role")
     set_model.add_argument("--family")
     set_model.add_argument("--effort")
     set_model.add_argument("--dry-run", action="store_true")
     set_model.add_argument("--json", action="store_true", help="JSON preview; requires --dry-run")
-    config = commands.add_parser("config", help="check local source and generated outputs", allow_abbrev=False)
+    roles = ("kael", "veyra", "orin", "atlas", "kovan", "argus", "nox", "vera", "talos", "thales", "helios")
+    for role in roles:
+        role_parser = commands.add_parser(role, help=f"configure the global {role} agent", allow_abbrev=False)
+        role_commands = role_parser.add_subparsers(dest="role_action", required=True, parser_class=Parser)
+        model = role_commands.add_parser("set-model", help="set the exact provider/model-id", allow_abbrev=False,
+                                         description=help_notes)
+        model.add_argument("model_id", help="exact provider/model-id, for example openai/gpt-6-luna")
+        effort = role_commands.add_parser("set-effort", help="set a catalog-declared reasoning effort", allow_abbrev=False,
+                                          description=help_notes)
+        effort.add_argument("effort", help="effort declared for this model by Models.dev")
+        for scoped in (model, effort):
+            scoped.add_argument("--scope", choices=("project", "global"), help="select scope (default: effective scope)")
+            scoped.add_argument("--target", type=Path, help="absolute managed project worktree root; project scope only")
+
+    config = commands.add_parser("config", help="list effective configuration or check generated outputs", allow_abbrev=False,
+                                 description=help_notes)
     config_commands = config.add_subparsers(dest="action", required=True, parser_class=Parser)
+    config_list = config_commands.add_parser("list", help="list effective values, absolute source paths, and precedence", allow_abbrev=False)
+    config_list.add_argument("--scope", choices=("project", "global"), help="select scope (default: effective scope)")
+    config_list.add_argument("--target", type=Path, help="absolute managed project worktree root; project scope only")
     check = config_commands.add_parser("check", help="compare renderer outputs without writing", allow_abbrev=False)
     check.add_argument("--harness", choices=("opencode", "codex", "all"), default="all")
     check.add_argument("--json", action="store_true")
@@ -83,26 +126,26 @@ def parser() -> Parser:
     mode.add_argument("--execute", action="store_true", help="explicitly apply project configuration; global is blocked")
     apply.add_argument("--json", action="store_true", help="emit a single JSON preview")
     install = commands.add_parser("install", help="install an immutable official release through the existing installer", allow_abbrev=False)
-    install.add_argument("--scope", choices=("project", "global"), required=True)
+    install.add_argument("--scope", choices=("project", "global"), default="global")
     install.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
-    install.add_argument("--harness", choices=("opencode", "codex", "all"), required=True)
-    install.add_argument("--version", dest="release_version", required=True, help="exact immutable release tag")
-    install_mode = install.add_mutually_exclusive_group(required=True)
+    install.add_argument("--harness", choices=("opencode", "codex", "all"), default="opencode")
+    install.add_argument("--version", dest="release_version", help="optional exact immutable release tag (default: latest stable)")
+    install_mode = install.add_mutually_exclusive_group()
     install_mode.add_argument("--dry-run", action="store_true", help="preview through the official installer")
     install_mode.add_argument("--execute", action="store_true", help="execute the official installer")
     install.add_argument("--json", action="store_true", help="emit one JSON result with captured native output")
     uninstall = commands.add_parser("uninstall", help="remove only manifest-owned resources through the existing engine", allow_abbrev=False)
-    uninstall.add_argument("--scope", choices=("project", "global"), required=True)
+    uninstall.add_argument("--scope", choices=("project", "global"), default="global")
     uninstall.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
-    uninstall.add_argument("--harness", choices=("opencode", "codex", "all"), required=True)
-    uninstall_mode = uninstall.add_mutually_exclusive_group(required=True)
+    uninstall.add_argument("--harness", choices=("opencode", "codex", "all"), default="opencode")
+    uninstall_mode = uninstall.add_mutually_exclusive_group()
     uninstall_mode.add_argument("--dry-run", action="store_true", help="preview when the native engine supports it")
     uninstall_mode.add_argument("--execute", action="store_true", help="execute the existing uninstall engine")
     uninstall.add_argument("--json", action="store_true", help="emit one JSON result with captured native output")
     doctor = commands.add_parser("doctor", help="read-only managed installation diagnostic", allow_abbrev=False)
-    doctor.add_argument("--scope", choices=("project", "global"), required=True)
+    doctor.add_argument("--scope", choices=("project", "global"), help="select scope (default: effective scope)")
     doctor.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
-    doctor.add_argument("--harness", choices=("opencode", "codex", "all"), required=True)
+    doctor.add_argument("--harness", choices=("opencode", "codex", "all"), default="opencode")
     doctor.add_argument("--json", action="store_true")
     recover = config_commands.add_parser("recover", help="explicitly recover one pending source edit or project apply", allow_abbrev=False)
     recover.add_argument("--scope", choices=("project", "global"), help="project selects a target apply journal")
@@ -279,11 +322,19 @@ def emit(response: dict, as_json: bool) -> None:
     for key, value in response["data"].items():
         if key == "roles":
             for role in value:
-                print(f"{role['role']} | {role['identity']} | family={role['family']} | effort={role['effort']} | "
-                      f"opencode={role['models']['opencode']} ({role['representation']['opencode']}) | "
-                      f"codex={role['models']['codex']} ({role['representation']['codex']})")
+                if "model" in role:
+                    print(f"{role['role']} | {role['identity']} | model={role['model']} | effort={role['effort']} | "
+                          f"model source={role['model_source']} | effort source={role['effort_source']}")
+                else:
+                    print(f"{role['role']} | {role['identity']} | family={role['family']} | effort={role['effort']} | "
+                          f"opencode={role['models']['opencode']} ({role['representation']['opencode']}) | "
+                          f"codex={role['models']['codex']} ({role['representation']['codex']})")
+        elif key == "manual_edit_reminder" and response["operation"] == "config list":
+            continue
         else:
             print(f"{key}: {json.dumps(value, ensure_ascii=False)}")
+    if response["operation"] == "config list":
+        print("Run 'olympus doctor' after manual edits.")
     for issue in response["issues"]:
         print(f"{issue['code']}: {issue['message']}", file=sys.stderr)
 
@@ -469,9 +520,11 @@ def main(argv: list[str] | None = None) -> int:
             raise CLIError("--version cannot be combined with a command", 2)
         if not args.version and not args.command:
             cli_parser.error("a command is required")
-        operation = "version" if args.version else " ".join(
-            filter(None, (args.command, getattr(args, "action", None)))
-        )
+        operation = "version" if args.version else " ".join(filter(None, (
+            args.command, getattr(args, "role_action", None) if args.command in {
+                "kael", "veyra", "orin", "atlas", "kovan", "argus", "nox", "vera", "talos", "thales", "helios",
+            } else getattr(args, "action", None),
+        )))
         response["operation"] = operation
         if operation in ("models set-family", "agents set-model") and args.json and not args.dry_run:
             raise CLIError("--json for model edits requires --dry-run", 2)
@@ -483,8 +536,47 @@ def main(argv: list[str] | None = None) -> int:
         response["context"] = {"source": str(source), "kind": "canonical_source"}
         if operation != "config recover" and (source / ".olympus-cli-edit").exists():
             response["context"]["source_edit"] = "unconfirmed; not repaired"
-        if args.version:
-            print(f"olympus {release_version(source)} (source: {source})")
+        if args.command == "help":
+            print(cli_parser.format_help(), end="")
+            return 0
+        if args.version or args.command == "version":
+            print(f"olympus {release_version(source)}")
+            return 0
+        if args.command in ("update", "upgrade"):
+            from . import system_cli
+
+            return system_cli.update(source, args.scope, args.target)
+        if args.command == "agents" and args.action == "list":
+            from . import user_config
+
+            scope, target = user_config.select_scope(source, args.scope, args.target)
+            rows = user_config.effective_roles(source, scope, target)
+            response["data"] = {"scope": scope, "target": str(target) if target else None, "roles": rows}
+            response["result"] = "ok"
+            emit(response, args.json)
+            return 0
+        if args.command == "config" and args.action == "list":
+            from . import user_config
+
+            scope, target = user_config.select_scope(source, args.scope, args.target)
+            response["data"] = user_config.config_listing(source, scope, target)
+            response["result"] = "ok"
+            emit(response, as_json)
+            return 0
+        if args.command in {
+            "kael", "veyra", "orin", "atlas", "kovan", "argus", "nox", "vera", "talos", "thales", "helios",
+        } and args.role_action in ("set-model", "set-effort"):
+            from . import user_config
+
+            field = "model" if args.role_action == "set-model" else "effort"
+            value = args.model_id if field == "model" else args.effort
+            scope, target = user_config.select_scope(source, args.scope, args.target)
+            path, applied = user_config.set_override(source, args.command, field, value, scope, target)
+            response["data"] = {"role": args.command, field: value, "scope": scope,
+                                 "target": str(target) if target else None,
+                                 "source": str(path), "installed_agent_updated": applied}
+            response["result"] = "ok"
+            emit(response, False)
             return 0
         if response["operation"] in ("models list", "config check"):
             harness = getattr(args, "harness", "all")
@@ -527,6 +619,46 @@ def main(argv: list[str] | None = None) -> int:
             return code
         if response["operation"] == "doctor":
             from . import doctor
+            from . import user_config
+            from .models_catalog import CatalogError
+
+            project_request = args.scope == "project" or (args.scope is None and args.target is not None)
+            check_user_configuration = args.scope == "global" or (args.scope is None and args.target is None)
+            if args.scope == "global" and args.target is not None:
+                raise CLIError("--target is available only with project scope.", 2)
+            if args.scope is None and not project_request:
+                try:
+                    args.scope, args.target = user_config.select_scope(source, args.scope, args.target)
+                except user_config.UserConfigError as error:
+                    response["result"] = "failed"
+                    response["issues"] = [{"code": "invalid_user_configuration", "message": str(error)}]
+                    emit(response, as_json)
+                    return 1
+            elif project_request:
+                args.scope = "project"
+                if args.target is not None:
+                    from . import config_apply
+
+                    try:
+                        target = config_apply._validate_target(source, args.target)
+                        record, _, blockers = config_apply._manifest_record(target)
+                        check_user_configuration = (
+                            not blockers and record is not None and "opencode" in record.installed_harnesses
+                        )
+                        if check_user_configuration:
+                            args.target = target
+                    except (config_apply.PreviewFault, OSError, RuntimeError):
+                        check_user_configuration = False
+
+            try:
+                user_configuration = (
+                    user_config.diagnose(source, args.scope, args.target) if check_user_configuration else None
+                )
+            except (user_config.UserConfigError, CatalogError) as error:
+                response["result"] = "failed"
+                response["issues"] = [{"code": "invalid_user_configuration", "message": str(error)}]
+                emit(response, as_json)
+                return 1
 
             if args.scope == "global":
                 from . import global_readonly
@@ -536,11 +668,15 @@ def main(argv: list[str] | None = None) -> int:
                     load_renderer=load_renderer, release_version=release_version,
                     assignment_query=model_assignments, operation="doctor",
                 )
+                if user_configuration is not None:
+                    response["data"]["user_configuration"] = user_configuration
                 emit(response, as_json)
                 return code
 
             code = doctor.diagnose(source, args, response, source_version=release_version(source),
                                    source_query=source_query)
+            if user_configuration is not None:
+                response["data"]["user_configuration"] = user_configuration
             emit(response, as_json)
             return code
         if response["operation"] in ("install", "uninstall"):
@@ -563,6 +699,11 @@ def main(argv: list[str] | None = None) -> int:
         })
         emit(response, as_json)
         return error.code
+    except ValueError as error:
+        response["result"] = "failed"
+        response["issues"].append({"code": "configuration_invalid", "message": str(error)})
+        emit(response, as_json)
+        return 1
     except (OSError, UnicodeError) as error:
         response["result"] = "failed"
         response["issues"].append({"code": "read_failed", "message": str(error)})

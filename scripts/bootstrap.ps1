@@ -6,7 +6,8 @@ param(
     [string]$Harness = 'opencode',
     [string]$SourceVersion = 'local',
     [switch]$DryRun,
-    [switch]$VerifyOnly
+    [switch]$VerifyOnly,
+    [switch]$Update
 )
 
 Set-StrictMode -Version Latest
@@ -30,6 +31,8 @@ $InstalledHarnesses = @()
 $ExistingEntries = @()
 $AllContent = [ordered]@{}
 $Retired = @()
+$ModifiedManagedAgents = @()
+$ConfirmedModifiedAgentPaths = @()
 $writerLock = $null
 $manifestPathSnapshot = $null
 $manifestHashSnapshot = $null
@@ -238,6 +241,75 @@ function Get-SelectedGeneratedContent([string[]]$Harnesses) {
     return ,$content
 }
 
+function Apply-OpenCodeProjectOverrides([string]$Repo, [System.Collections.IDictionary]$Outputs) {
+    $projectPath = Join-Path $Repo '.opencode/olympus-config.json'
+    if (-not (Path-Is-Within $projectPath $Repo)) { Fail 'UNSAFE_TARGET' 'Project Olympus configuration escapes the target.' }
+    $globalPath = if ($env:OLYMPUS_CONFIG_FILE) { [IO.Path]::GetFullPath($env:OLYMPUS_CONFIG_FILE) }
+        elseif ($env:OLYMPUS_CONFIG_HOME) { Join-Path ([IO.Path]::GetFullPath($env:OLYMPUS_CONFIG_HOME)) 'config.json' }
+        else { Join-Path $(if ($env:APPDATA) { $env:APPDATA } else { [Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData) }) 'Olympus/config.json' }
+    if ($env:OLYMPUS_CONFIG_FILE -and -not [IO.Path]::IsPathFullyQualified($env:OLYMPUS_CONFIG_FILE)) {
+        Fail 'USER_CONFIG_INVALID' 'OLYMPUS_CONFIG_FILE must be an absolute path.'
+    }
+    $configs = @()
+    foreach ($layerName in @('global', 'project')) {
+        $configPath = if ($layerName -eq 'global') { $globalPath } else { $projectPath }
+        if (-not (Test-Path -LiteralPath $configPath)) { continue }
+        if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { Fail 'USER_CONFIG_INVALID' "The $layerName Olympus configuration is not a file." }
+        try { $config = [IO.File]::ReadAllText($configPath) | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop }
+        catch { Fail 'USER_CONFIG_INVALID' "The $layerName Olympus configuration is not valid JSON." }
+        if ($config -isnot [System.Collections.IDictionary] -or $config.schema_version -ne 1 -or
+            $config.overrides -isnot [System.Collections.IDictionary] -or
+            @($config.Keys | Where-Object { $_ -notin @('schema_version', 'overrides') }).Count -gt 0) {
+            Fail 'USER_CONFIG_INVALID' "The $layerName Olympus configuration must use schema_version 1 and an overrides object."
+        }
+        $configs += ,$config
+    }
+    if (-not $configs.Count) { return }
+    $catalogPath = Join-Path $SourceRoot 'olympus/core/models-dev.json'
+    if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) { Fail 'SOURCE_FILE_MISSING' 'The offline Models.dev catalog is missing.' }
+    try { $catalog = [IO.File]::ReadAllText($catalogPath) | ConvertFrom-Json -AsHashtable -Depth 30 -ErrorAction Stop }
+    catch { Fail 'SOURCE_INVALID' 'The offline Models.dev catalog is invalid JSON.' }
+    $effectiveOverrides = [ordered]@{}
+    foreach ($config in $configs) {
+        foreach ($role in $config.overrides.Keys) {
+            $override = $config.overrides[$role]
+            if (-not $effectiveOverrides.Contains($role)) { $effectiveOverrides[$role] = [ordered]@{} }
+            if ($role -notmatch '^[a-z][a-z0-9_-]*$' -or $override -isnot [System.Collections.IDictionary] -or
+                @($override.Keys | Where-Object { $_ -notin @('model', 'effort') }).Count -gt 0) {
+                Fail 'USER_CONFIG_INVALID' "Olympus configuration has an unsupported override for '$role'."
+            }
+            foreach ($field in $override.Keys) { $effectiveOverrides[$role][$field] = $override[$field] }
+        }
+    }
+    foreach ($role in $effectiveOverrides.Keys) {
+        $override = $effectiveOverrides[$role]
+        $relative = ".opencode/agents/$role.md"
+        if ($relative -notin $Outputs.Keys) { Fail 'USER_CONFIG_INVALID' "Olympus configuration has an unsupported override for '$role'." }
+        $modelLine = [regex]::Match([string]$Outputs[$relative], '(?m)^model:\s*(?:"(?<quoted>[^"]+)"|(?<plain>[^\r\n]+))\s*$')
+        if (-not $modelLine.Success) { Fail 'SOURCE_INVALID' "The generated OpenCode agent has no single model field: $role." }
+        $current = if ($modelLine.Groups['quoted'].Success) { $modelLine.Groups['quoted'].Value } else { $modelLine.Groups['plain'].Value.Trim() }
+        $separator = $current.LastIndexOf('#')
+        if ($separator -lt 1) { Fail 'SOURCE_INVALID' "The generated OpenCode agent model is malformed: $role." }
+        $model = if ($override.Contains('model')) { $override['model'] } else { $current.Substring(0, $separator) }
+        $effort = if ($override.Contains('effort')) { $override['effort'] } else { $current.Substring($separator + 1) }
+        if ($model -isnot [string] -or $model -notmatch '^[A-Za-z0-9][A-Za-z0-9._:-]*/[A-Za-z0-9][A-Za-z0-9._:/-]*$' -or
+            $effort -isnot [string] -or $effort -notmatch '^[A-Za-z][A-Za-z0-9_-]*$') {
+            Fail 'USER_CONFIG_INVALID' "Project Olympus configuration has an invalid model or effort for '$role'."
+        }
+        $modelInfo = $catalog.models[$model]
+        if ($null -eq $modelInfo) {
+            # A bundled snapshot can lag a newly released or custom model.
+            Write-Warning "Models.dev does not list $model; model and effort compatibility are unverified."
+        } elseif ($modelInfo.tool_call -ne $true -or $modelInfo.reasoning -ne $true -or
+                  $effort -notin @($modelInfo.efforts)) {
+            Fail 'USER_CONFIG_INVALID' "Models.dev does not declare tool, reasoning, and '$effort' support for '$model'."
+        }
+        $replacement = 'model: "' + $model + '#' + $effort + '"'
+        $Outputs[$relative] = [regex]::Replace([string]$Outputs[$relative], '(?m)^model:\s*(?:"[^"]+"|[^\r\n]+)\s*$',
+            [System.Text.RegularExpressions.MatchEvaluator]{ param($match) $replacement }, 1)
+    }
+}
+
 function Assert-Target([string]$Raw) {
     if (-not [IO.Path]::IsPathFullyQualified($Raw)) { Fail "UNSAFE_TARGET" "Target must be absolute." }
     $target = Canonical-Dir $Raw
@@ -423,6 +495,7 @@ function Get-LegacyOpenCodeSets {
 }
 
 function Assert-Managed([string]$Repo, $Manifest) {
+    $script:ModifiedManagedAgents = @()
     if ($null -eq $Manifest) { $script:ExistingHarnesses = @(); $script:ExistingEntries = @(); return @() }
     if ($Manifest.schema_version -ne 1 -or $null -eq $Manifest.managed_files) {
         Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Unsupported manifest schema or missing managed_files.'
@@ -459,6 +532,10 @@ function Assert-Managed([string]$Repo, $Manifest) {
         $full = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         if (-not (Test-Path -LiteralPath $full)) { Fail "MANAGED_FILE_DRIFT" "Missing managed file: $p" }
         if ((Sha-File $full) -ne ([string]$e.sha256).ToLowerInvariant()) {
+            if ($Update -and 'opencode' -in $SelectedHarnesses -and $p -match '^\.opencode/agents/(?<role>[a-z][a-z0-9_-]*)\.md$') {
+                $script:ModifiedManagedAgents += $Matches.role
+                continue
+            }
             Fail "MANAGED_FILE_DRIFT" "Managed file modified: $p"
         }
     }
@@ -469,6 +546,28 @@ function Assert-Managed([string]$Repo, $Manifest) {
     }
     $script:ExistingEntries = @($entries)
     return @($actual | Where-Object { $_ -in $RetiredOpenCodeResources })
+}
+
+function Confirm-ModifiedManagedAgents {
+    $roles = @($script:ModifiedManagedAgents | Sort-Object -Unique)
+    if ($roles.Count -eq 0) { return }
+    $names = @($roles | ForEach-Object {
+        $parts = $_ -split '[-_]'
+        ($parts | ForEach-Object { if ($_.Length) { $_.Substring(0, 1).ToUpperInvariant() + $_.Substring(1) } }) -join ' '
+    })
+    Write-Host "Hay $($names.Count) agentes de Olympus modificados en este proyecto:"
+    foreach ($name in $names) { Write-Host "- $name" }
+    $readHost = Get-Command Read-Host -ErrorAction SilentlyContinue
+    $mockedPrompt = $null -ne $readHost -and $readHost.CommandType -eq 'Function'
+    $nonInteractiveHost = @([Environment]::GetCommandLineArgs() | Where-Object { $_ -match '^(?i:-NonInteractive|-noni)$' }).Count -gt 0
+    if ((-not [Environment]::UserInteractive -or [Console]::IsInputRedirected -or $nonInteractiveHost) -and -not $mockedPrompt) {
+        Fail 'MODIFIED_AGENT_CONFIRMATION_REQUIRED' 'Managed agents changed; rerun olympus update in an interactive PowerShell 7 terminal to confirm.'
+    }
+    $answer = Read-Host '¿Quieres sobrescribirlos con la versión nueva? [y/N]'
+    if ($answer -notmatch '^(?i:y|yes)$') {
+        Fail 'MODIFIED_AGENT_UPDATE_DECLINED' 'Update cancelled; modified agents were preserved.'
+    }
+    $script:ConfirmedModifiedAgentPaths = @($roles | ForEach-Object { ".opencode/agents/$_.md" })
 }
 
 function Assert-No-Conflicts([string]$Repo, $Manifest, $Content) {
@@ -719,18 +818,31 @@ function Get-CodexInstructionsPrecedenceWarning([string]$Repo) {
     return $null
 }
 
-function Get-Expected-Agents {
-    $agentsRoot = Join-Path $SourceRoot '.opencode/agents'
-    $files = @(Get-ChildItem -LiteralPath $agentsRoot -Filter '*.md' -File)
+function Get-Expected-Agents($Content) {
+    $files = @($Content.Keys | Where-Object { $_ -match '^\.opencode/agents/[^/]+\.md$' } | Sort-Object)
+    $catalogPath = Join-Path $SourceRoot 'olympus/core/models-dev.json'
+    if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) { Fail 'SOURCE_FILE_MISSING' 'The offline Models.dev catalog is missing.' }
+    try { $catalog = [IO.File]::ReadAllText($catalogPath) | ConvertFrom-Json -AsHashtable -Depth 30 -ErrorAction Stop }
+    catch { Fail 'SOURCE_INVALID' 'The offline Models.dev catalog is invalid JSON.' }
     $expected = @{}
-    foreach ($file in $files) {
-        $text = [IO.File]::ReadAllText($file.FullName)
-        $model = [regex]::Match($text, '(?m)^model:\s*["'']?openai/(?<id>[^#"''\s]+)#(?<effort>[A-Za-z]+)["'']?\s*$')
+    foreach ($path in $files) {
+        $text = [string]$Content[$path]
+        $model = [regex]::Match($text, '(?m)^model:\s*["'']?(?<id>[A-Za-z0-9][A-Za-z0-9._:-]*/[A-Za-z0-9][A-Za-z0-9._:/-]*)#(?<effort>[A-Za-z][A-Za-z0-9_-]*)["'']?\s*$')
         $mode = [regex]::Match($text, '(?m)^mode:\s*(?<mode>primary|subagent)\s*$')
         if (-not $model.Success -or -not $mode.Success) {
-            Fail 'SOURCE_AGENT_MODEL_INVALID' ("Generated role metadata is incomplete: " + $file.Name)
+            Fail 'SOURCE_AGENT_MODEL_INVALID' ("Generated role metadata is incomplete: " + [IO.Path]::GetFileName($path))
         }
-        $expected[$file.BaseName] = @($model.Groups['id'].Value, $model.Groups['effort'].Value, $mode.Groups['mode'].Value)
+        $modelId = $model.Groups['id'].Value
+        $effort = $model.Groups['effort'].Value
+        $modelInfo = $catalog.models[$modelId]
+        if ($null -eq $modelInfo) {
+            # The absence of catalog metadata is not proof of denied access.
+            Write-Warning "Models.dev does not list $modelId; model and effort compatibility are unverified."
+        } elseif ($modelInfo.tool_call -ne $true -or $modelInfo.reasoning -ne $true -or
+                  $effort -notin @($modelInfo.efforts)) {
+            Fail 'SOURCE_AGENT_MODEL_INVALID' "Models.dev does not declare tool, reasoning, and '$effort' support for '$modelId'."
+        }
+        $expected[[IO.Path]::GetFileNameWithoutExtension($path)] = @($modelId, $effort, $mode.Groups['mode'].Value)
     }
     $managedAgentCount = @($OpenCodeManaged | Where-Object { $_ -match '^\.opencode/agents/[^/]+\.md$' }).Count
     if ($files.Count -ne $managedAgentCount -or $expected.Count -ne $managedAgentCount) {
@@ -740,7 +852,7 @@ function Get-Expected-Agents {
 }
 
 function Validate-Install([string]$Repo) {
-    $expected = Get-Expected-Agents
+    $expected = Get-Expected-Agents $ManagedContent
     $lastMismatch = $null
     Push-Location $Repo
     try {
@@ -759,7 +871,7 @@ function Validate-Install([string]$Repo) {
                     $lastMismatch = "Unexpected effective agent: $name (count=$($a.Count); attempt=$attempt)."
                     break
                 }
-                $modelId = [string]$a[0].model.id
+                $modelId = [string]$a[0].model.providerID + '/' + [string]$a[0].model.id
                 $variant = [string]$a[0].model.variant
                 $mode = [string]$a[0].mode
                 if ($modelId -ne $expected[$name][0] -or $variant -ne $expected[$name][1] -or $mode -ne $expected[$name][2]) {
@@ -841,6 +953,7 @@ function Assert-InstalledHarness([string]$Repo, $Manifest) {
 
 try {
     if ($VerifyOnly -and $DryRun) { Fail 'VERIFY_MODE_INVALID' '-VerifyOnly and -DryRun cannot be combined.' }
+    if ($Update -and ($VerifyOnly -or $DryRun)) { Fail 'UPDATE_MODE_INVALID' '-Update cannot be combined with -VerifyOnly or -DryRun.' }
     $SelectedHarnesses = @(Get-HarnessSelection $Harness)
     if (-not (Has-Cmd 'git')) { Fail 'GIT_UNAVAILABLE' 'git is required.' }
     $Repo = Assert-Target $Target
@@ -867,24 +980,22 @@ try {
         $CodexGenerated = $GeneratedByHarness['codex']
         $CodexManaged = @($CodexGenerated.Keys | Sort-Object)
     }
+    if ('opencode' -in $GeneratedByHarness.Keys) {
+        $OpenCodeGenerated = $GeneratedByHarness['opencode']
+        Apply-OpenCodeProjectOverrides $Repo $OpenCodeGenerated
+        $GeneratedByHarness['opencode'] = $OpenCodeGenerated
+        $ModelCheck = 'MODELS_DEV_STATIC_VALIDATION'
+    }
     $ManagedContent = Get-SelectedGeneratedContent $SelectedHarnesses
     $Managed = @($ManagedContent.Keys | Sort-Object)
     Assert-Install-Destinations $Repo
     $Version = 'NOT_REQUIRED'
     $ModelCheck = 'NOT_REQUIRED'
+    if ('opencode' -in $SelectedHarnesses) { $ModelCheck = 'MODELS_DEV_STATIC_VALIDATION' }
     if (-not $VerifyOnly -and 'opencode' -in $SelectedHarnesses) {
         if (-not (Has-Cmd 'opencode')) { Fail 'OPENCODE_UNAVAILABLE' 'OpenCode is required for the OpenCode harness.' }
         $Version = (& opencode --version 2>$null | Out-String).Trim()
         if ($LASTEXITCODE -ne 0) { Fail 'OPENCODE_UNAVAILABLE' 'opencode --version failed.' }
-        $ModelCheck = 'DISCOVERY_UNAVAILABLE'
-        $models = (& opencode models 2>$null | Out-String)
-        if ($LASTEXITCODE -eq 0 -and $models) {
-            if ($models -notmatch [regex]::Escape('openai/gpt-6.1-sol') -or
-                $models -notmatch [regex]::Escape('openai/gpt-6-luna')) {
-                Fail 'MODEL_UNAVAILABLE' 'Required GPT-6.1 Sol/GPT-6 Luna IDs are absent.'
-            }
-            $ModelCheck = 'GPT61_SOL_GPT6_LUNA_IDS_AVAILABLE'
-        }
     }
 
     if ($VerifyOnly) {
@@ -961,6 +1072,7 @@ try {
     $Retired = if ('opencode' -in $SelectedHarnesses) { @($revalidatedRetired) } else { @() }
     Assert-No-Conflicts $Repo $manifest $ManagedContent
     Assert-Install-Destinations $Repo
+    Confirm-ModifiedManagedAgents
     $manifestDestination = Join-Path $Repo ($ManifestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
     if ((Test-Path -LiteralPath $manifestDestination) -and $CurrentManifestRel -cne $ManifestRel) {
         Fail 'INSTALL_CONFLICT' "Install manifest destination exists without ownership metadata: $ManifestRel"

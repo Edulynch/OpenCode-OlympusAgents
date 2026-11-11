@@ -173,8 +173,11 @@ function Apply-OpenCodeUserOverrides([System.Collections.IDictionary]$Outputs) {
             Fail 'USER_CONFIG_INVALID' "Olympus user configuration has an invalid model or effort for '$role'."
         }
         $modelInfo = $catalog.models[$model]
-        if ($null -eq $modelInfo -or $modelInfo.tool_call -ne $true -or $modelInfo.reasoning -ne $true -or
-            $effort -notin @($modelInfo.efforts)) {
+        if ($null -eq $modelInfo) {
+            # Honor an explicit provider/model pair without claiming catalog support.
+            Write-Warning "Models.dev does not list $model; model and effort compatibility are unverified."
+        } elseif ($modelInfo.tool_call -ne $true -or $modelInfo.reasoning -ne $true -or
+                  $effort -notin @($modelInfo.efforts)) {
             Fail 'USER_CONFIG_INVALID' "Models.dev does not declare tool, reasoning, and '$effort' support for '$model'."
         }
         $replacement = 'model: "' + $model + '#' + $effort + '"'

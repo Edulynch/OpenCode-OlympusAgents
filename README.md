@@ -34,10 +34,10 @@ After installation, open OpenCode in your project and try a prompt:
 
 ## Fast Install
 
-⚡ **One release, one version: Olympus v0.6.0.** The public entrypoint and installer use the same immutable release tag. No checkout is required. PowerShell asks **where** (current project, another project, global) and **which harness** (OpenCode, Codex, both). Every successful project or global install also sets up the per-user `olympus` command and adds only its `bin` folder to your user PATH.
+⚡ **One release, one version: Olympus v0.6.1.** The public entrypoint and installer use the same immutable release tag. No checkout is required. PowerShell asks **where** (current project, another project, global) and **which harness** (OpenCode, Codex, both). Every successful project or global install also sets up the per-user `olympus` command and adds only its `bin` folder to your user PATH.
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/install-olympus.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/install-olympus.ps1')))
 ```
 
 Open a new PowerShell 7 window, then use `olympus version` and `olympus update` to see and maintain the installed product version. [Installation and safety details →](docs/INSTALLATION.md).
@@ -75,7 +75,7 @@ Model IDs use the exact `provider/model-id` form from [Models.dev](https://model
 🗑️ **Use `olympus uninstall`** to remove the global OpenCode installation and CLI, or choose a scope and harness in the entrypoint below. Uninstall removes only intact managed files and the Olympus PATH entry; user configuration and unrelated files are preserved.
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/uninstall-olympus.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/uninstall-olympus.ps1')))
 ```
 
 <a id="guides"></a>

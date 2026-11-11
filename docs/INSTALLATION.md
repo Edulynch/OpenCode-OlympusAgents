@@ -2,7 +2,7 @@
 
 ## Start here
 
-Run [Fast Install](../README.md#fast-install) using the same `v0.6.0` tag for the public entrypoint and installer. The entrypoint asks for scope (**current project**, **another project**, or **global**) and harness (**OpenCode**, **Codex**, or **both**) when needed. A successful project or global install sets up the per-user `olympus` command and adds its `bin` folder to the current user's PATH; open a new PowerShell 7 shell afterward.
+Run [Fast Install](../README.md#fast-install) using the same `v0.6.1` tag for the public entrypoint and installer. The entrypoint asks for scope (**current project**, **another project**, or **global**) and harness (**OpenCode**, **Codex**, or **both**) when needed. A successful project or global install sets up the per-user `olympus` command and adds its `bin` folder to the current user's PATH; open a new PowerShell 7 shell afterward.
 
 Then use `olympus version` and `olympus update` from any directory. The public [Fast Uninstall](../README.md#fast-uninstall) entrypoint and `olympus uninstall` remove only managed resources and Olympus's PATH entry.
 
@@ -21,8 +21,8 @@ OpenCode V2 is in **ACTIVE DEVELOPMENT**. Codex is in **FROZEN COMPATIBILITY**: 
 ## Public PowerShell entrypoints
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/install-olympus.ps1')))
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/uninstall-olympus.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/install-olympus.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/uninstall-olympus.ps1')))
 ```
 
 Invoke the downloaded script block with `&` as shown.
@@ -42,8 +42,8 @@ When run in an interactive terminal with no selection parameters, either entrypo
 The examples below fetch the public entrypoint text, then invoke it with explicit parameters. Run the `-Project -Here` examples from the project root. The project-path target intentionally contains spaces.
 
 ```powershell
-$install = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/install-olympus.ps1'))
-$uninstall = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/uninstall-olympus.ps1'))
+$install = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/install-olympus.ps1'))
+$uninstall = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/uninstall-olympus.ps1'))
 
 # Install OpenCode in the current project, Codex in a project path, or both globally.
 & $install -Project -Here -Harness opencode
@@ -62,7 +62,7 @@ The twelve legacy install/uninstall wrappers remain for compatibility at `instal
 
 ## Release selection, identity, and executable source
 
-The v0.6.0 entrypoint queries GitHub's `releases/latest` metadata and requires a valid stable tag with `immutable=true`, `draft=false`, `prerelease=false`, and a published timestamp. The launcher downloads installer/archive content pinned to that returned tag and checks the installer's version identity. It fails closed for missing, malformed, mutable, unpublished, or mismatched sources; it never falls back to `main` or `master`.
+The v0.6.1 entrypoint queries GitHub's `releases/latest` metadata and requires a valid stable tag with `immutable=true`, `draft=false`, `prerelease=false`, and a published timestamp. The launcher downloads installer/archive content pinned to that returned tag and checks the installer's version identity. It fails closed for missing, malformed, mutable, unpublished, or mismatched sources; it never falls back to `main` or `master`.
 
 These checks establish release selection and tag identity, not cryptographic integrity. GitHub's immutability field is a platform assertion; the installer does not independently verify a signature or published SHA-256 for downloaded executable code. Review each downloaded stage separately if your trust policy requires it.
 
@@ -74,7 +74,7 @@ Maintainers may run `install.ps1` directly against a trusted local checkout inst
 $source = (Resolve-Path '.').Path
 $target = 'C:\Users\Ada Lovelace\source\Sample Project'
 pwsh -NoProfile -File (Join-Path $source 'install.ps1') `
-    -Version 'v0.6.0' -SourceRoot $source -Target $target -Scope project -Harness opencode
+    -Version 'v0.6.1' -SourceRoot $source -Target $target -Scope project -Harness opencode
 ```
 
 Use the version actually declared by the checkout; do not copy the example version blindly. Local-source installation is for advanced, trusted-checkout use and is not evidence that the corresponding release is published or immutable.

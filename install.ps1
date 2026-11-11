@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$')]
-    [string]$Version = 'v0.6.0',
+    [string]$Version = 'v0.6.1',
     [string]$Target = (Get-Location).Path,
     [ValidateSet('project', 'global')]
     [string]$Scope = 'project',
@@ -22,7 +22,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$ReleaseVersion = 'v0.6.0' # Must equal this installer's default and the release target tag.
+$ReleaseVersion = 'v0.6.1' # Must equal this installer's default and the release target tag.
 $owned = $null
 
 function Get-DeclaredReleaseVersion([string]$Source) {

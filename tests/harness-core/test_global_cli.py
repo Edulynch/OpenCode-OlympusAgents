@@ -183,10 +183,28 @@ class GlobalCli(unittest.TestCase):
         luna = models_catalog.validate_assignment("openai/gpt-6-luna", "max", ROOT)
         self.assertTrue(luna["tool_call"])
         self.assertEqual(["none", "low", "medium", "high", "xhigh", "max"], luna["efforts"])
-        with self.assertRaisesRegex(models_catalog.CatalogError, "not present"):
-            models_catalog.validate_assignment("openai/unknown", "high", ROOT)
+        warnings = io.StringIO()
+        with contextlib.redirect_stderr(warnings):
+            unknown = models_catalog.validate_assignment("custom/new-model", "high", ROOT)
+        self.assertEqual("unverified", unknown["catalog_status"])
+        self.assertIn("compatibility are unverified", warnings.getvalue())
         with self.assertRaisesRegex(models_catalog.CatalogError, "does not declare"):
             models_catalog.validate_assignment("openai/gpt-6.1-sol", "none", ROOT)
+
+    def test_custom_model_override_warns_and_persists_without_provider_probe(self):
+        # Unknown-but-well-formed models are the user's choice, not an access check.
+        env_patch = {"APPDATA": str(self.appdata), "LOCALAPPDATA": str(self.localappdata),
+                     "USERPROFILE": str(self.profile), "OPENCODE_CONFIG_DIR": str(self.root)}
+        warnings = io.StringIO()
+        with mock.patch.dict(os.environ, env_patch), contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(warnings):
+            code = main(["--source", str(ROOT), "nox", "set-model", "custom/new-model", "--scope", "global"])
+        self.assertEqual(0, code)
+        self.assertIn("compatibility are unverified", warnings.getvalue())
+        self.assertIn('model: "custom/new-model#', self._agent("nox").read_text(encoding="utf-8"))
+        updated = self._engine(update=True)
+        self.assertEqual(0, updated.returncode, updated.stdout + updated.stderr)
+        self.assertIn("compatibility are unverified", updated.stdout + updated.stderr)
 
     def test_cli_package_owns_generated_inventory_and_only_removes_its_path_entry(self):
         for name, initial_path, expected_after_uninstall, should_own in (

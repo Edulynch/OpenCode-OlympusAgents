@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+## v0.6.0
+
+### Highlights
+
+- Install the Windows Olympus CLI as `olympus` on the current user's PATH, usable in a new shell and from any directory without a source checkout or `python -m olympus` in the public workflow.
+- Manage the product with `olympus version`, `update`/`upgrade`, `install`, `uninstall` and `help`.
+- List and change effective agent models and efforts with `olympus agents list` and `olympus <agent> set-model`/`set-effort`, preserving project and global overrides.
+- Validate known model capabilities using a bundled Models.dev snapshot; accept well-formed unlisted custom/new model identifiers with a compatibility warning and without access checks.
+- Show configuration precedence and absolute source paths with `olympus config list`; use static `olympus doctor` after manual edits.
+- Update installed projects safely: identify modified managed agents by name and ask once before overwriting them; No is the default.
+
+### Validation
+
+- [PR #130](https://github.com/Edulynch/OpenCode-OlympusAgents/pull/130) merged with required CI workflows successful, including FAST / Windows, security/docs and native V2 permission API.
+- Focused CLI tests and an isolated Windows fresh-shell smoke covered installation, model/effort overrides, controlled stable-update and uninstall preservation. No real user installation, provider inference or local FULL/RUNTIME was exercised.
+
+### Capability limits
+
+- Windows with PowerShell 7 is the qualified installer platform; Python 3.11+ remains an internal dependency for the global CLI.
+- OpenCode V2 is primary; Codex remains frozen compatibility, not full parity. Global configuration apply/recovery outside the scoped CLI assignments remains deferred.
+- The bundled Models.dev snapshot may lag new/private models. Compatibility for unlisted models remains unverified; provider entitlement belongs to the user.
+- GitHub immutable-release metadata and exact-tag source identity checks are not independent cryptographic signature verification.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** on Windows with PowerShell 7. Exact commands and safety guidance: [v0.6.0 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.6.0/docs/INSTALLATION.md).
+
+## Verify installation
+
+See [release selection, identity and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.6.0/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` guidance. Controlled fixtures do not establish success for every real installation.
+
 ## v0.5.0
 
 ### Highlights

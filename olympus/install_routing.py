@@ -102,10 +102,10 @@ def run(source: Path, args, response: dict, *, emit, as_json: bool) -> int:
                        "--target is incompatible with --scope global; global roots are resolved by the official engine.")
     if operation == "install":
         release = args.release_version
-        if _RELEASE_TAG.fullmatch(release) is None:
+        if release is not None and _RELEASE_TAG.fullmatch(release) is None:
             return _finish(response, emit, as_json, 2, "failed", "invalid_release_tag",
                            "--version must be one exact Olympus release tag (for example v1.2.3).")
-        response["data"]["release_version"] = release
+        response["data"]["release_version"] = release or "latest stable"
     elif scope == "project" and (requested_target is None or not requested_target.is_absolute()):
         return _finish(response, emit, as_json, 2, "failed", "invalid_target",
                        "Project install/uninstall requires an absolute --target worktree root.")
@@ -160,8 +160,9 @@ def run(source: Path, args, response: dict, *, emit, as_json: bool) -> int:
 
     command = [executable, "-NoProfile", "-NonInteractive", "-File", str(script)]
     if operation == "install":
-        command.extend(["-Action", "install", "-Scope", scope, "-Harness", harness,
-                        "-Version", args.release_version])
+        command.extend(["-Action", "install", "-Scope", scope, "-Harness", harness])
+        if args.release_version:
+            command.extend(["-Version", args.release_version])
         if target is not None:
             command.extend(["-Target", str(target)])
         if dry_run:
@@ -211,6 +212,20 @@ def run(source: Path, args, response: dict, *, emit, as_json: bool) -> int:
         "native_stderr": completed.stderr or "",
     })
     if completed.returncode == 0:
+        if operation == "uninstall" and scope == "global" and not dry_run:
+            cli_uninstaller = source / "scripts" / "install-cli.ps1"
+            if cli_uninstaller.is_file():
+                cleanup = subprocess.run(
+                    [executable, "-NoProfile", "-NonInteractive", "-File", str(cli_uninstaller), "-Action", "uninstall"],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                    check=False, timeout=_ENGINE_TIMEOUT, env=environment, shell=False,
+                )
+                response["data"]["native_stdout"] += cleanup.stdout or ""
+                response["data"]["native_stderr"] += cleanup.stderr or ""
+                if cleanup.returncode != 0:
+                    response["data"].update({"state": "unconfirmed", "effects": "global harness removed; CLI cleanup failed"})
+                    return _finish(response, emit, as_json, 4, "unconfirmed", "global_cli_cleanup_failed",
+                                   "Global managed resources were removed but CLI PATH cleanup failed; inspect the installation before retrying.")
         if dry_run:
             response["data"].update({
                 "state": "preview",

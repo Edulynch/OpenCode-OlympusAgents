@@ -6,7 +6,8 @@ param(
     [string]$ProjectTarget = (Get-Location).Path,
     [switch]$VerifyOnly,
     [switch]$DryRun,
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    [switch]$Update
 )
 
 Set-StrictMode -Version Latest
@@ -17,6 +18,8 @@ $ManifestRelative = 'olympus/orchestrator-install.json'
 $OpenCodeConfigRelative = 'opencode.jsonc'
 $OpenCodeGuardIntentRelative = 'olympus/opencode-guard-pending.json'
 $script:ProjectOverrideDetected = $false
+$script:ModifiedManagedAgents = @()
+$script:ConfirmedModifiedAgentPaths = @()
 
 function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
 
@@ -128,6 +131,56 @@ function Get-GlobalOutputs([string]$SelectedHarness) {
         if ($outputs.Count -ne 12) { Fail 'SOURCE_INVALID' "Unexpected Codex global resource inventory: $($outputs.Count)." }
     }
     return ,$outputs
+}
+
+function Get-OlympusUserConfigPath {
+    if ($env:OLYMPUS_CONFIG_FILE) { return [IO.Path]::GetFullPath($env:OLYMPUS_CONFIG_FILE) }
+    if ($env:OLYMPUS_CONFIG_HOME) { return Join-Path ([IO.Path]::GetFullPath($env:OLYMPUS_CONFIG_HOME)) 'config.json' }
+    $appData = if ($env:APPDATA) { $env:APPDATA } else { [Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData) }
+    return Join-Path $appData 'Olympus/config.json'
+}
+
+function Apply-OpenCodeUserOverrides([System.Collections.IDictionary]$Outputs) {
+    $configPath = Get-OlympusUserConfigPath
+    if (-not (Test-Path -LiteralPath $configPath)) { return }
+    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { Fail 'USER_CONFIG_INVALID' 'Olympus user configuration is not a file.' }
+    try { $config = [IO.File]::ReadAllText($configPath) | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop }
+    catch { Fail 'USER_CONFIG_INVALID' 'Olympus user configuration is not valid JSON.' }
+    if ($config.schema_version -ne 1 -or $config.overrides -isnot [System.Collections.IDictionary] -or
+        @($config.Keys | Where-Object { $_ -notin @('schema_version','overrides') }).Count -gt 0) {
+        Fail 'USER_CONFIG_INVALID' 'Olympus user configuration must use schema_version 1 and an overrides object.'
+    }
+    $catalogPath = Join-Path $SourceRoot 'olympus/core/models-dev.json'
+    if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) { Fail 'SOURCE_FILE_MISSING' 'The offline Models.dev catalog is missing.' }
+    try { $catalog = [IO.File]::ReadAllText($catalogPath) | ConvertFrom-Json -AsHashtable -Depth 30 -ErrorAction Stop }
+    catch { Fail 'SOURCE_INVALID' 'The offline Models.dev catalog is invalid JSON.' }
+    foreach ($role in $config.overrides.Keys) {
+        $override = $config.overrides[$role]
+        $relative = "agents/$role.md"
+        if ($role -notmatch '^[a-z][a-z0-9_-]*$' -or $override -isnot [System.Collections.IDictionary] -or
+            $relative -notin $Outputs.Keys -or @($override.Keys | Where-Object { $_ -notin @('model','effort') }).Count -gt 0) {
+            Fail 'USER_CONFIG_INVALID' "Olympus user configuration has an unsupported override for '$role'."
+        }
+        $modelLine = [regex]::Match([string]$Outputs[$relative], '(?m)^model:\s*(?:"(?<quoted>[^"]+)"|(?<plain>[^\r\n]+))\s*$')
+        if (-not $modelLine.Success) { Fail 'SOURCE_INVALID' "The generated OpenCode agent has no single model field: $role." }
+        $current = if ($modelLine.Groups['quoted'].Success) { $modelLine.Groups['quoted'].Value } else { $modelLine.Groups['plain'].Value.Trim() }
+        $separator = $current.LastIndexOf('#')
+        if ($separator -lt 1) { Fail 'SOURCE_INVALID' "The generated OpenCode agent model is malformed: $role." }
+        $model = if ($override.Contains('model')) { $override['model'] } else { $current.Substring(0, $separator) }
+        $effort = if ($override.Contains('effort')) { $override['effort'] } else { $current.Substring($separator + 1) }
+        if ($model -isnot [string] -or $model -notmatch '^[A-Za-z0-9][A-Za-z0-9._:-]*/[A-Za-z0-9][A-Za-z0-9._:/-]*$' -or
+            $effort -isnot [string] -or $effort -notmatch '^[A-Za-z][A-Za-z0-9_-]*$') {
+            Fail 'USER_CONFIG_INVALID' "Olympus user configuration has an invalid model or effort for '$role'."
+        }
+        $modelInfo = $catalog.models[$model]
+        if ($null -eq $modelInfo -or $modelInfo.tool_call -ne $true -or $modelInfo.reasoning -ne $true -or
+            $effort -notin @($modelInfo.efforts)) {
+            Fail 'USER_CONFIG_INVALID' "Models.dev does not declare tool, reasoning, and '$effort' support for '$model'."
+        }
+        $replacement = 'model: "' + $model + '#' + $effort + '"'
+        $Outputs[$relative] = [regex]::Replace([string]$Outputs[$relative], '(?m)^model:\s*(?:"[^"]+"|[^\r\n]+)\s*$',
+            [System.Text.RegularExpressions.MatchEvaluator]{ param($match) $replacement }, 1)
+    }
 }
 
 function Assert-OpenCodeUserGuard([string]$Path) {
@@ -272,7 +325,9 @@ function Get-OpenCodeDefaultGuard {
     return [IO.File]::ReadAllText($source)
 }
 
-function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required, [System.Collections.IDictionary]$RecoverOutputs = $null) {
+function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
+    [System.Collections.IDictionary]$RecoverOutputs = $null, [switch]$AllowModifiedAgents) {
+    $script:ModifiedManagedAgents = @()
     $path = Assert-SafeDestination $Root $ManifestRelative
     if (-not (Test-Path -LiteralPath $path)) {
         if ($Required) { Fail 'GLOBAL_MANIFEST_MISSING' "No Olympus global ownership manifest exists for $Harness." }
@@ -293,6 +348,10 @@ function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
         $full = Assert-SafeDestination $Root $relative
         if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Managed global file is missing: $relative" }
         if ((Get-FileHashText $full) -cne ([string]$entry.sha256).ToLowerInvariant()) {
+            if ($AllowModifiedAgents -and $Harness -ceq 'opencode' -and $relative -match '^agents/(?<role>[a-z][a-z0-9_-]*)\.md$') {
+                $script:ModifiedManagedAgents += $Matches.role
+                continue
+            }
             # Only during a pending, hash-verified guard install may a retry
             # roll forward an agent already written from this exact source.
             # Unknown edits still block without touching the user's bytes.
@@ -303,6 +362,29 @@ function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
         }
     }
     return $manifest
+}
+
+function Confirm-ModifiedManagedAgents {
+    $roles = @($script:ModifiedManagedAgents | Sort-Object -Unique)
+    if ($roles.Count -eq 0) { return }
+    if (-not $Update) { Fail 'GLOBAL_MANAGED_FILE_DRIFT' 'A managed OpenCode agent was changed; no file was overwritten.' }
+    $names = @($roles | ForEach-Object {
+        $parts = $_ -split '[-_]'
+        ($parts | ForEach-Object { if ($_.Length) { $_.Substring(0,1).ToUpperInvariant() + $_.Substring(1) } }) -join ' '
+    })
+    Write-Host "Hay $($names.Count) agentes de Olympus modificados en este proyecto:"
+    foreach ($name in $names) { Write-Host "- $name" }
+    $readHost = Get-Command Read-Host -ErrorAction SilentlyContinue
+    $mockedPrompt = $null -ne $readHost -and $readHost.CommandType -eq 'Function'
+    $nonInteractiveHost = @([Environment]::GetCommandLineArgs() | Where-Object { $_ -match '^(?i:-NonInteractive|-noni)$' }).Count -gt 0
+    if ((-not [Environment]::UserInteractive -or [Console]::IsInputRedirected -or $nonInteractiveHost) -and -not $mockedPrompt) {
+        Fail 'MODIFIED_AGENT_CONFIRMATION_REQUIRED' 'Managed agents changed; rerun olympus update in an interactive PowerShell 7 terminal to confirm.'
+    }
+    $answer = Read-Host '¿Quieres sobrescribirlos con la versión nueva? [y/N]'
+    if ($answer -notmatch '^(?i:y|yes)$') {
+        Fail 'MODIFIED_AGENT_UPDATE_DECLINED' 'Update cancelled; modified agents were preserved.'
+    }
+    $script:ConfirmedModifiedAgentPaths = @($roles | ForEach-Object { "agents/$_.md" })
 }
 
 function Get-ManifestEntryMap($Manifest) {
@@ -423,10 +505,13 @@ function Invoke-OneHarness([string]$SelectedHarness) {
     }
 
     $recoverOutputs = if ($null -ne $guardIntent -and -not $VerifyOnly) { Get-GlobalOutputs $SelectedHarness } else { $null }
-    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:$VerifyOnly -RecoverOutputs $recoverOutputs
+    $allowModifiedAgents = $Update -and $SelectedHarness -eq 'opencode'
+    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:$VerifyOnly -RecoverOutputs $recoverOutputs -AllowModifiedAgents:$allowModifiedAgents
+    Confirm-ModifiedManagedAgents
     $oldEntries = Get-ManifestEntryMap $manifest
     $outputs = Get-GlobalOutputs $SelectedHarness
     if ($SelectedHarness -eq 'opencode') {
+        Apply-OpenCodeUserOverrides $outputs
         Add-OpenCodeGlobalGuard $root $oldEntries $outputs
     }
     if ($SelectedHarness -eq 'codex') {
@@ -446,7 +531,8 @@ function Invoke-OneHarness([string]$SelectedHarness) {
         if (-not (Test-Path -LiteralPath $full)) { $create.Add($relative); continue }
         if ($oldEntries.ContainsKey($relative)) {
             if ((Get-FileHashText $full) -cne ([string]$oldEntries[$relative].sha256).ToLowerInvariant()) {
-                if ($null -eq $recoverOutputs -or (Get-FileHashText $full) -cne (Get-TextHash ([string]$outputs[$relative]))) {
+                $confirmedAgent = $relative -in $script:ConfirmedModifiedAgentPaths
+                if (-not $confirmedAgent -and ($null -eq $recoverOutputs -or (Get-FileHashText $full) -cne (Get-TextHash ([string]$outputs[$relative])))) {
                     Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Refusing to overwrite modified managed global resource: $relative"
                 }
             }

@@ -1,34 +1,31 @@
 # Installation and uninstallation
 
-## Start here: two commands, two choices
+## Start here
 
-For a first installation, start with [Fast Install in the README](../README.md#fast-install); use [Fast Uninstall](../README.md#fast-uninstall) for removal. Both public entrypoints work **without cloning OlympusAgents** on the qualified Windows platform. The interactive prompts ask where to operate (**current project**, **another project**, or **global**) and which harness to use (**OpenCode**, **Codex**, or **both**). Project is not an implicit global installation.
+Run [Fast Install](../README.md#fast-install) once after v0.6.0 is published. This release is in preparation, not yet published; the remote command will work after publication, using the same v0.6.0 tag for the entrypoint and installer. The entrypoint asks for scope (**current project**, **another project**, or **global**) and harness (**OpenCode**, **Codex**, or **both**) when needed. A successful project or global install sets up the per-user `olympus` command and adds its `bin` folder to the current user's PATH; open a new PowerShell 7 shell afterward.
 
-For scripts and automation, pass the PowerShell selectors directly: `-Project -Here`, `-ProjectPath 'C:\path with spaces\project'`, or `-Global`, together with `-Harness opencode|codex|all`. The examples below show the complete executable syntax; these are **PowerShell parameters**, not portable CLI flags. The checkout-bound CLI uses `install --scope project --target <absolute-path> --harness ... --execute` on qualified Windows systems, as explained later in this guide.
+Then use `olympus version` and `olympus update` from any directory. The public [Fast Uninstall](../README.md#fast-uninstall) entrypoint and `olympus uninstall` remove only managed resources and Olympus's PATH entry.
 
-The publicly hosted script is executable code. The Fast path uses a published versioned bootstrap and resolves a qualifying release; it is not equivalent to an independently verified cryptographic signature. Operators who need to inspect each downloaded stage should follow the separate inspection procedure below.
+The public PowerShell entrypoints are executable code. Once published, they select an immutable stable release and validate the tag/installer identity before use; GitHub's immutability assertion is not independent cryptographic signature verification.
 
 ## Requirements and platform limits
 
 - Windows; this is the only currently qualified installer platform. Linux and macOS are not qualified.
 - PowerShell 7 (`pwsh`) installed and available on `PATH`. Windows PowerShell 5.1 may start an entrypoint only when PowerShell 7 is also available; 5.1 alone is insufficient.
+- Python 3.11+ is used internally by the global CLI; users invoke `olympus`, not `python -m olympus`.
 - Git is required for project-scope installation and uninstallation. Use the root of a trusted Git worktree.
 - Install OpenCode V2, Codex CLI, or both according to the selected harness. This does not establish runtime discovery for every version.
 
 OpenCode V2 is in **ACTIVE DEVELOPMENT**. Codex is in **FROZEN COMPATIBILITY**: existing installation and safe-uninstall behavior remain, but no new capability or full parity is implied. Global installation is Windows-qualified. See [harness capabilities](HARNESS-CAPABILITIES.md) and [Codex compatibility](CODEX-COMPATIBILITY.md).
 
-## The two public Fast entrypoints
-
-⚡ **Version map:** `v0.4.11` is the fixed, trusted bootstrap; [`releases/latest`](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) selects the actual installer (currently [v0.5.0](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.5.0)). The older number in the command is not the installed version.
-
-The public commands below use the versioned `v0.4.11` bootstrap from the published, immutable [release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.4.11), whose tag points to commit `b82086d386e5c5077d9568e0d5a4ec2b3c3b46ff`. The pinned tag identifies the bootstrap source only; it does **not** preselect the final release installer tag. Each bootstrap consults GitHub's `releases/latest` metadata to select a published release and tag that passes its checks. The checkout's declared installer version is independent of this older, trusted public bootstrap.
+## Public PowerShell entrypoints
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/install-olympus.ps1')))
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/uninstall-olympus.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/install-olympus.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/uninstall-olympus.ps1')))
 ```
 
-Invoke the downloaded script block with `&` as shown. Piping these published scripts through `iex` fails during parameter binding because their optional `ProjectPath` parameter has a `ValidateNotNullOrEmpty` attribute.
+Invoke the downloaded script block with `&` as shown.
 
 When run in an interactive terminal with no selection parameters, either entrypoint asks for scope and harness. A valid partial selection asks only for the missing values. For example, `-Global` asks only for a harness, while `-Harness codex` asks only for scope. If all required values are supplied, the command runs without prompting and is suitable for non-interactive use. If a required value is missing and interactive input is unavailable, it exits with `ARGUMENTS_REQUIRED` instead of waiting for input.
 
@@ -42,11 +39,11 @@ When run in an interactive terminal with no selection parameters, either entrypo
 
 `-Harness` accepts `opencode`, `codex`, or `all`; it has no implicit default. Supply `-Project` and `-Here` together. `-ProjectPath`, `-Global`, and the `-Project -Here` pair are mutually exclusive; contradictory choices are rejected. Do not mix those scope selectors. A quoted `-ProjectPath` may contain spaces.
 
-The examples below fetch the public bootstrap text, then invoke it with explicit parameters. Run the `-Project -Here` examples from the project root. The project-path target intentionally contains spaces.
+The examples below fetch the public entrypoint text, then invoke it with explicit parameters. Run the `-Project -Here` examples from the project root. The project-path target intentionally contains spaces.
 
 ```powershell
-$install = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/install-olympus.ps1'))
-$uninstall = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/uninstall-olympus.ps1'))
+$install = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/install-olympus.ps1'))
+$uninstall = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.0/uninstall-olympus.ps1'))
 
 # Install OpenCode in the current project, Codex in a project path, or both globally.
 & $install -Project -Here -Harness opencode
@@ -65,56 +62,9 @@ The twelve legacy install/uninstall wrappers remain for compatibility at `instal
 
 ## Release selection, identity, and executable source
 
-1. The versioned Fast command first runs its `v0.4.11` bootstrap source, pinned to published GitHub Release [v0.4.11](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.4.11) (tag commit `b82086d386e5c5077d9568e0d5a4ec2b3c3b46ff`). GitHub reports `published_at=2026-10-21T19:17:41Z`, `draft=false`, `prerelease=false`, and `immutable=true`; the published release record—not tag existence alone—is the provenance evidence. The bootstrap requests `https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest` and validates the returned release metadata: `immutable=true`, `draft=false`, `prerelease=false`, a valid Olympus tag, and a published timestamp. The returned `tag_name` selects the tag used to download that release's `scripts/launch-latest.ps1`.
-2. That release launcher also requests `releases/latest` and validates the response. Its returned tag selects the `install.ps1` download and the exact tag archive subsequently requested by the installer. The selected installer must identify itself with matching version and release markers, and the archive/source identity is checked before installation proceeds. A missing, malformed, mutable, unpublished, or mismatched source fails closed; there is no mutable-branch or older-launcher fallback.
-3. These checks distinguish release selection and tag identity from cryptographic integrity. GitHub's `immutable` field is a platform assertion; the installer does not independently verify a signature or a published SHA-256 for the downloaded executable code. The bootstrap and later downloaded scripts are executable code, not merely release metadata.
+The v0.6.0 entrypoint queries GitHub's `releases/latest` metadata and requires a valid stable tag with `immutable=true`, `draft=false`, `prerelease=false`, and a published timestamp. The launcher downloads installer/archive content pinned to that returned tag and checks the installer's version identity. It fails closed for missing, malformed, mutable, unpublished, or mismatched sources; it never falls back to `main` or `master`.
 
-The following is the **remote published-release flow**: it downloads the versioned bootstrap into a new, uniquely named temporary directory for inspection. Do not save it in a checkout or another directory that might contain a neighboring launcher. The bootstrap can use a sibling `scripts/launch-latest.ps1` if one exists; these checks ensure the inspection directory contains only the downloaded entrypoint. The .NET `CreateNew` mode below fails rather than replacing an existing file.
-
-Run both PowerShell 7 blocks in the same session. The first downloads and displays the entrypoint without executing it; the second is an explicitly separate execution step.
-
-```powershell
-$uri = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/install-olympus.ps1'
-$inspectionDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ('olympus-bootstrap-inspection-' + [guid]::NewGuid().ToString('N'))
-if (Test-Path -LiteralPath $inspectionDirectory) {
-    throw 'The generated inspection directory already exists; start again with a new GUID.'
-}
-$null = [System.IO.Directory]::CreateDirectory($inspectionDirectory)
-if (@(Get-ChildItem -LiteralPath $inspectionDirectory -Force).Count -ne 0) {
-    throw 'The new inspection directory is not empty; stop and use a different directory.'
-}
-
-$bootstrapPath = Join-Path $inspectionDirectory 'install-olympus.ps1'
-$response = Invoke-WebRequest -Uri $uri -ErrorAction Stop
-if ([string]::IsNullOrWhiteSpace($response.Content)) {
-    throw 'The downloaded bootstrap is empty; stop and investigate.'
-}
-$bytes = [System.Text.UTF8Encoding]::new($false).GetBytes([string]$response.Content)
-$stream = [System.IO.File]::Open($bootstrapPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
-try {
-    $stream.Write($bytes, 0, $bytes.Length)
-}
-finally {
-    $stream.Dispose()
-}
-
-# Inspection only: this displays the downloaded file; it does not execute it.
-Get-Content -LiteralPath $bootstrapPath
-```
-
-Inspect the displayed content and decide separately whether to execute it. Before execution, verify that the directory still contains exactly that one file; this prevents the bootstrap from selecting a neighboring local launcher. The following command is a separate, deliberate execution step, with an example project path that contains spaces:
-
-```powershell
-$inspectionItems = @(Get-ChildItem -LiteralPath $inspectionDirectory -Force)
-if ($inspectionItems.Count -ne 1 -or $inspectionItems[0].FullName -ne $bootstrapPath -or $inspectionItems[0].PSIsContainer) {
-    throw 'The inspection directory contains an unexpected neighboring item; do not execute the bootstrap.'
-}
-pwsh -NoProfile -File $bootstrapPath -ProjectPath 'C:\Users\Ada Lovelace\source\Sample Project' -Harness opencode
-```
-
-The versioned bootstrap uses GitHub `releases/latest` metadata to select the tag; it then downloads later tag-selected code. Inspecting the entrypoint does **not** inspect or cryptographically verify the launcher, installer, or archive that may subsequently be downloaded and executed. Review each stage separately if required by your trust policy. The `immutable` metadata check is not an independent signature or SHA-256 verification. Do not substitute `main`, `master`, or another mutable branch URL.
-
-This remote published-release flow is distinct from deliberately installing from a trusted local checkout, described below. The local-checkout route installs that checkout's content rather than selecting the current published release.
+These checks establish release selection and tag identity, not cryptographic integrity. GitHub's immutability field is a platform assertion; the installer does not independently verify a signature or published SHA-256 for downloaded executable code. Review each downloaded stage separately if your trust policy requires it.
 
 ## Advanced: install from a local source checkout
 
@@ -124,97 +74,42 @@ Maintainers may run `install.ps1` directly against a trusted local checkout inst
 $source = (Resolve-Path '.').Path
 $target = 'C:\Users\Ada Lovelace\source\Sample Project'
 pwsh -NoProfile -File (Join-Path $source 'install.ps1') `
-    -Version 'v0.5.0' -SourceRoot $source -Target $target -Scope project -Harness opencode
+    -Version 'v0.6.0' -SourceRoot $source -Target $target -Scope project -Harness opencode
 ```
 
 Use the version actually declared by the checkout; do not copy the example version blindly. Local-source installation is for advanced, trusted-checkout use and is not evidence that the corresponding release is published or immutable.
 
-## Portable CLI routing (Slice C5)
+## Olympus CLI
 
-The portable `olympus` CLI also exposes install/uninstall routing for operators who
-need an explicit mode and machine-readable result. It delegates to the existing
-PowerShell engines; it does not replace their release, manifest, ownership, hash,
-or target safety checks. This surface is qualified only on Windows with PowerShell
-7 (`pwsh`).
-
-Unlike the no-checkout public Fast entrypoints, the current portable CLI launcher
-is **bound to a trusted Olympus source checkout** and requires Python 3.11+.
-It does not install a system-wide `olympus` executable or silently inherit a
-project/global target from the current directory.
+The global command works from any directory and uses one product version. Python is an internal runtime dependency; users do not need a checkout or `python -m olympus`.
 
 ```powershell
-$sourceCheckout = 'C:\Path\to\trusted\OpenCode-OlympusAgents'
-$targetProject = 'C:\Users\Ada Lovelace\source\Sample Project'
-$releaseTag = 'v0.5.0' # choose the stable release tag to install
-& "$sourceCheckout\scripts\olympus.cmd" install --scope project --target $targetProject `
-    --harness opencode --version $releaseTag --dry-run --json
-& "$sourceCheckout\scripts\olympus.cmd" install --scope project --target $targetProject `
-    --harness opencode --version $releaseTag --execute
-& "$sourceCheckout\scripts\olympus.cmd" uninstall --scope project --target $targetProject `
-    --harness opencode --execute --json
+olympus version
+olympus update
+olympus agents list
+olympus nox set-model openai/gpt-6-luna
+olympus nox set-effort high
+olympus config list
+olympus doctor
+olympus install
+olympus uninstall
 ```
 
-`--version` is an exact release tag and is separate from root `olympus --version`.
-The CLI asks the release launcher for that exact GitHub tag and still requires the
-published immutable metadata, matching tag, installer identity, and existing
-archive checks. No arbitrary checkout/archive is accepted for installation.
-Project scope requires an absolute existing Git worktree root. Global scope
-rejects `--target`; the official engine alone discovers global roots. The
-inherited current directory remains read-only override context for existing
-engine checks, not a global destination; the CLI does not impersonate
-`USERPROFILE` for a global operation.
+`olympus update` selects an immutable stable release, refuses downgrades, preserves the user override file, and reports the prior/new version. If managed agents have changed, it lists their names and asks once; `y` permits the update, while `n`, Enter, or non-interactive input preserve them and stop. No hashes or old-version recovery are required.
 
-Install requires exactly one of `--dry-run` or `--execute`; the former forwards
-the existing installer's `-DryRun` and may still use temporary acquisition/cache
-locations. Project uninstall has no native dry-run and is blocked before
-PowerShell; global uninstall supports `--dry-run` through
-`scripts/global-install.ps1 -Uninstall -DryRun`. Project uninstall delegates to
-the local `scripts/project-uninstall.ps1`; uninstall does not download a release.
-Global `--harness all --execute` processes its roots sequentially and is not
-atomic. All uninstalls remove only intact manifest-owned files.
+`olympus <agent> set-model` accepts only an exact `provider/model-id` from the bundled [Models.dev](https://models.dev) catalog. `set-effort` accepts only levels declared for that model. Values are saved to the per-user Olympus configuration shown by `olympus config list`; installed global OpenCode agents consume those values. The catalog is checked in for offline, reproducible validation, so listing and diagnostics do not make a provider request. Olympus never checks API keys, subscriptions, quotas, or model access.
 
-`--json` emits one document containing the native exit code, stdout, and stderr.
-Mutating native errors, timeouts (300 s), or interruption are reported as
-`unconfirmed`/exit 4 when partial effects cannot be ruled out; inspect the target
-before retrying. The bounded PowerShell version probe times out after 10 s. No
-automatic retry is performed. Native temporary/cache activity is distinct from
-source/target writes; project/global resources are not modified by successful
-previews.
+`olympus config list` shows effective model/effort values, precedence (**project override > global override > canonical defaults**), and absolute paths to each source. Scope-aware commands such as `agents list`, `config list`, and `doctor` select the managed OpenCode project at the current directory when one exists; otherwise they use global scope. Use `--scope project --target <absolute-worktree-root>` or `--scope global` to select explicitly. For example, `olympus doctor --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project'` checks that project. Doctor is read-only: it validates JSON and declared model/effort values and checks managed installation state, but never applies edits or checks provider access. After manually editing JSON, use `olympus install --scope global --harness opencode --execute` for global configuration or `olympus update --scope project --target <absolute-worktree-root>` for project configuration to apply the effective values.
 
-## Global CLI inspection (Slice C7)
-
-The portable CLI now provides read-only `status`, `doctor` and `config apply
---dry-run` for global OpenCode and Codex installations. These commands never
-adopt an unowned resource or perform a global update. OpenCode uses
-`OPENCODE_CONFIG_DIR` or the current `opencode debug paths` result; Codex uses
-`CODEX_HOME` or its user configuration directory. Each root must have its own
-`olympus/orchestrator-install.json` with its own complete official inventory.
+Project installation remains explicit and uses the existing ownership safeguards:
 
 ```powershell
-python -B -m olympus status --scope global --harness all --json
-python -B -m olympus doctor --scope global --harness codex --json
-python -B -m olympus config apply --scope global --harness all --dry-run --json
+olympus install --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project' --harness opencode --dry-run
+olympus install --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project' --harness opencode --execute
+olympus uninstall --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project' --harness opencode --execute
 ```
 
-Status reports metadata without asserting integrity. Doctor checks the exact
-managed file inventory and SHA-256 values before invoking the official native
-`-VerifyOnly` script on Windows with PowerShell 7; Linux/macOS native verification
-is not qualified. The dry-run compares verified managed bytes with the canonical
-renderer and reports model assignments only in supported formats. OpenCode's
-global root model is not managed; Codex's Kael root lives in its Olympus profile.
-Installed model families remain unknown, and unrecognized formats remain
-unsupported. Global `config apply --execute` and global recovery are blocked:
-neither operation has a qualified writer/rollback protocol. Global `--harness
-all` is not evidence of runtime/provider integration or transactional writes.
-
-For a mixed installed/absent `--harness all` selection, `result=absent` and
-`data.selection_state=partial` identify incomplete coverage; the combined
-assignment preview remains unknown. A changed managed file is reported as
-`global_managed_file_drift` (exit 1), while unrecognized manifest versions and
-Codex global `AGENTS.override.md` precedence conflicts block with exit 3.
-Doctor preserves recognized native VerifyOnly failure categories; an unavailable
-or unrecognized native result never counts as a pass. No user-owned override
-contents are read or modified.
+`--dry-run` may use temporary acquisition/cache locations but does not write project resources. Global scope rejects `--target`; the official engine resolves the global root. Uninstall removes only unchanged, manifest-owned files. The CLI and update are qualified on Windows with PowerShell 7; Codex remains frozen compatibility.
 
 ## Installation safety
 

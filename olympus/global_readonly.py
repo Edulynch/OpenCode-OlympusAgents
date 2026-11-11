@@ -443,6 +443,10 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                 raise GlobalFault("source_drift", "Canonical generated source is not coherent with the renderer.")
             renderer = load_renderer(source)
             expected = _expected(source, renderer, selected)
+            if "opencode" in expected:
+                from . import user_config
+
+                user_config.apply_to_expected(source, expected["opencode"])
         current_by_harness: dict[str, dict[str, bytes]] = {}
         changes: list[dict[str, str]] = []
         absent, blocked = [], []

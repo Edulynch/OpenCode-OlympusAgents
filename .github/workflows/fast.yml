@@ -68,6 +68,15 @@ jobs:
           pwsh -NoProfile -File ./tests/global-installer/qualify.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Issue128 global CLI (focused Windows gate)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -B -m unittest discover -s tests/harness-core -p test_global_cli.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pwsh -NoProfile -File ./tests/global-cli/smoke.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: OA77 worktree activation (deterministic Windows)
         shell: pwsh
         run: |

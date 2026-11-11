@@ -213,6 +213,10 @@ exit 2
         @($calls | Where-Object { $_ -ceq 'debug agents exit=0 invalid-json' }).Count -eq 1 -and
         (Test-Path -LiteralPath (Join-Path $agentsCli 'bin/olympus.cmd') -PathType Leaf))
 
+    foreach ($name in $envNames) {
+        [Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], 'Process')
+    }
+    # Expand persisted PATH values in the same process environment as the baseline snapshot.
     Check 'P8_PERSISTENT_PATH_UNCHANGED' ([Environment]::GetEnvironmentVariable('Path','User') -ceq $originalUserPath -and
         [Environment]::GetEnvironmentVariable('Path','Machine') -ceq $originalMachinePath)
     Write-Output 'POST-INSTALL RUNTIME REGRESSION: PASS (isolated Windows fixtures; no real OpenCode runtime or persistent PATH changes)'

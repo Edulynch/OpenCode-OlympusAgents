@@ -19,6 +19,7 @@ $run = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) (
 )
 $passed = $false
 $script:OriginalOpenCodeCommand = ''
+$script:HostModelCatalogQualified = $false
 
 function Assert-GitSource {
     $root = (& git -C $source rev-parse --show-toplevel 2>$null | Out-String).Trim()
@@ -58,6 +59,10 @@ function New-IsolatedProject([string]$Name) {
 }
 
 function New-IsolatedEnvironment([string]$Name) {
+    if (-not $script:HostModelCatalogQualified) {
+        throw 'HOST_MODEL_CATALOG_UNQUALIFIED: Do not seed an isolated model catalog without a real host preflight.'
+    }
+
     $base = Join-Path $run ($Name + '-environment')
     # HOME is a protected automatic PowerShell variable, so use a distinct local name.
     $isolatedHome = Join-Path $base 'home'
@@ -88,12 +93,22 @@ function New-IsolatedEnvironment([string]$Name) {
 
     # npm can expose opencode.ps1 and opencode.cmd while keeping the binary
     # outside PATH. Both temporary entrypoints call the already-qualified CLI.
+    # Only model discovery uses the IDs just verified against the real host:
+    # the isolated process has no access to the user's provider credentials.
     $shimDirectory = Join-Path $base 'standalone-shim'
     [IO.Directory]::CreateDirectory($shimDirectory) | Out-Null
     $shimPs1 = Join-Path $shimDirectory 'opencode.ps1'
     $shimCmd = Join-Path $shimDirectory 'opencode.cmd'
     $psLiteralPath = $script:OriginalOpenCodeCommand.Replace("'", "''")
-    $psText = "# Private server is scoped to this qualification process.`r`n& '$psLiteralPath' --standalone @args`r`n"
+    $psText = @(
+        '# Model IDs were checked against the real host before isolation.'
+        'if ($args.Count -eq 1 -and $args[0] -ceq ''models'') {'
+        '    ''openai/gpt-6.1-sol'''
+        '    ''openai/gpt-6-luna'''
+        '    exit 0'
+        '}'
+        "& '$psLiteralPath' --standalone @args"
+    ) -join "`r`n"
     [IO.File]::WriteAllText($shimPs1, $psText, $utf8)
 
     # The batch entrypoint also covers callers that resolve opencode.cmd.
@@ -106,7 +121,18 @@ function New-IsolatedEnvironment([string]$Name) {
         '.exe' { "`"$batchPath`" --standalone %*" }
         default { throw "OPENCODE_LAUNCHER_UNSUPPORTED: $extension" }
     }
-    $cmdText = "@echo off`r`nsetlocal DisableDelayedExpansion`r`n$batchCall`r`nexit /b %errorlevel%`r`n"
+    $cmdText = @(
+        '@echo off'
+        'setlocal DisableDelayedExpansion'
+        'rem The host preflight verified these IDs; no credentials enter this process.'
+        'if /I "%~1"=="models" if "%~2"=="" ('
+        '    echo openai/gpt-6.1-sol'
+        '    echo openai/gpt-6-luna'
+        '    exit /b 0'
+        ')'
+        $batchCall
+        'exit /b %errorlevel%'
+    ) -join "`r`n"
     [IO.File]::WriteAllText($shimCmd, $cmdText, [Text.Encoding]::ASCII)
     $paths['OLYMPUS_QUALIFICATION_PS_SHIM'] = $shimPs1
     $paths['OLYMPUS_QUALIFICATION_CMD_SHIM'] = $shimCmd
@@ -213,6 +239,19 @@ try {
     }
     Write-Output "OPENCODE_LAUNCHER: $($resolvedCommand.Name)"
     Write-Output 'OPENCODE_SERVICE_MODE: STANDALONE (user managed service untouched)'
+
+    # Validate the actual model catalog before removing the user's provider
+    # configuration from every child process. Never log the complete catalog.
+    $hostModels = (& opencode models 2>$null | Out-String)
+    $hostModelsExit = $LASTEXITCODE
+    if ($hostModelsExit -ne 0 -or
+        $hostModels -notmatch '(?m)^openai/gpt-6\.1-sol\s*$' -or
+        $hostModels -notmatch '(?m)^openai/gpt-6-luna\s*$') {
+        throw 'HOST_MODEL_CATALOG_UNQUALIFIED: Required model IDs are not available in the real OpenCode profile.'
+    }
+    $script:HostModelCatalogQualified = $true
+    Write-Output 'HOST_MODEL_CATALOG: PASS (both IDs verified; no inference)'
+    Write-Output 'ISOLATED_MODEL_CATALOG: HOST_PREQUALIFIED (no credentials copied)'
 
     [IO.Directory]::CreateDirectory($run) | Out-Null
 

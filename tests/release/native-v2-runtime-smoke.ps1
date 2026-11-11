@@ -84,6 +84,15 @@ function New-IsolatedEnvironment([string]$Name) {
         'OPENCODE_CONFIG_DIR', 'TEMP', 'TMP')) {
         [IO.Directory]::CreateDirectory([string]$paths[$key]) | Out-Null
     }
+
+    # The test-only command shim makes the installer's nested OpenCode calls
+    # use private servers without changing the user's shared service or its port.
+    $shimDirectory = Join-Path $base 'standalone-shim'
+    [IO.Directory]::CreateDirectory($shimDirectory) | Out-Null
+    $shimPath = Join-Path $shimDirectory 'opencode.cmd'
+    $shim = "@echo off`r`nopencode.exe --standalone %*`r`nexit /b %errorlevel%`r`n"
+    [IO.File]::WriteAllText($shimPath, $shim, [Text.Encoding]::ASCII)
+    $paths['OLYMPUS_QUALIFICATION_SHIM'] = $shimPath
     return $paths
 }
 
@@ -115,6 +124,11 @@ function Invoke-BoundedProbe {
     foreach ($key in $IsolatedEnvironment.Keys) {
         $start.Environment[$key] = [string]$IsolatedEnvironment[$key]
     }
+    $shimPath = [string]$IsolatedEnvironment['OLYMPUS_QUALIFICATION_SHIM']
+    if (-not (Test-Path -LiteralPath $shimPath -PathType Leaf)) {
+        throw "STANDALONE_SHIM_MISSING: $Name"
+    }
+    $start.Environment['PATH'] = (Split-Path -Parent $shimPath) + ';' + $start.Environment['PATH']
     $effectiveArguments = @('-NoProfile', '-NonInteractive') + @($Arguments)
     foreach ($argument in $effectiveArguments) {
         $start.ArgumentList.Add([string]$argument)
@@ -172,6 +186,10 @@ try {
         throw "OPENCODE_VERSION_MISMATCH: expected=$ExpectedOpenCode; actual=$openCodeVersion"
     }
     Write-Output "OPENCODE_VERSION: PASS ($openCodeVersion)"
+    if (-not (Get-Command opencode.exe -CommandType Application -ErrorAction SilentlyContinue)) {
+        throw 'OPENCODE_NATIVE_BINARY_MISSING: Standalone qualification requires opencode.exe on PATH.'
+    }
+    Write-Output 'OPENCODE_SERVICE_MODE: STANDALONE (user managed service untouched)'
 
     [IO.Directory]::CreateDirectory($run) | Out-Null
 
@@ -180,7 +198,9 @@ try {
     $cleanEnvironment = New-IsolatedEnvironment 'clean'
     $cleanResult = Invoke-BoundedProbe -Name 'clean-debug-config' -Project $clean `
         -IsolatedEnvironment $cleanEnvironment `
-        -Arguments @('-Command', '& opencode debug config') -TimeoutMilliseconds 45000
+        -Arguments @('-Command',
+            'if ((Get-Command opencode -CommandType Application).Source -ine $env:OLYMPUS_QUALIFICATION_SHIM) { throw "STANDALONE_SHIM_NOT_ACTIVE" }; & opencode debug config') `
+        -TimeoutMilliseconds 45000
     if ($cleanResult.ExitCode -ne 0) {
         throw "CLEAN_RUNTIME_FAILED: exit=$($cleanResult.ExitCode); inspect clean-debug-config logs."
     }
@@ -219,4 +239,4 @@ try {
     }
 }
 
-Write-Output 'OA64_NATIVE_RUNTIME_QUALIFICATION: PASS'
+Write-Output 'OA64_NATIVE_STANDALONE_QUALIFICATION: PASS'

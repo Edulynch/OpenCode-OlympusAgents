@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- For the v0.6.1 maintenance release, keep static installer integrity and ownership checks blocking while reporting unverifiable OpenCode runtime discovery as a warning; recommend `olympus doctor` for static checks.
+
 ## v0.6.0
 
 ### Highlights

@@ -2,7 +2,35 @@
 
 ## [Unreleased]
 
-- For the v0.6.1 maintenance release, keep static installer integrity and ownership checks blocking while reporting unverifiable OpenCode runtime discovery as a warning; recommend `olympus doctor` for static checks.
+## v0.6.1
+
+### Highlights
+
+- Allow a project installation that already passed static source validation, ownership checks, and post-write managed-file hashes to complete even when OpenCode's runtime inspection cannot be verified.
+- Report `OLYMPUS_RUNTIME_VALIDATION_WARNING` rather than aborting when `opencode debug config` fails, `debug agents` fails, or its output is invalid/mismatched. Suggest `olympus doctor` for static checks.
+- Keep `VerifyOnly` read-only, preserve existing user files and manifest drift protection, and continue failing on invalid source metadata or installation conflicts.
+- This maintenance patch does **not** relax the existing global `external_directory` ASK/DENY guard and does not implement Auto/YOLO autoapproval.
+
+### Validation
+
+- [PR #133](https://github.com/Edulynch/OpenCode-OlympusAgents/pull/133) passed CI / FAST, Security and Native V2 before merge; its targeted Windows P1–P8 post-install runtime tests and isolated Windows smoke passed.
+- The test uses isolated internal destinations and a mocked OpenCode runtime. It does not qualify a fully public first-install entrypoint with a real OpenCode session; a public-tag smoke is a separate acceptance step after publication.
+- No FULL/RUNTIME general suite, real provider inference or access checks were performed.
+
+### Capability limits
+
+- Windows with PowerShell 7 remains the qualified installer platform; Python 3.11+ is an internal CLI dependency.
+- Runtime discovery is **unverified** when Olympus emits the new warning. Successful static installation does not establish effective discovery of all eleven agents.
+- Existing global OpenCode configurations without an explicit safe `external_directory` fallback still fail closed with `GLOBAL_EXTERNAL_GUARD_UNSAFE`. Do not create a parallel `opencode.jsonc` or overwrite user-owned `opencode.json` to work around it.
+- OpenCode V2 is primary and Codex remains frozen compatibility. Exact-tag release identity and GitHub immutability are not independent cryptographic signature verification.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.6.1 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.6.1/docs/INSTALLATION.md), including supported modes and safety constraints.
+
+## Verify installation
+
+See [release selection, identity and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.6.1/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and static validation guidance. `olympus doctor` checks static configuration; it does not prove native runtime discovery.
 
 ## v0.6.0
 

@@ -14,6 +14,9 @@ $originalPath = $env:PATH
 $originalOpenCodeRoot = $env:OPENCODE_CONFIG_DIR
 $originalCodexHome = $env:CODEX_HOME
 $originalFixtureOpenCodeRoot = $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT
+$originalOlympusConfigFile = $env:OLYMPUS_CONFIG_FILE
+$cliInstallRoot = Join-Path $run 'cli-install'
+$cliPathStorePath = Join-Path $cliInstallRoot 'path-store.txt'
 $utf8 = [Text.UTF8Encoding]::new($false)
 
 function Check([string]$Id, [bool]$Condition, [string]$Evidence = '') {
@@ -33,7 +36,8 @@ function New-Target([string]$Name) {
 }
 
 function Run-Installer([string]$Target, [string[]]$Arguments) {
-    $args = @('-NoProfile', '-File', $installer, '-SourceRoot', $source, '-Target', $Target) + $Arguments
+    $args = @('-NoProfile', '-File', $installer, '-SourceRoot', $source, '-Target', $Target,
+        '-CliInstallRoot', $cliInstallRoot, '-CliPathStorePath', $cliPathStorePath) + $Arguments
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         # Windows PowerShell 5.1 turns native stderr into a terminating error
@@ -98,6 +102,7 @@ try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
     $openCodeRoot = Join-Path $run 'OpenCode Global Config'
     $codexHome = Join-Path $run 'Codex Global Home'
+    $env:OLYMPUS_CONFIG_FILE = Join-Path $run 'Olympus User Config/config.json'
     [IO.Directory]::CreateDirectory($openCodeRoot) | Out-Null
     [IO.Directory]::CreateDirectory($codexHome) | Out-Null
     $project = New-Target 'migration-project'
@@ -127,7 +132,8 @@ try {
     $localManifest = Get-Content -LiteralPath $localManifestPath -Raw | ConvertFrom-Json
     Check 'PROJECT_SCOPE_ALL_INSTALL' ($localInstall.Code -eq 0 -and $localManifest.scope -eq 'project' -and
         $localManifest.installed_version -eq $candidateVersion -and $localManifest.installed_harnesses.Count -eq 2 -and
-        $localManifest.installed_harnesses[0] -eq 'opencode' -and $localManifest.installed_harnesses[1] -eq 'codex')
+        $localManifest.installed_harnesses[0] -eq 'opencode' -and $localManifest.installed_harnesses[1] -eq 'codex') `
+        ("exit=$($localInstall.Code)`n$($localInstall.Text)")
     $projectBeforeVerify = Snapshot $project
     $projectVerify = Run-Installer $project @('-Harness','all','-VerifyOnly')
     Check 'PROJECT_VERIFYONLY_ALL_UNAFFECTED' ($projectVerify.Code -eq 0 -and (Snapshot $project) -ceq $projectBeforeVerify)
@@ -664,6 +670,8 @@ try {
     else { $env:CODEX_HOME = $originalCodexHome }
     if ($null -eq $originalFixtureOpenCodeRoot) { Remove-Item Env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT -ErrorAction SilentlyContinue }
     else { $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $originalFixtureOpenCodeRoot }
+    if ($null -eq $originalOlympusConfigFile) { Remove-Item Env:OLYMPUS_CONFIG_FILE -ErrorAction SilentlyContinue }
+    else { $env:OLYMPUS_CONFIG_FILE = $originalOlympusConfigFile }
     if ($run -and (Test-Path -LiteralPath $run)) {
         for ($attempt = 1; $attempt -le 10; $attempt++) {
             try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop; break }

@@ -148,7 +148,9 @@ class GlobalCli(unittest.TestCase):
             mode = __import__("re").search(r"(?m)^mode:\s*(primary|subagent)\s*$", text)
             self.assertIsNotNone(model)
             self.assertIsNotNone(mode)
-            generated.append({"id": file.stem, "model": {"id": model.group(1), "variant": model.group(2)},
+            provider, model_id = model.group(1).split("/", 1)
+            generated.append({"id": file.stem, "model": {"providerID": provider, "id": model_id,
+                                                           "variant": model.group(2)},
                               "mode": mode.group(1)})
         agents_json = self.sandbox / "mock-agents.json"
         agents_json.write_text(json.dumps(generated), encoding="utf-8")

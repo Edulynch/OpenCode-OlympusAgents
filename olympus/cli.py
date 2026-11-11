@@ -55,10 +55,11 @@ def parser() -> Parser:
                 "  olympus doctor --scope project --target <absolute-worktree-root> --harness all [--json]\n"
                 "  olympus doctor --scope global --harness opencode [--json]\n"
                 "  olympus config apply --scope global --harness codex --dry-run --json\n"
-                "  olympus status --scope project --target <absolute-worktree-root>\n"
-                "Source-edit and project-apply commands are advanced checkout operations.\n"
-                "Doctor performs static configuration checks; it never probes a model provider.\n"
-                + help_notes),
+                 "  olympus status --scope project --target <absolute-worktree-root>\n"
+                 "Source-edit and project-apply commands are advanced checkout operations.\n"
+                 "Project config apply writes only with --execute; global config apply is preview-only.\n"
+                 "Doctor performs static configuration checks; it never probes a model provider.\n"
+                 + help_notes),
         allow_abbrev=False,
     )
     root.add_argument("--source", type=Path, help="absolute trusted source checkout (before command)")
@@ -621,9 +622,38 @@ def main(argv: list[str] | None = None) -> int:
             from . import user_config
             from .models_catalog import CatalogError
 
+            project_request = args.scope == "project" or (args.scope is None and args.target is not None)
+            check_user_configuration = args.scope == "global" or (args.scope is None and args.target is None)
+            if args.scope == "global" and args.target is not None:
+                raise CLIError("--target is available only with project scope.", 2)
+            if args.scope is None and not project_request:
+                try:
+                    args.scope, args.target = user_config.select_scope(source, args.scope, args.target)
+                except user_config.UserConfigError as error:
+                    response["result"] = "failed"
+                    response["issues"] = [{"code": "invalid_user_configuration", "message": str(error)}]
+                    emit(response, as_json)
+                    return 1
+            elif project_request:
+                args.scope = "project"
+                if args.target is not None:
+                    from . import config_apply
+
+                    try:
+                        target = config_apply._validate_target(source, args.target)
+                        record, _, blockers = config_apply._manifest_record(target)
+                        check_user_configuration = (
+                            not blockers and record is not None and "opencode" in record.installed_harnesses
+                        )
+                        if check_user_configuration:
+                            args.target = target
+                    except (config_apply.PreviewFault, OSError, RuntimeError):
+                        check_user_configuration = False
+
             try:
-                args.scope, args.target = user_config.select_scope(source, args.scope, args.target)
-                user_configuration = user_config.diagnose(source, args.scope, args.target)
+                user_configuration = (
+                    user_config.diagnose(source, args.scope, args.target) if check_user_configuration else None
+                )
             except (user_config.UserConfigError, CatalogError) as error:
                 response["result"] = "failed"
                 response["issues"] = [{"code": "invalid_user_configuration", "message": str(error)}]
@@ -638,13 +668,15 @@ def main(argv: list[str] | None = None) -> int:
                     load_renderer=load_renderer, release_version=release_version,
                     assignment_query=model_assignments, operation="doctor",
                 )
-                response["data"]["user_configuration"] = user_configuration
+                if user_configuration is not None:
+                    response["data"]["user_configuration"] = user_configuration
                 emit(response, as_json)
                 return code
 
             code = doctor.diagnose(source, args, response, source_version=release_version(source),
                                    source_query=source_query)
-            response["data"]["user_configuration"] = user_configuration
+            if user_configuration is not None:
+                response["data"]["user_configuration"] = user_configuration
             emit(response, as_json)
             return code
         if response["operation"] in ("install", "uninstall"):

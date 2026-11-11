@@ -14,7 +14,10 @@ param(
     [switch]$Update,
     # Qualification-only source overrides. Source identity is always checked.
     [string]$SourceRoot,
-    [string]$SourceArchive
+    [string]$SourceArchive,
+    # Qualification-only CLI destination overrides; normal installs use user defaults.
+    [string]$CliInstallRoot,
+    [string]$CliPathStorePath
 )
 
 Set-StrictMode -Version Latest
@@ -49,11 +52,14 @@ function Get-ContentHash([string]$Path) {
     } finally { $sha.Dispose() }
 }
 
-function Set-UpGlobalCli([string]$Source, [string]$Version, [string]$Action) {
+function Set-UpGlobalCli([string]$Source, [string]$Version, [string]$Action,
+                         [string]$InstallRoot, [string]$PathStorePath) {
     $cliInstaller = Join-Path $Source 'scripts/install-cli.ps1'
     if (-not (Test-Path -LiteralPath $cliInstaller -PathType Leaf)) { throw 'SOURCE_INVALID: Global CLI installer is missing.' }
     $cliArgs = @('-NoProfile', '-File', $cliInstaller, '-Action', $Action,
         '-Version', $Version, '-SourceRoot', $Source)
+    if ($InstallRoot) { $cliArgs += @('-InstallRoot', $InstallRoot) }
+    if ($PathStorePath) { $cliArgs += @('-PathStorePath', $PathStorePath) }
     & $pwsh.Source @cliArgs
     if ($LASTEXITCODE -ne 0) { throw "GLOBAL_CLI_SETUP_FAILED: global CLI setup exited $LASTEXITCODE." }
 }
@@ -260,7 +266,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "GLOBAL_BOOTSTRAP_FAILED: global installer exited $LASTEXITCODE." }
         if (-not $DryRun -and -not $VerifyOnly) {
             $cliAction = if ($Uninstall) { 'uninstall' } else { 'install' }
-            Set-UpGlobalCli -Source $source -Version $resolvedVersion -Action $cliAction
+            Set-UpGlobalCli -Source $source -Version $resolvedVersion -Action $cliAction `
+                -InstallRoot $CliInstallRoot -PathStorePath $CliPathStorePath
         }
         exit 0
     }
@@ -275,7 +282,10 @@ try {
     if ($Update) { $args += '-Update' }
     & $pwsh.Source @args
     if ($LASTEXITCODE -ne 0) { throw "BOOTSTRAP_FAILED: bootstrap exited $LASTEXITCODE; no installer cleanup touches the target." }
-    if (-not $DryRun) { Set-UpGlobalCli -Source $source -Version $resolvedVersion -Action 'install' }
+    if (-not $DryRun) {
+        Set-UpGlobalCli -Source $source -Version $resolvedVersion -Action 'install' `
+            -InstallRoot $CliInstallRoot -PathStorePath $CliPathStorePath
+    }
     if ($DryRun) { Write-Output "OLYMPUS_INSTALL: $resolvedVersion DRY_RUN_READY" }
     else { Write-Output "OLYMPUS_INSTALL: $resolvedVersion READY_OR_NO_CHANGES" }
 } catch {

@@ -815,20 +815,19 @@ function Get-CodexInstructionsPrecedenceWarning([string]$Repo) {
     return $null
 }
 
-function Get-Expected-Agents {
-    $agentsRoot = Join-Path $SourceRoot '.opencode/agents'
-    $files = @(Get-ChildItem -LiteralPath $agentsRoot -Filter '*.md' -File)
+function Get-Expected-Agents($Content) {
+    $files = @($Content.Keys | Where-Object { $_ -match '^\.opencode/agents/[^/]+\.md$' } | Sort-Object)
     $catalogPath = Join-Path $SourceRoot 'olympus/core/models-dev.json'
     if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) { Fail 'SOURCE_FILE_MISSING' 'The offline Models.dev catalog is missing.' }
     try { $catalog = [IO.File]::ReadAllText($catalogPath) | ConvertFrom-Json -AsHashtable -Depth 30 -ErrorAction Stop }
     catch { Fail 'SOURCE_INVALID' 'The offline Models.dev catalog is invalid JSON.' }
     $expected = @{}
-    foreach ($file in $files) {
-        $text = [IO.File]::ReadAllText($file.FullName)
+    foreach ($path in $files) {
+        $text = [string]$Content[$path]
         $model = [regex]::Match($text, '(?m)^model:\s*["'']?(?<id>[A-Za-z0-9][A-Za-z0-9._:-]*/[A-Za-z0-9][A-Za-z0-9._:/-]*)#(?<effort>[A-Za-z][A-Za-z0-9_-]*)["'']?\s*$')
         $mode = [regex]::Match($text, '(?m)^mode:\s*(?<mode>primary|subagent)\s*$')
         if (-not $model.Success -or -not $mode.Success) {
-            Fail 'SOURCE_AGENT_MODEL_INVALID' ("Generated role metadata is incomplete: " + $file.Name)
+            Fail 'SOURCE_AGENT_MODEL_INVALID' ("Generated role metadata is incomplete: " + [IO.Path]::GetFileName($path))
         }
         $modelId = $model.Groups['id'].Value
         $effort = $model.Groups['effort'].Value
@@ -837,7 +836,7 @@ function Get-Expected-Agents {
             $effort -notin @($modelInfo.efforts)) {
             Fail 'SOURCE_AGENT_MODEL_INVALID' "Models.dev does not declare tool, reasoning, and '$effort' support for '$modelId'."
         }
-        $expected[$file.BaseName] = @($modelId, $effort, $mode.Groups['mode'].Value)
+        $expected[[IO.Path]::GetFileNameWithoutExtension($path)] = @($modelId, $effort, $mode.Groups['mode'].Value)
     }
     $managedAgentCount = @($OpenCodeManaged | Where-Object { $_ -match '^\.opencode/agents/[^/]+\.md$' }).Count
     if ($files.Count -ne $managedAgentCount -or $expected.Count -ne $managedAgentCount) {
@@ -847,7 +846,7 @@ function Get-Expected-Agents {
 }
 
 function Validate-Install([string]$Repo) {
-    $expected = Get-Expected-Agents
+    $expected = Get-Expected-Agents $ManagedContent
     $lastMismatch = $null
     Push-Location $Repo
     try {
@@ -866,7 +865,7 @@ function Validate-Install([string]$Repo) {
                     $lastMismatch = "Unexpected effective agent: $name (count=$($a.Count); attempt=$attempt)."
                     break
                 }
-                $modelId = [string]$a[0].model.id
+                $modelId = [string]$a[0].model.providerID + '/' + [string]$a[0].model.id
                 $variant = [string]$a[0].model.variant
                 $mode = [string]$a[0].mode
                 if ($modelId -ne $expected[$name][0] -or $variant -ne $expected[$name][1] -or $mode -ne $expected[$name][2]) {

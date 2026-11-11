@@ -2,11 +2,11 @@
 
 ## Start here
 
-Run [Fast Install](../README.md#fast-install) once after v0.6.0 is published. This release is in preparation, not yet published; the remote command will work after publication, using the same v0.6.0 tag for the entrypoint and installer. The entrypoint asks for scope (**current project**, **another project**, or **global**) and harness (**OpenCode**, **Codex**, or **both**) when needed. A successful project or global install sets up the per-user `olympus` command and adds its `bin` folder to the current user's PATH; open a new PowerShell 7 shell afterward.
+Run [Fast Install](../README.md#fast-install) using the same `v0.6.0` tag for the public entrypoint and installer. The entrypoint asks for scope (**current project**, **another project**, or **global**) and harness (**OpenCode**, **Codex**, or **both**) when needed. A successful project or global install sets up the per-user `olympus` command and adds its `bin` folder to the current user's PATH; open a new PowerShell 7 shell afterward.
 
 Then use `olympus version` and `olympus update` from any directory. The public [Fast Uninstall](../README.md#fast-uninstall) entrypoint and `olympus uninstall` remove only managed resources and Olympus's PATH entry.
 
-The public PowerShell entrypoints are executable code. Once published, they select an immutable stable release and validate the tag/installer identity before use; GitHub's immutability assertion is not independent cryptographic signature verification.
+The public PowerShell entrypoints are executable code. They select an immutable stable release and validate the tag/installer identity before use; GitHub's immutability assertion is not independent cryptographic signature verification.
 
 ## Requirements and platform limits
 
@@ -97,7 +97,7 @@ olympus uninstall
 
 `olympus update` selects an immutable stable release, refuses downgrades, preserves the user override file, and reports the prior/new version. If managed agents have changed, it lists their names and asks once; `y` permits the update, while `n`, Enter, or non-interactive input preserve them and stop. No hashes or old-version recovery are required.
 
-`olympus <agent> set-model` accepts only an exact `provider/model-id` from the bundled [Models.dev](https://models.dev) catalog. `set-effort` accepts only levels declared for that model. Values are saved to the per-user Olympus configuration shown by `olympus config list`; installed global OpenCode agents consume those values. The catalog is checked in for offline, reproducible validation, so listing and diagnostics do not make a provider request. Olympus never checks API keys, subscriptions, quotas, or model access.
+`olympus <agent> set-model` accepts a syntactically valid `provider/model-id`. Known models are checked against the bundled [Models.dev](https://models.dev) catalog and their declared effort levels; newer or custom IDs absent from the snapshot are allowed with a compatibility warning. Olympus does not test model access. Values are saved to the per-user Olympus configuration shown by `olympus config list`; installed global OpenCode agents consume those values. The catalog is checked in for offline, reproducible validation, so listing and diagnostics do not make a provider request. Olympus never checks API keys, subscriptions, quotas, or model access.
 
 `olympus config list` shows effective model/effort values, precedence (**project override > global override > canonical defaults**), and absolute paths to each source. Scope-aware commands such as `agents list`, `config list`, and `doctor` select the managed OpenCode project at the current directory when one exists; otherwise they use global scope. Use `--scope project --target <absolute-worktree-root>` or `--scope global` to select explicitly. For example, `olympus doctor --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project'` checks that project. Doctor is read-only: it validates JSON and declared model/effort values and checks managed installation state, but never applies edits or checks provider access. After manually editing JSON, use `olympus install --scope global --harness opencode --execute` for global configuration or `olympus update --scope project --target <absolute-worktree-root>` for project configuration to apply the effective values.
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import tomllib
 from functools import lru_cache
 from pathlib import Path
@@ -14,6 +15,7 @@ class CatalogError(ValueError):
 
 
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*/[A-Za-z0-9][A-Za-z0-9._:/-]*\Z")
+_EFFORT = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z")
 
 
 def catalog_path(source: Path | None = None) -> Path:
@@ -47,13 +49,17 @@ def validate_assignment(model_id: str, effort: str, source: Path, harness: str =
     """Require exact provider/model identity and declared tool/effort support."""
     if not isinstance(model_id, str) or not _IDENTIFIER.fullmatch(model_id):
         raise CatalogError("Use an exact Models.dev provider/model-id, for example openai/gpt-6-luna.")
-    if not isinstance(effort, str) or not effort:
-        raise CatalogError("An explicit reasoning effort is required for Olympus agents.")
+    if not isinstance(effort, str) or not _EFFORT.fullmatch(effort):
+        raise CatalogError("Use a nonempty, syntactically valid reasoning effort.")
 
     catalog = load_catalog(str(catalog_path(source).resolve()))
     model = catalog["models"].get(model_id)
     if model is None:
-        raise CatalogError(f"{model_id} is not present in the bundled Models.dev catalog; compatibility was not inferred.")
+        # A bundled snapshot may lag behind a custom provider or a newer model.
+        # Preserve the explicit ID while making unverified capabilities visible.
+        print(f"WARNING: {model_id} is not in bundled Models.dev; model and effort compatibility are unverified.",
+              file=sys.stderr)
+        return {"catalog_status": "unverified", "model_id": model_id}
     if model.get("tool_call") is not True:
         raise CatalogError(f"{model_id} does not declare tool-call support in Models.dev.")
     if model.get("reasoning") is not True:

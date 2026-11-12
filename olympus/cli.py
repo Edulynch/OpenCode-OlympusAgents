@@ -50,6 +50,8 @@ def parser() -> Parser:
                 "  olympus config check\n"
                 "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --dry-run\n"
                 "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --execute\n"
+                "  olympus config apply --scope global --harness opencode --execute\n"
+                "  olympus config recover --scope global --harness opencode\n"
                 "  olympus install --scope project --target <absolute-worktree-root> --harness opencode --version <release-tag> --dry-run\n"
                 "  olympus uninstall --scope project --target <absolute-worktree-root> --harness opencode --execute\n"
                 "  olympus doctor --scope project --target <absolute-worktree-root> --harness all [--json]\n"
@@ -57,7 +59,7 @@ def parser() -> Parser:
                 "  olympus config apply --scope global --harness codex --dry-run --json\n"
                  "  olympus status --scope project --target <absolute-worktree-root>\n"
                  "Source-edit and project-apply commands are advanced checkout operations.\n"
-                 "Project config apply writes only with --execute; global config apply is preview-only.\n"
+                 "Config apply writes only with --execute; global execution currently supports OpenCode only.\n"
                  "Doctor performs static configuration checks; it never probes a model provider.\n"
                  + help_notes),
         allow_abbrev=False,
@@ -116,15 +118,15 @@ def parser() -> Parser:
     check.add_argument("--harness", choices=("opencode", "codex", "all"), default="all")
     check.add_argument("--json", action="store_true")
     apply = config_commands.add_parser(
-        "apply", help="preview an existing project/global installation; execute project only", allow_abbrev=False,
+        "apply", help="preview an existing project/global installation; execute explicitly", allow_abbrev=False,
     )
     apply.add_argument("--scope", choices=("project", "global"), required=True)
     apply.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
     apply.add_argument("--harness", choices=("opencode", "codex", "all"), required=True)
     mode = apply.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="read-only preview; no target writes")
-    mode.add_argument("--execute", action="store_true", help="explicitly apply project configuration; global is blocked")
-    apply.add_argument("--json", action="store_true", help="emit a single JSON preview")
+    mode.add_argument("--execute", action="store_true", help="explicitly apply project or OpenCode global configuration")
+    apply.add_argument("--json", action="store_true", help="emit a single JSON result")
     install = commands.add_parser("install", help="install an immutable official release through the existing installer", allow_abbrev=False)
     install.add_argument("--scope", choices=("project", "global"), default="global")
     install.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
@@ -147,9 +149,10 @@ def parser() -> Parser:
     doctor.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
     doctor.add_argument("--harness", choices=("opencode", "codex", "all"), default="opencode")
     doctor.add_argument("--json", action="store_true")
-    recover = config_commands.add_parser("recover", help="explicitly recover one pending source edit or project apply", allow_abbrev=False)
+    recover = config_commands.add_parser("recover", help="explicitly recover one pending source edit or config apply", allow_abbrev=False)
     recover.add_argument("--scope", choices=("project", "global"), help="project selects a target apply journal")
     recover.add_argument("--target", type=Path, help="absolute project root for project-apply recovery")
+    recover.add_argument("--harness", choices=("opencode", "codex", "all"), help="global recovery currently supports opencode only")
     status = commands.add_parser("status", help="read reported installation metadata; no integrity verification", allow_abbrev=False)
     status.add_argument("--scope", choices=("project", "global"), default="project")
     status.add_argument("--target", type=Path, help="absolute Git worktree root; required for project scope")
@@ -480,6 +483,8 @@ def _run_project_recovery(source: Path, args, response: dict) -> int:
 
     response["operation"] = "config recover"
     response["context"] = {"source": str(source), "kind": "project_apply_recovery", "scope": "project"}
+    if args.harness is not None:
+        raise CLIError("--harness is available only with --scope global for config recovery.", 2)
     if args.scope == "global":
         raise CLIError("Global config recovery is unavailable.", 3)
     if args.scope != "project" or args.target is None or not args.target.is_absolute():
@@ -503,6 +508,13 @@ def _run_project_recovery(source: Path, args, response: dict) -> int:
     print(f"config recover: {result}")
     print(f"target: {target}")
     return 0
+
+
+def _run_global_recovery(source: Path, args, response: dict) -> int:
+    from . import global_apply
+
+    args.harness = args.harness or "opencode"
+    return global_apply.recover(source, args, response, load_renderer=load_renderer)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -589,20 +601,35 @@ def main(argv: list[str] | None = None) -> int:
         if response["operation"] in ("models set-family", "agents set-model"):
             return _run_model_edit(source, args, response)
         if response["operation"] == "config recover":
+            if args.scope == "global":
+                code = _run_global_recovery(source, args, response)
+                emit(response, as_json)
+                return code
             if args.scope is not None or args.target is not None:
                 return _run_project_recovery(source, args, response)
+            if args.harness is not None:
+                raise CLIError("--harness requires --scope global for config recovery.", 2)
             return _run_recovery(source, response)
         if response["operation"] == "config apply":
             from . import config_apply
 
             if args.scope == "global":
-                from . import global_readonly
+                if args.execute:
+                    from . import global_apply
 
-                code = global_readonly.inspect(
-                    source, args, response, source_query=source_query,
-                    load_renderer=load_renderer, release_version=release_version,
-                    assignment_query=model_assignments, operation="config apply",
-                )
+                    code = global_apply.execute(
+                        source, args, response, source_query=source_query,
+                        load_renderer=load_renderer, release_version=release_version,
+                        assignment_query=model_assignments,
+                    )
+                else:
+                    from . import global_readonly
+
+                    code = global_readonly.inspect(
+                        source, args, response, source_query=source_query,
+                        load_renderer=load_renderer, release_version=release_version,
+                        assignment_query=model_assignments, operation="config apply",
+                    )
                 emit(response, as_json)
                 return code
 
@@ -714,9 +741,15 @@ def main(argv: list[str] | None = None) -> int:
         response["result"] = "unconfirmed"
         message = "Operation interrupted; inspect/recover pending source-edit state explicitly."
         if response.get("operation") == "config apply":
-            target = str(getattr(locals().get("args", None), "target", "unknown"))
-            message = ("Project config apply interrupted; inspect and explicitly recover the pending project state "
-                       f"with config recover --scope project --target {target}.")
+            args = locals().get("args", None)
+            if getattr(args, "scope", None) == "global":
+                response["data"].update({"preview_only": False, "execution": "unconfirmed"})
+                message = ("Global OpenCode config apply interrupted; inspect and explicitly recover the pending state "
+                           "with config recover --scope global --harness opencode.")
+            else:
+                target = str(getattr(args, "target", "unknown"))
+                message = ("Project config apply interrupted; inspect and explicitly recover the pending project state "
+                           f"with config recover --scope project --target {target}.")
         elif response.get("operation") in ("install", "uninstall"):
             if response.get("data", {}).get("engine", "not_started") == "not_started":
                 code = 3

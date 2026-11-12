@@ -17,6 +17,8 @@ $Utf8NoBom = [Text.UTF8Encoding]::new($false)
 $ManifestRelative = 'olympus/orchestrator-install.json'
 $OpenCodeConfigRelative = 'opencode.jsonc'
 $OpenCodeGuardIntentRelative = 'olympus/opencode-guard-pending.json'
+$GlobalApplyScratch = '.olympus-cli-config-apply'
+. (Join-Path $PSScriptRoot 'target-writer-lock.ps1')
 $script:ProjectOverrideDetected = $false
 $script:ModifiedManagedAgents = @()
 $script:ConfirmedModifiedAgentPaths = @()
@@ -31,6 +33,15 @@ function Normalize-Relative([string]$Path) {
     return $value.TrimStart('/')
 }
 
+function Get-ExistingItemOrNull([string]$Path) {
+    try { return Get-Item -LiteralPath $Path -Force -ErrorAction Stop }
+    catch {
+        if ($_.Exception -is [Management.Automation.ItemNotFoundException] -and
+            $_.FullyQualifiedErrorId -like 'PathNotFound,*') { return $null }
+        Fail 'GLOBAL_PATH_INSPECTION_FAILED' "Cannot inspect path '$Path': $($_.Exception.Message)"
+    }
+}
+
 function Assert-SafeDestination([string]$Root, [string]$Relative) {
     $relative = Normalize-Relative $Relative
     $base = [IO.Path]::GetFullPath($Root).TrimEnd([char[]]@('\','/'))
@@ -42,12 +53,41 @@ function Assert-SafeDestination([string]$Root, [string]$Relative) {
     $cursor = $base
     foreach ($part in ($relative -split '/')) {
         $cursor = Join-Path $cursor $part
-        $item = Get-Item -LiteralPath $cursor -Force -ErrorAction SilentlyContinue
+        $item = Get-ExistingItemOrNull $cursor
         if ($null -ne $item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
             Fail 'GLOBAL_PATH_UNSAFE' "Managed destination traverses a reparse point: $Relative"
         }
     }
     return $full
+}
+
+function Assert-SafeGlobalRoot([string]$Root) {
+    if (-not [IO.Path]::IsPathFullyQualified($Root)) { Fail 'GLOBAL_PATH_INVALID' 'Resolved global root is not absolute.' }
+    $full = [IO.Path]::GetFullPath($Root)
+    $volume = [IO.Path]::GetPathRoot($full)
+    if ($full.TrimEnd([char[]]@('\','/')) -ceq $volume.TrimEnd([char[]]@('\','/'))) {
+        Fail 'GLOBAL_PATH_INVALID' 'A filesystem root cannot be a global configuration root.'
+    }
+    $cursor = $volume
+    foreach ($part in ($full.Substring($volume.Length) -split '[\\/]+' | Where-Object { $_ })) {
+        $cursor = Join-Path $cursor $part
+        $item = Get-ExistingItemOrNull $cursor
+        if ($null -ne $item -and (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+            -not $item.PSIsContainer)) {
+            Fail 'GLOBAL_PATH_UNSAFE' 'Global root traverses a reparse point or non-directory component.'
+        }
+    }
+    return $full
+}
+
+function Assert-NoPendingGlobalCliTransaction([string]$Root) {
+    foreach ($relative in @($GlobalApplyScratch, '.olympus-cli-edit')) {
+        $path = Assert-SafeDestination $Root $relative
+        $item = Get-ExistingItemOrNull $path
+        if ($null -ne $item) {
+            Fail 'GLOBAL_APPLY_RECOVERY_PENDING' 'A global apply/source-edit journal is pending; recover it explicitly before using the global installer.'
+        }
+    }
 }
 
 function Get-TextHash([string]$Text) {
@@ -479,10 +519,31 @@ function Get-ProjectOverride([string]$Harness, [string]$GlobalVersion) {
     }
 }
 
-function Invoke-OneHarness([string]$SelectedHarness) {
+function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]$ExpectedRoot) {
     $script:ProjectOverrideDetected = $false
-    $root = if ($SelectedHarness -eq 'opencode') { Get-OpenCodeRoot } else { Get-CodexRoot }
-    if (-not [IO.Path]::IsPathFullyQualified($root)) { Fail 'GLOBAL_PATH_INVALID' 'Resolved global root is not absolute.' }
+    $resolvedRoot = if ($SelectedHarness -eq 'opencode') { Get-OpenCodeRoot } else { Get-CodexRoot }
+    $root = Assert-SafeGlobalRoot $resolvedRoot
+    if (-not $DryRun -and -not $VerifyOnly -and -not $LockHeld) {
+        if ($Uninstall -and -not (Test-Path -LiteralPath $root -PathType Container)) {
+            Fail 'GLOBAL_INSTALL_CONFLICT' 'Cannot uninstall because the resolved global root does not exist.'
+        }
+        if (-not $Uninstall) { [IO.Directory]::CreateDirectory($root) | Out-Null }
+        $root = Assert-SafeGlobalRoot $root
+        $targetLock = $null
+        try {
+            $targetLock = Enter-OlympusTargetWriterLock $root
+            Assert-NoPendingGlobalCliTransaction $root
+            Invoke-OneHarness $SelectedHarness -LockHeld -ExpectedRoot $root
+        } finally {
+            if ($null -ne $targetLock) { Exit-OlympusTargetWriterLock $targetLock }
+        }
+        return
+    }
+    if (-not $DryRun -and -not $VerifyOnly -and $LockHeld -and
+        -not [string]::Equals($root, $ExpectedRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        Fail 'GLOBAL_PATH_CHANGED' 'Resolved global root changed after the stable target lock was acquired.'
+    }
+    if ($LockHeld) { Assert-NoPendingGlobalCliTransaction $root }
     $manifestPath = Assert-SafeDestination $root $ManifestRelative
     $guardIntent = if ($SelectedHarness -eq 'opencode') { Read-OpenCodeGuardIntent $root } else { $null }
 

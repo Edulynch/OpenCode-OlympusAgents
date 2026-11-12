@@ -1,6 +1,6 @@
 # CLI portátil Olympus — quickstart (v0.5.0 candidate)
 
-**Alcance del candidato**: Slice A (consulta) y B (edición canónica) aceptadas en Windows/Linux; C1–C6 para instalaciones **project** con preview de asignaciones también antes de `--execute`, doctor y routing de install/uninstall sólo donde estén cualificados; C7 para `status`, `doctor` y preview **global read-only**. Global `config apply --execute` y recovery no están soportados (seguimiento en [#122](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/122)). macOS **NOT VERIFIED**. No se declara cualificación genérica de instaladores ni runtime fuera de la matriz de [v0.5.0](../../docs/RELEASE-v0.5.0.md). [Evidencia histórica de A/B/C4](tasks.md).
+**Alcance del candidato**: Slice A (consulta) y B (edición canónica) aceptadas en Windows/Linux; C1–C6 para instalaciones **project** con preview de asignaciones también antes de `--execute`, doctor y routing de install/uninstall sólo donde estén cualificados; C7 para lectura global y C8 (#122) para apply/recovery explícito de **OpenCode global**. C8 está implementado en esta rama, pero pendiente de review/CI hosted y cualificación independiente; las pruebas locales usan raíces sintéticas en Windows y no acreditan perfiles reales, Linux/macOS ni runtime. macOS **NOT VERIFIED**. No se declara cualificación genérica de instaladores ni runtime fuera de la matriz de [v0.5.0](../../docs/RELEASE-v0.5.0.md). [Evidencia histórica de A/B/C4](tasks.md).
 
 ## Requisitos y contexto
 
@@ -267,11 +267,45 @@ python -B -m olympus config apply --scope global --harness all --dry-run --json
 
 Para probarlo sin leer tu instalación, prepara `OPENCODE_CONFIG_DIR` y `CODEX_HOME`
 apuntando a fixtures globales aislados. No uses esas variables para una instalación
-real sin revisar sus destinos. El preview marca `apply_available=false`; su
-`--execute` y recovery global están bloqueados. OpenCode global no administra
-`opencode.jsonc`; Codex registra a Kael en `olympus.config.toml`, no como
-especialista. Familias actuales siguen `unknown`; formatos no verificables se
-etiquetan `unsupported`. No se prueban proveedores, sesiones ni overrides.
+real sin revisar sus destinos. El preview de OpenCode muestra `apply_available=true`
+como disponibilidad de una vía explícita separada, no como autorización ni garantía
+de que vaya a pasar sus verificaciones; Codex/`all` no ofrecen ejecución global.
+OpenCode administra el `opencode.jsonc` guard sólo cuando consta en su manifest;
+Codex registra a Kael en `olympus.config.toml`, no como especialista. Familias
+actuales siguen `unknown`; formatos no verificables se etiquetan `unsupported`.
+No se prueban proveedores, sesiones ni overrides.
+
+### Apply y recovery global OpenCode (Slice C8 / #122)
+
+Sólo una instalación global OpenCode existente, con manifest/inventario/hash
+válidos y sin conflictos, admite ejecución. El preview no escribe. Revisa las
+raíces que resolverá OpenCode y los cambios antes de solicitar `--execute`:
+
+```powershell
+python -B -m olympus config apply --scope global --harness opencode --dry-run --json
+python -B -m olympus config apply --scope global --harness opencode --execute --json
+python -B -m olympus config recover --scope global --harness opencode
+```
+
+`--execute` actualiza únicamente recursos globales OpenCode ya manifest-owned y
+reemplaza el manifest al final. Un inventario histórico de 13 recursos recibe el
+guard OpenCode únicamente cuando no existe `opencode.json` ni `opencode.jsonc`;
+una configuración existente fuera del manifest se conserva sin adoptarla.
+Una configuración insegura, conflicto de precedencia, drift, manifest inválido o journal previo
+bloquea antes de escribir. `codex` y `all` se bloquean para ejecución y recovery.
+
+Apply y el instalador global comparten `.olympus-cli-edit.lock`. El journal privado
+global tiene `schema_version=2`; el journal de apply project conserva schema 1.
+Tras una interrupción, recovery revierte estados PREPARED old/new demostrables,
+limpia un commit COMMITTED verificado y preserva evidencia si encuentra bytes
+ajenos o estado incierto. No vuelve a ejecutar automáticamente el apply ni promete
+atomicidad visible entre archivos. Si hay un journal pendiente, recovery es una
+orden separada; el instalador global rehúsa mutar hasta resolverlo.
+
+La cobertura de esta rama no justifica ejecutar contra perfiles reales ni declara
+soporte Linux/macOS. Los tests focales configuran `OPENCODE_CONFIG_DIR` sintético,
+home/cache y fixtures aislados; no instalan dependencias ni invocan runtime,
+proveedores o servicios externos.
 
 ## Evidencia enfocada y plataformas
 

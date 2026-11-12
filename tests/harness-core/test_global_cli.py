@@ -442,6 +442,46 @@ class GlobalCli(unittest.TestCase):
         self.assertNotIn("¿Quieres sobrescribirlos", result.stdout)
         self.assertIn("OLYMPUS_GLOBAL_INSTALL:", result.stdout)
 
+    def test_global_installer_refuses_a_pending_python_apply_journal(self):
+        agent = self._agent("kael")
+        before_agent, before_manifest = agent.read_bytes(), self.manifest_path.read_bytes()
+        pending = self.root / ".olympus-cli-config-apply"
+        pending.mkdir()
+        (pending / "unconfirmed-fixture.txt").write_bytes(b"preserve pending evidence")
+        result = self._engine(update=False)
+        output = result.stdout + result.stderr
+        self.assertNotEqual(0, result.returncode, output)
+        self.assertIn("GLOBAL_APPLY_RECOVERY_PENDING", output)
+        self.assertEqual(before_agent, agent.read_bytes())
+        self.assertEqual(before_manifest, self.manifest_path.read_bytes())
+        self.assertEqual(b"preserve pending evidence", (pending / "unconfirmed-fixture.txt").read_bytes())
+
+    def test_global_installer_fails_closed_when_journal_inspection_errors(self):
+        agent = self._agent("kael")
+        before_agent, before_manifest = agent.read_bytes(), self.manifest_path.read_bytes()
+        env = self.env.copy()
+        env["OLYMPUS_TEST_FAIL_INSPECTION"] = str(self.root / ".olympus-cli-config-apply")
+        escaped = str(self.script).replace("'", "''")
+        body = (
+            "function global:Get-Item { param([string]$LiteralPath,[switch]$Force,"
+            "[Alias('ErrorAction')][string]$Action = 'Continue'); "
+            "if ($LiteralPath -eq $env:OLYMPUS_TEST_FAIL_INSPECTION) { "
+            "throw [IO.IOException]::new('controlled inspection failure') }; "
+            "Microsoft.PowerShell.Management\\Get-Item -LiteralPath $LiteralPath "
+            "-Force:$Force -ErrorAction $Action }; "
+            f"& '{escaped}' -Harness opencode -SourceVersion '{RELEASE_VERSION}'"
+        )
+        result = subprocess.run([self.pwsh, "-NoProfile", "-NonInteractive", "-Command", body],
+                                cwd=ROOT, env=env, capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=60, check=False)
+        output = result.stdout + result.stderr
+        self.assertNotEqual(0, result.returncode, output)
+        self.assertIn("GLOBAL_PATH_INSPECTION_FAILED", output)
+        self.assertIn("controlled inspection failure", output)
+        self.assertEqual(before_agent, agent.read_bytes())
+        self.assertEqual(before_manifest, self.manifest_path.read_bytes())
+        self.assertFalse((self.root / ".olympus-cli-config-apply").exists())
+
     def test_update_two_changed_agents_yes_overwrites_only_after_one_confirmation(self):
         originals = self._change_two_agents()
         result = self._engine(update=True, answer="y")

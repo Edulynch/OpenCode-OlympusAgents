@@ -301,21 +301,18 @@ try {
         if ($null -eq $manifest -or [string]$manifest.version -cne $Version) { Fail 'CLI_VERSION_CONFLICT' "The version directory is not owned by Olympus: $versionPath" }
         Assert-VersionFiles $versionPath $manifest
     } else {
+        $sourceFiles = @(Get-SourceFiles $source)
+        $sourcePrefix = $source.TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
         [IO.Directory]::CreateDirectory($versionsRoot) | Out-Null
         $stage = Join-Path $versionsRoot ('.stage-' + [guid]::NewGuid().ToString('N'))
         try {
             [IO.Directory]::CreateDirectory($stage) | Out-Null
-            Copy-Item -LiteralPath (Join-Path $source 'olympus') -Destination $stage -Recurse
-            Copy-Item -LiteralPath (Join-Path $source 'scripts') -Destination $stage -Recurse
-            Copy-Item -LiteralPath (Join-Path $source 'install.ps1') -Destination $stage
-            foreach ($relative in (Get-GeneratedSourceFiles $source)) {
-                $sourceFile = Join-Path $source ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+            $files = foreach ($sourceFile in $sourceFiles) {
+                $relative = $sourceFile.Substring($sourcePrefix.Length).Replace('\','/')
                 $destination = Join-Path $stage ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
                 [IO.Directory]::CreateDirectory((Split-Path -Parent $destination)) | Out-Null
                 Copy-Item -LiteralPath $sourceFile -Destination $destination
-            }
-            $files = foreach ($file in (Get-SourceFiles $stage)) {
-                [ordered]@{ path=$file.Substring($stage.Length + 1).Replace('\','/'); sha256=(Get-FileSha256 $file) }
+                [ordered]@{ path=$relative; sha256=(Get-FileSha256 $destination) }
             }
             $manifestText = ([ordered]@{ schema_version=1; version=$Version; files=@($files) } | ConvertTo-Json -Depth 10) + "`n"
             [IO.File]::WriteAllText((Join-Path $stage 'olympus-cli-manifest.json'), $manifestText, $Utf8NoBom)

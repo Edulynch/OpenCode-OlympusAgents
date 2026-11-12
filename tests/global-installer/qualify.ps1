@@ -178,6 +178,8 @@ try {
     )) {
         $unsafeRoot = Join-Path $run ('OpenCode Unsafe ' + $unsafeCase.Name)
         [IO.Directory]::CreateDirectory($unsafeRoot) | Out-Null
+        # Keep stable-lock initialization out of the rejection-side snapshot.
+        [IO.File]::WriteAllBytes((Join-Path $unsafeRoot '.olympus-cli-edit.lock'), [byte[]]::new(0))
         $unsafeFile = Join-Path $unsafeRoot 'opencode.jsonc'
         [IO.File]::WriteAllText($unsafeFile, $unsafeCase.Text, $utf8)
         $unsafeBefore = Snapshot $unsafeRoot
@@ -467,6 +469,7 @@ try {
     # failed recovery must leave the caller's current bytes untouched.
     $recoverConflictRoot = Join-Path $run 'OpenCode Guard Interrupted Conflict'
     [IO.Directory]::CreateDirectory((Join-Path $recoverConflictRoot 'olympus')) | Out-Null
+    [IO.File]::WriteAllBytes((Join-Path $recoverConflictRoot '.olympus-cli-edit.lock'), [byte[]]::new(0))
     [IO.File]::WriteAllText((Join-Path $recoverConflictRoot 'olympus/opencode-guard-pending.json'), $recoverIntent, $utf8)
     [IO.File]::WriteAllText((Join-Path $recoverConflictRoot 'opencode.jsonc'), '{"permissions":[]}', $utf8)
     $recoverConflictBefore = Snapshot $recoverConflictRoot
@@ -481,6 +484,7 @@ try {
 
     $doubleConfigRoot = Join-Path $run 'OpenCode Ambiguous Config'
     [IO.Directory]::CreateDirectory($doubleConfigRoot) | Out-Null
+    [IO.File]::WriteAllBytes((Join-Path $doubleConfigRoot '.olympus-cli-edit.lock'), [byte[]]::new(0))
     [IO.File]::WriteAllText((Join-Path $doubleConfigRoot 'opencode.json'), $safeUserConfig, $utf8)
     [IO.File]::WriteAllText((Join-Path $doubleConfigRoot 'opencode.jsonc'), $safeUserConfig, $utf8)
     $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $doubleConfigRoot

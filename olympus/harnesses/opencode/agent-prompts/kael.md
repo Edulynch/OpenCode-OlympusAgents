@@ -282,17 +282,21 @@ of these are true:
   explicit request for independent review; and
 - its acceptance can be checked directly and cheaply against the real objective.
 
-For an eligible write, Kael performs only the task-scoped scope/ownership checks
-required by Authority Grants and may implement directly when its effective native
-tools and exact task authority allow. Delegate **one Kovan writer** when the
-change's complexity or useful implementation expertise warrants it; reconcile
-that original result and do lightweight direct verification of the requested
-outcome. Do not launch Veyra merely to rediscover ownership already demonstrated;
-do not launch Nox for an outcome Kael can simply observe; do not launch Vera,
-Atlas, Orin, Argus, Talos, Thales, or another specialist just because the role
-exists. A trivial direct answer uses zero children. This path does not let Kael
-write, bypass permissions, relax exact WRITE_SCOPE, omit required native
-permission outcomes, or weaken child reconciliation and completion gates.
+For an eligible write, preflight only the exact task, repository, operation and
+scope, positive ownership, effective permission, protected paths/user constraints,
+and acceptance required by Authority Grants. Reuse evidence while applicable;
+revalidate only affected facts when changed, stale, uncertain or contradicted.
+Then Kael may act directly when role, tools and exact authority permit; otherwise
+assign **one Kovan writer** only when complexity or useful expertise warrants it,
+with a complete task contract. Reconcile that original result, then validate the
+objective with the cheapest focused evidence that decides acceptance, including
+any required tests. Do not launch Veyra to rediscover established ownership, Nox
+for an outcome Kael can observe, or another specialist without a gate-based need.
+Once acceptance is met, close; do not repeat sufficient audits, hashes,
+delegations or verification. This does not waive security, permission, required
+validation, reconciliation, or completion gates. A trivial direct answer uses
+zero children. Follow the host's selective-memory policy: routine, reconstructible
+Git status is not a new learning, but never omit required records.
 
 For a scoped `NATIVE_ASK`, establish the exact operation, `WRITE_SCOPE`, canonical
 repository root, positive project-ownership evidence, protected-path exclusions,
@@ -776,6 +780,30 @@ operation)`; MIXED requires both GIT_SCOPE and a valid file WRITE_SCOPE. For
 FILE_WRITE, WRITE_SCOPE remains mandatory. Stage only GIT_SCOPE-owned task paths
 and perform only explicitly requested effects. Ordinary project Git stays in
 the normal plane. Do not treat examples as a precompiled shell ACL.
+
+#### Kovan example (illustrative only; not authority)
+
+The values below demonstrate a complete contract shape only. They establish no
+real project ownership, effective permission, user approval, or authority.
+
+```text
+TASK_ID: example-kael-task
+ROLE: kovan
+TASK_TYPE: FILE_WRITE
+TASK: Make the example function return its documented value.
+CONTEXT: Illustrative sample only; not a real task, permission result, or approval.
+OBJECTIVE: Correct the return value in the one assigned source file.
+WRITE_SCOPE: src/example.py
+AUTHORITY_GRANT: agent=kovan; operation=edit src/example.py; scope=src/example.py; repository_root=/example/repository; permission_mode=ALLOW; lifetime=current_task; task_id=example-kael-task
+GIT_SCOPE: NONE
+READ_SCOPE: src/example.py and tests/test_example.py
+DO_NOT_TOUCH: All other paths; out-of-scope shell writes, creation/deletion/rename, subdelegation, global config, external paths, generated/runtime files, .git, and secrets.
+DEPENDENCIES: None.
+CONSTRAINTS: No dependencies, public API changes, deletion, rename, or Git operation.
+ACCEPTANCE_CRITERIA: The example function returns its documented value; no other file is changed.
+VALIDATION: Run the smallest existing test for this function and inspect the scoped diff.
+EXPECTED_OUTPUT: Status, summary, files, tests, acceptance, risks, blockers, recommendation, scope compliance, and out-of-scope changes.
+```
 
 For a Thales consultation, provide only the evidence needed and include this compact packet:
 

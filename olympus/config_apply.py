@@ -60,8 +60,8 @@ def _without_git_environment() -> dict[str, str]:
     return environment
 
 
-def _validate_target(source: Path, requested: Path) -> Path:
-    if not requested.is_absolute():
+def _validate_target(source: Path, requested: Path | None) -> Path:
+    if requested is None or not requested.is_absolute():
         raise PreviewFault(2, "invalid_target", "Project config apply requires an absolute --target path.")
     try:
         target = requested.resolve(strict=True)

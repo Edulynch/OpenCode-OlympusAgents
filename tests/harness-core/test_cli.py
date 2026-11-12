@@ -832,6 +832,22 @@ class SliceA(unittest.TestCase):
         response = self.json_query(*self.config_apply_arguments(), code=3)
         self.assertIn("source_output_drift", {item["code"] for item in response["issues"]})
 
+    def test_slice_c_project_target_omitted_is_controlled_and_read_only(self):
+        cases = (
+            ("config apply", ("config", "apply", "--scope", "project", "--harness", "opencode", "--dry-run")),
+            ("doctor", ("doctor", "--scope", "project", "--harness", "opencode")),
+        )
+        for command, arguments in cases:
+            with self.subTest(command=command, output="json"):
+                response = self.json_query(*arguments, code=2)
+                self.assertEqual("failed", response["result"])
+                self.assertEqual("invalid_target", response["issues"][0]["code"])
+            with self.subTest(command=command, output="human"):
+                human = self.query(*arguments)
+                self.assertEqual(2, human.returncode, human.stdout + human.stderr)
+                self.assertNotIn("Traceback", human.stdout + human.stderr)
+                self.assertIn("invalid_target", human.stderr)
+
     def test_slice_c_apply_without_dry_run_is_not_an_execution_path(self):
         arguments = ("config", "apply", "--scope", "project", "--target", str(self.target),
                      "--harness", "opencode", "--json")

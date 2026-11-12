@@ -1,7 +1,20 @@
 # Opt-in local defense for staged changes. CI independently checks current
 # non-ignored files and Git history; this hook never replaces that gate.
+default_install_hook_types:
+  - pre-commit
+  - pre-push
 repos:
+  - repo: local
+    hooks:
+      - id: olympus-pre-push-gate
+        name: Olympus FAST and documentation pre-push gate
+        entry: python -B scripts/pre_push.py
+        language: system
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false
   - repo: https://github.com/gitleaks/gitleaks
     rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # v8.30.1
     hooks:
       - id: gitleaks
+        stages: [pre-commit]

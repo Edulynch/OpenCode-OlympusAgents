@@ -97,6 +97,59 @@ def yaml_frontmatter(text: str) -> tuple[str, int] | None:
     return text[4 : 4 + closing.start()], 4 + closing.end()
 
 
+def kael_compact_contract_checks(prompt_text: str) -> dict[str, bool]:
+    marker = "#### Kovan example (illustrative only; not authority)"
+    match = re.search(
+        r"(?ms)^#### Kovan example \(illustrative only; not authority\)[ \t]*\n.*?^```text[ \t]*\n(.*?)^```[ \t]*(?:\n|$)",
+        prompt_text,
+    )
+    names = (
+        "KAEL_KOVAN_EXAMPLE_COMPLETE",
+        "KAEL_KOVAN_EXAMPLE_REJECTS_MISSING_FIELD",
+        "KAEL_KOVAN_EXAMPLE_REJECTS_MISSING_GRANT",
+        "KAEL_KOVAN_EXAMPLE_REJECTS_MISSING_SCOPE",
+    )
+    if prompt_text.count(marker) != 1 or match is None:
+        return dict.fromkeys(names, False)
+
+    example = match.group(1)
+    required = {
+        "TASK_ID", "ROLE", "TASK_TYPE", "TASK", "CONTEXT", "OBJECTIVE",
+        "WRITE_SCOPE", "AUTHORITY_GRANT", "GIT_SCOPE", "READ_SCOPE",
+        "DO_NOT_TOUCH", "DEPENDENCIES", "CONSTRAINTS", "ACCEPTANCE_CRITERIA",
+        "VALIDATION", "EXPECTED_OUTPUT",
+    }
+
+    def complete(text: str) -> bool:
+        lines = [line.partition(":") for line in text.splitlines()]
+        fields = {key: value.strip() for key, separator, value in lines if separator}
+        grant_parts = {part.strip() for part in fields.get("AUTHORITY_GRANT", "").split(";")}
+        return (
+            len(lines) == len(required)
+            and all(separator for _, separator, _ in lines)
+            and set(fields) == required
+            and all(fields.values())
+            and {
+                "agent=kovan", "operation=edit src/example.py", "scope=src/example.py",
+                "repository_root=/example/repository", "permission_mode=ALLOW",
+                "lifetime=current_task", "task_id=example-kael-task",
+            } <= grant_parts
+        )
+
+    if not complete(example):
+        return dict.fromkeys(names, False)
+
+    def without(field: str) -> str:
+        return "\n".join(line for line in example.splitlines() if not line.startswith(f"{field}:"))
+
+    return {
+        names[0]: True,
+        names[1]: not complete(without("READ_SCOPE")),
+        names[2]: not complete(without("AUTHORITY_GRANT")),
+        names[3]: not complete(without("WRITE_SCOPE")),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -161,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
         f'{role}: "{identity}"' in (ROOT / ".opencode/plugins/olympus-activity/activity.ts").read_text(encoding="utf-8")
         for role, identity in identities.items()))
     kael_prompt = opencode_files["kael"].read_text(encoding="utf-8")
+    for name, result in kael_compact_contract_checks(kael_prompt).items():
+        check(name, result)
     check("NO_RETIRED_AEGIS_OR_MAINTAIN_OUTPUT", "aegis" not in opencode_files and
           not (ROOT / ".opencode/commands/maintain.md").exists())
     generated_agent_frontmatter = {

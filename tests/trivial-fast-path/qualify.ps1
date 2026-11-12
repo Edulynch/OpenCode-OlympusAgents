@@ -86,8 +86,7 @@ try {
     $surgicalMode = [regex]::Match($kael, '(?ms)^- \*\*`surgical-mode`\*\* (?<body>.*?)(?=^[ \t]*\r?\nModifiers compose)').Groups['body'].Value
 
     Check 'FAST_POLICY_SPECIALIST_VALUE' ($section -match 'Specialist value must exceed orchestration cost' -and
-        $section -match 'do not launch Veyra' -and $section -match 'do not launch Nox' -and
-        $section -match 'do not launch Vera')
+        $section -match '(?is)Do not launch Veyra to rediscover established ownership,\s*Nox\s+for an outcome Kael can observe,\s*or another specialist without a gate-based need')
     Check 'FAST_POLICY_ELIGIBILITY' ($section -match 'one operation or a small' -and
         $section -match 'exact target/scope is known' -and $section -match 'ownership is\s+already sufficiently established' -and
         $section -match 'no new architecture' -and $section -match 'uncertain diagnosis/root cause' -and

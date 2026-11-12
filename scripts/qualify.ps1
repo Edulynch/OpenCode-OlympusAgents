@@ -80,6 +80,7 @@ function Invoke-PythonCheck([string]$Name, [string]$RelativePath, [string[]]$Ext
 
 function Invoke-FastSlice {
     Write-Output "`n######## FAST — offline-only qualification ########"
+    Invoke-Check 'Local pre-push gate' $script:Python @('-B','-m','unittest','discover','-s','tests/pre-push','-p','test_pre_push.py','-v')
     Invoke-PythonCheck 'Harness Core (safe root read-only)' 'tests/harness-core/qualify.py' @('--safe-root-read-only')
     Invoke-PythonCheck 'Codex static profile (no CLI/catalog probe)' 'tests/codex/validate_profile.py' @('--mode','static')
 

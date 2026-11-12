@@ -2,9 +2,11 @@
 
 For Olympus maintainers, contributors, installation debugging, qualification, and release engineering. For first-time setup, start with the [README](../README.md).
 
-## Optional local Gitleaks hook
+## Optional local Gitleaks and pre-push hooks
 
-The repository provides an **opt-in** `.pre-commit-config.yaml` that pins the official Gitleaks `v8.30.1` hook to a specific upstream commit. It checks the **staged changes** before a local commit and redacts secrets in its output. It is not installed by cloning OlympusAgents or by any Olympus installer; it requires [pre-commit](https://pre-commit.com/) and Go on the contributor's machine. The first run needs network access to bootstrap the pinned hook.
+The repository provides an **opt-in** `.pre-commit-config.yaml`. Its Gitleaks hook remains pinned to the official `v8.30.1` upstream commit and scans **staged changes** before a local commit. The pre-push hook runs the documentation checker for every changed push and runs the existing offline **FAST** profile whenever any changed path is not documentation-only. Root Markdown (except product-owned `CODEX.md`) and Markdown/images under `docs/` or `specs/` are documentation-only; Core/prompts, tests, code, configuration, and unknown paths select FAST. It validates the tracked/index state visible to the hook, checks a supplied `PRE_COMMIT_TO_REF` against `HEAD`, and checks `PRE_COMMIT_LOCAL_BRANCH` against `HEAD` on the all-files fallback. When a manual all-files invocation supplies no branch, the helper does not invent a target ref. The gate itself never stashes or resets user work, but pre-commit may temporarily stash and restore unstaged changes before invoking hooks; unstaged edits hidden in that manager snapshot cannot be rejected by this helper. It does not run Gitleaks, FULL, RUNTIME, or runtime/API checks during push. The gate is locally qualified on Windows with Python 3.11+ and PowerShell 7; no Linux/macOS hook support is claimed. CI and its independent secret/history gates remain mandatory.
+
+Neither hook is installed by cloning OlympusAgents or by an Olympus installer. Gitleaks requires [pre-commit](https://pre-commit.com/), Go, and network access on its first environment bootstrap. The pre-push gate uses Python's standard library and the existing FAST prerequisites; it does not install or update dependencies.
 
 Before installing any hook, inspect the effective Git hooks location and any existing `pre-commit` hook. Git's `core.hooksPath` can redirect hooks away from the default directory. In Windows PowerShell:
 
@@ -12,25 +14,36 @@ Before installing any hook, inspect the effective Git hooks location and any exi
 cd 'D:\WORKSPACE\Personal\Tools\OpenCode-OlympusAgents'
 git status --short --branch
 git branch --show-current
+git worktree list
 
 $hookDirectory = (git rev-parse --path-format=absolute --git-path hooks).Trim()
 Get-Item -LiteralPath (Join-Path $hookDirectory 'pre-commit') -ErrorAction SilentlyContinue
+Get-Item -LiteralPath (Join-Path $hookDirectory 'pre-push') -ErrorAction SilentlyContinue
 git config --show-origin --get core.hooksPath
 ```
 
-If an existing hook or custom hooks path is configured, reconcile it manually first; **do not overwrite or bypass it automatically**. Once the hook location is confirmed to be safe, the contributor may choose to install and run the local check:
+Linked worktrees share the repository's Git hooks directory, so installing the pre-push hook affects sibling worktrees too; inspect `git worktree list` and their configuration before enabling it.
+
+If an existing hook or custom hooks path is configured, reconcile it manually first; **do not overwrite or bypass it automatically**. To add only the pre-push gate while preserving an existing pre-commit hook, install this hook type explicitly (without `--overwrite`):
 
 ```powershell
 cd 'D:\WORKSPACE\Personal\Tools\OpenCode-OlympusAgents'
 git status --short --branch
 git branch --show-current
 
-py -m pip install --user pre-commit
-pre-commit install --allow-missing-config
+pre-commit --version
+pre-commit validate-config
+pre-commit install --hook-type pre-push --allow-missing-config
+```
+
+Use the `pre-commit` executable from the environment where the package is installed. `python -m pre_commit` works only when that exact `python` interpreter has the module; the `python` on `PATH` may differ from the interpreter used by `pre-commit`. The configuration also declares both hook types as defaults, so `pre-commit install --allow-missing-config` installs both when intentionally setting up a fresh hook directory. Do not use `--overwrite`; inspect and reconcile any existing hooks first. To run Gitleaks manually or install its hook separately:
+
+```powershell
+pre-commit install --hook-type pre-commit --allow-missing-config
 pre-commit run gitleaks
 ```
 
-The hook checks staged changes, not the entire repository or historical commits. `--allow-missing-config` skips the hook in older worktrees that lack this file; it does **not** provide secret scanning for those worktrees. A hook can also be bypassed locally, so the independent CI secret gate remains mandatory. CI scans tracked and non-ignored current files plus the selected Git history. Its pinned release archive is downloaded with bounded retries and may be cached by the workflow; every cached or newly downloaded archive must pass the expected SHA-256 check before execution. A missing or invalid archive fails the gate closed. A cache-write failure after a verified download does not abort scanning, because caching is optional. No credentials, findings, or executable files are shared with the local hook.
+The pre-push gate uses the pre-commit manager's supplied range; on a first push or when no range is supplied, it conservatively checks all tracked files and validates the manager-supplied local branch when available. It checks one eligible pushed ref per invocation, so push one checked-out branch at a time; it does not reconstruct multi-ref transport. `--allow-missing-config` skips hooks in older worktrees that lack this configuration; it does **not** provide secret scanning or qualification there. Local hooks can be bypassed, so CI secret and qualification gates remain mandatory. CI scans tracked and non-ignored current files plus the selected Git history. Its pinned release archive is downloaded with bounded retries and may be cached by the workflow; every cached or newly downloaded archive must pass the expected SHA-256 check before execution. A missing or invalid archive fails the gate closed. A cache-write failure after a verified download does not abort scanning, because caching is optional. No credentials, findings, or executable files are shared with the local hook.
 
 ## Architecture
 

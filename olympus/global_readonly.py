@@ -23,6 +23,7 @@ from . import config_apply, install_routing
 
 _MANIFEST = "olympus/orchestrator-install.json"
 _OPENCODE_GUARD_INTENT = "olympus/opencode-guard-pending.json"
+_GLOBAL_APPLY_SCRATCH = ".olympus-cli-config-apply"
 _HASH = re.compile(r"[0-9a-fA-F]{64}\Z")
 _POWERSHELL_VERSION = re.compile(r"(?m)^PowerShell ([0-9]+)\.")
 _CONFIG_PATH = re.compile(r"(?m)^\s*config\s{2,}(?P<path>.+?)\s*$")
@@ -148,10 +149,7 @@ def _read(root: Path, relative: str) -> bytes | None:
     return raw
 
 
-def _manifest(root: Path, harness: str, expected: dict[str, bytes] | None):
-    raw = _read(root, _MANIFEST)
-    if raw is None:
-        return None, {}, {}
+def _parse_manifest_bytes(raw: bytes, harness: str, expected: dict[str, bytes] | None):
     def reject_duplicate_keys(pairs):
         result = {}
         for key, value in pairs:
@@ -195,7 +193,15 @@ def _manifest(root: Path, harness: str, expected: dict[str, bytes] | None):
             allowed_inventory.add(frozenset(set(expected) - {"opencode.jsonc"}))
         if frozenset(entries) not in allowed_inventory:
             raise GlobalFault("unsupported_global_inventory", "Global manifest inventory does not match the current adapter inventory.")
-    return data, entries, {"sha256": hashlib.sha256(raw).hexdigest(), "path": _MANIFEST}
+    return data, entries
+
+
+def _manifest(root: Path, harness: str, expected: dict[str, bytes] | None):
+    raw = _read(root, _MANIFEST)
+    if raw is None:
+        return None, {}, {}, None
+    data, entries = _parse_manifest_bytes(raw, harness, expected)
+    return data, entries, {"sha256": hashlib.sha256(raw).hexdigest(), "path": _MANIFEST}, raw
 
 
 def _verified_files(root: Path, entries: dict[str, str]) -> dict[str, bytes]:
@@ -421,7 +427,8 @@ def _native_verify(source: Path, root: Path, harness: str, version: str) -> tupl
 
 
 def inspect(source: Path, args, response: dict, *, source_query: Callable, load_renderer: Callable,
-            release_version: Callable, assignment_query: Callable, operation: str) -> int:
+            release_version: Callable, assignment_query: Callable, operation: str,
+            plan_sink: dict | None = None) -> int:
     """Report each global harness independently and preserve the original failure."""
     selected = ("opencode", "codex") if args.harness == "all" else (args.harness,)
     response.update({"operation": operation, "context": {"scope": "global", "harness": args.harness, "source": str(source)},
@@ -430,12 +437,17 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
         response["result"] = "failed"
         response["issues"] = [{"code": "invalid_target", "message": "--target is incompatible with --scope global."}]
         return 2
-    if operation == "config apply" and getattr(args, "execute", False):
-        response["result"] = "blocked"
-        response["issues"] = [{"code": "global_execute_unavailable", "message": "Global apply requires a separate writer/rollback qualification; no execution is enabled."}]
-        return 3
     try:
         roots = resolve_roots(selected)
+        if operation in ("config apply", "doctor") and "opencode" in roots:
+            try:
+                os.lstat(roots["opencode"] / _GLOBAL_APPLY_SCRATCH)
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                raise GlobalFault("global_apply_recovery_pending", "Cannot inspect the pending global apply journal; preserve it for explicit recovery.") from error
+            else:
+                raise GlobalFault("global_apply_recovery_pending", "A global apply journal is pending; use config recover --scope global --harness opencode explicitly.")
         expected = None
         if operation != "status":
             source_data, issues = source_query(source, "config check", args.harness)
@@ -448,6 +460,7 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
 
                 user_config.apply_to_expected(source, expected["opencode"])
         current_by_harness: dict[str, dict[str, bytes]] = {}
+        apply_candidates: dict[str, dict] = {}
         changes: list[dict[str, str]] = []
         absent, blocked = [], []
         failure_codes: list[int] = []
@@ -455,7 +468,7 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
             root = roots[harness]
             response["data"]["harnesses"][harness] = {"root": str(root), "state": "unverified"}
             try:
-                manifest, entries, meta = _manifest(root, harness, expected[harness] if expected else None)
+                manifest, entries, meta, manifest_raw = _manifest(root, harness, expected[harness] if expected else None)
                 if manifest is None:
                     absent.append(harness)
                     response["data"]["harnesses"][harness]["state"] = "absent"
@@ -471,6 +484,13 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                 current_by_harness[harness] = current
                 item["integrity"] = "hash_verified"
                 if harness == "opencode":
+                    if operation == "config apply":
+                        json_file = _read(root, "opencode.json")
+                        jsonc_file = _read(root, "opencode.jsonc")
+                        if json_file is not None and jsonc_file is not None:
+                            raise GlobalFault("global_external_guard_unsafe", "Both global OpenCode config formats exist; precedence is ambiguous.")
+                        if "opencode.jsonc" in entries and json_file is not None:
+                            raise GlobalFault("global_external_guard_unsafe", "An unowned opencode.json conflicts with the Olympus-managed opencode.jsonc.")
                     if _read(root, _OPENCODE_GUARD_INTENT) is not None:
                         # The Windows writer owns pending recovery; a read-only
                         # preview must not declare an interrupted install done.
@@ -481,6 +501,12 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                         if guard_state == "missing" and operation == "config apply":
                             changes.append({"harness": "opencode", "path": "opencode.jsonc", "action": "create",
                                             "proposed_sha256": hashlib.sha256(expected[harness]["opencode.jsonc"]).hexdigest()})
+                    if operation == "config apply":
+                        apply_candidates[harness] = {
+                            "root": root, "manifest": manifest, "entries": entries,
+                            "manifest_raw": manifest_raw, "expected": expected[harness],
+                            "current": current, "guard_state": item.get("external_guard"),
+                        }
                 if harness == "codex":
                     # The native installer refuses this user-owned, higher-priority
                     # instruction file, even if every Olympus-managed byte matches.
@@ -519,10 +545,13 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
         if absent and len(absent) != len(selected):
             response["issues"].append({"code": "harness_absent", "message": "At least one selected global harness is not installed."})
         if operation == "config apply":
-            response["data"].update({"preview_only": True, "apply_available": False, "changes": changes,
+            response["data"].update({"preview_only": True, "apply_available": args.harness == "opencode", "changes": changes,
                                      "assignments": {"status": "unknown", "evidence": "not_verified", "roles": [], "roots": {}}})
             if not blocked and not absent:
                 response["data"]["assignments"] = _assignments(current_by_harness, expected, assignment_query(load_renderer(source), source))
+                if plan_sink is not None and args.harness == "opencode":
+                    plan_sink.clear()
+                    plan_sink.update(apply_candidates["opencode"])
         if blocked:
             code = 3 if 3 in failure_codes else 1
             response["result"] = "blocked" if code == 3 else "failed"

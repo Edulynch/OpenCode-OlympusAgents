@@ -226,6 +226,17 @@ class SliceA(unittest.TestCase):
         entry["sha256"] = hashlib.sha256(raw).hexdigest()
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
 
+    def make_legacy_global_opencode(self):
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest_path = root / "olympus/orchestrator-install.json"
+        original = manifest_path.read_bytes()
+        manifest = json.loads(original)
+        manifest["managed_files"] = [item for item in manifest["managed_files"]
+                                     if item["path"] != "opencode.jsonc"]
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        (root / "opencode.jsonc").unlink()
+        return manifest_path, original, manifest_path.read_bytes()
+
     def canonical_role(self, role):
         return next(item for item in cli_model_assignments(self.renderer, self.source)["roles"]
                     if item["role"] == role)
@@ -1107,7 +1118,9 @@ class SliceA(unittest.TestCase):
                     self.target, self.source, changes, manifest_path, manifest_old, manifest_new,
                     lambda: (changes, manifest_old, manifest_new),
                 )
-        self.assertTrue((self.target / ".olympus-cli-config-apply/record.json").is_file())
+        project_record = self.target / ".olympus-cli-config-apply/record.json"
+        self.assertTrue(project_record.is_file())
+        self.assertEqual(1, json.loads(project_record.read_text(encoding="utf-8"))["schema_version"])
         recovered = self.invoke_cli("config", "recover", "--scope", "project", "--target", str(self.target))
         self.assertEqual(0, recovered.returncode, recovered.stdout + recovered.stderr)
         self.assertIn("rolled_back", recovered.stdout)
@@ -1775,14 +1788,393 @@ class SliceA(unittest.TestCase):
         response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
         self.assertEqual("unsafe_global_resource", response["issues"][0]["code"])
 
-    def test_slice_c7_global_execute_and_recovery_remain_blocked(self):
+    def test_slice_c7_global_all_execute_and_unlocked_recovery_remain_blocked(self):
         self.create_global_managed_install()
         response = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--execute", code=3)
         self.assertEqual("blocked", response["result"])
-        self.assertEqual("global_execute_unavailable", response["issues"][0]["code"])
-        # Global recovery has no independently qualified journal or writer.
+        self.assertEqual("global_harness_unsupported", response["issues"][0]["code"])
+        # Global recovery never creates a lock just to discover an empty profile.
         recovery = self.query("config", "recover", "--scope", "global")
         self.assertEqual(3, recovery.returncode, recovery.stdout + recovery.stderr)
+        for harness in ("codex", "all"):
+            with self.subTest(recovery_harness=harness):
+                before = self.snapshot()
+                result = self.invoke_cli("config", "recover", "--scope", "global", "--harness", harness)
+                self.assertEqual(3, result.returncode, result.stdout + result.stderr)
+                self.assertIn("global_harness_unsupported", result.stderr)
+                self.assertEqual(before, self.snapshot())
+
+    def test_slice_c8_global_apply_noop_updates_and_preserves_unowned_bytes(self):
+        self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        before_noop = self.snapshot()
+        noop = self.invoke_cli("config", "apply", "--scope", "global", "--harness", "opencode", "--execute", "--json")
+        self.assertEqual(0, noop.returncode, noop.stdout + noop.stderr)
+        self.assertEqual("no_changes", json.loads(noop.stdout)["result"])
+        self.assertEqual(before_noop, self.snapshot(), "A global no-op must not create a lock or journal")
+
+        user_bytes = b"user-owned bytes\x00\xff\r\n"
+        user_file = root / "custom-user-file.bin"
+        user_file.write_bytes(user_bytes)
+        role = self.source / "olympus/harnesses/opencode/agent-prompts/veyra.md"
+        role.write_text(role.read_text(encoding="utf-8") + "\nIssue 122 isolated renderer delta.\n", encoding="utf-8")
+        self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
+        expected = (self.source / ".opencode/agents/veyra.md").read_bytes()
+        applied = self.invoke_cli("config", "apply", "--scope", "global", "--harness", "opencode", "--execute", "--json")
+        self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
+        response = json.loads(applied.stdout)
+        self.assertEqual("ok", response["result"])
+        self.assertEqual("committed", response["data"]["execution"])
+        self.assertEqual(expected, (root / "agents/veyra.md").read_bytes())
+        self.assertEqual(user_bytes, user_file.read_bytes())
+        manifest = json.loads((root / "olympus/orchestrator-install.json").read_text(encoding="utf-8"))
+        entry = next(item for item in manifest["managed_files"] if item["path"] == "agents/veyra.md")
+        self.assertEqual(hashlib.sha256(expected).hexdigest(), entry["sha256"])
+        self.assertTrue((root / ".olympus-cli-edit.lock").is_file())
+        self.assertFalse((root / ".olympus-cli-config-apply").exists())
+
+    def test_slice_c8_global_apply_rejects_codex_all_drift_conflict_and_unsafe_guard(self):
+        self.create_global_managed_install()
+        for harness in ("codex", "all"):
+            with self.subTest(harness=harness):
+                before = self.snapshot()
+                result = self.invoke_cli("config", "apply", "--scope", "global", "--harness", harness,
+                                         "--execute", "--json")
+                self.assertEqual(3, result.returncode, result.stdout + result.stderr)
+                response = json.loads(result.stdout)
+                self.assertEqual("global_harness_unsupported", response["issues"][0]["code"])
+                self.assertEqual(before, self.snapshot())
+                self.assertFalse((Path(self.env["OPENCODE_CONFIG_DIR"]) / ".olympus-cli-edit.lock").exists())
+
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        managed = root / "agents/kael.md"
+        managed.write_bytes(managed.read_bytes() + b"foreign drift\n")
+        before = self.snapshot()
+        drift = self.invoke_cli("config", "apply", "--scope", "global", "--harness", "opencode", "--execute", "--json")
+        self.assertEqual(1, drift.returncode, drift.stdout + drift.stderr)
+        self.assertEqual("global_managed_file_drift", json.loads(drift.stdout)["issues"][0]["code"])
+        self.assertEqual("not_started", json.loads(drift.stdout)["data"]["execution"])
+        self.assertEqual(before, self.snapshot())
+        self.assertFalse((root / ".olympus-cli-edit.lock").exists())
+
+        for variable in ("OPENCODE_CONFIG_DIR", "CODEX_HOME"):
+            path = Path(self.env[variable])
+            shutil.rmtree(path)
+            path.mkdir()
+        self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest_path = root / "olympus/orchestrator-install.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["managed_files"].append({"path": "foreign.txt", "sha256": "0" * 64})
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        before = self.snapshot()
+        foreign = self.invoke_cli("config", "apply", "--scope", "global", "--harness", "opencode", "--execute", "--json")
+        self.assertEqual(3, foreign.returncode, foreign.stdout + foreign.stderr)
+        self.assertEqual("unsupported_global_inventory", json.loads(foreign.stdout)["issues"][0]["code"])
+        self.assertEqual(before, self.snapshot())
+        self.assertFalse((root / ".olympus-cli-edit.lock").exists())
+
+        for variable in ("OPENCODE_CONFIG_DIR", "CODEX_HOME"):
+            path = Path(self.env[variable])
+            shutil.rmtree(path)
+            path.mkdir()
+        self.create_global_managed_install(("opencode",))
+        self.make_legacy_global_opencode()
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        (root / "opencode.json").write_bytes(b"unowned competing config")
+        before = self.snapshot()
+        conflict = self.invoke_cli("config", "apply", "--scope", "global", "--harness", "opencode", "--execute", "--json")
+        self.assertEqual(3, conflict.returncode, conflict.stdout + conflict.stderr)
+        self.assertEqual("global_external_guard_unsafe", json.loads(conflict.stdout)["issues"][0]["code"])
+        self.assertEqual(before, self.snapshot())
+        self.assertFalse((root / ".olympus-cli-edit.lock").exists())
+
+        for variable in ("OPENCODE_CONFIG_DIR", "CODEX_HOME"):
+            path = Path(self.env[variable])
+            shutil.rmtree(path)
+            path.mkdir()
+        self.create_global_managed_install(("opencode",))
+        self.make_legacy_global_opencode()
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        (root / "opencode.jsonc").write_text(
+            '{"permissions":[{"action":"external_directory","resource":"*","effect":"allow"}]}',
+            encoding="utf-8",
+        )
+        before = self.snapshot()
+        unsafe = self.invoke_cli("config", "apply", "--scope", "global", "--harness", "opencode", "--execute", "--json")
+        self.assertEqual(3, unsafe.returncode, unsafe.stdout + unsafe.stderr)
+        self.assertEqual("global_external_guard_unsafe", json.loads(unsafe.stdout)["issues"][0]["code"])
+        self.assertEqual(before, self.snapshot())
+        self.assertFalse((root / ".olympus-cli-edit.lock").exists())
+
+    def test_slice_c8_global_apply_preserves_safe_legacy_user_config_without_adoption(self):
+        self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        self.make_legacy_global_opencode()
+        user_config = b'{"permissions":[{"action":"external_directory","resource":"*","effect":"deny"}]}\n'
+        (root / "opencode.jsonc").write_bytes(user_config)
+        prompt = self.source / "olympus/harnesses/opencode/agent-prompts/veyra.md"
+        prompt.write_text(prompt.read_text(encoding="utf-8") + "\nPreserve legacy user guard.\n", encoding="utf-8")
+        self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
+        expected = (self.source / ".opencode/agents/veyra.md").read_bytes()
+
+        applied = self.invoke_cli("config", "apply", "--scope", "global", "--harness", "opencode", "--execute", "--json")
+        self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
+        self.assertEqual(expected, (root / "agents/veyra.md").read_bytes())
+        self.assertEqual(user_config, (root / "opencode.jsonc").read_bytes())
+        manifest = json.loads((root / "olympus/orchestrator-install.json").read_text(encoding="utf-8"))
+        self.assertEqual(13, len(manifest["managed_files"]))
+        self.assertNotIn("opencode.jsonc", {item["path"] for item in manifest["managed_files"]})
+
+    def test_slice_c8_global_apply_blocks_a_pending_journal_before_lock_or_writes(self):
+        self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        journal = root / ".olympus-cli-config-apply"
+        journal.mkdir()
+        (journal / "record.json").write_bytes(b"incomplete pending record")
+        before = self.snapshot()
+
+        result = self.invoke_cli("config", "apply", "--scope", "global", "--harness", "opencode", "--execute", "--json")
+        self.assertEqual(3, result.returncode, result.stdout + result.stderr)
+        self.assertEqual("global_apply_recovery_pending", json.loads(result.stdout)["issues"][0]["code"])
+        self.assertEqual("not_started", json.loads(result.stdout)["data"]["execution"])
+        self.assertEqual(before, self.snapshot())
+        self.assertFalse((root / ".olympus-cli-edit.lock").exists())
+
+    def test_slice_c8_global_apply_revalidates_resolved_root_under_lock(self):
+        self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        alternate = self.sandbox / "alternate_opencode_root"
+        shutil.copytree(root, alternate)
+        original_agent = (root / "agents/veyra.md").read_bytes()
+        original_manifest = (root / "olympus/orchestrator-install.json").read_bytes()
+        prompt = self.source / "olympus/harnesses/opencode/agent-prompts/veyra.md"
+        prompt.write_text(prompt.read_text(encoding="utf-8") + "\nRoot-drift fixture delta.\n", encoding="utf-8")
+        self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
+
+        with mock.patch("olympus.global_readonly.resolve_roots",
+                        side_effect=({"opencode": root}, {"opencode": alternate})):
+            code, output, errors = self.call_main(
+                "config", "apply", "--scope", "global", "--harness", "opencode", "--execute",
+            )
+        self.assertEqual(3, code, output + errors)
+        self.assertIn("global OpenCode root changed after preview", output + errors)
+        self.assertEqual(original_agent, (root / "agents/veyra.md").read_bytes())
+        self.assertEqual(original_manifest, (root / "olympus/orchestrator-install.json").read_bytes())
+        self.assertEqual(original_agent, (alternate / "agents/veyra.md").read_bytes())
+        self.assertEqual(original_manifest, (alternate / "olympus/orchestrator-install.json").read_bytes())
+        self.assertFalse((root / ".olympus-cli-config-apply").exists())
+        self.assertFalse((alternate / ".olympus-cli-edit.lock").exists())
+
+    def test_slice_c8_global_recovery_can_resume_an_interrupted_rollback(self):
+        self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        managed = root / "agents/veyra.md"
+        manifest = root / "olympus/orchestrator-install.json"
+        old_agent, old_manifest = managed.read_bytes(), manifest.read_bytes()
+        prompt = self.source / "olympus/harnesses/opencode/agent-prompts/veyra.md"
+        prompt.write_text(prompt.read_text(encoding="utf-8") + "\nInterrupted rollback fixture.\n", encoding="utf-8")
+        self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
+        new_agent = (self.source / ".opencode/agents/veyra.md").read_bytes()
+
+        original_replace = os.replace
+
+        def interrupt_after_manifest(source, destination):
+            result = original_replace(source, destination)
+            if Path(destination) == manifest:
+                raise KeyboardInterrupt
+            return result
+
+        with mock.patch.dict(os.environ, self.env, clear=True), \
+             mock.patch("olympus.config_apply_transaction.os.replace", side_effect=interrupt_after_manifest):
+            code, output, errors = self.call_main(
+                "config", "apply", "--scope", "global", "--harness", "opencode", "--execute",
+            )
+        self.assertEqual(4, code, output + errors)
+        self.assertEqual(new_agent, managed.read_bytes())
+        new_manifest = manifest.read_bytes()
+        self.assertNotEqual(old_manifest, new_manifest)
+
+        interrupted = False
+
+        def interrupt_rollback(source, destination):
+            nonlocal interrupted
+            result = original_replace(source, destination)
+            if Path(destination) == managed and not interrupted:
+                interrupted = True
+                raise KeyboardInterrupt
+            return result
+
+        with mock.patch.dict(os.environ, self.env, clear=True), \
+             mock.patch("olympus.config_apply_transaction.os.replace", side_effect=interrupt_rollback):
+            rollback_code, rollback_output, rollback_errors = self.call_main(
+                "config", "recover", "--scope", "global", "--harness", "opencode",
+            )
+        self.assertEqual(4, rollback_code, rollback_output + rollback_errors)
+        self.assertTrue(interrupted)
+        self.assertEqual(old_agent, managed.read_bytes())
+        self.assertEqual(new_manifest, manifest.read_bytes())
+        self.assertTrue((root / ".olympus-cli-config-apply/record.json").is_file())
+
+        with mock.patch.dict(os.environ, self.env, clear=True):
+            recovered, recovery_output, recovery_errors = self.call_main(
+                "config", "recover", "--scope", "global", "--harness", "opencode",
+            )
+        self.assertEqual(0, recovered, recovery_output + recovery_errors)
+        self.assertIn("rolled_back", recovery_output)
+        self.assertEqual(old_manifest, manifest.read_bytes())
+        self.assertFalse((root / ".olympus-cli-config-apply").exists())
+
+    def test_slice_c8_global_recovery_cleans_a_committed_journal(self):
+        self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        managed = root / "agents/veyra.md"
+        prompt = self.source / "olympus/harnesses/opencode/agent-prompts/veyra.md"
+        prompt.write_text(prompt.read_text(encoding="utf-8") + "\nCommitted cleanup fixture.\n", encoding="utf-8")
+        self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
+        expected = (self.source / ".opencode/agents/veyra.md").read_bytes()
+        original_cleanup = config_apply_transaction._cleanup_scratch
+
+        def interrupt_cleanup(*args, **kwargs):
+            if kwargs.get("allowed_states") == {"COMMITTED"}:
+                raise KeyboardInterrupt
+            return original_cleanup(*args, **kwargs)
+
+        with mock.patch.dict(os.environ, self.env, clear=True), \
+             mock.patch("olympus.config_apply_transaction._cleanup_scratch", side_effect=interrupt_cleanup):
+            code, output, errors = self.call_main(
+                "config", "apply", "--scope", "global", "--harness", "opencode", "--execute",
+            )
+        self.assertEqual(4, code, output + errors)
+        self.assertEqual(expected, managed.read_bytes())
+        journal = root / ".olympus-cli-config-apply"
+        self.assertEqual("COMMITTED", json.loads((journal / "record.json").read_text(encoding="utf-8"))["state"])
+
+        with mock.patch.dict(os.environ, self.env, clear=True):
+            recovered, recovery_output, recovery_errors = self.call_main(
+                "config", "recover", "--scope", "global", "--harness", "opencode",
+            )
+            repeated, repeat_output, _ = self.call_main(
+                "config", "recover", "--scope", "global", "--harness", "opencode",
+            )
+        self.assertEqual(0, recovered, recovery_output + recovery_errors)
+        self.assertIn("committed_cleanup", recovery_output)
+        self.assertEqual(0, repeated, repeat_output)
+        self.assertIn("no_changes", repeat_output)
+        self.assertEqual(expected, managed.read_bytes())
+        self.assertFalse(journal.exists())
+
+    def test_slice_c8_global_apply_legacy_guard_recovery_is_explicit_and_repeatable(self):
+        self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest_path, _, legacy_manifest = self.make_legacy_global_opencode()
+        user_bytes = b"unowned and preserved\x00\xff"
+        (root / "custom-user-file.bin").write_bytes(user_bytes)
+        original = config_apply_transaction._create_global_file
+
+        def interrupt_after_create(*args, **kwargs):
+            original(*args, **kwargs)
+            raise KeyboardInterrupt
+
+        with mock.patch.dict(os.environ, self.env, clear=True), \
+             mock.patch("olympus.config_apply_transaction._create_global_file", side_effect=interrupt_after_create):
+            code, output, errors = self.call_main("config", "apply", "--scope", "global", "--harness", "opencode", "--execute")
+        self.assertEqual(4, code, output + errors)
+        self.assertIn("config recover --scope global --harness opencode", output + errors)
+        self.assertIn("preview_only: false", output)
+        self.assertIn('execution: "unconfirmed"', output)
+        guard = root / "opencode.jsonc"
+        self.assertTrue(guard.is_file())
+        journal = root / ".olympus-cli-config-apply"
+        record = json.loads((journal / "record.json").read_text(encoding="utf-8"))
+        self.assertEqual((2, "global", "PREPARED"),
+                         (record["schema_version"], record["scope"], record["state"]))
+        self.assertEqual(legacy_manifest, manifest_path.read_bytes())
+
+        with mock.patch.dict(os.environ, self.env, clear=True):
+            recovered, output, recovery_error = self.call_main("config", "recover", "--scope", "global", "--harness", "opencode")
+            repeated, repeat_output, _ = self.call_main("config", "recover", "--scope", "global", "--harness", "opencode")
+        self.assertEqual(0, recovered, output + recovery_error)
+        self.assertIn("rolled_back", output)
+        self.assertEqual(0, repeated, repeat_output)
+        self.assertIn("no_changes", repeat_output)
+        self.assertFalse(guard.exists())
+        self.assertEqual(legacy_manifest, manifest_path.read_bytes())
+        self.assertEqual(user_bytes, (root / "custom-user-file.bin").read_bytes())
+        self.assertFalse(journal.exists())
+
+    def test_slice_c8_global_recovery_preserves_unknown_guard_bytes(self):
+        self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest_path, _, legacy_manifest = self.make_legacy_global_opencode()
+        original = config_apply_transaction._create_global_file
+
+        def interrupt_after_create(*args, **kwargs):
+            original(*args, **kwargs)
+            raise KeyboardInterrupt
+
+        with mock.patch.dict(os.environ, self.env, clear=True), \
+             mock.patch("olympus.config_apply_transaction._create_global_file", side_effect=interrupt_after_create):
+            code, _, _ = self.call_main("config", "apply", "--scope", "global", "--harness", "opencode", "--execute")
+        self.assertEqual(4, code)
+        foreign = b"foreign bytes after interrupted guard creation"
+        guard = root / "opencode.jsonc"
+        guard.write_bytes(foreign)
+        with mock.patch.dict(os.environ, self.env, clear=True):
+            recovered, output, recovery_error = self.call_main("config", "recover", "--scope", "global", "--harness", "opencode")
+        self.assertEqual(4, recovered, output + recovery_error)
+        self.assertIn("foreign third state", output + recovery_error)
+        self.assertEqual(foreign, guard.read_bytes())
+        self.assertEqual(legacy_manifest, manifest_path.read_bytes())
+        self.assertTrue((root / ".olympus-cli-config-apply/record.json").is_file())
+
+    @unittest.skipUnless(os.name == "nt" and shutil.which("pwsh"), "Cross-runtime target lock requires Windows PowerShell 7")
+    def test_slice_c8_global_apply_and_installer_share_python_powershell_lock(self):
+        self.create_global_managed_install(("opencode",))
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest = root / "olympus/orchestrator-install.json"
+        manifest_before = manifest.read_bytes()
+        lock = source_edit._acquire_lock(root, create=True)
+        script = self.source / "scripts/global-install.ps1"
+        try:
+            native = subprocess.run(
+                [shutil.which("pwsh"), "-NoProfile", "-NonInteractive", "-File", str(script),
+                 "-Harness", "opencode", "-SourceVersion", self.source_version, "-Update"],
+                cwd=self.source, env=self.env, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=30, check=False,
+            )
+        finally:
+            source_edit._release_lock(lock)
+        self.assertNotEqual(0, native.returncode, native.stdout + native.stderr)
+        self.assertIn("OLYMPUS_TARGET_LOCK_BUSY", native.stdout + native.stderr)
+        self.assertEqual(manifest_before, manifest.read_bytes())
+
+        role = self.source / "olympus/harnesses/opencode/agent-prompts/veyra.md"
+        role.write_text(role.read_text(encoding="utf-8") + "\nPowerShell-held lock fixture delta.\n", encoding="utf-8")
+        self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
+        helper = self.source / "scripts/target-writer-lock.ps1"
+        ps_quote = lambda value: str(value).replace("'", "''")
+        body = (f". '{ps_quote(helper)}'; $l = Enter-OlympusTargetWriterLock '{ps_quote(root)}'; "
+                "[Console]::Out.WriteLine('LOCKED'); [Console]::Out.Flush(); "
+                "Start-Sleep -Seconds 8; Exit-OlympusTargetWriterLock $l")
+        process = subprocess.Popen([shutil.which("pwsh"), "-NoProfile", "-NonInteractive", "-Command", body],
+                                   cwd=self.source, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, encoding="utf-8")
+        try:
+            self.assertEqual("LOCKED", process.stdout.readline().strip())
+            before = {path.name: path.read_bytes() for path in (manifest, root / "agents/veyra.md")}
+            blocked = self.invoke_cli("config", "apply", "--scope", "global", "--harness", "opencode", "--execute", "--json")
+            self.assertEqual(3, blocked.returncode, blocked.stdout + blocked.stderr)
+            response = json.loads(blocked.stdout)
+            self.assertEqual("blocked", response["result"])
+            self.assertEqual("not_started", response["data"]["execution"])
+            self.assertIn("stable global target writer lock", response["issues"][0]["message"])
+            self.assertEqual(before, {path.name: path.read_bytes() for path in (manifest, root / "agents/veyra.md")})
+            self.assertFalse((root / ".olympus-cli-config-apply").exists())
+        finally:
+            if process.poll() is None:
+                process.terminate()
+            process.communicate(timeout=15)
 
     def test_slice_c7_global_doctor_native_gate_is_explicit(self):
         self.create_global_managed_install()

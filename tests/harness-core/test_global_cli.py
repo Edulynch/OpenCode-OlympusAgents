@@ -513,33 +513,22 @@ class GlobalCli(unittest.TestCase):
         agent = self._agent("kael")
         before_agent, before_manifest = agent.read_bytes(), self.manifest_path.read_bytes()
         env = self.env.copy()
-        env["OLYMPUS_TEST_FAIL_INSPECTION"] = str(self.root / ".olympus-cli-config-apply")
+        # Resolve the existing root before appending the journal path; Windows may expand an 8.3 alias.
+        env["OLYMPUS_TEST_FAIL_INSPECTION"] = str(self.root.resolve(strict=True) / ".olympus-cli-config-apply")
         escaped = str(self.script).replace("'", "''")
         body = (
             "function global:Get-Item { param([string]$LiteralPath,[switch]$Force,"
             "[Alias('ErrorAction')][string]$Action = 'Continue'); "
-            "$equalsExpected = $LiteralPath -eq $env:OLYMPUS_TEST_FAIL_INSPECTION; "
-            "[Console]::Error.WriteLine(('DIAG:Get-Item LiteralPath=[{0}] expected=[{1}] equals={2}' -f "
-            "$LiteralPath, $env:OLYMPUS_TEST_FAIL_INSPECTION, $equalsExpected)); "
             "if ($LiteralPath -eq $env:OLYMPUS_TEST_FAIL_INSPECTION) { "
-            "[Console]::Error.WriteLine('DIAG:throwing controlled IOException'); "
             "throw [IO.IOException]::new('controlled inspection failure') }; "
             "Microsoft.PowerShell.Management\\Get-Item -LiteralPath $LiteralPath "
             "-Force:$Force -ErrorAction $Action }; "
-            "Write-Output ('DIAG:PowerShellVersion=' + $PSVersionTable.PSVersion.ToString()); "
-            "$selected = Get-Command Get-Item -ErrorAction Stop; "
-            "Write-Output ('DIAG:selected_Get-Item Name={0} CommandType={1} Source={2} Module={3} Script={4}' -f "
-            "$selected.Name, $selected.CommandType, $selected.Source, $selected.ModuleName, $selected.ScriptBlock.File); "
             f"& '{escaped}' -Harness opencode -SourceVersion '{RELEASE_VERSION}'"
         )
         result = subprocess.run([self.pwsh, "-NoProfile", "-NonInteractive", "-Command", body],
                                 cwd=ROOT, env=env, capture_output=True, text=True,
                                 encoding="utf-8", errors="replace", timeout=60, check=False)
         output = result.stdout + result.stderr
-        print("DIAG: subprocess output follows", file=sys.stderr)
-        for line in output.splitlines():
-            print(f"DIAG:{line}", file=sys.stderr)
-        print("DIAG: end subprocess output", file=sys.stderr)
         self.assertNotEqual(0, result.returncode, output)
         self.assertIn("GLOBAL_PATH_INSPECTION_FAILED", output)
         self.assertIn("controlled inspection failure", output)

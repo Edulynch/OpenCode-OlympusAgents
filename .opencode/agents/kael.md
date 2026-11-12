@@ -886,6 +886,8 @@ rule does not weaken result-consumption semantics.
 
 ## Task contracts
 
+Compact by omitting redundancy, never by merging words in natural prose; preserve natural spacing, fields, code and identifiers, evidence, scope, conditions, and security constraints.
+
 Send a complete, repository-relative contract. Read-only tasks use:
 
 TASK_ID:

@@ -99,6 +99,11 @@ def yaml_frontmatter(text: str) -> tuple[str, int] | None:
 
 def kael_compact_contract_checks(prompt_text: str) -> dict[str, bool]:
     marker = "#### Kovan example (illustrative only; not authority)"
+    compaction_rule = (
+        "Compact by omitting redundancy, never by merging words in natural prose; "
+        "preserve natural spacing, fields, code and identifiers, evidence, scope, "
+        "conditions, and security constraints."
+    )
     match = re.search(
         r"(?ms)^#### Kovan example \(illustrative only; not authority\)[ \t]*\n.*?^```text[ \t]*\n(.*?)^```[ \t]*(?:\n|$)",
         prompt_text,
@@ -108,6 +113,7 @@ def kael_compact_contract_checks(prompt_text: str) -> dict[str, bool]:
         "KAEL_KOVAN_EXAMPLE_REJECTS_MISSING_FIELD",
         "KAEL_KOVAN_EXAMPLE_REJECTS_MISSING_GRANT",
         "KAEL_KOVAN_EXAMPLE_REJECTS_MISSING_SCOPE",
+        "KAEL_COMPACTION_PRESERVES_NATURAL_SPACING",
     )
     if prompt_text.count(marker) != 1 or match is None:
         return dict.fromkeys(names, False)
@@ -147,6 +153,7 @@ def kael_compact_contract_checks(prompt_text: str) -> dict[str, bool]:
         names[1]: not complete(without("READ_SCOPE")),
         names[2]: not complete(without("AUTHORITY_GRANT")),
         names[3]: not complete(without("WRITE_SCOPE")),
+        names[4]: prompt_text.count(compaction_rule) == 1,
     }
 
 

@@ -106,6 +106,187 @@ class PushSelectionTests(unittest.TestCase):
                 pre_push.require_clean_tracked_tree()
 
 
+class RunCheckEnvironmentTests(unittest.TestCase):
+    def test_run_check_removes_only_git_local_vars_from_child_environment(self) -> None:
+        local_vars = b"GIT_DIR\nGIT_WORK_TREE\nGIT_COMMON_DIR\nGIT_INDEX_FILE\nGIT_CONFIG_PARAMETERS\n"
+        values = {
+            "GIT_DIR": "outer-git-dir",
+            "GIT_WORK_TREE": "outer-worktree",
+            "GIT_COMMON_DIR": "outer-common-dir",
+            "GIT_INDEX_FILE": "outer-index",
+            "GIT_CONFIG_PARAMETERS": "'core.bare=true'",
+            "GIT_SSH_COMMAND": "ssh -o BatchMode=yes",
+            "PATH": "fixture-path",
+            "PRE_COMMIT_FROM_REF": "from-sentinel",
+            "PRE_COMMIT_TO_REF": "to-sentinel",
+        }
+        with patch.dict(os.environ, values, clear=False):
+            parent_before = os.environ.copy()
+            with patch.object(pre_push, "git_output", return_value=local_vars) as enumerate_vars, patch.object(
+                pre_push.subprocess, "run", return_value=subprocess.CompletedProcess(["check"], 0)
+            ) as run:
+                pre_push.run_check("fixture", ["check"])
+
+            enumerate_vars.assert_called_once_with(["rev-parse", "--local-env-vars"])
+            run.assert_called_once()
+            child_env = run.call_args.kwargs["env"]
+            self.assertIsNot(child_env, os.environ)
+            for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_CONFIG_PARAMETERS"):
+                self.assertNotIn(name, child_env)
+            for name in ("GIT_SSH_COMMAND", "PATH", "PRE_COMMIT_FROM_REF", "PRE_COMMIT_TO_REF"):
+                self.assertEqual(child_env[name], values[name])
+            self.assertEqual(os.environ, parent_before)
+
+    def test_run_check_does_not_launch_child_if_git_env_enumeration_fails(self) -> None:
+        with patch.object(pre_push, "git_output", side_effect=pre_push.GateError("Git unavailable")) as enumerate_vars, patch.object(
+            pre_push.subprocess, "run"
+        ) as run:
+            with self.assertRaisesRegex(pre_push.GateError, "Git unavailable"):
+                pre_push.run_check("fixture", ["check"])
+        enumerate_vars.assert_called_once_with(["rev-parse", "--local-env-vars"])
+        run.assert_not_called()
+
+    def test_run_check_isolates_nested_git_fixture_from_outer_repository(self) -> None:
+        local_names = pre_push.git_output(["rev-parse", "--local-env-vars"]).decode("ascii").splitlines()
+        clean_env = os.environ.copy()
+        for name in local_names:
+            clean_env.pop(name, None)
+        fixture_root = Path(os.environ.get("OLYMPUS_TEST_ROOT", tempfile.gettempdir()))
+        self.assertTrue(fixture_root.is_dir())
+
+        with tempfile.TemporaryDirectory(prefix="pre-push-env-", dir=fixture_root) as directory:
+            fixture = Path(directory)
+            outer = fixture / "outer"
+            inner = fixture / "inner"
+            outer.mkdir()
+            inner.mkdir()
+            outer_readme = outer / "README.md"
+            outer_readme.write_text("outer sentinel\n", encoding="utf-8")
+            outer_readme_bytes = outer_readme.read_bytes()
+            (inner / "README.md").write_text("inner sentinel\n", encoding="utf-8")
+
+            for command in (
+                ["git", "init", "--quiet", str(outer)],
+                ["git", "-C", str(outer), "config", "core.bare", "false"],
+                ["git", "-C", str(outer), "add", "--", "README.md"],
+                [
+                    "git", "-C", str(outer), "-c", "user.name=Fixture",
+                    "-c", "user.email=fixture@example.invalid",
+                    "commit", "--quiet", "-m", "outer sentinel",
+                ],
+            ):
+                subprocess.run(command, cwd=ROOT, env=clean_env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            outer_gitdir = Path(
+                subprocess.run(
+                    ["git", "-C", str(outer), "rev-parse", "--absolute-git-dir"],
+                    cwd=ROOT, env=clean_env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                ).stdout.strip()
+            )
+            outer_index = Path(
+                subprocess.run(
+                    ["git", "-C", str(outer), "rev-parse", "--git-path", "index"],
+                    cwd=ROOT, env=clean_env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                ).stdout.strip()
+            )
+            if not outer_index.is_absolute():
+                outer_index = outer / outer_index
+            outer_head = subprocess.run(
+                ["git", "-C", str(outer), "rev-parse", "HEAD"],
+                cwd=ROOT, env=clean_env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            ).stdout.strip()
+            outer_index_bytes = outer_index.read_bytes()
+            outer_config_bytes = (outer_gitdir / "config").read_bytes()
+            outer_status = subprocess.run(
+                ["git", "-C", str(outer), "status", "--porcelain=v1", "--untracked-files=all"],
+                cwd=ROOT, env=clean_env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            ).stdout
+            outer_entries = subprocess.run(
+                ["git", "-C", str(outer), "ls-files", "--stage"],
+                cwd=ROOT, env=clean_env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            ).stdout
+            self.assertEqual(
+                subprocess.run(
+                    ["git", "-C", str(outer), "config", "--local", "--get", "core.bare"],
+                    cwd=ROOT, env=clean_env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                ).stdout.strip(),
+                "false",
+            )
+
+            child = """
+import os
+import subprocess
+import sys
+
+inner = sys.argv[1]
+def git(*args):
+    result = subprocess.run(
+        ["git", "-C", inner, *args], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    if result.returncode:
+        raise SystemExit(result.stderr.decode("utf-8", errors="replace"))
+
+git("init", "--quiet")
+git("add", "--", "README.md")
+git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+    "commit", "--quiet", "-m", "inner sentinel")
+top = subprocess.run(
+    ["git", "-C", inner, "rev-parse", "--show-toplevel"],
+    check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+).stdout.strip()
+assert os.path.samefile(top, inner)
+assert os.environ.get("GIT_SSH_COMMAND") == "ssh -o BatchMode=yes"
+assert os.environ.get("PRE_COMMIT_FROM_REF") == "from-sentinel"
+for name in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+    assert name not in os.environ, name
+"""
+            controlled_env = clean_env.copy()
+            controlled_env.update(
+                {
+                    "GIT_DIR": str(outer_gitdir),
+                    "GIT_COMMON_DIR": str(outer_gitdir),
+                    "GIT_WORK_TREE": str(outer),
+                    "GIT_INDEX_FILE": str(outer_index),
+                    "GIT_SSH_COMMAND": "ssh -o BatchMode=yes",
+                    "PRE_COMMIT_FROM_REF": "from-sentinel",
+                }
+            )
+            with patch.dict(os.environ, controlled_env, clear=True), patch.object(pre_push, "ROOT", outer):
+                parent_before = os.environ.copy()
+                pre_push.run_check("nested Git fixture", [sys.executable, "-c", child, str(inner)])
+                self.assertEqual(os.environ, parent_before)
+
+            inner_head = subprocess.run(
+                ["git", "-C", str(inner), "rev-parse", "HEAD"],
+                cwd=ROOT, env=clean_env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            ).stdout.strip()
+            self.assertTrue(inner_head)
+            self.assertEqual(outer_readme.read_bytes(), outer_readme_bytes)
+            self.assertEqual((outer_gitdir / "config").read_bytes(), outer_config_bytes)
+            self.assertEqual(outer_index.read_bytes(), outer_index_bytes)
+            self.assertEqual(
+                subprocess.run(
+                    ["git", "-C", str(outer), "rev-parse", "HEAD"],
+                    cwd=ROOT, env=clean_env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                ).stdout.strip(),
+                outer_head,
+            )
+            self.assertEqual(
+                subprocess.run(
+                    ["git", "-C", str(outer), "status", "--porcelain=v1", "--untracked-files=all"],
+                    cwd=ROOT, env=clean_env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                ).stdout,
+                outer_status,
+            )
+            self.assertEqual(
+                subprocess.run(
+                    ["git", "-C", str(outer), "ls-files", "--stage"],
+                    cwd=ROOT, env=clean_env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                ).stdout,
+                outer_entries,
+            )
+
+
 @unittest.skipUnless(importlib.util.find_spec("pre_commit"), "pre-commit is not installed in this Python")
 class LocalBarePushTests(unittest.TestCase):
     def test_installed_gate_blocks_failed_fast_without_updating_local_bare_remote(self) -> None:

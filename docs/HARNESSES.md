@@ -17,7 +17,7 @@ guarantee.
 | `olympus/policies/authority.md` | Canonical ALLOW / ASK / DENY meaning. |
 | `olympus/policies/maintenance-context.md` | Repository identity, contextual maintenance routing, goal-first execution, and the external-project ownership boundary. |
 | `olympus/harnesses/capabilities.toml` | The two-harness capability contract (`SUPPORTED`, `ADAPTABLE`, `PARTIAL`, `GAP`, `NOT_NEEDED`). |
-| `olympus/harnesses/opencode/` | OpenCode permission/frontmatter, native role-prompt representation, default config, shared Serena MCP registration, and activity plugin sources. |
+| `olympus/harnesses/opencode/` | OpenCode permission/frontmatter, native role-prompt representation, default config, and activity plugin sources. |
 | `olympus/harnesses/codex/` | Codex-native role-prompt representation, root instructions, project config, and permission profile. Contextual Olympus maintenance remains a declared capability gap. |
 
 Adapter prompt files intentionally contain runtime-specific instructions, not
@@ -258,12 +258,15 @@ supported-state evidence.
 The OpenCode project adapter provides Kael, normal specialists, native ASK,
 hard DENY, Activity HUD, models, permissions, and installer-managed resources.
 Contextual Olympus maintenance uses the same Kael workflow; the current 11-role
-candidate requires its own runtime evidence. OpenCode's project config registers
-one native `serena` MCP server (`serena start-mcp-server`, project-from-cwd,
-stdio, Code Mode disabled) so Kael, Veyra, and Kovan can use read-only Serena
-symbol-navigation tools. This requires the Serena CLI on `PATH`; the generated
-agent permissions intentionally do not expose Serena editing tools. The actual
-server/tool result remains a runtime dependency, not a prompt-only guarantee.
+candidate requires its own runtime evidence. The OpenCode adapter does not
+register any MCP server. MCP is optional user/host configuration: Olympus does
+not require an MCP CLI on `PATH`, install Serena, or manage the user's MCP
+settings. If a user or host separately makes Serena tools available, the
+canonical Olympus configuration keeps their grants limited to read-only
+symbol-navigation tools for Kael, Veyra, and Kovan, with the global `serena_*`
+denial and mutation-tool defenses preserved. These conditional grants are not a
+Serena prerequisite or a guarantee against host-level MCP failures; normal
+non-MCP tools remain subject to their configured permissions.
 Global discovery is separately
 qualified above for isolated Windows V2.0.26; no model-backed prompt is implied.
 Codex installation does not imply capability parity: Codex multi-agent and

@@ -43,6 +43,10 @@ def permission_effect(global_rules: list[dict[str, str]], metadata: str,
     return effective
 
 
+def no_bundled_mcp_servers(config: dict) -> bool:
+    return not config.get("mcp", {}).get("servers", {})
+
+
 def main() -> int:
     policy = text("olympus/policies/maintenance-context.md")
     routing = text("olympus/policies/routing.md")
@@ -92,11 +96,11 @@ def main() -> int:
     check("ADAPTER_CAPABILITY_CONTRACT", capabilities["opencode"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "SUPPORTED"
           and capabilities["codex"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "GAP"
           and "AEGIS" not in capabilities["opencode"] and "AEGIS" not in capabilities["codex"])
-    serena = opencode_config["mcp"]["servers"]["serena"]
-    check("SERENA_REGISTERED_ONCE_IN_NATIVE_V2_CONFIG", serena["type"] == "local"
-          and serena["disabled"] is False and serena["codemode"] is False
-          and serena["command"][0] == "serena" and "--project-from-cwd" in serena["command"]
-          and len(re.findall(r'(?m)^\s*"serena"\s*:', config_source)) == 1)
+    check("NO_BUNDLED_MCP_SERVERS", no_bundled_mcp_servers(opencode_config))
+    check("NO_BUNDLED_MCP_SERVER_QUALIFICATION_REJECTS_DECLARATION",
+          not no_bundled_mcp_servers({"mcp": {"servers": {"synthetic": {"type": "local"}}}}))
+    check("NO_BUNDLED_MCP_SERVER_QUALIFICATION_ACCEPTS_ABSENT_OR_EMPTY",
+          no_bundled_mcp_servers({}) and no_bundled_mcp_servers({"mcp": {"servers": {}}}))
     semantic_tools = (
         "get_symbols_overview", "find_symbol", "find_referencing_symbols",
         "find_implementations", "find_declaration", "get_diagnostics_for_file",

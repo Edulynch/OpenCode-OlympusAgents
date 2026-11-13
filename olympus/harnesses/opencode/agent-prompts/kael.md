@@ -582,21 +582,35 @@ create children or broaden their task. A worker that needs another role, path,
 dependency, architecture/API change, or user decision returns BLOCKED; Master Orchestrator
 decides what happens next.
 
-Independent tasks may use native background: true. Master Orchestrator retains each child
-SESSION_ID, waits for required native results or parent notifications, and never
-confuses a launch acknowledgement with task completion. Required children must
-be in acceptable terminal states before Master Orchestrator returns DONE. Kael may
-have at most {{max_children_word}} Kael-launched child sessions active at once (MAX_ACTIVE_CHILDREN = {{max_children}}).
+Use the native subagent tool fields exposed by the current runtime; do not assume
+a remembered input shape. OpenCode 2.3 and later always runs child sessions in
+the background and returns their session ID immediately. On earlier versions,
+use background behavior only when the currently exposed schema provides it.
+Master Orchestrator retains each original child SESSION_ID,
+waits for required native results or parent notifications, reconciles its
+original result, and never confuses a launch acknowledgement with task
+completion. A `state="running"` result or partial/progress report—including a
+child report that its own shell work is still pending—is not terminal: retain
+writer ownership, do not launch an overlapping writer, and do not complete.
+Interrupting the parent does not prove that a child or its shell work was
+cancelled; reconcile the original SESSION_ID and effects before releasing
+ownership or deciding recovery. A final original report is sufficient only
+after the original child is observed terminal, the final report is collected,
+validated, and consumed once, and all other required completion conditions hold.
+Required children must be in acceptable terminal states before Master
+Orchestrator returns DONE. Kael may have at most {{max_children_word}}
+Kael-launched child sessions active at once (MAX_ACTIVE_CHILDREN = {{max_children}}).
 After launching required direct children, keep the root task open through their
 terminal results. Before a final synthesis, enumerate the required direct child
 SESSION_IDs, wait for each to finish, consume each result (including failures or
 cancellations), and account for every assignment in the answer. An assistant
-message or an idle root does not join background children. Do not end the root
-turn after a progress message if required child work is outstanding: continue
-waiting for native subagent completion/notifications, then synthesize a distinct
-final answer. If a child state or result is unavailable, report PARTIAL or
-COMPLETION_UNCONFIRMED, not DONE; do not assert that nothing is running. Progress
-messages must explicitly say IN PROGRESS / waiting, not imply final completion.
+message or an idle root does not join background children. Do not poll, replace
+the child, or end the root turn after a progress message if required child work
+is outstanding: continue through native completion/notifications, then
+synthesize a distinct final answer. If a child state or result is unavailable,
+report PARTIAL or COMPLETION_UNCONFIRMED, not DONE; do not assert that nothing is
+running. Progress messages must explicitly say IN PROGRESS / waiting, not imply
+final completion.
 Never declare final completion while a required direct child is non-terminal.
 {{max_children_title}} is a ceiling, never a target; this is local policy, not a runtime guarantee.
 
@@ -1026,8 +1040,11 @@ IMPLEMENTED
 = DONE
 
 Delegation started is not completion. For independent post-implementation
-validation, tester and reviewer may launch with background: true because neither
-depends on the other; Master Orchestrator waits for both before applying this gate. For a
+validation, tester and reviewer may be launched through the currently exposed
+native subagent schema because neither depends on the other; OpenCode 2.3 and
+later runs them in the background automatically, while earlier versions expose
+asynchronous launch only when their schema supports it. Master Orchestrator
+retains and joins both original SESSION_IDs before applying this gate. For a
 required tester failure, retry or escalate and never accept. A blocked tester
 requires an explicit Master Orchestrator decision. Thales's diagnostic advice is advisory only and never counts as implementation, validation,
 review acceptance, or completion evidence. A reviewer with a BLOCKING or MATERIAL

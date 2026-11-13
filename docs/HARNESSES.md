@@ -274,6 +274,81 @@ result delivery are supported, ALLOW is supported, ASK is adaptable, DENY and
 contextual Olympus maintenance remain gaps, and activity visibility is partial/basic. See the generated
 [capability contract](HARNESS-CAPABILITIES.md).
 
+### OpenCode 2.3 subagent compatibility
+
+OpenCode's stable [v2.3.0 release notes](https://github.com/anomalyco/opencode/releases/tag/v2.3.0)
+(published 2026-11-13) state that subagents always run in the background, return
+their session ID immediately, and report results when idle; a report can remain
+partial while the child has its own background work pending. The Olympus prompt
+source now expresses this lifecycle without assuming a background input field.
+
+| Surface | State | Evidence and limit |
+|---|---|---|
+| Native child lifecycle | **ADAPT** | Prompt uses the current exposed tool schema and original-session reconciliation. A controlled smoke delivered a running partial report and the same child's final result after a maintainer-reported parent interruption; scope and observation limits are recorded below. |
+| Code Mode | **NOT_APPLICABLE** | No affected consumer was found in the inspected Olympus sources; this is not a blanket claim that Code Mode has no such behavior. |
+| Windows shell handoff / HUD | **DEFER** | Shell handoff/interruption survival and interactive HUD validation remain outstanding. No speculative implementation change was made. |
+| Local CLI | **v2.3.0 observed** | Kael observed `opencode --version` as v2.3.0. This does not qualify the roster, prompts, cancellation behavior, or HUD. |
+
+This is a scoped compatibility assessment, not a blanket PASS or runtime
+qualification.
+
+The maintainer regenerated `.opencode/agents/kael.md` in the source checkout;
+the subsequent read-only OpenCode renderer check matched all 15 managed outputs.
+A disposable candidate clone had previously used
+HEAD `1a8e4c360c40d6f104f1792d2ab1c86a03f8e970` plus six current overlays:
+`render --harness all` changed 1 output (27 unchanged), and the all-harness
+read-only renderer check passed all 28 outputs. Focused gates passed
+individually: safe-root
+Harness Core, external-work ownership (static only), Codex static,
+bootstrap-source validation, adaptive concurrency, completion gates, model
+migration, preflight, question barrier, result reconciliation, role purity,
+routing constraints, trivial fast path, contextual maintenance, and structured
+task output. The Harness Core `WinError 2` was reproduced with the default
+Python alias under the isolated profile: `sys.executable` pointed to a
+nonexistent WindowsApps path beneath the fixture `USERPROFILE`, so
+`subprocess.run` could not launch the renderer. Harness Core passed
+`--safe-root-read-only` with the local Python 3.13 executable; no product code
+change was made. Bootstrap-source validation first lacked `$TEMP\opencode`,
+then passed after that fixture directory was created. The original FAST output
+remains unavailable beyond its truncated report; the earlier pre-push report
+recorded 10 passing tests and one optional pre-commit skip. Subsequently, one
+new aggregate FAST run on the synchronized source checkout passed all 16 gates
+(`FAIL=0`, `NOT RUN=0`). Its pre-push suite again passed 10 tests, with the
+optional pre-commit test skipped because that tool was not installed.
+
+The isolated Public-fixture smoke used the installed OpenCode v2.3.0 CLI.
+`debug paths`, `debug config --standalone`, and `debug agents --standalone`
+returned exit 0; all 10 runtime paths and all 3 config paths stayed within the
+fixture, including its project config. The effective response had 18 unique
+IDs: all 11 expected Olympus IDs appeared exactly once, no `aegis` appeared,
+and seven additional IDs were present (`build`, `compaction`, `explore`,
+`general`, `plan`, `summary`, `title`). Observed config facts were
+`kael.mode=primary` and fixture `default_agent=kael`. This confirms expected-ID
+presence and those config facts, not an exact 11-entry effective roster.
+That isolated CLI smoke did not exercise delegation, cancellation, HUD, or
+model-backed interaction. Separately, a native delegated validation session
+launched FAST as one background shell job and returned its terminal result.
+The parent observed the launch acknowledgement and final child report in that
+first run; no matching intermediate notification was collected then.
+
+A subsequent controlled smoke used the existing global CLI unittest suite as
+real background work, without repeating FAST or adding sleeps. The parent
+received a native `state="running"` partial report, retained the original child
+and shell-job identities, and later received the same child's terminal report:
+14 tests passed, no skips were reported, and the test sandbox was removed.
+The maintainer confirmed pressing Esc while the child was active, interrupting
+the parent's response, and then continuing. That UI action is user-reported
+external/manual evidence, not the tester's or parent's direct UI observation.
+No equivalent job was relaunched.
+
+The tracked-change path lists matched before and after the smoke. Exact
+before/after file contents were not captured, so byte-for-byte source
+preservation was not established; an already-dirty worktree was not treated as
+a test failure or proof of corruption. Interactive HUD and shell
+handoff/interruption survival were not tested. Native permission UI and
+permission decisions were NOT_OBSERVABLE. These scoped results are not a global
+#142 compatibility claim.
+
 Codex uses its root thread as Kael, custom specialists, per-role model/effort,
 native multi-agent tools, bounded fan-out/fan-in, child result delivery, and
 native activity visibility. Current user-provided runtime evidence records

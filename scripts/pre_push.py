@@ -92,8 +92,12 @@ def is_documentation_path(path: str) -> bool:
 
 
 def run_check(name: str, command: list[str]) -> None:
+    child_env = os.environ.copy()
+    local_env_names = git_output(["rev-parse", "--local-env-vars"]).decode("ascii").splitlines()
+    for variable in local_env_names:
+        child_env.pop(variable, None)
     try:
-        result = subprocess.run(command, cwd=ROOT, check=False)
+        result = subprocess.run(command, cwd=ROOT, env=child_env, check=False)
     except OSError as error:
         raise GateError(f"{name} prerequisite could not run: {error}") from None
     if result.returncode:

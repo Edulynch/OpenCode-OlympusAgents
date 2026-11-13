@@ -1,4 +1,4 @@
-"""Focused Slice A checks; fixtures are prepared before every query snapshot."""
+"""Focused CLI checks across query, source-edit, and project/global workflow slices."""
 
 from __future__ import annotations
 

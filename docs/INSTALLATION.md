@@ -95,9 +95,131 @@ olympus install
 olympus uninstall
 ```
 
+### Command scopes and effects
+
+`--source` (when used) is an absolute trusted Olympus source checkout; it is
+not the installation target. The following scope auto-detection applies only
+to commands that select an effective user configuration: `update`, `agents
+list`, `config list`, `doctor`, and role aliases. They use a managed OpenCode
+project at the current directory when found, otherwise global scope. Supply
+`--scope` and, for project scope, `--target` to be explicit. Other commands
+below do not inherit that rule.
+
+| Command | Scope and target | Effect |
+|---|---|---|
+| `olympus update` (`upgrade`) | Auto-detects, or accepts `--scope project\|global` and project `--target` | Applies the immutable stable release update; Windows/PowerShell 7 only. There is no preview mode. |
+| `olympus install` | Defaults to `--scope global --harness opencode`; project requires absolute `--target`. `--harness opencode\|codex\|all`; optional `--version <tag>` | `--dry-run` previews. Otherwise the installer executes, whether or not `--execute` is written. `--execute` makes that intent explicit. |
+| `olympus uninstall` | Same defaults and target rules as install | Omitting `--dry-run` executes. Global uninstall supports preview; project uninstall has no dry-run and rejects it. Execution removes only unchanged manifest-owned resources (and global CLI state where applicable). |
+| `olympus <role> set-model <id>` / `set-effort <value>` | `<role>`: `kael`, `veyra`, `orin`, `atlas`, `kovan`, `argus`, `nox`, `vera`, `talos`, `thales`, or `helios`; auto-detects or accepts scope/target | Writes the user override immediately and updates a managed installed OpenCode agent when applicable. This is not a canonical source edit and has no dry-run flag. |
+| `olympus models list`, `olympus agents list` | Canonical source for models; agents list uses auto-detection or explicit scope/target | Read-only lists. `models list` is offline; `agents list` shows effective values and their sources. |
+| `olympus models set-family <family> --opencode <id> --codex <id>` / `olympus agents set-model <role> [--family <family>] [--effort <value>]` (at least one option required) | Canonical checkout selected by `--source`, or this CLI's bundled source | Edits canonical model intent. `--dry-run` previews; omitting it executes the source edit. JSON output for these edits requires `--dry-run`. |
+| `olympus config list` / `olympus config check` | List uses auto-detection or explicit scope/target; check reads the selected source and harness | Both are read-only. List shows effective values, precedence, and paths; check compares renderer output without writing. |
+| `olympus config apply --scope project\|global --harness opencode\|codex\|all` | Project requires an absolute existing worktree `--target`; global forbids `--target` | Exactly one of `--dry-run` or `--execute` is required. Preview does not write target resources; execution applies the selected managed configuration. Global execution currently supports OpenCode only. |
+| `olympus config recover` | No scope recovers a pending canonical source edit; project recovery requires `--scope project --target`; global recovery uses `--scope global --harness opencode` | Explicitly reconciles pending transaction state and may change files. Use only for the matching pending operation; global recovery is OpenCode-only. |
+| `olympus status` | Defaults to project and requires `--target`; use `--scope global` without a target for global metadata | Read-only reported manifest/install metadata; it does not verify file integrity. |
+| `olympus doctor` | Auto-detects, or accepts explicit scope/target and `--harness`; project scope requires `--target` | Read-only configuration and managed-installation diagnostics. It does not apply repairs or check provider access. |
+
 `olympus update` selects an immutable stable release, refuses downgrades, preserves the user override file, and reports the prior/new version. If managed agents have changed, it lists their names and asks once; `y` permits the update, while `n`, Enter, or non-interactive input preserve them and stop. No hashes or old-version recovery are required.
 
 `olympus <agent> set-model` accepts a syntactically valid `provider/model-id`. Known models are checked against the bundled [Models.dev](https://models.dev) catalog and their declared effort levels; newer or custom IDs absent from the snapshot are allowed with a compatibility warning. Olympus does not test model access. Values are saved to the per-user Olympus configuration shown by `olympus config list`; installed global OpenCode agents consume those values. The catalog is checked in for offline, reproducible validation, so listing and diagnostics do not make a provider request. Olympus never checks API keys, subscriptions, quotas, or model access.
+
+#### Reproducing a Models.dev catalog snapshot
+
+Refresh from a saved raw `https://models.dev/api.json` payload; this recipe
+does not make a network or provider request. Preserve the payload bytes as
+`models.dev.raw.json` (do not open and re-save it in an editor), set the date
+the payload was captured, then run this PowerShell-compatible Python recipe.
+It derives provider/model IDs from the API mapping, retains the declared
+reasoning/tool-call booleans, and records only explicitly listed `effort`
+values; it does not infer defaults. Duplicate or malformed data fails before
+the catalog is written.
+
+```powershell
+$raw = (Resolve-Path '.\models.dev.raw.json').Path
+$catalog = 'olympus/core/models-dev.json'
+$snapshotDate = '2026-11-13' # Set to the saved payload's capture date.
+@'
+import hashlib
+import json
+import re
+import sys
+from datetime import date
+from pathlib import Path
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        assert key not in result, f"duplicate JSON key: {key}"
+        result[key] = value
+    return result
+
+raw_path, catalog_path, snapshot_date = sys.argv[1:4]
+assert date.fromisoformat(snapshot_date).isoformat() == snapshot_date
+raw = Path(raw_path).read_bytes()
+providers = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_object)
+assert isinstance(providers, dict) and providers
+models = {}
+for provider_id, provider in sorted(providers.items()):
+    assert isinstance(provider_id, str) and provider_id and isinstance(provider, dict)
+    provider_models = provider.get("models")
+    assert isinstance(provider_models, dict)
+    for model_key, model in sorted(provider_models.items()):
+        assert isinstance(model_key, str) and model_key and isinstance(model, dict)
+        assert model.get("id") == model_key
+        reasoning, tool_call = model.get("reasoning"), model.get("tool_call")
+        assert type(reasoning) is bool and type(tool_call) is bool
+        options = model.get("reasoning_options", [])
+        assert isinstance(options, list)
+        effort_options = []
+        for option in options:
+            assert isinstance(option, dict) and isinstance(option.get("type"), str)
+            if option["type"] == "effort":
+                effort_options.append(option)
+        assert len(effort_options) <= 1
+        efforts = effort_options[0].get("values", []) if effort_options else []
+        assert isinstance(efforts, list)
+        assert all(isinstance(value, str) and value for value in efforts)
+        assert len(efforts) == len(set(efforts))
+        model_id = f"{provider_id}/{model_key}"
+        assert re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]*/[A-Za-z0-9][A-Za-z0-9._:/-]*", model_id)
+        assert model_id not in models
+        models[model_id] = {
+            "efforts": efforts, "reasoning": reasoning, "tool_call": tool_call,
+        }
+
+assert models
+catalog = {
+    "model_count": len(models),
+    "models": dict(sorted(models.items())),
+    "provider_count": len(providers),
+    "schema_version": 1,
+    "snapshot_date": snapshot_date,
+    "source": "https://models.dev/api.json",
+    "source_sha256": hashlib.sha256(raw).hexdigest(),
+}
+assert catalog["model_count"] == len(catalog["models"])
+assert catalog["model_count"] == sum(len(provider["models"]) for provider in providers.values())
+assert catalog["provider_count"] == len(providers)
+assert len(catalog["source_sha256"]) == 64
+Path(catalog_path).write_bytes(
+    (json.dumps(catalog, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+)
+print(f"models={catalog['model_count']} providers={catalog['provider_count']} sha256={catalog['source_sha256']}")
+'@ | python -B - $raw $catalog $snapshotDate
+```
+
+Review the resulting `model_count`, `provider_count`, source hash, and complete
+diff against the saved payload before accepting it:
+
+```powershell
+git diff --check -- olympus/core/models-dev.json
+git diff --stat -- olympus/core/models-dev.json
+git diff -- olympus/core/models-dev.json
+```
+
+Keep unknown/custom-model warnings and offline behavior. A newly absent model
+may be treated as unknown; never replace an explicit capability or effort
+declaration with an inferred default.
 
 `olympus config list` shows effective model/effort values, precedence (**project override > global override > canonical defaults**), and absolute paths to each source. Scope-aware commands such as `agents list`, `config list`, and `doctor` select the managed OpenCode project at the current directory when one exists; otherwise they use global scope. Use `--scope project --target <absolute-worktree-root>` or `--scope global` to select explicitly. For example, `olympus doctor --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project'` checks that project. Doctor is read-only: it validates JSON and declared model/effort values and checks managed installation state, but never applies edits or checks provider access. After manually editing JSON, use `olympus install --scope global --harness opencode --execute` for global configuration or `olympus update --scope project --target <absolute-worktree-root>` for project configuration to apply the effective values.
 

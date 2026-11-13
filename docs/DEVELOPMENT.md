@@ -309,19 +309,25 @@ pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FULL
 pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile RUNTIME
 ```
 
-**FAST** is offline-only: safe-root-read-only Harness Core; Codex static checks;
-the 13 established PowerShell contract checks (including handoff fidelity); and
-external-work ownership static contracts. It never queries OpenCode or Codex,
-does not run disposable processes, and does not render generated outputs in the
-checkout. It does not include the nine installer/history selectors reserved for
-FULL. Direct qualifier defaults remain unchanged.
+The profile selections are defined in
+[`scripts/qualify.ps1`](../scripts/qualify.ps1); CI can add checks outside those
+profiles.
 
-**FULL** runs FAST exactly once, then the Windows global-installer fixture, the
-release qualifier with `-MockOpenCode`, installer compatibility, dual-harness
-installer, dirty-worktree checks, and the three existing Phase 11 offline
-commands (qualifier, integrated-routing unittests, feature-fixture unittests),
-followed by the Offline slices of Authority, Activity HUD, Argus, Atlas, Helios,
-Talos, Thales, Phase 4C, and Autonomy. Those nine slices execute their existing
+**FAST** is offline-only: the pre-push unittest suite; safe-root-read-only
+Harness Core; Codex static checks; bootstrap, orchestration, and role-contract
+qualifiers; contextual-maintenance and structured-output checks; and
+external-work ownership static contracts. It never queries a real OpenCode or
+Codex runtime, does not run the external-work ownership disposable-process
+slice, and does not render generated outputs in the checkout. The historical
+handoff-fidelity suite and the nine installer/history selectors reserved for
+FULL are not included. Direct qualifier defaults remain unchanged.
+
+**FULL** runs FAST exactly once, then the offline global OpenCode API-query
+contract, the Windows global-installer fixture, the release qualifier with
+`-MockOpenCode`, installer compatibility, dual-harness installer, Codex
+instruction precedence, and dirty-worktree checks, followed by the Offline
+slices of Authority, Activity HUD, Argus, Atlas, Helios, Talos, Thales, Phase 4C,
+and Autonomy. Those nine slices execute their existing
 local installation, history, upgrade, drift, conflict, and synthetic checks;
 Activity also runs its local Node presentation tests. For bootstrap-driven
 offline fixtures only, they temporarily put the existing
@@ -333,8 +339,14 @@ runtime evidence. The
 FULL dirty-worktree installer check uses the same fixture only for its local
 OpenCode `--version` preflight. FULL does not contact a real OpenCode or Codex
 runtime. It does not call tag-transition stability a second time; that check is
-already nested in release qualification. Phase 11's existing historical corpus
-is used as-is.
+already nested in release qualification. Phase 11's historical corpus is
+retained as evidence, not executed as current contract tests by these profiles.
+
+The [`FAST / Windows` CI job](../.github/workflows/fast.yml) runs FAST and then
+additional authority, global-installer, global-CLI/smoke, post-install runtime,
+and worktree-activation gates. A local FAST pass does not establish that those
+additional CI gates passed. Other CI jobs also select their own qualification
+slices.
 
 **RUNTIME** does not include FULL or FAST. It runs only the Codex bundled-model
 catalog probe, external-work ownership disposable process cases, and the

@@ -340,6 +340,57 @@ def emit(response: dict, as_json: bool) -> None:
         print("Run 'olympus doctor' after manual edits.")
     for issue in response["issues"]:
         print(f"{issue['code']}: {issue['message']}", file=sys.stderr)
+    if response["operation"] == "doctor":
+        guidance = {
+            "managed_file_drift": "Inspect the listed managed path and compare it with the trusted source; preserve local edits and reconcile ownership before any update or uninstall.",
+            "global_managed_file_drift": "Inspect the listed global managed path and preserve local edits; reconcile ownership before any update or uninstall.",
+            "source_drift": "Run `python scripts/render_harnesses.py check --harness all` in the displayed source; reconcile intentional source/output differences before applying anything.",
+            "invalid_manifest": "Preserve the manifest and managed files; inspect and manually reconcile the manifest format and ownership before install, update, or uninstall.",
+            "invalid_global_manifest": "Preserve the global manifest and resources; inspect and manually reconcile its format and ownership before install, update, or uninstall.",
+            "ambiguous_manifest": "Preserve both manifest locations and all managed files; resolve which manifest owns this displayed project before taking action.",
+            "unsafe_manifest": "Preserve the manifest and target files; inspect the unsafe path or file type before any operation that could change ownership.",
+            "manifest_too_large": "Preserve the manifest; inspect it manually and do not treat this read-limit result as a valid ownership check.",
+            "invalid_manifest_entry": "Preserve the manifest and managed files; inspect the malformed entry and reconcile ownership before any update or uninstall.",
+            "invalid_manifest_hash": "Preserve the manifest and managed files; inspect the invalid hash entry without rewriting it to match current files.",
+            "unsupported_manifest_inventory": "Preserve the manifest and managed files; compare its inventory with a trusted compatible source before taking action.",
+            "unsupported_global_inventory": "Preserve the global manifest and files; compare its inventory with a trusted compatible source before taking action.",
+            "version_mismatch": "Compare the recorded and source versions shown above, then choose the intended trusted release before any explicit update; no version change was made.",
+            "unsupported_global_version": "Preserve the global installation and verify its recorded release against a trusted supported release before changing it.",
+            "platform_unqualified": "Run doctor on a Windows system with PowerShell 7 (pwsh); this platform result did not verify the installation.",
+            "verifier_missing": "Inspect the displayed trusted source checkout and restore its verifier only from that source; no installation verification ran.",
+            "verifier_unavailable": "Run doctor on Windows with PowerShell 7 (pwsh) available; this result did not verify the installation.",
+            "verifier_version_unsupported": "Use PowerShell 7 or later (`pwsh`) and rerun doctor; this result did not verify the installation.",
+            "native_verify_unavailable": "Check the displayed platform, PowerShell 7 availability, and verifier diagnostic; no verification was established.",
+            "verification_unavailable": "Review the verifier diagnostic above and rerun doctor only when the stated verification prerequisite is available.",
+            "verification_failed": "Review the VerifyOnly diagnostic above and preserve the indicated files while reconciling the cause; doctor made no repair.",
+            "invalid_user_configuration": "Inspect the configuration path named above and correct its JSON, schema, or declared model/effort values manually, then rerun doctor.",
+            "harness_absent": "Confirm the selected harness and scope are intended; install it only after reviewing the displayed target and ownership.",
+            "invalid_target": "Select the intended existing Git worktree root and keep the canonical source checkout separate from the project target.",
+            "source_is_target": "Choose a separate existing project worktree; never use the canonical source checkout as its own installation target.",
+            "git_unavailable": "Make Git available and verify the selected directory is the intended worktree root before rerunning doctor.",
+            "target_unconfirmed": "Verify the displayed directory is the actual Git worktree root and that Git can inspect it; no target was changed.",
+            "invalid_global_root": "Select the intended absolute global configuration root and verify it is not a filesystem root before retrying.",
+            "global_path_unavailable": "Verify the OpenCode CLI or configured global path and inspect the selected global root before retrying; do not guess or move the root.",
+            "overlapping_global_roots": "Inspect the resolved OpenCode and Codex roots and keep them distinct; do not change either installation until ownership is clear.",
+            "unsafe_global_root": "Inspect the displayed global path components for links, reparse points, or non-directory entries; preserve them until ownership is clear.",
+            "unsafe_global_resource": "Preserve the reported global resource and inspect its path/type manually before any operation that could change it.",
+            "global_external_guard_unsafe": "Inspect the existing global OpenCode config and resolve ambiguous rules manually; establish an external_directory ASK or DENY fallback before applying configuration.",
+            "global_install_conflict": "Preserve the user-owned conflicting resource and inspect the reported path; do not force an overwrite.",
+            "global_apply_recovery_pending": "Preserve the pending journal and verify it belongs to the displayed global OpenCode root; use only the explicit recovery path named in the diagnostic.",
+            "global_guard_recovery_pending": "Preserve the pending intent and global config; inspect the interrupted install and verify root ownership before choosing recovery.",
+            "source_invalid": "Inspect the canonical source and renderer diagnostic above; resolve source errors before applying any generated output.",
+            "source_inventory_unsupported": "Compare the displayed source inventory with the supported adapter inventory and use a compatible trusted source before applying anything.",
+            "configuration_invalid": "Inspect the configuration diagnostic and displayed path, correct the input manually, and rerun doctor; no repair was attempted.",
+            "read_failed": "Check that the displayed source or target resource is readable, preserve its contents, then rerun doctor.",
+            "query_failed": "Review the query diagnostic and displayed source/target paths; verify them manually before retrying and do not repair managed files from this generic error.",
+        }
+        for issue in response["issues"]:
+            recommendation = guidance.get(issue.get("code"))
+            if recommendation is None:
+                recommendation = "Review this issue code and message before choosing a repair; no repair was attempted."
+            scope = response.get("context", {}).get("scope")
+            context = f" ({scope} scope)" if scope else ""
+            print(f"next step{context}: {recommendation}")
 
 
 def _model_edit_error_code(error) -> int:

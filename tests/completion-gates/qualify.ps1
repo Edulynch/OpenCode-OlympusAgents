@@ -28,6 +28,17 @@ function Gate($units) {
     $state = if ($unknown -or $failures) { 'PARTIAL' } else { 'FINISHED' }
     [pscustomobject]@{ state=$state; passes=$passes; failures=$failures; unknown=$unknown }
 }
+function Child-ReportGate([string]$childState, [string]$reportState, [bool]$parentInterrupted,
+                          [bool]$consumed, [bool]$validated, [string]$outcome) {
+    $terminal = $childState -in @('completed', 'failed', 'cancelled')
+    $reconciled = $terminal -and $reportState -eq 'final' -and $consumed
+    [pscustomobject]@{
+        writerOwned = -not $reconciled
+        done = $reconciled -and $outcome -eq 'succeeded' -and $validated
+        parentInterrupted = $parentInterrupted
+        childCancelled = $childState -eq 'cancelled'
+    }
+}
 try {
     $kael = Text '.opencode/agents/kael.md'
     $maintenancePolicy = Text 'olympus/policies/maintenance-context.md'
@@ -96,6 +107,35 @@ try {
         $codexRoot -match 'all reconciled required results')
     Check 'PROGRESS_NOT_FINAL' ($kael -match 'Progress\s+messages must explicitly say IN PROGRESS / waiting' -and
         $kael -match 'Never declare final completion while a required direct child is non-terminal')
+    $nativeSessions = [regex]::Match($kaelSource, '(?ms)^## Native child sessions\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
+    $completionSource = [regex]::Match($kaelSource, '(?ms)^## Completion gate\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
+    Check 'NATIVE_BACKGROUND_SCHEMA_NEUTRAL' (
+        $nativeSessions -match 'OpenCode 2\.3 and later always runs child sessions in\s+the background' -and
+        $nativeSessions -match 'On earlier versions,\s+use background behavior only when the currently exposed schema provides it' -and
+        $nativeSessions -notmatch 'background:\s*true' -and
+        $completionSource -notmatch 'background:\s*true')
+    Check 'RUNNING_PARTIAL_AND_PARENT_INTERRUPT' (
+        $nativeSessions -match 'state="running".*?partial/progress report' -and
+        $nativeSessions -match 'retain\s+writer ownership' -and
+        $nativeSessions -match 'Interrupting the parent does not prove that a child or its shell work was\s+cancelled' -and
+        $nativeSessions -match 'final report is collected,\s+validated, and consumed once')
+    $child = [pscustomobject]@{
+        sessionID='synthetic-original'; state='running'; report='partial'
+        parentInterrupted=$false; consumed=$false; validated=$false; outcome=''
+    }
+    $partialReport = Child-ReportGate $child.state $child.report $child.parentInterrupted `
+        $child.consumed $child.validated $child.outcome
+    $child.state='completed'; $child.report='final'; $child.consumed=$true
+    $child.validated=$true; $child.outcome='succeeded'
+    $terminalReport = Child-ReportGate $child.state $child.report $child.parentInterrupted `
+        $child.consumed $child.validated $child.outcome
+    Check 'RUNNING_THEN_TERMINAL_ORIGINAL_REPORT' ($partialReport.writerOwned -and
+        -not $partialReport.done -and -not $terminalReport.writerOwned -and
+        $terminalReport.done -and $child.sessionID -eq 'synthetic-original')
+    $interruptedParent = Child-ReportGate 'running' 'partial' $true $false $false ''
+    Check 'PARENT_INTERRUPT_DOES_NOT_CANCEL_CHILD' ($interruptedParent.parentInterrupted -and
+        -not $interruptedParent.childCancelled -and $interruptedParent.writerOwned -and
+        -not $interruptedParent.done)
     $agents = Get-ChildItem (Join-Path $root '.opencode/agents') -Filter '*.md'
     $allAgentText = ($agents | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
     Check 'NO_LUNA_FAST' ($allAgentText -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')

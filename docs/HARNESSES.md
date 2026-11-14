@@ -284,10 +284,17 @@ source now expresses this lifecycle without assuming a background input field.
 
 | Surface | State | Evidence and limit |
 |---|---|---|
-| Native child lifecycle | **ADAPT** | Prompt uses the current exposed tool schema and original-session reconciliation. A controlled smoke delivered a running partial report and the same child's final result after a maintainer-reported parent interruption; scope and observation limits are recorded below. |
-| Code Mode | **NOT_APPLICABLE** | No affected consumer was found in the inspected Olympus sources; this is not a blanket claim that Code Mode has no such behavior. |
-| Windows shell handoff / HUD | **DEFER** | Shell handoff/interruption survival and interactive HUD validation remain outstanding. No speculative implementation change was made. |
-| Local CLI | **v2.3.0 observed** | Kael observed `opencode --version` as v2.3.0. This does not qualify the roster, prompts, cancellation behavior, or HUD. |
+| Native child lifecycle | **ADAPT** | The adaptation is in `olympus/harnesses/opencode/agent-prompts/kael.md`; static fixtures are in `tests/completion-gates/qualify.ps1`. The earlier maintainer-reported Esc smoke below remains separate from the dated concurrent case. |
+| Code Mode | **NOT_APPLICABLE** | No consumer or changed-result parser was found in the inspected Olympus adapter/role sources; Kovan's prompt and metadata also forbid `execute`. This is not a host-wide claim about Code Mode. |
+| MCP OAuth / localhost | **NO_CHANGE** | The adapter does not register or manage MCP; optional host Serena access remains read-only. No authentication or provider access was tested. |
+| MCP events | **NOT_APPLICABLE** | No Olympus consumer was found. |
+| TUI plugin surface | **NO_CHANGE** | `olympus/harnesses/opencode/tui.tsx` uses `@opencode/plugin/tui`, `Plugin.define`, `context.ui.slot` at `session.composer.top`, and `context.data.session.list/status`; this is not a server tool-hook or fork API. See the [CLI plugin documentation](https://opencode.ai/docs/build/plugins/cli). |
+| `ToolContext.signal`, `session.fork`, `execute.before`, exported `Tool` | **NOT_APPLICABLE** | No consumer was found in the inspected Olympus sources. |
+| Existing permission configuration | **NO_CHANGE** | Role metadata plus `olympus/harnesses/opencode/config.jsonc` / `global-permissions.jsonc` remain in place; static hard-deny assertions are in `tests/harness-core/qualify.py`. Native permission UI and decision were **NOT_OBSERVABLE**; no live ASK/DENY qualification is claimed. |
+| Interactive HUD | **DEFER** | A reactive source slot is not visual runtime evidence. HUD visibility at low TUI verbosity remains unverified; no default or plugin change was made. |
+| Windows shell handoff / interruption survival | **DEFER** | This is runtime-controlled and Olympus has no replacement daemon. No handoff-survival test was performed. |
+| Windows worktree setup | **NO_CHANGE** | `olympus/harnesses/opencode/worktree-setup.ps1` retains its Windows gate; it does not establish shell handoff or interruption survival. |
+| Case-only rename | **NO_CHANGE** | No Olympus consumer was found; the helper in `olympus/harnesses/opencode/worktree-setup.ps1` creates paths or refuses existing ones rather than renaming. OS case-only rename behavior was not retested. |
 
 This is a scoped compatibility assessment, not a blanket PASS or runtime
 qualification.
@@ -348,6 +355,70 @@ a test failure or proof of corruption. Interactive HUD and shell
 handoff/interruption survival were not tested. Native permission UI and
 permission decisions were NOT_OBSERVABLE. These scoped results are not a global
 #142 compatibility claim.
+
+### Dated follow-up (2026-11-14)
+
+The test source checkout was clean at HEAD
+`d154a4ecb7d40b7e5a246316997c5bf75d4c6638` before and after this native case.
+The installed local CLI reported `opencode v2.3.0`;
+`opencode api get /api/info` reported server version `2.3.0` at
+`2026-11-14T04:07:56.0491244Z`. The official
+[v2.3.0 release](https://github.com/anomalyco/opencode/releases/tag/v2.3.0)
+was published 2026-11-13, and the public
+[@opencode/cli latest registry entry](https://registry.npmjs.org/@opencode%2fcli/latest)
+reported `2.3.0`. GitHub's generic `/releases/latest` pointed to legacy v1.19.5
+and was not used as V2 version authority. These are dated version observations,
+not binary-signature verification, an upgrade, or a claim that v2.3.0 remains
+the latest stable 2.x; recheck stable 2.x before any future runtime execution.
+
+For the new native concurrency case, Kael launched two direct Nox children
+together and received both launch acknowledgements before either terminal
+result; a separate static Veyra assessment supplied the used-surface matrix. The parent kept
+the original child/job identities while A was pending; B's failure report
+arrived before A's final result, and the parent retained A's pending state
+until that same child completed. There was no parent polling, sleep, or
+relaunch. A ran
+`python -B -m unittest discover -s tests/harness-core -p test_global_cli.py -v`
+as one offline background shell job. Its initial report was still running;
+the same child later completed with exit 0, 14 tests passed, and no skips. Its
+task-local temporary directory was removed after subprocesses ended. The
+process-local temporary environment did not alter HOME, USERPROFILE, or auth.
+
+B's original foreground stimulus was
+`python -B -c "import sys; print('OA142_EXPECTED_CHILD_COMMAND_FAILURE'); sys.exit(7)"`.
+It printed the marker once and requested child exit 7, but the native tool
+returned exit 1. That original check failed its exact exit-code expectation;
+it does not establish a product bug or native-session crash. Only after all original
+results were terminal, one corrected calibration captured PowerShell's
+`$LASTEXITCODE`, emitted `OA142_NATIVE_EXIT=7`, and returned tool exit 7. That
+calibration passed as an expected child-command failure only; it was not
+another concurrency run and A was not rerun. The original failure remains part
+of the record.
+
+**Disposable PowerShell calibration only; this intentionally exits that
+process with 7. Do not paste it into the maintainer's interactive parent shell.**
+
+```powershell
+$ErrorActionPreference = 'Stop'; python -B -c "import sys; print('OA142_EXPECTED_CHILD_COMMAND_FAILURE'); sys.exit(7)"; $nativeExit = $LASTEXITCODE; Write-Output "OA142_NATIVE_EXIT=$nativeExit"; exit $nativeExit
+```
+
+This case establishes the observed partial/final result correlation and
+handling of the concurrent failed report only for these actors. It does not
+prove forced-session crash/cancellation behavior, HUD visibility, Windows
+shell-handoff survival, or native permission UI/approval; the earlier Esc
+action remains separately identified above as maintainer-reported evidence.
+
+**Decision and reversal boundary:** retain the already-merged minimal native
+lifecycle adaptation; this evidence indicates no further production change.
+The deferred and not-applicable surfaces prevent a global compatibility
+claim. If a proven regression later requires reversal, separately authorize a
+normal workflow to revert only lifecycle delta
+`3af6d38e8f44da62b53c1e713ac65f533696f588` (canonical Kael source, its matching
+generated output, focused assertions, and documentation). Preserve the
+independent Git-environment fix
+`26140336fb6d6ba98251dd804fb94d230c4b0da0`, PRs #149/#150, and user-config
+ownership. No reversal or broader renderer/global-write authority is implied
+here.
 
 Codex uses its root thread as Kael, custom specialists, per-role model/effort,
 native multi-agent tools, bounded fan-out/fan-in, child result delivery, and

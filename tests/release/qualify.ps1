@@ -25,6 +25,8 @@ if ($RecoveryRunId -notmatch '^[A-Za-z0-9-]{8,80}$') { throw 'RECOVERY_RUN_ID_IN
 $run = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId)
 $receiptPath = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId + '.json')
 $transcriptPath = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId + '.log')
+$cliInstallRoot = Join-Path $run 'cli-install'
+$cliPathStorePath = Join-Path $cliInstallRoot 'cli-path.json'
 $utf8 = [Text.UTF8Encoding]::new($false)
 $script:QualificationReceipt = $null
 function Save-QualificationReceipt {
@@ -119,7 +121,20 @@ function New-SourceArchive([string]$sourceRoot, [string]$tag, [string]$archivePa
     return $archivePath
 }
 
+function Assert-QualificationRunPath([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not [IO.Path]::IsPathFullyQualified($Path)) {
+        throw 'HISTORICAL_FIXTURE_PATH_INVALID: Path must be absolute and inside the owned qualification run.'
+    }
+    $runPrefix = [IO.Path]::GetFullPath($run).TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
+    $fullPath = [IO.Path]::GetFullPath($Path).TrimEnd([char[]]@('\','/'))
+    if (-not $fullPath.StartsWith($runPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'HISTORICAL_FIXTURE_PATH_INVALID: Path must be inside the owned qualification run.'
+    }
+    return $fullPath
+}
+
 function New-GitTagArchive([string]$tag, [string]$archivePath) {
+    $archivePath = Assert-QualificationRunPath $archivePath
     $prefix = "OpenCode-OlympusAgents-$tag/"
     & git -C $source archive --format=zip "--prefix=$prefix" $tag -o $archivePath
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
@@ -128,16 +143,109 @@ function New-GitTagArchive([string]$tag, [string]$archivePath) {
     return $archivePath
 }
 
+function Get-HistoricalInstaller([string]$SourceRoot, [string]$ExpectedVersion) {
+    $source = Assert-QualificationRunPath $SourceRoot
+    if ($ExpectedVersion -notin @('v0.2.0','v0.3.0-beta.3') -or
+        (Split-Path -Leaf $source) -cne "OpenCode-OlympusAgents-$ExpectedVersion") {
+        throw "HISTORICAL_SOURCE_VERSION_MISMATCH: $ExpectedVersion is not an assigned historical tag source."
+    }
+    $installerPath = Assert-QualificationRunPath (Join-Path $source 'install.ps1')
+    $bootstrapPath = Assert-QualificationRunPath (Join-Path $source 'scripts/bootstrap.ps1')
+    if (-not (Test-Path -LiteralPath $source -PathType Container) -or
+        -not (Test-Path -LiteralPath $installerPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $bootstrapPath -PathType Leaf)) {
+        throw 'HISTORICAL_SOURCE_INVALID: Installer or bootstrap is missing from the extracted tag source.'
+    }
+    $text = [IO.File]::ReadAllText($installerPath)
+    $default = [regex]::Match($text, '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''\s*,?\s*$')
+    $release = [regex]::Match($text, '(?m)^\s*\$ReleaseVersion\s*=\s*''([^'']+)''')
+    if (-not $default.Success -or $default.Groups[1].Value -cne $ExpectedVersion -or
+        ($release.Success -and $release.Groups[1].Value -cne $ExpectedVersion)) {
+        throw "HISTORICAL_SOURCE_VERSION_MISMATCH: Expected $ExpectedVersion in $installerPath."
+    }
+    return [pscustomobject]@{
+        SourceRoot = $source
+        InstallerPath = $installerPath
+        Version = $default.Groups[1].Value
+    }
+}
+
+function Expand-HistoricalSource([string]$ArchivePath, [string]$ExpectedVersion) {
+    $archive = Assert-QualificationRunPath $ArchivePath
+    $destination = Assert-QualificationRunPath (Join-Path $run ('historical-source-' + ($ExpectedVersion -replace '[^A-Za-z0-9.-]', '-')))
+    if (-not (Test-Path -LiteralPath $archive -PathType Leaf) -or (Test-Path -LiteralPath $destination)) {
+        throw 'HISTORICAL_SOURCE_INVALID: Archive is missing or the owned extraction destination already exists.'
+    }
+    [IO.Directory]::CreateDirectory($destination) | Out-Null
+    Expand-Archive -LiteralPath $archive -DestinationPath $destination -ErrorAction Stop
+    $roots = @(Get-ChildItem -LiteralPath $destination -Force)
+    $expectedRoot = "OpenCode-OlympusAgents-$ExpectedVersion"
+    if ($roots.Count -ne 1 -or -not $roots[0].PSIsContainer -or $roots[0].Name -cne $expectedRoot) {
+        throw "HISTORICAL_SOURCE_INVALID: Expected the single tag-shaped archive root '$expectedRoot'."
+    }
+    $source = Assert-QualificationRunPath $roots[0].FullName
+    [void](Get-HistoricalInstaller $source $ExpectedVersion)
+    return $source
+}
+
+function Install-Historical([string]$SourceRoot, [string]$Target, [string]$Version) {
+    $source = Assert-QualificationRunPath $SourceRoot
+    $targetRoot = Assert-QualificationRunPath $Target
+    $identity = Get-HistoricalInstaller $source $Version
+    if (-not (Test-Path -LiteralPath $targetRoot -PathType Container)) {
+        throw 'HISTORICAL_FIXTURE_TARGET_INVALID: Target must be an existing fixture directory.'
+    }
+    $args = @('-NoProfile', '-File', $identity.InstallerPath, '-Version', $identity.Version,
+        '-SourceRoot', $identity.SourceRoot, '-Target', $targetRoot)
+    $output = (& pwsh @args 2>&1 | Out-String)
+    [pscustomobject]@{
+        Text = $output
+        Code = $LASTEXITCODE
+        Version = $identity.Version
+        SourceRoot = $identity.SourceRoot
+        InstallerPath = $identity.InstallerPath
+    }
+}
+
+function Assert-QualificationCliTargets([string]$InstallRoot, [string]$PathStorePath) {
+    if ([string]::IsNullOrWhiteSpace($InstallRoot) -or -not [IO.Path]::IsPathFullyQualified($InstallRoot) -or
+        [string]::IsNullOrWhiteSpace($PathStorePath) -or -not [IO.Path]::IsPathFullyQualified($PathStorePath)) {
+        throw 'CLI_FIXTURE_TARGET_INVALID: CLI install root and PATH store must be absolute.'
+    }
+    $fixturePrefix = [IO.Path]::GetFullPath($run).TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
+    $installRoot = [IO.Path]::GetFullPath($InstallRoot).TrimEnd([char[]]@('\','/'))
+    $pathStore = [IO.Path]::GetFullPath($PathStorePath)
+    if (-not $installRoot.StartsWith($fixturePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'CLI_FIXTURE_TARGET_INVALID: CLI install root must be inside this qualification run.'
+    }
+    $installPrefix = $installRoot + [IO.Path]::DirectorySeparatorChar
+    if (-not $pathStore.StartsWith($installPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'CLI_FIXTURE_TARGET_INVALID: PATH store must be inside the fixture CLI install root.'
+    }
+}
+
+function Test-QualificationCliTargetsReject([string]$InstallRoot, [string]$PathStorePath) {
+    try {
+        Assert-QualificationCliTargets $InstallRoot $PathStorePath
+        return $false
+    } catch {
+        return $true
+    }
+}
+
 function Install([string]$target, [string]$archive, [string]$version = '') {
-    $args = @('-NoProfile', '-File', $installer, '-Target', $target, '-SourceArchive', $archive)
+    Assert-QualificationCliTargets $cliInstallRoot $cliPathStorePath
+    $args = @('-NoProfile', '-File', $installer, '-Target', $target, '-SourceArchive', $archive,
+        '-CliInstallRoot', $cliInstallRoot, '-CliPathStorePath', $cliPathStorePath)
     if ($version) { $args += @('-Version', $version) }
     $output = (& pwsh @args 2>&1 | Out-String)
     [pscustomobject]@{ Text=$output; Code=$LASTEXITCODE }
 }
 
 function Verify([string]$target, [string]$archive, [string]$version) {
+    Assert-QualificationCliTargets $cliInstallRoot $cliPathStorePath
     $args = @('-NoProfile', '-File', $installer, '-Target', $target, '-SourceArchive', $archive,
-        '-Version', $version, '-VerifyOnly')
+        '-Version', $version, '-VerifyOnly', '-CliInstallRoot', $cliInstallRoot, '-CliPathStorePath', $cliPathStorePath)
     $output = (& pwsh @args 2>&1 | Out-String)
     [pscustomobject]@{ Text=$output; Code=$LASTEXITCODE }
 }
@@ -156,6 +264,25 @@ function Get-ProjectSnapshot([string]$target) {
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
     Start-Transcript -LiteralPath $transcriptPath -Force | Out-Null
+    $validCliTargets = $false
+    try {
+        Assert-QualificationCliTargets $cliInstallRoot $cliPathStorePath
+        $validCliTargets = $true
+    } catch {}
+    $hostDefaultCliRoot = Join-Path $env:LOCALAPPDATA 'Programs/Olympus'
+    $outsideFixtureCliRoot = Join-Path $tempOpencode ('outside-' + $RecoveryRunId)
+    $cliTargetRejections = @(
+        (Test-QualificationCliTargetsReject '' $cliPathStorePath),
+        (Test-QualificationCliTargetsReject $cliInstallRoot ''),
+        (Test-QualificationCliTargetsReject 'relative-cli-root' $cliPathStorePath),
+        (Test-QualificationCliTargetsReject $cliInstallRoot 'relative-path-store.json'),
+        (Test-QualificationCliTargetsReject $outsideFixtureCliRoot (Join-Path $outsideFixtureCliRoot 'cli-path.json')),
+        (Test-QualificationCliTargetsReject $cliInstallRoot (Join-Path $run 'escaped-cli-path.json')),
+        (Test-QualificationCliTargetsReject $hostDefaultCliRoot (Join-Path $hostDefaultCliRoot 'cli-path.json'))
+    )
+    Check 'R0_CLI_TARGETS_FAIL_CLOSED' ($validCliTargets -and $cliTargetRejections.Count -eq 7 -and
+        @($cliTargetRejections | Where-Object { -not $_ }).Count -eq 0) `
+        "valid fixture paths accepted; missing, relative, escaping, and host-default destinations rejected"
     if ($MockOpenCode) {
         $mockBin = Join-Path $run 'mock-bin'
         [IO.Directory]::CreateDirectory($mockBin) | Out-Null
@@ -170,6 +297,13 @@ try {
     $candidateArchive = New-SourceArchive $source $script:CandidateVersion (Join-Path $run "candidate-$($script:CandidateVersion).zip")
     $stableArchive = New-GitTagArchive 'v0.2.0' (Join-Path $run 'stable-v020.zip')
     $previousBetaArchive = New-GitTagArchive 'v0.3.0-beta.3' (Join-Path $run 'previous-beta3.zip')
+    $stableHistoricalSource = Expand-HistoricalSource $stableArchive 'v0.2.0'
+    $previousBetaHistoricalSource = Expand-HistoricalSource $previousBetaArchive 'v0.3.0-beta.3'
+    $wrongHistoricalVersionRejected = $false
+    try { [void](Get-HistoricalInstaller $stableHistoricalSource $script:CandidateVersion) }
+    catch { $wrongHistoricalVersionRejected = $_.Exception.Message -match '^HISTORICAL_SOURCE_VERSION_MISMATCH:' }
+    Check 'R0_HISTORICAL_SOURCE_REJECTS_CANDIDATE_VERSION' $wrongHistoricalVersionRejected `
+        'Historical source identity mismatch is rejected before any historical installer launch.'
     $alphaArchive = New-SourceArchive $source 'v0.3.0-alpha.1' (Join-Path $run 'alpha.zip')
     $betaArchive = New-SourceArchive $source 'v0.3.0-beta.2' (Join-Path $run 'beta.zip')
     $rcArchive = New-SourceArchive $source 'v0.3.0-rc.1' (Join-Path $run 'rc.zip')
@@ -183,7 +317,7 @@ try {
     $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1',$script:CandidateVersion,'v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
     if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
         Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
-        Check 'R0_TARGET_IDENTITY_V050' ($script:CandidateVersion -ceq 'v0.5.0')
+        Check 'R0_TARGET_IDENTITY_V070' ($script:CandidateVersion -ceq 'v0.7.0')
         Check 'R0_STABLE_CANDIDATE_VERSION' ($script:CandidateVersion -match '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$')
         Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
         Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
@@ -199,6 +333,38 @@ try {
     # The current prerelease request uses a local ZIP with the same GitHub tag-root layout.
     $target = New-Target 'fresh-candidate-default'
     $first = Install $target $candidateArchive
+    $expectedCliRoot = [IO.Path]::GetFullPath($cliInstallRoot).TrimEnd([char[]]@('\','/'))
+    $cliRootReport = [regex]::Match($first.Text, '(?m)^OLYMPUS_CLI: .* root=(?<root>.+?)\s*$')
+    $reportedCliRoot = $null
+    if ($cliRootReport.Success) {
+        try { $reportedCliRoot = [IO.Path]::GetFullPath($cliRootReport.Groups['root'].Value.Trim()).TrimEnd([char[]]@('\','/')) }
+        catch { $reportedCliRoot = $null }
+    }
+    $reportedCliRootMatches = ($null -ne $reportedCliRoot -and
+        [string]::Equals($reportedCliRoot, $expectedCliRoot, [StringComparison]::OrdinalIgnoreCase))
+    $currentCliMarkerPath = Join-Path $cliInstallRoot 'current.txt'
+    $currentCliMarker = if (Test-Path -LiteralPath $currentCliMarkerPath -PathType Leaf) {
+        [IO.File]::ReadAllText($currentCliMarkerPath).Trim()
+    } else { $null }
+    $currentCliMarkerMatches = $currentCliMarker -ceq $script:CandidateVersion
+    $cliPathStoreExists = Test-Path -LiteralPath $cliPathStorePath -PathType Leaf
+    $cliFixtureCheckResult = if ($first.Code -ne 0) { 'INSTALL_FAILED' }
+        elseif ($reportedCliRootMatches -and $currentCliMarkerMatches -and $cliPathStoreExists) { 'PASS' }
+        else { 'FAIL' }
+    $script:QualificationReceipt.cli_fixture = [ordered]@{
+        expected_root = $expectedCliRoot
+        reported_root = $reportedCliRoot
+        reported_root_matches = $reportedCliRootMatches
+        current_marker = $currentCliMarker
+        current_marker_matches_candidate = $currentCliMarkerMatches
+        path_store_exists = $cliPathStoreExists
+        check_result = $cliFixtureCheckResult
+    }
+    Save-QualificationReceipt
+    Check 'R1_ISOLATED_CLI_FIXTURE_DESTINATION' ($cliFixtureCheckResult -eq 'PASS') `
+        ("result=$cliFixtureCheckResult; expected_root=$expectedCliRoot; reported_root=$reportedCliRoot; " +
+            "reported_root_matches=$reportedCliRootMatches; current_marker=$currentCliMarker; " +
+            "current_marker_matches_candidate=$currentCliMarkerMatches; path_store_exists=$cliPathStoreExists")
     if (-not $ResumeAtPermissions) {
         $r1Pass = ($first.Code -eq 0 -and
             $first.Text -match "OLYMPUS_SOURCE: requested=$($script:CandidateRegex) resolved=$($script:CandidateRegex) origin=LOCAL_ARCHIVE" -and
@@ -267,11 +433,20 @@ try {
 
     # Stable SemVer remains installable explicitly; prerelease identifiers are accepted end-to-end.
     $stableTarget = New-Target 'explicit-stable-v020'
-    $stable = Install $stableTarget $stableArchive 'v0.2.0'
-    Check 'R13_EXPLICIT_STABLE_INSTALL' ($stable.Code -eq 0 -and
-        $stable.Text -match 'OLYMPUS_SOURCE: requested=v0\.2\.0 resolved=v0\.2\.0 origin=LOCAL_ARCHIVE' -and
+    $stable = Install-Historical $stableHistoricalSource $stableTarget 'v0.2.0'
+    $stableManifestPath = Join-Path $stableTarget '.opencode/orchestrator-install.json'
+    $stableManifest = if (Test-Path -LiteralPath $stableManifestPath -PathType Leaf) {
+        try { Get-Content -LiteralPath $stableManifestPath -Raw | ConvertFrom-Json -ErrorAction Stop }
+        catch { $null }
+    } else { $null }
+    $stableInstallPass = ($stable.Code -eq 0 -and $stable.Version -ceq 'v0.2.0' -and
+        $stable.SourceRoot -ceq $stableHistoricalSource -and
+        $stable.InstallerPath -ceq (Join-Path $stableHistoricalSource 'install.ps1') -and
         $stable.Text -match 'OLYMPUS_INSTALL: v0\.2\.0 READY_OR_NO_CHANGES' -and
-        (Get-Content -LiteralPath (Join-Path $stableTarget '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json).managed_files.Count -gt 0)
+        $null -ne $stableManifest -and $stableManifest.schema_version -eq 1 -and
+        @($stableManifest.managed_files).Count -gt 0)
+    Check 'R13_EXPLICIT_STABLE_INSTALL' $stableInstallPass `
+        "installer=$($stable.InstallerPath); exit=$($stable.Code)`n$($stable.Text)"
     $stableVerify = Verify $stableTarget $stableArchive 'v0.2.0'
     Check 'R24_STABLE_INSTALL_VERIFY_PASS' ($stableVerify.Code -eq 0 -and $stableVerify.Text -match '(?m)^OLYMPUS_VERIFY: v0\.2\.0 PASS\s*$')
     $unexpectedLegacyAgent = Join-Path $stableTarget '.opencode/agents/aegis.md'
@@ -310,20 +485,37 @@ try {
     Check 'R24_CANDIDATE_VS_INSTALLED_STABLE_FAIL' ($oldStableMismatch.Code -ne 0 -and
         $oldStableMismatch.Text -match "(?m)^OLYMPUS_VERIFY: $($script:CandidateRegex) FAIL\s*$" -and
         $oldStableMismatch.Text -match 'OLYMPUS_VERIFY_REASON: MANAGED_FILE_MISMATCH')
-    $previousBetaTarget = New-Target 'previous-beta3-cannot-resolve-candidate'
-    $previousBetaInstall = Install $previousBetaTarget $previousBetaArchive $script:CandidateVersion
-    $previousBetaErrorPattern = [regex]::Escape(
-        "Archive root 'OpenCode-OlympusAgents-v0.3.0-beta.3' does not identify"
-    ) + "[\s|]*requested tag[\s|]*'" +
-        [regex]::Escape($script:CandidateVersion) + "'\."
-
-    Check 'R27_PREVIOUS_BETA3_CANNOT_SATISFY_CANDIDATE' (
-        $previousBetaInstall.Code -ne 0 -and
-        $previousBetaInstall.Text -match 'SOURCE_VERSION_MISMATCH' -and
-        $previousBetaInstall.Text -match $previousBetaErrorPattern -and
-        -not (Test-Path -LiteralPath (Join-Path $previousBetaTarget '.opencode/orchestrator-install.json')) -and
-        (Get-Content -LiteralPath (Join-Path $previousBetaTarget 'user-notes.txt') -Raw) -eq "preserve me`n"
-    )
+    $previousBetaTarget = New-Target 'previous-beta3-historical-install'
+    $previousBetaInstall = Install-Historical $previousBetaHistoricalSource $previousBetaTarget 'v0.3.0-beta.3'
+    $previousBetaManifestPath = Join-Path $previousBetaTarget '.opencode/orchestrator-install.json'
+    $previousBetaManifest = if (Test-Path -LiteralPath $previousBetaManifestPath -PathType Leaf) {
+        try { Get-Content -LiteralPath $previousBetaManifestPath -Raw | ConvertFrom-Json -ErrorAction Stop }
+        catch { $null }
+    } else { $null }
+    $previousBetaInstallPass = ($previousBetaInstall.Code -eq 0 -and
+        $previousBetaInstall.Version -ceq 'v0.3.0-beta.3' -and
+        $previousBetaInstall.SourceRoot -ceq $previousBetaHistoricalSource -and
+        $previousBetaInstall.InstallerPath -ceq (Join-Path $previousBetaHistoricalSource 'install.ps1') -and
+        $previousBetaInstall.Text -match 'OLYMPUS_INSTALL: v0\.3\.0-beta\.3 READY_OR_NO_CHANGES' -and
+        $null -ne $previousBetaManifest -and $previousBetaManifest.schema_version -eq 1 -and
+        $previousBetaManifest.installed_version -ceq 'v0.3.0-beta.3' -and
+        @($previousBetaManifest.managed_files).Count -gt 0)
+    Check 'R27_PREVIOUS_BETA3_SAME_TAG_INSTALL' $previousBetaInstallPass `
+        "installer=$($previousBetaInstall.InstallerPath); exit=$($previousBetaInstall.Code)`n$($previousBetaInstall.Text)"
+    $previousBetaSnapshot = Get-ProjectSnapshot $previousBetaTarget
+    $previousBetaVerify = Verify $previousBetaTarget $previousBetaArchive 'v0.3.0-beta.3'
+    Check 'R27_PREVIOUS_BETA3_VERIFY_READ_ONLY' ($previousBetaVerify.Code -eq 0 -and
+        $previousBetaVerify.Text -match '(?m)^OLYMPUS_VERIFY: v0\.3\.0-beta\.3 PASS\s*$' -and
+        (Get-ProjectSnapshot $previousBetaTarget) -ceq $previousBetaSnapshot)
+    [IO.File]::WriteAllText((Join-Path $previousBetaTarget '.opencode/agents/maintenance.md'), "id: maintenance`n", $utf8)
+    $previousBetaRosterSnapshot = Get-ProjectSnapshot $previousBetaTarget
+    $previousBetaRosterVerify = Verify $previousBetaTarget $previousBetaArchive 'v0.3.0-beta.3'
+    $previousBetaRosterReadOnly = (Get-ProjectSnapshot $previousBetaTarget) -ceq $previousBetaRosterSnapshot
+    Check 'R27_PREVIOUS_BETA3_ROSTER_NEGATIVE_READ_ONLY' ($previousBetaRosterVerify.Code -ne 0 -and
+        $previousBetaRosterVerify.Text -match 'OLYMPUS_VERIFY_REASON: ROSTER_MISMATCH' -and
+        $previousBetaRosterReadOnly) `
+        "exit=$($previousBetaRosterVerify.Code); read_only=$previousBetaRosterReadOnly`n$($previousBetaRosterVerify.Text)"
+    Remove-Item -LiteralPath (Join-Path $previousBetaTarget '.opencode/agents/maintenance.md') -Force
     $otherBetaTarget = New-Target 'verify-other-beta'
     $otherBetaInstall = Install $otherBetaTarget $betaArchive 'v0.3.0-beta.2'
     if ($otherBetaInstall.Code -ne 0) { throw 'Other-beta fixture install failed before version verification.' }
@@ -456,20 +648,24 @@ try {
         $releaseNotes -match '(?i)read-only|VerifyOnly')
     Check 'R25_RELEASE_NOTES_KEEP_COMMANDS_IN_INSTALL_GUIDE' ($releaseNotes -notmatch '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/)[^\r\n]+?\.ps1' -and
         $releaseNotes -notmatch '(?i)\b(?:irm|iwr|Invoke-WebRequest)\b[^\r\n]*\.ps1')
-    $requiredHighlights = @('Dual Harness Installer','-Harness opencode','-Harness codex','-Harness all',
-        'installed_harnesses','additive','legacy OpenCode installations','PowerShell 5.1','PowerShell 7','Olympus Harness Core',
-        'VerifyOnly','user-owned','does not claim full parity')
+    $requiredHighlights = @('olympus config apply','--dry-run','--execute','OpenCode-only global apply/recovery',
+        'matching pending operation','olympus doctor','read-only','MCP servers optional','v0.6.1','selected immutable tag')
     $missingHighlights = @($requiredHighlights | Where-Object { -not $releaseNotes.Contains($_) })
-    Check 'R25_DUAL_HARNESS_RELEASE_HIGHLIGHTS' ($missingHighlights.Count -eq 0)
-    Check 'R25_CAPABILITY_GAPS_NOT_OVERCLAIMED' ($releaseNotes -match 'DENY\s*=\s*GAP' -and
-        $releaseNotes -match 'AEGIS\s*=\s*GAP' -and $releaseNotes -match 'ACTIVITY_VISIBILITY\s*=\s*PARTIAL/BASIC' -and
-        $releaseNotes -match 'does not claim full parity' -and $releaseNotes -notmatch '(?i)Codex (?:has|provides|supports) (?:full parity|hard DENY|Aegis)')
+    Check 'R25_CURRENT_RELEASE_HIGHLIGHTS' ($missingHighlights.Count -eq 0)
+    Check 'R25_CURRENT_CAPABILITY_GAPS_NOT_OVERCLAIMED' ($releaseNotes -match 'DENY\s*=\s*GAP' -and
+        $releaseNotes -match 'CONTEXTUAL_OLYMPUS_MAINTENANCE\s*=\s*GAP' -and
+        $releaseNotes -match 'QUESTION_CENTRALIZATION\s*=\s*PARTIAL' -and
+        $releaseNotes -match 'RESULT_RECONCILIATION\s*=\s*PARTIAL' -and
+        $releaseNotes -match 'ACTIVITY_VISIBILITY\s*=\s*PARTIAL\b' -and
+        $releaseNotes -notmatch '(?i)AEGIS\s*=\s*GAP|PARTIAL/BASIC' -and
+        $releaseNotes -match '(?i)does not establish broad version compatibility' -and
+        $releaseNotes -notmatch '(?i)Codex (?:has|provides|supports) (?:full parity|hard DENY|Aegis)')
     $mutableExecutableUrl = '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/(?:master|main|refs/heads/(?:master|main))/[^\s]+?\.ps1|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/(?:master|main)/[^\s]+?\.ps1)'
     Check 'R25_RELEASE_NO_MUTABLE_EXECUTABLE_SOURCE' ($releaseNotes -notmatch $mutableExecutableUrl -and
         $versionText -match 'archive/refs/tags/\$Version\.zip')
 
     $readme = [IO.File]::ReadAllText((Join-Path $source 'README.md'))
-    $publicBootstrapVersion = 'v0.4.11'
+    $publicBootstrapVersion = 'v0.6.1'
     $fastInstallUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$publicBootstrapVersion/install-olympus.ps1"
     $fastUninstallUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$publicBootstrapVersion/uninstall-olympus.ps1"
     function Get-ReadmePowerShellCodeBlocks([string]$Markdown) {
@@ -564,8 +760,11 @@ try {
     Check 'R25_README_FAST_CONTRACT_ACCEPTS_LF_AND_CRLF' (
         (Test-ReadmeFastCommandContract $readmeWithLf $fastInstallCommand $fastUninstallCommand) -and
         (Test-ReadmeFastCommandContract $readmeWithCrLf $fastInstallCommand $fastUninstallCommand) -and
-        $readme.Contains('releases/tag/' + $publicBootstrapVersion) -and
+        $readme.Contains('/' + $publicBootstrapVersion + '/install-olympus.ps1') -and
+        $readme.Contains('/' + $publicBootstrapVersion + '/uninstall-olympus.ps1') -and
         $readme.Contains('published, immutable') -and
+        $readme -match '(?i)bootstrap pin is not the installed product version' -and
+        $readme -match '(?i)metadata checks fail closed' -and
         -not $readme.Contains('/' + $script:CandidateVersion + '/install-olympus.ps1') -and
         -not $readme.Contains('/' + $script:CandidateVersion + '/uninstall-olympus.ps1'))
     $readmeWithExtraFastHeadingLf = $readmeWithLf + "`n## Fast Extra`n"
@@ -637,9 +836,14 @@ try {
     Check 'R25_INSTALLATION_GUIDE_HAS_SCOPE_HARNESS_SAFETY_AND_STATUS' (
         $installGuide.Contains($fastInstallUrl) -and $installGuide.Contains($fastUninstallUrl) -and
         $installGuide.Contains($script:CandidateVersion) -and
-        $installGuide.Contains('releases/tag/' + $publicBootstrapVersion) -and
+        $installGuide.Contains('https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest') -and
+        $installGuide.Contains($publicBootstrapVersion + '/install-olympus.ps1') -and
         $installGuide.Contains('immutable=true') -and
-        $installGuide.Contains('ValidateNotNullOrEmpty') -and
+        $installGuide.Contains('time-zone-aware') -and
+        $installGuide.Contains('published_at') -and
+        $installGuide.Contains('tag_name') -and
+        $installGuide.Contains('matching version and release markers') -and
+        $installGuide.Contains('older-launcher fallback') -and
         -not $installGuide.Contains('/' + $script:CandidateVersion + '/install-olympus.ps1') -and
         -not $installGuide.Contains('/' + $script:CandidateVersion + '/uninstall-olympus.ps1') -and
         $installGuide.Contains('ACTIVE DEVELOPMENT') -and
@@ -689,7 +893,9 @@ try {
         $gateText -match 'RELEASE_NOTES_HARNESS_VERIFY_MISSING')
 
     $badVersionTarget = New-Target 'bad-version'
-    $badVersion = (& pwsh -NoProfile -File $installer -Version 'v1.2.3-preview.1' -Target $badVersionTarget -SourceArchive $candidateArchive 2>&1 | Out-String)
+    Assert-QualificationCliTargets $cliInstallRoot $cliPathStorePath
+    $badVersion = (& pwsh -NoProfile -File $installer -Version 'v1.2.3-preview.1' -Target $badVersionTarget -SourceArchive $candidateArchive `
+        -CliInstallRoot $cliInstallRoot -CliPathStorePath $cliPathStorePath 2>&1 | Out-String)
     Check 'R17_MALFORMED_VERSION_REJECTED' ($LASTEXITCODE -ne 0 -and $badVersion -match 'v1\.2\.3-preview\.1' -and
         $badVersion -match 'no coincide|does not match|validation pattern' -and
         -not (Test-Path -LiteralPath (Join-Path $badVersionTarget '.opencode/orchestrator-install.json')))
@@ -722,7 +928,7 @@ try {
     Check 'R22_UPGRADE_REINSTALL_NO_CHANGES' ($upgradeAgain.Code -eq 0 -and $upgradeAgain.Text -match '(?m)^NO_CHANGES\s*$')
 
     $alteredLegacyTarget = New-Target 'altered-historical-inventory'
-    $alteredLegacyInstall = Install $alteredLegacyTarget $stableArchive 'v0.2.0'
+    $alteredLegacyInstall = Install-Historical $stableHistoricalSource $alteredLegacyTarget 'v0.2.0'
     if ($alteredLegacyInstall.Code -ne 0) { throw 'Stable legacy fixture install failed before inventory test.' }
     $alteredManifestPath = Join-Path $alteredLegacyTarget '.opencode/orchestrator-install.json'
     $alteredManifest = Get-Content -LiteralPath $alteredManifestPath -Raw | ConvertFrom-Json
@@ -739,7 +945,7 @@ try {
         (Get-ProjectSnapshot $alteredLegacyTarget) -ceq $alteredLegacySnapshot)
 
     $modifiedLegacyTarget = New-Target 'modified-retired-agent'
-    $modifiedInstall = Install $modifiedLegacyTarget $stableArchive 'v0.2.0'
+    $modifiedInstall = Install-Historical $stableHistoricalSource $modifiedLegacyTarget 'v0.2.0'
     if ($modifiedInstall.Code -ne 0) { throw 'Stable legacy fixture install failed before drift test.' }
     $retiredPath = Join-Path $modifiedLegacyTarget '.opencode/agents/maintenance.md'
     [IO.File]::AppendAllText($retiredPath, "`n# local modification`n", $utf8)

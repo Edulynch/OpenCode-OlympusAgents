@@ -2,7 +2,7 @@
 
 ## Start here
 
-Run [Fast Install](../README.md#fast-install) using the same `v0.6.1` tag for the public entrypoint and installer. The entrypoint asks for scope (**current project**, **another project**, or **global**) and harness (**OpenCode**, **Codex**, or **both**) when needed. A successful project or global install sets up the per-user `olympus` command and adds its `bin` folder to the current user's PATH; open a new PowerShell 7 shell afterward.
+Run [Fast Install](../README.md#fast-install) from the published `v0.6.1` bootstrap. That immutable bootstrap selects an eligible published stable release; its tag is separate from the selected product version. It asks for scope (**current project**, **another project**, or **global**) and harness (**OpenCode**, **Codex**, or **both**) when needed. A successful project or global install sets up the per-user `olympus` command and adds its `bin` folder to the current user's PATH; open a new PowerShell 7 shell afterward.
 
 Then use `olympus version` and `olympus update` from any directory. The public [Fast Uninstall](../README.md#fast-uninstall) entrypoint and `olympus uninstall` remove only managed resources and Olympus's PATH entry.
 
@@ -62,7 +62,7 @@ The twelve legacy install/uninstall wrappers remain for compatibility at `instal
 
 ## Release selection, identity, and executable source
 
-The v0.6.1 entrypoint queries GitHub's `releases/latest` metadata and requires a valid stable tag with `immutable=true`, `draft=false`, `prerelease=false`, and a published timestamp. The launcher downloads installer/archive content pinned to that returned tag and checks the installer's version identity. It fails closed for missing, malformed, mutable, unpublished, or mismatched sources; it never falls back to `main` or `master`.
+The published `v0.6.1` entrypoint queries `https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest` metadata only to select a release. It requires `immutable=true`, `draft=false`, `prerelease=false`, a valid stable `tag_name`, and a nonempty, time-zone-aware `published_at` timestamp that is not more than five minutes in the future. The selected tag supplies `scripts/launch-latest.ps1`; that launcher fetches the installer and exact tag archive from the same tag and checks matching version and release markers. Both stages fail closed for missing, malformed, mutable, unpublished, or mismatched sources; there is no mutable-branch or older-launcher fallback.
 
 These checks establish release selection and tag identity, not cryptographic integrity. GitHub's immutability field is a platform assertion; the installer does not independently verify a signature or published SHA-256 for downloaded executable code. Review each downloaded stage separately if your trust policy requires it.
 
@@ -74,7 +74,7 @@ Maintainers may run `install.ps1` directly against a trusted local checkout inst
 $source = (Resolve-Path '.').Path
 $target = 'C:\Users\Ada Lovelace\source\Sample Project'
 pwsh -NoProfile -File (Join-Path $source 'install.ps1') `
-    -Version 'v0.6.1' -SourceRoot $source -Target $target -Scope project -Harness opencode
+    -Version 'v0.7.0' -SourceRoot $source -Target $target -Scope project -Harness opencode
 ```
 
 Use the version actually declared by the checkout; do not copy the example version blindly. Local-source installation is for advanced, trusted-checkout use and is not evidence that the corresponding release is published or immutable.
@@ -221,7 +221,7 @@ Keep unknown/custom-model warnings and offline behavior. A newly absent model
 may be treated as unknown; never replace an explicit capability or effort
 declaration with an inferred default.
 
-`olympus config list` shows effective model/effort values, precedence (**project override > global override > canonical defaults**), and absolute paths to each source. Scope-aware commands such as `agents list`, `config list`, and `doctor` select the managed OpenCode project at the current directory when one exists; otherwise they use global scope. Use `--scope project --target <absolute-worktree-root>` or `--scope global` to select explicitly. For example, `olympus doctor --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project'` checks that project. Doctor is read-only: it validates JSON and declared model/effort values and checks managed installation state, but never applies edits or checks provider access. After manually editing JSON, use `olympus install --scope global --harness opencode --execute` for global configuration or `olympus update --scope project --target <absolute-worktree-root>` for project configuration to apply the effective values.
+`olympus config list` shows effective model/effort values, precedence (**project override > global override > canonical defaults**), and absolute paths to each source. Scope-aware commands such as `agents list`, `config list`, and `doctor` select the managed OpenCode project at the current directory when one exists; otherwise they use global scope. Use `--scope project --target <absolute-worktree-root>` or `--scope global` to select explicitly. For example, `olympus doctor --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project'` checks that project. Doctor is read-only: it validates JSON and declared model/effort values and checks managed installation state, but never applies edits or checks provider access. For managed configuration changes, review `olympus config apply ... --dry-run` first, then use `--execute` only for the intended target; global execution is OpenCode-only. `olympus config recover` may change files and is only for reconciling the matching pending operation. See the [command scopes and effects](#command-scopes-and-effects) table before applying or recovering.
 
 Project installation remains explicit and uses the existing ownership safeguards:
 

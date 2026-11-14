@@ -205,9 +205,9 @@ function Add-ReadmeInstallCommand($Docs, [string]$Command) {
 function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG', 'POST_TAG')][string]$TagState) {
     $errors = [System.Collections.Generic.List[string]]::new()
     $versionRegex = [regex]::Escape($Version)
-    $bootstrapVersion = 'v0.4.11'
+    $bootstrapVersion = 'v0.6.1'
     $bootstrapVersionRegex = [regex]::Escape($bootstrapVersion)
-    if ($Version -cne 'v0.5.0') { $errors.Add('DOC_TARGET_IDENTITY_NOT_V050') }
+    if ($Version -cne 'v0.7.0') { $errors.Add('DOC_TARGET_IDENTITY_NOT_V070') }
     if ($Version -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$') {
         $errors.Add('DOC_TARGET_NOT_STABLE_VERSION')
     }
@@ -279,14 +279,18 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
         -not (Test-GlobalReadmeInstallerContract $readme $fastInstallCommand $fastUninstallCommand)) {
         $publicInvalid = $true
     }
-    $versionedBootstrapPattern = '(?i)versioned[ \t]+`?' + $bootstrapVersionRegex + '`?[ \t]+bootstrap'
+    $pinnedBootstrapPattern = '(?i)pinned[ \t]+to[ \t]+the[ \t]+published[ \t]+`?' + $bootstrapVersionRegex + '`?[ \t]+bootstrap'
     $readmeReleaseContractInvalid = (
-        -not [regex]::IsMatch($readme, $versionedBootstrapPattern) -or
-        -not $readme.Contains('https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/' + $bootstrapVersion) -or
+        -not [regex]::IsMatch($readme, $pinnedBootstrapPattern) -or
+        -not $readme.Contains('/' + $bootstrapVersion + '/install-olympus.ps1') -or
+        -not $readme.Contains('/' + $bootstrapVersion + '/uninstall-olympus.ps1') -or
         -not $readme.Contains('published, immutable') -or
+        $readme -notmatch '(?i)bootstrap pin is not the installed product version' -or
         $readme.Contains('/' + $Version + '/install-olympus.ps1') -or
         $readme.Contains('/' + $Version + '/uninstall-olympus.ps1') -or
-        $readme -notmatch '(?i)releases/latest.{0,160}metadata.{0,160}published release.{0,80}tag' -or
+        $readme -notmatch '(?i)releases/latest.{0,160}metadata' -or
+        $readme -notmatch '(?i)published.{0,100}stable release' -or
+        $readme -notmatch '(?i)selected tag' -or
         $readme -notmatch '(?i)release metadata checks fail closed' -or
         $readme -notmatch '(?i)GitHub.{0,60}immutability flag.{0,80}not independent cryptographic signature verification'
     )
@@ -337,23 +341,24 @@ function Get-DocumentationErrors($Docs, [string]$Version, [ValidateSet('PRE_TAG'
     $releasePrerequisiteInvalid = (
         -not $installationGuide.Contains($fastInstallCommand) -or
         -not $installationGuide.Contains($fastUninstallCommand) -or
-        -not $installationGuide.Contains('releases/tag/' + $bootstrapVersion) -or
-        -not $installationGuide.Contains('b82086d386e5c5077d9568e0d5a4ec2b3c3b46ff') -or
-        -not $installationGuide.Contains('published_at=2026-10-21T19:17:41Z') -or
-        -not $installationGuide.Contains('ValidateNotNullOrEmpty') -or
+        -not $installationGuide.Contains('/' + $bootstrapVersion + '/install-olympus.ps1') -or
+        -not $installationGuide.Contains('/' + $bootstrapVersion + '/uninstall-olympus.ps1') -or
+        -not $installationGuide.Contains('https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest') -or
+        -not $installationGuide.Contains('immutable=true') -or
+        -not $installationGuide.Contains('draft=false') -or
+        -not $installationGuide.Contains('prerelease=false') -or
+        -not $installationGuide.Contains('published_at') -or
+        -not $installationGuide.Contains('time-zone-aware') -or
+        -not $installationGuide.Contains('five minutes in the future') -or
+        -not $installationGuide.Contains('tag_name') -or
+        -not $installationGuide.Contains('scripts/launch-latest.ps1') -or
+        -not $installationGuide.Contains('exact tag archive') -or
+        -not $installationGuide.Contains('matching version and release markers') -or
+        -not $installationGuide.Contains('no mutable-branch or older-launcher fallback') -or
+        -not $installationGuide.Contains('does not independently verify a signature') -or
         $installationGuide.Contains('/' + $Version + '/install-olympus.ps1') -or
         $installationGuide.Contains('/' + $Version + '/uninstall-olympus.ps1') -or
-        $installationGuide -notmatch '(?i)https://api\.github\.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest' -or
-        $installationGuide -notmatch '(?i)\bimmutable\s*=\s*true\b' -or
-        $installationGuide -notmatch '(?i)\bdraft\s*=\s*false\b' -or
-        $installationGuide -notmatch '(?i)\bprerelease\s*=\s*false\b' -or
-        $installationGuide -notmatch '(?i)published timestamp' -or
-        $installationGuide -notmatch '(?i)tag_name' -or
-        $installationGuide -notmatch '(?i)scripts/launch-latest\.ps1' -or
-        $installationGuide -notmatch '(?i)exact tag archive' -or
-        $installationGuide -notmatch '(?i)matching version and release markers' -or
-        $installationGuide -notmatch '(?i)no mutable-branch or older-launcher fallback' -or
-        $installationGuide -notmatch '(?i)does not independently verify a signature'
+        $installationGuide -notmatch '(?i)published stable release'
     )
     if ($releasePrerequisiteInvalid) {
         $errors.Add('DOC_INSTALLATION_RELEASE_PREREQUISITE_INVALID')
@@ -534,11 +539,11 @@ try {
     Assert-Rejected $badIdentity $version 'PRE_TAG' 'DOC_ACTIVE_RELEASE_IDENTITY_MISMATCH' 'REGRESSION_REJECTS_ACTIVE_IDENTITY_MISMATCH'
 
     $badTargetIdentity = Copy-ReleaseDocs $docs
-    $badTargetIdentity['install.ps1'] = ([string]$badTargetIdentity['install.ps1']).Replace("[string]`$Version = '$version'", "[string]`$Version = 'v0.4.11'").Replace("`$ReleaseVersion = '$version'", "`$ReleaseVersion = 'v0.4.11'")
-    Assert-Rejected $badTargetIdentity 'v0.4.11' 'PRE_TAG' 'DOC_TARGET_IDENTITY_NOT_V050' 'REGRESSION_REJECTS_NON_V050_TARGET'
+    $badTargetIdentity['install.ps1'] = ([string]$badTargetIdentity['install.ps1']).Replace("[string]`$Version = '$version'", "[string]`$Version = 'v0.6.1'").Replace("`$ReleaseVersion = '$version'", "`$ReleaseVersion = 'v0.6.1'")
+    Assert-Rejected $badTargetIdentity 'v0.6.1' 'PRE_TAG' 'DOC_TARGET_IDENTITY_NOT_V070' 'REGRESSION_REJECTS_NON_V070_TARGET'
 
     $tagBase = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' + $version + '/'
-    $bootstrapBase = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.4.11/'
+    $bootstrapBase = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/'
     $fastInstallCommand = "& ([scriptblock]::Create((irm '$($bootstrapBase)install-olympus.ps1')))"
     $fastUninstallCommand = "& ([scriptblock]::Create((irm '$($bootstrapBase)uninstall-olympus.ps1')))"
     $badMissingPublicEntrypoint = Copy-ReleaseDocs $docs
@@ -576,8 +581,7 @@ try {
 
     $badCandidateBootstrapDescription = Copy-ReleaseDocs $docs
     $badCandidateBootstrapDescription['README.md'] = ([string]$badCandidateBootstrapDescription['README.md']).Replace(
-        'versioned `v0.4.11` bootstrap', 'versioned `v0.4.12` bootstrap').Replace(
-        '/releases/tag/v0.4.11', '/releases/tag/v0.4.12')
+        'pinned to the published `v0.6.1` bootstrap', 'pinned to the published `v0.7.0` bootstrap')
     Assert-Rejected $badCandidateBootstrapDescription $version 'PRE_TAG' 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID' 'REGRESSION_REJECTS_CANDIDATE_BOOTSTRAP_PROVENANCE_CLAIM'
 
     $badMutableLauncher = Copy-ReleaseDocs $docs

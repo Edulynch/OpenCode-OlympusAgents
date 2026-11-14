@@ -19,7 +19,7 @@ Issue #91 keeps documentation versioned in this repository. Enabling or publishi
 
 ## Current guidance and release records
 
-The files below include the 10 documents from the prior governance inventory (nine historical top-level entries plus the operational issue ledger), the v0.5.0 qualification record, the v0.6.0 and v0.6.1 release notes, and the operator workflow guide. No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
+The files below include the 10 documents from the prior governance inventory (nine historical top-level entries plus the operational issue ledger), the v0.5.0 qualification record, the v0.6.0 and v0.6.1 release notes, the v0.7.0 release record, and the operator workflow guide. No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
 
 | Document | Purpose and audience | State, relationship, and incoming references | Proposed owner |
 | --- | --- | --- | --- |
@@ -37,6 +37,7 @@ The files below include the 10 documents from the prior governance inventory (ni
 | [RELEASE-v0.5.0.md](RELEASE-v0.5.0.md) | Bounded CLI qualification snapshot and support matrix | **Historical pre-publication evidence.** Preserved as recorded alongside the [historical stable v0.5.0 Release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.5.0). | Release maintainer (proposed role) |
 | [RELEASE-v0.6.0.md](RELEASE-v0.6.0.md) | Original global CLI release highlights and installation guidance | **Historical v0.6.0 release notes.** Preserved exact-tag installation and verification evidence. | Release maintainer (proposed role) |
 | [RELEASE-v0.6.1.md](RELEASE-v0.6.1.md) | Post-install runtime warning and maintenance boundaries | **v0.6.1 release notes.** Exact-tag installation, verification and known limitations. | Release maintainer (proposed role) |
+| [RELEASE-v0.7.0.md](RELEASE-v0.7.0.md) | Safe configuration apply/recovery, diagnostics, and lifecycle updates | **v0.7.0 release record.** Installation, verification and evidence boundaries. | Release maintainer (proposed role) |
 
 ## Historical records
 

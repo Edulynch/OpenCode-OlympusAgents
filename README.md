@@ -34,7 +34,7 @@ After installation, open OpenCode in your project and try a prompt:
 
 ## Fast Install
 
-⚡ **One release, one version: Olympus v0.6.1.** The public entrypoint and installer use the same immutable release tag. No checkout is required. PowerShell asks **where** (current project, another project, global) and **which harness** (OpenCode, Codex, both). Every successful project or global install also sets up the per-user `olympus` command and adds only its `bin` folder to your user PATH.
+⚡ **Olympus source identity: v0.7.0.** The two public commands stay pinned to the published `v0.6.1` bootstrap. It uses `releases/latest` metadata to select a published, immutable stable release, then runs the installer and archive from that selected tag; the bootstrap pin is not the installed product version. Release metadata checks fail closed for invalid or mismatched sources. GitHub's immutability flag is not independent cryptographic signature verification. No checkout is required. PowerShell asks **where** (current project, another project, global) and **which harness** (OpenCode, Codex, both). Every successful project or global install also sets up the per-user `olympus` command and adds only its `bin` folder to your user PATH.
 
 ```powershell
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/install-olympus.ps1')))
@@ -65,10 +65,13 @@ olympus agents list
 olympus nox set-model openai/gpt-6-luna
 olympus nox set-effort high
 olympus config list
+olympus config apply --scope global --harness opencode --dry-run
+olympus config apply --scope global --harness opencode --execute
+olympus config recover --scope global --harness opencode
 olympus doctor
 ```
 
-Model IDs use the exact `provider/model-id` form from [Models.dev](https://models.dev). Effective values use project overrides, then global overrides, then canonical defaults. Olympus validates known catalog-declared capabilities offline; a model absent from its bundled snapshot produces a compatibility warning, not an access check or rejection. It never checks credentials, subscriptions, or model access. Doctor is read-only; use `olympus install` for global JSON edits or `olympus update --scope project --target <worktree>` for project edits to apply them. `config list` prints absolute source paths. [Installation and safety →](docs/INSTALLATION.md)
+Model IDs use the exact `provider/model-id` form from [Models.dev](https://models.dev). Effective values use project overrides, then global overrides, then canonical defaults. Olympus validates known catalog-declared capabilities offline; a model absent from its bundled snapshot produces a compatibility warning, not an access check or rejection. It never checks credentials, subscriptions, or model access. `config apply --dry-run` previews managed changes; applying globally currently supports OpenCode only and requires `--execute`. Global recovery is OpenCode-only, may change files, and is for the matching pending operation only. Doctor is read-only. `config list` prints absolute source paths. [Installation, command scopes, and safety →](docs/INSTALLATION.md#command-scopes-and-effects)
 
 ## Fast Uninstall
 

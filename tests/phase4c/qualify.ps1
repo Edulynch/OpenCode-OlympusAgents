@@ -587,6 +587,7 @@ try {
 
         $modifiedRepo = New-CleanRepo $scenarioDir 'modified' ([ordered]@{ 'README.md' = 'modified legacy route' + [Environment]::NewLine })
         [void](Assert-Installed $modifiedRepo 'READY')
+        [IO.Directory]::CreateDirectory((Join-Path $modifiedRepo '.opencode/commands')) | Out-Null
         $modifiedManifestPath = Join-Path $modifiedRepo '.opencode/orchestrator-install.json'
         $modifiedManifest = [IO.File]::ReadAllText($modifiedManifestPath) | ConvertFrom-Json -Depth 100
         $modifiedAgent = Join-Path $modifiedRepo '.opencode/agents/aegis.md'
@@ -606,6 +607,7 @@ try {
 
         $unownedRepo = New-CleanRepo $scenarioDir 'unowned' ([ordered]@{ 'README.md' = 'unowned legacy route' + [Environment]::NewLine })
         [void](Assert-Installed $unownedRepo 'READY')
+        [IO.Directory]::CreateDirectory((Join-Path $unownedRepo '.opencode/commands')) | Out-Null
         $unownedAgent = Join-Path $unownedRepo '.opencode/agents/aegis.md'
         $unownedCommand = Join-Path $unownedRepo '.opencode/commands/maintain.md'
         [IO.File]::WriteAllText($unownedAgent, 'user-owned agent' + "`n", $Utf8)

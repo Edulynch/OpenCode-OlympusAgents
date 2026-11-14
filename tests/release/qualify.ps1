@@ -907,25 +907,76 @@ try {
         -not (Test-Path -LiteralPath (Join-Path $mismatchTarget '.opencode/orchestrator-install.json')) -and
         (Get-Content -LiteralPath (Join-Path $mismatchTarget 'user-notes.txt') -Raw) -eq "preserve me`n")
 
-    # Verified owned legacy maintenance.md is migrated; modified or unowned copies are never replaced.
-    Check 'R22_STABLE_SOURCE_HAS_RETIRED_AGENT' (Test-Path -LiteralPath (Join-Path $stableTarget '.opencode/agents/maintenance.md'))
+    # The historical inventory owns maintenance.md; the current release retires its old routes.
     $stableManifest = Get-Content -LiteralPath (Join-Path $stableTarget '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json
-    Check 'R22_STABLE_HISTORICAL_INVENTORY' ($stableManifest.managed_files.Count -eq 12 -and
+    $stableMaintenancePath = Join-Path $stableTarget '.opencode/agents/maintenance.md'
+    $stableMaintenancePresent = Test-Path -LiteralPath $stableMaintenancePath -PathType Leaf
+    Check 'R22_STABLE_SOURCE_HAS_RETIRED_AGENT' ($stableMaintenancePresent)
+    $stableMaintenanceEntries = @($stableManifest.managed_files | Where-Object path -eq '.opencode/agents/maintenance.md')
+    Check 'R22_STABLE_HISTORICAL_INVENTORY' ($null -ne $stableManifest -and
+        $stableManifest.schema_version -eq 1 -and $stableManifest.managed_files.Count -eq 12 -and
+        $stableMaintenanceEntries.Count -eq 1 -and
         @($stableManifest.managed_files | Where-Object path -eq '.opencode/scripts/worktree-setup.ps1').Count -eq 0)
     $upgrade = Install $stableTarget $candidateArchive $script:CandidateVersion
-    $upManifest = Get-Content -LiteralPath (Join-Path $stableTarget '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json
-    Check 'R22_OWNED_RETIRED_AGENT_MIGRATED' ($upgrade.Code -eq 0 -and
-        -not (Test-Path -LiteralPath (Join-Path $stableTarget '.opencode/agents/maintenance.md')) -and
-        (Test-Path -LiteralPath (Join-Path $stableTarget '.opencode/agents/aegis.md')) -and
-        $upManifest.installed_version -eq $script:CandidateVersion -and
-        @($upManifest.managed_files | Where-Object path -eq '.opencode/agents/maintenance.md').Count -eq 0)
+    $upManifestPath = Join-Path $stableTarget '.opencode/orchestrator-install.json'
+    $upManifestPresent = Test-Path -LiteralPath $upManifestPath -PathType Leaf
+    $upManifestParseError = $null
+    $upManifest = $null
+    if ($upManifestPresent) {
+        try { $upManifest = Get-Content -LiteralPath $upManifestPath -Raw | ConvertFrom-Json -Depth 100 -ErrorAction Stop }
+        catch { $upManifestParseError = $_.Exception.Message }
+    } else {
+        $upManifestParseError = 'Updated manifest is missing.'
+    }
+    $upManagedFilesProperty = if ($null -ne $upManifest) { $upManifest.PSObject.Properties['managed_files'] } else { $null }
+    $upSchemaProperty = if ($null -ne $upManifest) { $upManifest.PSObject.Properties['schema_version'] } else { $null }
+    $upVersionProperty = if ($null -ne $upManifest) { $upManifest.PSObject.Properties['installed_version'] } else { $null }
+    $upManifestHasManagedFiles = ($null -ne $upManagedFilesProperty -and $null -ne $upManagedFilesProperty.Value)
+    $upManagedFiles = @(if ($upManifestHasManagedFiles) { $upManagedFilesProperty.Value })
+    $upManifestSchema = if ($null -ne $upSchemaProperty) { $upSchemaProperty.Value } else { $null }
+    $upManifestVersion = if ($null -ne $upVersionProperty) { [string]$upVersionProperty.Value } else { $null }
+    $retiredOpenCodePaths = @(
+        '.opencode/agents/maintenance.md',
+        '.opencode/agents/aegis.md',
+        '.opencode/commands/maintain.md'
+    )
+    $retiredPathsPresent = @($retiredOpenCodePaths | Where-Object {
+        Test-Path -LiteralPath (Join-Path $stableTarget $_) -PathType Leaf
+    })
+    $retiredManifestEntries = @($upManagedFiles | Where-Object {
+        $pathProperty = if ($null -ne $_) { $_.PSObject.Properties['path'] } else { $null }
+        $null -ne $pathProperty -and $pathProperty.Value -in $retiredOpenCodePaths
+    } | ForEach-Object { [string]$_.PSObject.Properties['path'].Value })
+    $currentAgentDirectory = Join-Path $stableTarget '.opencode/agents'
+    $currentAgentCount = if (Test-Path -LiteralPath $currentAgentDirectory -PathType Container) {
+        @(Get-ChildItem -LiteralPath $currentAgentDirectory -Filter '*.md' -File).Count
+    } else { 0 }
+    $retiredFilesAbsent = $retiredPathsPresent.Count -eq 0
+    $upgradePass = ($upgrade.Code -eq 0 -and $null -ne $upManifest -and $upManifestPresent -and
+        $null -eq $upManifestParseError -and $upManifestSchema -eq 1 -and
+        $upManifestHasManagedFiles -and $upManifestVersion -ceq $script:CandidateVersion -and
+        $upManagedFiles.Count -eq 15 -and $currentAgentCount -eq 11 -and $retiredFilesAbsent -and
+        $retiredManifestEntries.Count -eq 0)
+    $upgradeEvidence = "exit=$($upgrade.Code); expected_version=$script:CandidateVersion; manifest_present=$upManifestPresent; schema=$upManifestSchema; installed_version=$upManifestVersion; managed_count=$($upManagedFiles.Count)/15; role_count=$currentAgentCount/11; retired_files_present=$($retiredPathsPresent -join ','); retired_manifest_entries=$($retiredManifestEntries -join ','); parse_error=$upManifestParseError`n$($upgrade.Text)"
+    Check 'R22_OWNED_RETIRED_AGENT_MIGRATED' $upgradePass $upgradeEvidence
     $worktreeSetupPath = Join-Path $stableTarget '.opencode/scripts/worktree-setup.ps1'
-    $worktreeSetupEntry = @($upManifest.managed_files | Where-Object path -eq '.opencode/scripts/worktree-setup.ps1')
-    Check 'R22_WORKTREE_SETUP_INSTALLED_AND_OWNED' ((Test-Path -LiteralPath $worktreeSetupPath -PathType Leaf) -and
-        $upManifest.managed_files.Count -eq 17 -and $worktreeSetupEntry.Count -eq 1 -and
-        $worktreeSetupEntry[0].sha256 -eq (Get-FileHash -LiteralPath $worktreeSetupPath -Algorithm SHA256).Hash.ToLowerInvariant())
+    $worktreeSetupEntry = @($upManagedFiles | Where-Object {
+        $pathProperty = if ($null -ne $_) { $_.PSObject.Properties['path'] } else { $null }
+        $null -ne $pathProperty -and $pathProperty.Value -eq '.opencode/scripts/worktree-setup.ps1'
+    })
+    $worktreeSetupPresent = Test-Path -LiteralPath $worktreeSetupPath -PathType Leaf
+    $worktreeHashProperty = if ($worktreeSetupEntry.Count -eq 1) { $worktreeSetupEntry[0].PSObject.Properties['sha256'] } else { $null }
+    $worktreeSetupHashMatches = ($worktreeSetupPresent -and $worktreeSetupEntry.Count -eq 1 -and
+        $null -ne $worktreeHashProperty -and
+        $worktreeHashProperty.Value -eq (Get-FileHash -LiteralPath $worktreeSetupPath -Algorithm SHA256).Hash.ToLowerInvariant())
+    $worktreeSetupPass = ($worktreeSetupPresent -and $upManagedFiles.Count -eq 15 -and
+        $worktreeSetupEntry.Count -eq 1 -and $worktreeSetupHashMatches)
+    Check 'R22_WORKTREE_SETUP_INSTALLED_AND_OWNED' $worktreeSetupPass `
+        ("exit=$($upgrade.Code); helper_present=$worktreeSetupPresent; managed_count=$($upManagedFiles.Count); helper_entries=$($worktreeSetupEntry.Count); hash_matches=$worktreeSetupHashMatches`n$($upgrade.Text)")
     $upgradeAgain = Install $stableTarget $candidateArchive $script:CandidateVersion
-    Check 'R22_UPGRADE_REINSTALL_NO_CHANGES' ($upgradeAgain.Code -eq 0 -and $upgradeAgain.Text -match '(?m)^NO_CHANGES\s*$')
+    $upgradeAgainPass = ($upgradeAgain.Code -eq 0 -and $upgradeAgain.Text -match '(?m)^NO_CHANGES\s*$')
+    Check 'R22_UPGRADE_REINSTALL_NO_CHANGES' $upgradeAgainPass `
+        ("exit_code=$($upgradeAgain.Code); no_changes_output=$($upgradeAgain.Text -match '(?m)^NO_CHANGES\s*$')`n$($upgradeAgain.Text)")
 
     $alteredLegacyTarget = New-Target 'altered-historical-inventory'
     $alteredLegacyInstall = Install-Historical $stableHistoricalSource $alteredLegacyTarget 'v0.2.0'
@@ -962,11 +1013,19 @@ try {
     $unownedPath = Join-Path $unownedTarget '.opencode/agents/maintenance.md'
     [IO.File]::WriteAllText($unownedPath, "user-owned retired-name file`n", $utf8)
     $unownedHash = (Get-FileHash -LiteralPath $unownedPath -Algorithm SHA256).Hash
+    $unownedAegisPath = Join-Path $unownedTarget '.opencode/agents/aegis.md'
+    $unownedMaintainPath = Join-Path $unownedTarget '.opencode/commands/maintain.md'
+    $unownedSnapshot = Get-ProjectSnapshot $unownedTarget
     $unownedUpgrade = Install $unownedTarget $candidateArchive
-    Check 'R23_UNOWNED_RETIRED_FILE_CONFLICT_NONDESTRUCTIVE' ($unownedUpgrade.Code -ne 0 -and
-        $unownedUpgrade.Text -match 'INSTALL_CONFLICT' -and
-        (Get-FileHash -LiteralPath $unownedPath -Algorithm SHA256).Hash -eq $unownedHash -and
-        (Test-Path -LiteralPath (Join-Path $unownedTarget '.opencode/agents/aegis.md')))
+    $unownedHashPreserved = (Get-FileHash -LiteralPath $unownedPath -Algorithm SHA256).Hash -eq $unownedHash
+    $unownedSnapshotPreserved = (Get-ProjectSnapshot $unownedTarget) -ceq $unownedSnapshot
+    $unownedAegisPresent = Test-Path -LiteralPath $unownedAegisPath -PathType Leaf
+    $unownedMaintainPresent = Test-Path -LiteralPath $unownedMaintainPath -PathType Leaf
+    $unownedConflictPass = ($unownedUpgrade.Code -ne 0 -and $unownedUpgrade.Text -match 'INSTALL_CONFLICT' -and
+        $unownedHashPreserved -and $unownedSnapshotPreserved -and -not $unownedAegisPresent -and
+        -not $unownedMaintainPresent)
+    Check 'R23_UNOWNED_RETIRED_FILE_CONFLICT_NONDESTRUCTIVE' $unownedConflictPass `
+        ("exit=$($unownedUpgrade.Code); install_conflict=$($unownedUpgrade.Text -match 'INSTALL_CONFLICT'); user_file_preserved=$unownedHashPreserved; snapshot_preserved=$unownedSnapshotPreserved; aegis_present=$unownedAegisPresent; maintain_command_present=$unownedMaintainPresent`n$($unownedUpgrade.Text)")
 
     $second = Install $target $candidateArchive
     Check 'R6_REINSTALL' ($second.Code -eq 0 -and $second.Text -match '(?m)^NO_CHANGES\s*$')

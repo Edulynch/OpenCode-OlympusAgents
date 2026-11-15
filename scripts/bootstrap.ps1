@@ -487,6 +487,22 @@ function Get-LegacyOpenCodeSets {
         'opencode.jsonc'
     )
     $allowed += ,@($v044Managed)
+    # Freeze the exact v0.2.0 inventory independently of the current agent roster.
+    $v020Managed = @(
+        'opencode.jsonc',
+        '.opencode/agents/kael.md',
+        '.opencode/agents/veyra.md',
+        '.opencode/agents/orin.md',
+        '.opencode/agents/kovan.md',
+        '.opencode/agents/nox.md',
+        '.opencode/agents/vera.md',
+        '.opencode/agents/sorin.md',
+        '.opencode/agents/maintenance.md',
+        '.opencode/commands/maintain.md',
+        '.opencode/plugins/olympus-activity/activity.ts',
+        '.opencode/plugins/olympus-activity/tui.tsx'
+    )
+    $allowed += ,@($v020Managed)
     # The last shipped Aegis roster added both paths; retire them only when the
     # exact manifest set and hashes prove Olympus ownership.
     $allowed += ,@($OpenCodeManaged + '.opencode/agents/aegis.md' + '.opencode/commands/maintain.md')

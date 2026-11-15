@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## v0.7.0
+
+### Highlights
+
+- Add explicit `olympus config apply --dry-run` previews before `--execute`, OpenCode-only global apply/recovery, and read-only `olympus doctor` diagnostics with actionable guidance. Recovery is only for the matching pending operation.
+- Reconcile OpenCode background child lifecycle reports without treating a partial result as terminal; keep the runtime evidence and limits separate from static checks.
+- Keep MCP servers optional when the host does not provide them; clarify CLI effects and qualification scopes.
+- Keep the two public Fast entrypoints pinned to the published `v0.6.1` bootstrap. It selects a published stable release by metadata and loads the installer/archive from the selected immutable tag; this bootstrap pin is distinct from the product version declared by the selected source.
+
+### Capability limits
+
+- Windows with PowerShell 7 remains the only qualified installer platform. OpenCode V2 remains in active development; Codex remains frozen compatibility.
+- Codex retains `DENY = GAP` and `CONTEXTUAL_OLYMPUS_MAINTENANCE = GAP`; `QUESTION_CENTRALIZATION = PARTIAL`, `RESULT_RECONCILIATION = PARTIAL`, and `ACTIVITY_VISIBILITY = PARTIAL`. No full parity is claimed.
+- The scoped OpenCode 2.3 lifecycle evidence is recorded in the [harness guide](docs/HARNESSES.md#opencode-23-subagent-compatibility); it does not establish broad version compatibility, cancellation/crash handling, HUD visibility, Windows shell-handoff survival, or native permission UI/approval.
+- Static release checks do not establish a public-tag install, real provider inference, or independent cryptographic verification. GitHub's immutability assertion and tag identity are not a signature.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.7.0 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.7.0/docs/INSTALLATION.md). The public entrypoints remain pinned to the published bootstrap and resolve the selected product tag through release metadata.
+
+## Verify installation
+
+See [release selection, identity and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.7.0/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and static validation guidance. `olympus doctor` is read-only and does not prove native runtime discovery.
+
 ## v0.6.1
 
 ### Highlights

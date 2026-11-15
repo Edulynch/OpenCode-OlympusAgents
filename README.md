@@ -36,7 +36,7 @@ After installation, open OpenCode in your project and try a prompt:
 
 ⚡ **Olympus source identity: v0.7.0.** The two public commands stay pinned to the published `v0.6.1` bootstrap. It uses `releases/latest` metadata to select a published, immutable stable release, then runs the installer and archive from that selected tag; the bootstrap pin is not the installed product version. Release metadata checks fail closed for invalid or mismatched sources. GitHub's immutability flag is not independent cryptographic signature verification. No checkout is required. PowerShell asks **where** (current project, another project, global) and **which harness** (OpenCode, Codex, both). Every successful project or global install also sets up the per-user `olympus` command and adds only its `bin` folder to your user PATH.
 
-v0.7.0 adds safer configuration previews, recovery for the matching pending operation, read-only diagnostics, and bounded handling of OpenCode background results.
+v0.7.0 adds safer configuration previews and scoped recovery, read-only diagnostics, and bounded handling of OpenCode background results.
 
 ```powershell
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/install-olympus.ps1')))

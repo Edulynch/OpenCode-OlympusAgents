@@ -90,7 +90,7 @@ jobs:
       - name: OA77 worktree activation (deterministic Windows)
         shell: pwsh
         run: |
-          # Exercise the legacy upgrade and worktree conflict gates in temporary Git fixtures.
+          # Exercise current local-source worktree provisioning and safety gates in temporary Git fixtures.
           pwsh -NoProfile -File ./tests/worktree-activation/qualify.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

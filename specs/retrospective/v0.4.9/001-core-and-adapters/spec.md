@@ -74,7 +74,7 @@ Una persona que mantiene Olympus modifica una fuente Core y necesita que las sup
 
 - **Dependencies**: `olympus/core/`, `olympus/roles/`, `olympus/policies/`, `olympus/harnesses/` y `scripts/render_harnesses.py`; detalle de fuentes en [docs/HARNESSES.md](../../../../docs/HARNESSES.md).
 - **Risks**: Como el renderer no lee los cuerpos de los roles ni inyecta toda policy, instrucciones adaptadas pueden divergir semánticamente. El inventario registra esta frontera sin prescribir una reparación no autorizada.
-- **Runtime difference**: OpenCode expresa Kael como agente primario; Codex como thread raíz. Capacidades como Aegis y DENY difieren o son GAP, documentadas en [compatibilidad Codex](../../../../docs/CODEX-COMPATIBILITY.md).
+- **Runtime difference (historical)**: OpenCode expresaba Kael como agente primario; Codex como thread raíz. Capacidades como Aegis y DENY diferían o eran GAP, documentadas en la [compatibilidad Codex del baseline inmutable](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/docs/CODEX-COMPATIBILITY.md).
 
 ## Verification Scope
 

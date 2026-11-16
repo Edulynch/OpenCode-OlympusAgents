@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Target,
-    [ValidateSet('opencode', 'codex', 'all')]
+    [ValidateSet('opencode')]
     [string]$Harness = 'opencode',
     [string]$SourceVersion = 'local',
     [switch]$DryRun,
@@ -16,21 +16,17 @@ $ErrorActionPreference = "Stop"
 $SourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $Utf8NoBom = [Text.UTF8Encoding]::new($false)
 $OpenCodeManifestRel = '.opencode/orchestrator-install.json'
-$CodexManifestRel = '.codex/orchestrator-install.json'
 $ManifestRel = $null
 $CurrentManifestRel = $null
 $SelectedHarnesses = @()
 $OpenCodeGenerated = @{}
-$CodexGenerated = @{}
 $GeneratedByHarness = @{}
 $Managed = @()
 $OpenCodeManaged = @()
-$CodexManaged = @()
 $ExistingHarnesses = @()
 $InstalledHarnesses = @()
 $ExistingEntries = @()
 $AllContent = [ordered]@{}
-$Retired = @()
 $ModifiedManagedAgents = @()
 $ConfirmedModifiedAgentPaths = @()
 $writerLock = $null
@@ -44,11 +40,7 @@ $PathComparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32N
 if ($SourceVersion -cne 'local' -and $SourceVersion -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') {
     throw 'SOURCE_VERSION_INVALID: Expected an Olympus SemVer release or local.'
 }
-$LegacyMaintenanceFiles = @('.opencode/agents/maintenance.md', '.opencode/commands/maintain.md',
-    '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
-$OldReasoner = '.opencode/agents/sorin.md'
-$RetiredMaintenanceAgent = '.opencode/agents/maintenance.md'
-$RetiredOpenCodeResources = @($OldReasoner, $RetiredMaintenanceAgent,
+$RetiredOpenCodeResources = @('.opencode/agents/sorin.md', '.opencode/agents/maintenance.md',
     '.opencode/agents/aegis.md', '.opencode/commands/maintain.md')
 
 function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
@@ -166,7 +158,8 @@ function Write-Text([string]$Path, [string]$Content) {
 }
 
 function Get-GeneratedHarnessOutputs([string]$Name) {
-    $adapterRoot = Join-Path $SourceRoot ('.' + $Name)
+    if ($Name -cne 'opencode') { Fail 'HARNESS_INVALID' "Unsupported harness '$Name'." }
+    $adapterRoot = Join-Path $SourceRoot '.opencode'
     $outputs = [ordered]@{}
     if (-not (Test-Path -LiteralPath $adapterRoot -PathType Container)) {
         Fail 'SOURCE_FILE_MISSING' ("Generated $Name output directory is missing.")
@@ -183,19 +176,14 @@ function Get-GeneratedHarnessOutputs([string]$Name) {
     if (-not (Test-Path -LiteralPath $agentsRoot -PathType Container)) {
         Fail 'SOURCE_FILE_MISSING' ("Generated $Name agent directory is missing.")
     }
-    $agentFilter = if ($Name -eq 'opencode') { '*.md' } else { '*.toml' }
-    foreach ($agentFile in @(Get-ChildItem -LiteralPath $agentsRoot -Filter $agentFilter -File -Recurse -Force | Sort-Object FullName)) {
+    foreach ($agentFile in @(Get-ChildItem -LiteralPath $agentsRoot -Filter '*.md' -File -Recurse -Force | Sort-Object FullName)) {
         $managedSourcePaths.Add($agentFile.FullName.Substring($prefix.Length).Replace('\', '/'))
     }
-    if ($Name -eq 'opencode') {
-        $managedSourcePaths.AddRange([string[]]@(
-            '.opencode/plugins/olympus-activity/activity.ts',
-            '.opencode/plugins/olympus-activity/tui.tsx',
-            '.opencode/scripts/worktree-setup.ps1'
-        ))
-    } else {
-        $managedSourcePaths.Add('.codex/config.toml')
-    }
+    $managedSourcePaths.AddRange([string[]]@(
+        '.opencode/plugins/olympus-activity/activity.ts',
+        '.opencode/plugins/olympus-activity/tui.tsx',
+        '.opencode/scripts/worktree-setup.ps1'
+    ))
 
     foreach ($managedRelative in $managedSourcePaths) {
         $sourcePath = Join-Path $SourceRoot ($managedRelative -replace '/', [IO.Path]::DirectorySeparatorChar)
@@ -210,7 +198,7 @@ function Get-GeneratedHarnessOutputs([string]$Name) {
         }
         $outputs[$relative] = $text
     }
-    $rootOutput = if ($Name -eq 'opencode') { 'opencode.jsonc' } else { 'CODEX.md' }
+    $rootOutput = 'opencode.jsonc'
     $rootPath = Join-Path $SourceRoot $rootOutput
     if (-not (Test-Path -LiteralPath $rootPath -PathType Leaf)) {
         Fail 'SOURCE_FILE_MISSING' ("Generated harness root output is missing: $rootOutput")
@@ -220,17 +208,13 @@ function Get-GeneratedHarnessOutputs([string]$Name) {
         Fail 'SOURCE_INVALID' ("Harness root file is not a generated Harness Core output: $rootOutput")
     }
     $outputs[$rootOutput] = $rootText
-    if ($outputs.Count -eq 0) { Fail 'SOURCE_INVALID' ("No generated outputs found for $Name.") }
+    if ($outputs.Count -ne 15) { Fail 'SOURCE_INVALID' "Unexpected OpenCode output inventory: $($outputs.Count)." }
     return ,$outputs
 }
 
 function Get-HarnessSelection([string]$Name) {
-    switch ($Name.ToLowerInvariant()) {
-        'opencode' { return @('opencode') }
-        'codex' { return @('codex') }
-        'all' { return @('opencode', 'codex') }
-        default { Fail 'HARNESS_INVALID' "Unsupported harness '$Name'." }
-    }
+    if ($Name -cne 'opencode') { Fail 'HARNESS_INVALID' "Unsupported harness '$Name'." }
+    return @('opencode')
 }
 
 function Get-SelectedGeneratedContent([string[]]$Harnesses) {
@@ -328,7 +312,7 @@ function Assert-Target([string]$Raw) {
     if (-not [string]::Equals($target, $gitRoot, $PathComparison)) {
         Fail "TARGET_NOT_GIT_ROOT" "Use the worktree root: $gitRoot"
     }
-    foreach ($surface in @('.opencode', '.codex')) {
+    foreach ($surface in @('.opencode')) {
         $surfacePath = Join-Path $target $surface
         if (Test-Path -LiteralPath $surfacePath) {
             $surfaceItem = Get-Item -LiteralPath $surfacePath -Force
@@ -342,7 +326,7 @@ function Assert-Target([string]$Raw) {
 }
 
 function Assert-Install-Destinations([string]$Repo) {
-    foreach ($p in @($Managed) + @($OpenCodeManifestRel, $CodexManifestRel) + @($RetiredOpenCodeResources)) {
+    foreach ($p in @($Managed) + @($OpenCodeManifestRel) + @($RetiredOpenCodeResources)) {
         $path = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         if (-not (Path-Is-Within $path $Repo)) {
             Fail "UNSAFE_TARGET_PATH" "Install destination escapes the target repository: $p"
@@ -352,19 +336,16 @@ function Assert-Install-Destinations([string]$Repo) {
 
 function Read-Manifest([string]$Repo) {
     $opencodePath = Join-Path $Repo ($OpenCodeManifestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
-    $codexPath = Join-Path $Repo ($CodexManifestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
+    $codexPath = Join-Path $Repo ('.codex/orchestrator-install.json' -replace '/', [IO.Path]::DirectorySeparatorChar)
+    if (Test-Path -LiteralPath $codexPath) {
+        Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Codex project manifests are unsupported and will not be migrated.'
+    }
     if ((Test-Path -LiteralPath $opencodePath) -and -not (Test-Path -LiteralPath $opencodePath -PathType Leaf)) {
         Fail 'INSTALL_CONFLICT' 'OpenCode install manifest path is not a file.'
     }
-    if ((Test-Path -LiteralPath $codexPath) -and -not (Test-Path -LiteralPath $codexPath -PathType Leaf)) {
-        Fail 'INSTALL_CONFLICT' 'Codex install manifest path is not a file.'
-    }
-    $hasOpenCode = Test-Path -LiteralPath $opencodePath -PathType Leaf
-    $hasCodex = Test-Path -LiteralPath $codexPath -PathType Leaf
-    if ($hasOpenCode -and $hasCodex) { Fail 'INSTALL_CONFLICT' 'Both harness install manifests exist; refusing ambiguous ownership metadata.' }
-    if (-not $hasOpenCode -and -not $hasCodex) { return $null }
-    $script:CurrentManifestRel = if ($hasOpenCode) { $OpenCodeManifestRel } else { $CodexManifestRel }
-    $path = if ($hasOpenCode) { $opencodePath } else { $codexPath }
+    if (-not (Test-Path -LiteralPath $opencodePath -PathType Leaf)) { return $null }
+    $script:CurrentManifestRel = $OpenCodeManifestRel
+    $path = $opencodePath
     try { $manifest = [IO.File]::ReadAllText($path) | ConvertFrom-Json -AsHashtable -Depth 100 }
     catch { Fail 'INSTALL_CONFLICT' 'Invalid existing install manifest.' }
     # schema_version remains 1. Provenance is optional metadata, never ownership;
@@ -417,138 +398,44 @@ function Get-RetainedHarnessProvenance($Manifest, [string[]]$ReplacedHarnesses) 
 function Get-ManifestHarnesses($Manifest) {
     if ($null -eq $Manifest) { return @() }
     $properties = @(Get-ManifestPropertyNames $Manifest)
-    if ('installed_harnesses' -in $properties) {
-        $values = @($Manifest.installed_harnesses | ForEach-Object { ([string]$_).ToLowerInvariant() })
-        if ($values.Count -eq 0 -or @($values | Where-Object { $_ -notin @('opencode', 'codex') }).Count -gt 0 -or
-            @($values | Select-Object -Unique).Count -ne $values.Count) {
-            Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Manifest installed_harnesses is empty, duplicated, or unsupported.'
-        }
-        return @(@('opencode', 'codex') | Where-Object { $_ -in $values })
+    if ('installed_harnesses' -notin $properties) {
+        Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Manifest must explicitly declare only the OpenCode harness.'
     }
-    # beta.4 and earlier used the OpenCode-only manifest with no harness field.
+    if ($Manifest.installed_harnesses -isnot [System.Collections.IList]) {
+        Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Manifest installed_harnesses must be an array.'
+    }
+    $values = @($Manifest.installed_harnesses | ForEach-Object { [string]$_ })
+    if ($values.Count -ne 1 -or $values[0] -cne 'opencode') {
+        Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Manifest installed_harnesses must be exactly ["opencode"].'
+    }
     return @('opencode')
-}
-
-function Get-LegacyOpenCodeSets {
-    $previous = @('.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx')
-    $currentBeforeWorktreeSetup = @($OpenCodeManaged | Where-Object { $_ -ne '.opencode/scripts/worktree-setup.ps1' })
-    # Historical inventories predate the worktree helper and had maintenance where the new candidate has aegis.
-    $historical = @($currentBeforeWorktreeSetup |
-        ForEach-Object { if ($_ -eq '.opencode/agents/aegis.md') { $RetiredMaintenanceAgent } else { $_ } })
-    $currentBeforeArgus = @($historical | Where-Object { $_ -notin @('.opencode/agents/argus.md', '.opencode/agents/talos.md', '.opencode/agents/helios.md') })
-    $currentBeforeTalos = @($historical | Where-Object { $_ -notin @('.opencode/agents/talos.md', '.opencode/agents/helios.md') })
-    $currentBeforeHelios = @($historical | Where-Object { $_ -ne '.opencode/agents/helios.md' })
-    # Recognize exact historical owned sets, including pre-maintenance and pre-HUD
-    # manifests. Counts alone cannot distinguish the old and new reasoner identity.
-    $allowed = @()
-    foreach ($reasoner in @($OldReasoner, '.opencode/agents/thales.md')) {
-        $base = @($currentBeforeArgus | Where-Object { $_ -ne '.opencode/agents/atlas.md' } |
-            ForEach-Object { if ($_ -eq '.opencode/agents/thales.md') { $reasoner } else { $_ } })
-        foreach ($missing in @(@(), $previous, $LegacyMaintenanceFiles)) {
-            $allowed += ,@($base | Where-Object { $_ -notin $missing })
-        }
-    }
-    # Some focused upgrade fixtures simulate pre-HUD/pre-Maintenance ownership
-    # from a currently installed candidate, retaining its Atlas-owned path.
-    foreach ($missing in @(@(), $previous, $LegacyMaintenanceFiles)) {
-        $allowed += ,@($currentBeforeArgus | Where-Object { $_ -notin $missing })
-    }
-    # Focused legacy fixtures can retain the already-owned current reasoner while
-    # reconstructing pre-HUD/pre-Maintenance ownership. Exact sets and hashes
-    # still govern every existing path; unowned new destinations still conflict.
-    foreach ($missing in @(@(), $previous, $LegacyMaintenanceFiles)) {
-        $allowed += ,@($currentBeforeTalos | Where-Object { $_ -notin $missing })
-    }
-    foreach ($missing in @(@(), $previous, $LegacyMaintenanceFiles)) {
-        $allowed += ,@($currentBeforeHelios | Where-Object { $_ -notin $missing })
-    }
-    foreach ($missing in @(@(), $previous, $LegacyMaintenanceFiles)) {
-        $allowed += ,@($currentBeforeWorktreeSetup | Where-Object { $_ -notin $missing })
-        $allowed += ,@($historical | Where-Object { $_ -notin $missing })
-    }
-    # Freeze the exact v0.4.4 project inventory independently of future agent releases.
-    # Existing manifest hashes still decide ownership before retiring either legacy file.
-    $v044Managed = @(
-        '.opencode/agents/aegis.md',
-        '.opencode/agents/argus.md',
-        '.opencode/agents/atlas.md',
-        '.opencode/agents/helios.md',
-        '.opencode/agents/kael.md',
-        '.opencode/agents/kovan.md',
-        '.opencode/agents/nox.md',
-        '.opencode/agents/orin.md',
-        '.opencode/agents/talos.md',
-        '.opencode/agents/thales.md',
-        '.opencode/agents/vera.md',
-        '.opencode/agents/veyra.md',
-        '.opencode/commands/maintain.md',
-        '.opencode/plugins/olympus-activity/activity.ts',
-        '.opencode/plugins/olympus-activity/tui.tsx',
-        'opencode.jsonc'
-    )
-    $allowed += ,@($v044Managed)
-    # Freeze the exact v0.2.0 inventory independently of the current agent roster.
-    $v020Managed = @(
-        'opencode.jsonc',
-        '.opencode/agents/kael.md',
-        '.opencode/agents/veyra.md',
-        '.opencode/agents/orin.md',
-        '.opencode/agents/kovan.md',
-        '.opencode/agents/nox.md',
-        '.opencode/agents/vera.md',
-        '.opencode/agents/sorin.md',
-        '.opencode/agents/maintenance.md',
-        '.opencode/commands/maintain.md',
-        '.opencode/plugins/olympus-activity/activity.ts',
-        '.opencode/plugins/olympus-activity/tui.tsx'
-    )
-    $allowed += ,@($v020Managed)
-    # The last shipped Aegis roster added both paths; retire them only when the
-    # exact manifest set and hashes prove Olympus ownership.
-    $allowed += ,@($OpenCodeManaged + '.opencode/agents/aegis.md' + '.opencode/commands/maintain.md')
-    $allowed += ,@($OpenCodeManaged)
-    return ,$allowed
 }
 
 function Assert-Managed([string]$Repo, $Manifest) {
     $script:ModifiedManagedAgents = @()
     if ($null -eq $Manifest) { $script:ExistingHarnesses = @(); $script:ExistingEntries = @(); return @() }
-    if ($Manifest.schema_version -ne 1 -or $null -eq $Manifest.managed_files) {
-        Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Unsupported manifest schema or missing managed_files.'
-    }
-    $scopeProperties = @(Get-ManifestPropertyNames $Manifest)
-    if ('scope' -in $scopeProperties -and [string]$Manifest.scope -cne 'project') {
-        Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Project bootstrap cannot adopt a non-project Olympus manifest.'
+    if ($Manifest.schema_version -ne 1 -or [string]$Manifest.scope -cne 'project' -or
+        $Manifest.installed_version -isnot [string] -or [string]::IsNullOrWhiteSpace($Manifest.installed_version) -or
+        $Manifest.installed_from_commit -isnot [string] -or [string]::IsNullOrWhiteSpace($Manifest.installed_from_commit) -or
+        $null -eq $Manifest.managed_files) {
+        Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Current schema v1 project metadata is incomplete or unsupported.'
     }
     $script:ExistingHarnesses = @(Get-ManifestHarnesses $Manifest)
     $entries = @($Manifest.managed_files)
-    $actual = @($entries | ForEach-Object { Rel ([string]$_.path) })
-    $allowedSets = @()
-    if ('opencode' -in $ExistingHarnesses) {
-        foreach ($candidate in (Get-LegacyOpenCodeSets)) {
-            if ('codex' -in $ExistingHarnesses) { $candidate = @($candidate) + @($CodexManaged) }
-            $allowedSets += ,@($candidate)
-        }
+    if ($entries.Count -ne $OpenCodeManaged.Count) {
+        Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Managed file set is not the exact current OpenCode inventory.'
     }
-    if ('codex' -in $ExistingHarnesses -and 'opencode' -notin $ExistingHarnesses) {
-        $allowedSets += ,@($CodexManaged)
-    }
-    $matchCount = 0
-    foreach ($candidate in $allowedSets) {
-        if ($candidate.Count -eq $actual.Count -and
-            @($actual | Where-Object { $_ -notin $candidate }).Count -eq 0) { $matchCount++ }
-    }
-    if ($matchCount -ne 1) { Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Managed file set differs from the installed harness inventory.' }
     $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($e in $entries) {
         $p = Rel ([string]$e.path)
-        if (-not $seen.Add($p)) {
+        if ($p -notin $OpenCodeManaged -or -not $seen.Add($p) -or
+            ([string]$e.sha256) -notmatch '^(?i:[0-9a-f]{64})$') {
             Fail "INSTALL_MANIFEST_INCOMPATIBLE" "Unexpected or duplicate managed path: $p"
         }
         $full = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         if (-not (Test-Path -LiteralPath $full)) { Fail "MANAGED_FILE_DRIFT" "Missing managed file: $p" }
-        if ((Sha-File $full) -ne ([string]$e.sha256).ToLowerInvariant()) {
-            if ($Update -and 'opencode' -in $SelectedHarnesses -and $p -match '^\.opencode/agents/(?<role>[a-z][a-z0-9_-]*)\.md$') {
+        if ((Sha-File $full) -cne ([string]$e.sha256).ToLowerInvariant()) {
+            if ($Update -and $p -match '^\.opencode/agents/(?<role>[a-z][a-z0-9_-]*)\.md$') {
                 $script:ModifiedManagedAgents += $Matches.role
                 continue
             }
@@ -556,12 +443,12 @@ function Assert-Managed([string]$Repo, $Manifest) {
         }
     }
     foreach ($old in $RetiredOpenCodeResources) {
-        if ($old -notin $actual -and (Test-Path -LiteralPath (Join-Path $Repo ($old -replace '/', [IO.Path]::DirectorySeparatorChar)))) {
+        if ($old -notin $OpenCodeManaged -and (Test-Path -LiteralPath (Join-Path $Repo ($old -replace '/', [IO.Path]::DirectorySeparatorChar)))) {
             Fail 'INSTALL_CONFLICT' "Unowned retired agent exists: $old"
         }
     }
     $script:ExistingEntries = @($entries)
-    return @($actual | Where-Object { $_ -in $RetiredOpenCodeResources })
+    return @()
 }
 
 function Confirm-ModifiedManagedAgents {
@@ -779,7 +666,7 @@ function Manifest-Text($Detection, $Content, [string]$Version, $ExistingManifest
     ($record | ConvertTo-Json -Depth 100) + "`n"
 }
 
-function Plan([string]$Repo, $Content, [string]$ManifestText, [string[]]$Retired) {
+function Plan([string]$Repo, $Content, [string]$ManifestText) {
     $create = [System.Collections.Generic.List[string]]::new()
     $update = [System.Collections.Generic.List[string]]::new()
     foreach ($p in @($Content.Keys | Sort-Object)) {
@@ -790,10 +677,7 @@ function Plan([string]$Repo, $Content, [string]$ManifestText, [string[]]$Retired
     $mf = Join-Path $Repo ($ManifestRel -replace "/", [IO.Path]::DirectorySeparatorChar)
     if (-not (Test-Path $mf)) { $create.Add($ManifestRel) }
     elseif ((Sha-File $mf) -ne (Sha-Text $ManifestText)) { $update.Add($ManifestRel) }
-    $removeList = [System.Collections.Generic.List[string]]::new()
-    foreach ($p in $Retired) { if ($p -notin $removeList) { $removeList.Add($p) } }
-    if ($CurrentManifestRel -and $CurrentManifestRel -cne $ManifestRel) { $removeList.Add($CurrentManifestRel) }
-    [pscustomobject]@{ Creates=@($create); Updates=@($update); Removes=@($removeList) }
+    [pscustomobject]@{ Creates=@($create); Updates=@($update); Removes=@() }
 }
 
 function Report([string]$Repo, $Detection, $Plan, [string]$Status, [string]$Version, [string]$ModelCheck) {
@@ -811,27 +695,6 @@ function Report([string]$Repo, $Detection, $Plan, [string]$Status, [string]$Vers
     if ('opencode' -in $SelectedHarnesses) { Write-Output "OPENCODE:"; Write-Output $Version }
     Write-Output "MODEL_CHECK:"; Write-Output $ModelCheck
     Write-Output "STATUS:"; Write-Output $Status
-}
-
-function Get-CodexInstructionsPrecedenceWarning([string]$Repo) {
-    if ($DryRun -or 'codex' -notin $SelectedHarnesses) { return $null }
-
-    # Codex prefers AGENTS.override.md to AGENTS.md. Empty instruction files
-    # are ignored, so only the first non-empty file in that order can shadow
-    # the generated CODEX.md at the project root.
-    foreach ($relative in @('AGENTS.override.md', 'AGENTS.md')) {
-        $path = Join-Path $Repo $relative
-        try {
-            if (-not (Test-Path -LiteralPath $path -PathType Leaf -ErrorAction Stop)) { continue }
-            $contents = [IO.File]::ReadAllText($path)
-        } catch {
-            return "OLYMPUS_CODEX_INSTRUCTIONS_WARNING: Could not inspect root $relative for Codex precedence; managed-file installation or verification does not guarantee Kael was loaded as root instructions. No user files were changed."
-        }
-        if ([string]::IsNullOrWhiteSpace($contents)) { continue }
-
-        return "OLYMPUS_CODEX_INSTRUCTIONS_WARNING: Codex gives non-empty root $relative precedence over CODEX.md. Managed-file installation or verification does not guarantee Kael was loaded as root instructions; the user-owned file was left unchanged."
-    }
-    return $null
 }
 
 function Get-Expected-Agents($Content) {
@@ -913,61 +776,44 @@ function Validate-Install([string]$Repo) {
 
 function Assert-InstalledHarness([string]$Repo, $Manifest) {
     if ($null -eq $Manifest) { Fail 'MANAGED_FILE_MISMATCH' 'Olympus install manifest is missing.' }
-    if ($Manifest.schema_version -ne 1 -or $null -eq $Manifest.managed_files) {
-        Fail 'MANAGED_FILE_MISMATCH' 'Olympus install manifest schema or managed file set is unsupported.'
+    if ($Manifest.schema_version -ne 1 -or [string]$Manifest.scope -cne 'project' -or
+        $Manifest.installed_version -isnot [string] -or [string]::IsNullOrWhiteSpace($Manifest.installed_version) -or
+        $Manifest.installed_from_commit -isnot [string] -or [string]::IsNullOrWhiteSpace($Manifest.installed_from_commit) -or
+        $null -eq $Manifest.managed_files) {
+        Fail 'MANAGED_FILE_MISMATCH' 'Current schema v1 project metadata is incomplete or unsupported.'
     }
-    $manifestProperties = @(Get-ManifestPropertyNames $Manifest)
-    if ('scope' -in $manifestProperties -and [string]$Manifest.scope -cne 'project') {
-        Fail 'MANAGED_FILE_MISMATCH' 'VerifyOnly project target does not contain a project-scope Olympus manifest.'
+    if ($Manifest.installed_version -notin @('unknown', 'local') -and $Manifest.installed_version -cne $SourceVersion) {
+        Fail 'INSTALLED_VERSION_MISMATCH' "Manifest records '$($Manifest.installed_version)'; requested '$SourceVersion'."
     }
-    if ('installed_version' -in $manifestProperties) {
-        $recordedVersion = [string]$Manifest.installed_version
-        if ($recordedVersion -and $recordedVersion -notin @('unknown', 'local') -and $recordedVersion -cne $SourceVersion) {
-            Fail 'INSTALLED_VERSION_MISMATCH' "Manifest records '$recordedVersion'; requested '$SourceVersion'."
-        }
+    try { [void](Get-ManifestHarnesses $Manifest) }
+    catch { Fail 'MANAGED_FILE_MISMATCH' $_.Exception.Message }
+    $entries = @($Manifest.managed_files)
+    if ($entries.Count -ne $OpenCodeManaged.Count) {
+        Fail 'MANAGED_FILE_MISMATCH' 'Installed managed file set is not the exact current OpenCode inventory.'
     }
-    $harnesses = @(Get-ManifestHarnesses $Manifest)
-    foreach ($harness in $SelectedHarnesses) {
-        if ($harness -notin $harnesses) { Fail 'MANAGED_FILE_MISMATCH' "The installed manifest does not record harness '$harness'." }
-        $expected = $GeneratedByHarness[$harness]
-        $expectedPaths = @($expected.Keys | Sort-Object)
-        $entries = @($Manifest.managed_files)
-        $scopeEntries = if ($harness -eq 'opencode') {
-            @($entries | Where-Object { ([string]$_.path).Replace('\','/') -match '^\.opencode/' -or ([string]$_.path).Replace('\','/') -eq 'opencode.jsonc' })
-        } else {
-            @($entries | Where-Object { ([string]$_.path).Replace('\','/') -match '^\.codex/' -or ([string]$_.path).Replace('\','/') -eq 'CODEX.md' })
+    foreach ($relative in $OpenCodeManaged) {
+        $matched = @($entries | Where-Object { (Rel ([string]$_.path)) -ceq $relative })
+        if ($matched.Count -ne 1 -or ([string]$matched[0].sha256) -notmatch '^(?i:[0-9a-f]{64})$') {
+            Fail 'MANAGED_FILE_MISMATCH' "Manifest does not uniquely own '$relative' with a valid SHA-256."
         }
-        $scopePaths = @($scopeEntries | ForEach-Object { Rel ([string]$_.path) } | Sort-Object)
-        if ($scopePaths.Count -ne $expectedPaths.Count -or @($expectedPaths | Where-Object { $_ -notin $scopePaths }).Count -gt 0) {
-            Fail 'MANAGED_FILE_MISMATCH' "Installed managed file set differs for requested harness '$harness'."
-        }
-        foreach ($relative in $expectedPaths) {
-            $matched = @($scopeEntries | Where-Object { (Rel ([string]$_.path)) -ceq $relative })
-            if ($matched.Count -ne 1) { Fail 'MANAGED_FILE_MISMATCH' "Manifest does not uniquely own '$relative'." }
-            $full = Join-Path $Repo ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
-            if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { Fail 'MANAGED_FILE_MISSING' "Installed managed file is missing: $relative" }
-            $expectedHash = Sha-Text ([string]$expected[$relative])
-            $targetHash = Sha-File $full
-            if ($targetHash -cne $expectedHash -or ([string]$matched[0].sha256).ToLowerInvariant() -cne $targetHash) {
-                Fail 'MANAGED_FILE_MISMATCH' "Installed managed content differs from the requested release: $relative"
-            }
+        $full = Join-Path $Repo ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { Fail 'MANAGED_FILE_MISSING' "Installed managed file is missing: $relative" }
+        $expectedHash = Sha-Text ([string]$GeneratedByHarness['opencode'][$relative])
+        $targetHash = Sha-File $full
+        if ($targetHash -cne $expectedHash -or ([string]$matched[0].sha256).ToLowerInvariant() -cne $targetHash) {
+            Fail 'MANAGED_FILE_MISMATCH' "Installed managed content differs from the requested release: $relative"
         }
     }
-    if ('opencode' -in $SelectedHarnesses) {
-        foreach ($retiredPath in $RetiredOpenCodeResources) {
-            $retiredFile = Join-Path $Repo ($retiredPath -replace '/', [IO.Path]::DirectorySeparatorChar)
-            if (Test-Path -LiteralPath $retiredFile) {
-                Fail 'ROSTER_MISMATCH' "Retired or unowned OpenCode agent remains present: $retiredPath"
-            }
+    foreach ($retiredPath in $RetiredOpenCodeResources) {
+        $retiredFile = Join-Path $Repo ($retiredPath -replace '/', [IO.Path]::DirectorySeparatorChar)
+        if (Test-Path -LiteralPath $retiredFile) {
+            Fail 'ROSTER_MISMATCH' "Retired or unowned OpenCode agent remains present: $retiredPath"
         }
-        # VerifyOnly is deliberately limited to manifest, version, generated
-        # source, and managed-file/hash checks. Runtime discovery can initialize
-        # optional integrations (and mutate the target), so it belongs only to
-        # install-time validation, never the read-only verification boundary.
-        if (-not $VerifyOnly) {
-            if (-not (Has-Cmd 'opencode')) { Fail 'ROSTER_MISMATCH' 'OpenCode CLI is required to validate the active agent roster.' }
-            Validate-Install $Repo
-        }
+    }
+    # VerifyOnly never calls runtime discovery, which may initialize local integrations.
+    if (-not $VerifyOnly) {
+        if (-not (Has-Cmd 'opencode')) { Fail 'ROSTER_MISMATCH' 'OpenCode CLI is required to validate the active agent roster.' }
+        Validate-Install $Repo
     }
 }
 
@@ -983,36 +829,19 @@ try {
         $manifestPathSnapshot = $CurrentManifestRel
         $manifestHashSnapshot = Sha-File (Join-Path $Repo ($CurrentManifestRel -replace '/', [IO.Path]::DirectorySeparatorChar))
     }
-    $inventoryHarnesses = @($SelectedHarnesses)
-    if (-not $VerifyOnly -and $null -ne $manifest) {
-        foreach ($harness in (Get-ManifestHarnesses $manifest)) {
-            if ($harness -notin $inventoryHarnesses) { $inventoryHarnesses += $harness }
-        }
-    }
-    foreach ($harness in $inventoryHarnesses) {
-        $GeneratedByHarness[$harness] = Get-GeneratedHarnessOutputs $harness
-    }
-    if ('opencode' -in $GeneratedByHarness.Keys) {
-        $OpenCodeGenerated = $GeneratedByHarness['opencode']
-        $OpenCodeManaged = @($OpenCodeGenerated.Keys | Sort-Object)
-    }
-    if ('codex' -in $GeneratedByHarness.Keys) {
-        $CodexGenerated = $GeneratedByHarness['codex']
-        $CodexManaged = @($CodexGenerated.Keys | Sort-Object)
-    }
-    if ('opencode' -in $GeneratedByHarness.Keys) {
-        $OpenCodeGenerated = $GeneratedByHarness['opencode']
-        Apply-OpenCodeProjectOverrides $Repo $OpenCodeGenerated
-        $GeneratedByHarness['opencode'] = $OpenCodeGenerated
-        $ModelCheck = 'MODELS_DEV_STATIC_VALIDATION'
-    }
+    $OpenCodeGenerated = Get-GeneratedHarnessOutputs 'opencode'
+    $OpenCodeManaged = @($OpenCodeGenerated.Keys | Sort-Object)
+    $GeneratedByHarness['opencode'] = $OpenCodeGenerated
+    Apply-OpenCodeProjectOverrides $Repo $OpenCodeGenerated
+    $GeneratedByHarness['opencode'] = $OpenCodeGenerated
+    $ModelCheck = 'MODELS_DEV_STATIC_VALIDATION'
     $ManagedContent = Get-SelectedGeneratedContent $SelectedHarnesses
     $Managed = @($ManagedContent.Keys | Sort-Object)
     Assert-Install-Destinations $Repo
     $Version = 'NOT_REQUIRED'
     $ModelCheck = 'NOT_REQUIRED'
-    if ('opencode' -in $SelectedHarnesses) { $ModelCheck = 'MODELS_DEV_STATIC_VALIDATION' }
-    if (-not $VerifyOnly -and 'opencode' -in $SelectedHarnesses) {
+    $ModelCheck = 'MODELS_DEV_STATIC_VALIDATION'
+    if (-not $VerifyOnly) {
         if (-not (Has-Cmd 'opencode')) { Fail 'OPENCODE_UNAVAILABLE' 'OpenCode is required for the OpenCode harness.' }
         $Version = (& opencode --version 2>$null | Out-String).Trim()
         if ($LASTEXITCODE -ne 0) { Fail 'OPENCODE_UNAVAILABLE' 'opencode --version failed.' }
@@ -1020,42 +849,30 @@ try {
 
     if ($VerifyOnly) {
         Assert-InstalledHarness $Repo $manifest
-        $codexInstructionsWarning = Get-CodexInstructionsPrecedenceWarning $Repo
-        if ($codexInstructionsWarning) { Write-Output $codexInstructionsWarning }
         Write-Output "OLYMPUS_VERIFY: $SourceVersion PASS"
         exit 0
     }
 
-    $ownedRetired = @(Assert-Managed $Repo $manifest)
+    [void](Assert-Managed $Repo $manifest)
     $ExistingHarnesses = @($script:ExistingHarnesses)
-    $InstalledHarnesses = @(@('opencode', 'codex') | Where-Object { $_ -in @($ExistingHarnesses + $SelectedHarnesses) })
-    $ManifestRel = if ('opencode' -in $InstalledHarnesses) { $OpenCodeManifestRel } else { $CodexManifestRel }
-    $Retired = if ('opencode' -in $SelectedHarnesses) { @($ownedRetired) } else { @() }
+    $InstalledHarnesses = @('opencode')
+    $ManifestRel = $OpenCodeManifestRel
     Assert-No-Conflicts $Repo $manifest $ManagedContent
-    $manifestDestination = Join-Path $Repo ($ManifestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
-    if ((Test-Path -LiteralPath $manifestDestination) -and $CurrentManifestRel -cne $ManifestRel) {
-        Fail 'INSTALL_CONFLICT' "Install manifest destination exists without ownership metadata: $ManifestRel"
-    }
     # Ownership and destination checks above, not repository-wide Git status,
     # decide whether installation is safe. Unrelated work stays untouched.
 
     $detection = Detect-Project $Repo
-    $codexInstructionsWarning = Get-CodexInstructionsPrecedenceWarning $Repo
-    if ($codexInstructionsWarning) {
-        $detection.Warnings = @($detection.Warnings) + @($codexInstructionsWarning)
-    }
     $AllContent = [ordered]@{}
     if ($null -ne $manifest) {
         foreach ($entry in $ExistingEntries) {
             $p = Rel ([string]$entry.path)
-            if ($p -in $Retired) { continue }
             $full = Join-Path $Repo ($p -replace '/', [IO.Path]::DirectorySeparatorChar)
             $AllContent[$p] = [IO.File]::ReadAllText($full)
         }
     }
     foreach ($p in $Managed) { $AllContent[$p] = [string]$ManagedContent[$p] }
     $manifestText = Manifest-Text $detection $AllContent $SourceVersion $manifest
-    $plan = Plan $Repo $AllContent $manifestText $Retired
+    $plan = Plan $Repo $AllContent $manifestText
 
     if ($DryRun) {
         Report $Repo $detection $plan "DRY_RUN_READY" $Version $ModelCheck
@@ -1086,21 +903,15 @@ try {
         Fail 'TARGET_CHANGED' 'Project manifest disappeared after preflight.'
     }
     $manifest = $revalidatedManifest
-    $revalidatedRetired = @(Assert-Managed $Repo $manifest)
+    [void](Assert-Managed $Repo $manifest)
     $ExistingHarnesses = @($script:ExistingHarnesses)
-    $InstalledHarnesses = @(@('opencode', 'codex') | Where-Object { $_ -in @($ExistingHarnesses + $SelectedHarnesses) })
-    $Retired = if ('opencode' -in $SelectedHarnesses) { @($revalidatedRetired) } else { @() }
+    $InstalledHarnesses = @('opencode')
     Assert-No-Conflicts $Repo $manifest $ManagedContent
     Assert-Install-Destinations $Repo
     Confirm-ModifiedManagedAgents
-    $manifestDestination = Join-Path $Repo ($ManifestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
-    if ((Test-Path -LiteralPath $manifestDestination) -and $CurrentManifestRel -cne $ManifestRel) {
-        Fail 'INSTALL_CONFLICT' "Install manifest destination exists without ownership metadata: $ManifestRel"
-    }
-    $revalidatedPlan = Plan $Repo $AllContent $manifestText $Retired
+    $revalidatedPlan = Plan $Repo $AllContent $manifestText
     if (($revalidatedPlan.Creates -join "`n") -cne ($plan.Creates -join "`n") -or
-        ($revalidatedPlan.Updates -join "`n") -cne ($plan.Updates -join "`n") -or
-        ($revalidatedPlan.Removes -join "`n") -cne ($plan.Removes -join "`n")) {
+        ($revalidatedPlan.Updates -join "`n") -cne ($plan.Updates -join "`n")) {
         Fail 'TARGET_CHANGED' 'Project destinations changed after preflight.'
     }
     if ($null -ne $writerLock) { Assert-OlympusTargetWriterLock $writerLock }
@@ -1110,27 +921,12 @@ try {
     }
     Write-Text (Join-Path $Repo ($ManifestRel -replace "/", [IO.Path]::DirectorySeparatorChar)) $manifestText
 
-    foreach ($p in $plan.Removes) {
-        if ($p -eq $CurrentManifestRel) { continue }
-        $full = Join-Path $Repo ($p -replace '/', [IO.Path]::DirectorySeparatorChar)
-        $entry = @($ExistingEntries | Where-Object { (Rel ([string]$_.path)) -eq $p })
-        if ($entry.Count -ne 1 -or (Sha-File $full) -ne ([string]$entry[0].sha256).ToLowerInvariant()) {
-            Fail 'MANAGED_FILE_DRIFT' "Managed file modified before removal: $p"
-        }
-        [IO.File]::Delete($full)
-    }
-
     foreach ($p in $Managed) {
         $full = Join-Path $Repo ($p -replace "/", [IO.Path]::DirectorySeparatorChar)
         if ((Sha-File $full) -ne (Sha-Text ([string]$ManagedContent[$p]))) { Fail 'INSTALL_VERIFY_FAILED' $p }
     }
-    if ($CurrentManifestRel -and $CurrentManifestRel -cne $ManifestRel) {
-        $oldManifest = Join-Path $Repo ($CurrentManifestRel -replace '/', [IO.Path]::DirectorySeparatorChar)
-        if (-not (Test-Path -LiteralPath $oldManifest -PathType Leaf)) { Fail 'MANAGED_FILE_DRIFT' "Existing manifest disappeared before migration: $CurrentManifestRel" }
-        [IO.File]::Delete($oldManifest)
-    }
 
-    if ('opencode' -in $SelectedHarnesses) { Validate-Install $Repo }
+    Validate-Install $Repo
     Report $Repo $detection $plan "READY" $Version $ModelCheck
     exit 0
 }

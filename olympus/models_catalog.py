@@ -45,7 +45,7 @@ def load_catalog(path: str) -> dict:
     return data
 
 
-def validate_assignment(model_id: str, effort: str, source: Path, harness: str = "opencode") -> dict:
+def validate_assignment(model_id: str, effort: str, source: Path) -> dict:
     """Require exact provider/model identity and declared tool/effort support."""
     if not isinstance(model_id, str) or not _IDENTIFIER.fullmatch(model_id):
         raise CatalogError("Use an exact Models.dev provider/model-id, for example openai/gpt-6-luna.")
@@ -59,9 +59,9 @@ def validate_assignment(model_id: str, effort: str, source: Path, harness: str =
             capabilities = tomllib.load(stream)
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise CatalogError(f"Cannot read declared harness capabilities at {capabilities_path}: {error}") from error
-    declared = capabilities.get(harness, {})
+    declared = capabilities.get("opencode", {})
     if declared.get("PER_ROLE_MODEL") != "SUPPORTED" or declared.get("PER_ROLE_REASONING") != "SUPPORTED":
-        raise CatalogError(f"The {harness} harness does not declare per-role model and reasoning support.")
+        raise CatalogError("The opencode harness does not declare per-role model and reasoning support.")
 
     catalog = load_catalog(str(catalog_path(source).resolve()))
     model = catalog["models"].get(model_id)

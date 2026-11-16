@@ -24,7 +24,7 @@ FAST is selected explicitly by the user's task. It is not a command that grants 
 
 ## The team
 
-Kael is the single coordinator. Olympus Core defines **11 canonical roles**; OpenCode uses 11 agents, while Codex represents Kael as root plus ten specialist agents. These are responsibilities, not a guarantee of runtime parity.
+Kael is the single coordinator. Olympus Core defines **11 canonical roles**, represented through the currently supported OpenCode adapter. These are responsibilities, not a guarantee of runtime behavior beyond the documented evidence.
 
 | Icon | Role | Focus |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ Kael is the single coordinator. Olympus Core defines **11 canonical roles**; Ope
 | 🧠 | **Thales** · The Sage | Resolve difficult uncertainty |
 | 🚀 | **Helios** · The Optimizer | Examine performance tradeoffs |
 
-The canonical definitions remain in [Olympus Core](../olympus/README.md). Model/provider availability depends on the user's OpenCode or Codex configuration.
+The canonical definitions remain in [Olympus Core](../olympus/README.md). Model/provider availability depends on the user's OpenCode configuration.
 
 ## NORMAL vs FAST
 
@@ -74,7 +74,7 @@ Markers may be combined at the end of a single task; they do not persist into fu
 - **Kael orchestrates** work inside OlympusAgents and other projects using the same normal team. There is no active Aegis role or `/maintain` command.
 - **The user owns product decisions.** Kael checks project identity, scope and feasibility before involving specialists; it cannot silently expand authorization.
 - **OpenCode owns runtime execution.** Sessions, subprocesses, tools and permissions belong to the host; Olympus coordinates and reconciles results. Do not interpret static tests as live provider/runtime guarantees.
-- **Codex remains frozen compatibility.** OpenCode supports the current contextual maintenance workflow; Codex currently declares it a capability gap. See the [capability matrix](HARNESS-CAPABILITIES.md) and [Codex policy](CODEX-COMPATIBILITY.md).
+- **OpenCode is the only currently supported runtime.** Historical Codex behavior is not a support or compatibility promise; see the [capability contract](HARNESS-CAPABILITIES.md).
 - **Optional native `/goal`** is chosen by the user when available; it is not silently invoked or required.
 
 The present product direction prioritizes Flutter/Android and 2D games with Flame while retaining websites and other software projects. You do not need to install the wider OlympusSuite to use OlympusAgents. Further implementation detail lives in [Development](DEVELOPMENT.md) and [Roadmap](ROADMAP.md).

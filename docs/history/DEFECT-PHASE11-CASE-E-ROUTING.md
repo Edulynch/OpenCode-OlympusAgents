@@ -6,15 +6,15 @@ native attempt remains an observed routing failure and has not been rewritten.
 **Historical E1 result:** `NATIVE_EXECUTED_ROUTING_FAIL`.
 **Current Case E acceptance:** E2 `NATIVE_EXECUTED_ROUTING_PASS`.
 **Phase 11:** **SHIPPED** after independent closure review; see the final
-integrated-routing closure record in `tests/phase11-integrated-routing/baseline.md`.
+integrated-routing closure record in the [immutable baseline](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/baseline.md).
 
 ## Native evidence
 
 The original completed root was reconciled using public, read-only OpenCode V2
-API GETs. `tests/phase11-integrated-routing/case-e.native-trace.json` records
+API GETs. The [case E native trace](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/case-e.native-trace.json) records
 the observed route and classifications. The exact user prompt and visible
-assistant terminal text are in
-`tests/phase11-integrated-routing/case-e.root-session.export.json`, a
+assistant terminal text are in the
+[case E root-session export](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/case-e.root-session.export.json), a
 reasoning-redacted projection of the original export. The raw export was
 captured in memory only; all reasoning blocks were removed before persistence,
 secrets were checked, and only observable tool-call ID/name/state stubs would be
@@ -77,9 +77,9 @@ optional specialist gate:
 - Talos's own prompt repeats the security-specific unanswered-question
   prerequisite (`olympus/harnesses/opencode/agent-prompts/talos.md:25-27`).
 - The Case E matrix expects `default: [kael, talos]`
-  (`tests/phase11-integrated-routing/cases.json:96-106`); the completed original
+  ([cases.json](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/cases.json#L96-L106)); the completed original
   prompt is retained in the native export projection and its short case
-  reference remains in `tests/phase11-integrated-routing/RUNME.md:231-240`.
+  reference remains in the [RUNME](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/RUNME.md#L231-L240).
 - The canonical generic routing policy says to choose the smallest sufficient
   role set (`olympus/policies/routing.md:5-7`).
 
@@ -122,7 +122,7 @@ Changed source, regression and record files:
 - `olympus/harnesses/codex/root.md`
 - `olympus/harnesses/codex/agents/talos.toml`
 - `tests/talos/qualify.ps1`
-- `tests/phase11-integrated-routing/qualify.py` (updated the static marker only;
+- [Phase 11 qualify.py](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/qualify.py) (updated the static marker only;
   Case E expected route and historical native failure remain unchanged)
 - `docs/DEFECT-PHASE11-CASE-E-ROUTING.md`
 
@@ -157,10 +157,8 @@ same direct child. The Talos export contains no tool-call records. Both message
 lists were reconciled over two pages; the second cursor-only page for each was
 empty.
 
-The root and child export projections are
-`tests/phase11-integrated-routing/case-e2.root-session.export.json` and
-`tests/phase11-integrated-routing/case-e2.talos-session.export.json`; the
-bounded trace is `tests/phase11-integrated-routing/case-e2.native-trace.json`.
+The root and child export projections are the [root-session export](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/case-e2.root-session.export.json) and [Talos-session export](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/case-e2.talos-session.export.json); the
+bounded trace is the [case E2 native trace](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/case-e2.native-trace.json).
 Two root reasoning blocks were removed and the child had none. Retained prompt
 and terminal text matches the public exports, no secret-pattern matches
 required redaction, and raw exports were not persisted. No private child
@@ -192,7 +190,7 @@ independent Vera closure review accepted Phase 11 as **SHIPPED**, with no
 pending native cases. This does not rewrite E1 or claim exhaustive runtime-path
 coverage. The guided Case I partial result and non-exercised Argus/Thales
 same-session follow-up coverage remain non-blocking and are recorded with the
-closure rationale in `tests/phase11-integrated-routing/baseline.md`. The
+closure rationale in the [immutable baseline](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/baseline.md). The
 closure's static validation commands and results are recorded in
-`tests/phase11-integrated-routing/baseline.md`; they validate artifacts and do
+the [immutable baseline](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/baseline.md); they validate artifacts and do
 not constitute a Case E rerun or independent source-export authentication.

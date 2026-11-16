@@ -1,5 +1,9 @@
 ## v0.6.1
 
+> Historical release record: statements below describe v0.6.1 only, not current
+> support or routes. Olympus currently supports OpenCode only; public
+> install/update/uninstall is global/OpenCode-only.
+
 🏛️ **OlympusAgents maintenance: don't confuse runtime discovery with installation integrity.**
 
 ### Highlights

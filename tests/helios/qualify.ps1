@@ -3,10 +3,7 @@ param([ValidateSet('Both','Offline','Runtime')][string]$QualificationSlice = 'Bo
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$production = 'a5b2c9a12f542217e7d9927034486f922756d17c'
 $run = Join-Path (Join-Path $env:LOCALAPPDATA 'Temp/opencode') ('helios-qualification-' + [guid]::NewGuid().ToString('N'))
-$old = Join-Path $run 'production-source'
-$originalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
 $script:CollectOfflineContracts = $QualificationSlice -eq 'Offline'
 $script:OfflineContractFailures = [Collections.Generic.List[string]]::new()
 function Check([string]$id, [bool]$ok) {
@@ -34,10 +31,10 @@ function Test-OpenCodeGeneratedAgentManaged([string]$BootstrapText, [string]$Ren
         $RendererText.Contains('display = identities[role]') -and
         $RendererText.Contains('output[root / ".opencode" / "agents" / f"{role}.md"] = header + prompt')
     $bootstrapUsesGeneratedInventory = $BootstrapText.Contains('function Get-GeneratedHarnessOutputs([string]$Name) {') -and
-        $BootstrapText.Contains('$adapterRoot = Join-Path $SourceRoot (''.'' + $Name)') -and
+        $BootstrapText.Contains('$adapterRoot = Join-Path $SourceRoot ''.opencode''') -and
         $BootstrapText.Contains('$outputs[$relative] = $text') -and
-        $BootstrapText.Contains('$GeneratedByHarness[$harness] = Get-GeneratedHarnessOutputs $harness') -and
-        $BootstrapText.Contains('$OpenCodeGenerated = $GeneratedByHarness[''opencode'']') -and
+        $BootstrapText.Contains('$OpenCodeGenerated = Get-GeneratedHarnessOutputs ''opencode''') -and
+        $BootstrapText.Contains('$GeneratedByHarness[''opencode''] = $OpenCodeGenerated') -and
         $BootstrapText.Contains('$OpenCodeManaged = @($OpenCodeGenerated.Keys | Sort-Object)') -and
         $BootstrapText.Contains('$Managed = @($ManagedContent.Keys | Sort-Object)')
     $prefix = [IO.Path]::GetFullPath($SourceRoot).TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
@@ -46,31 +43,10 @@ function Test-OpenCodeGeneratedAgentManaged([string]$BootstrapText, [string]$Ren
     })
     return $rendererMapsCanonicalRole -and $bootstrapUsesGeneratedInventory -and $adapterPaths -ccontains $expectedPath
 }
-function Enable-OfflineOpenCodeStub([string]$FixtureRoot) {
-    $mockBin = Join-Path $FixtureRoot 'mock-opencode'
-    [IO.Directory]::CreateDirectory($mockBin) | Out-Null
-    Copy-Item -LiteralPath (Join-Path $source 'tests/release/fixtures/opencode.ps1') -Destination (Join-Path $mockBin 'opencode.ps1')
-    $pwsh = Join-Path $PSHOME 'pwsh.exe'
-    $wrapper = "@echo off`r`n`"$pwsh`" -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
-    [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), $wrapper, [Text.Encoding]::ASCII)
-    $windowsApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
-    $parts = @($originalPath -split [regex]::Escape([IO.Path]::PathSeparator) | Where-Object {
-        $_ -and $_.Trim('"') -ine $windowsApps -and $_.Trim('"') -ine $PSHOME
-    })
-    $env:PATH = (@($mockBin,$PSHOME) + $parts) -join [IO.Path]::PathSeparator
-}
-function Install([string]$root, [string]$target, [switch]$DryRun) {
-    $args = @('-NoProfile','-File',(Join-Path $root 'install.ps1'),'-SourceRoot',$root,'-Target',$target)
-    if ($DryRun) { $args += '-DryRun' }
+function Install([string]$root, [string]$target) {
+    $args = @('-NoProfile','-File',(Join-Path $root 'scripts/bootstrap.ps1'),'-Target',$target)
     $output = (& pwsh @args 2>&1 | Out-String)
     [pscustomobject]@{ Code=$LASTEXITCODE; Output=$output }
-}
-function Snapshot([string]$root) {
-    $paths = @('src/local.txt','docs/staged.txt','notes.txt','.serena/project.yml','.opencode/user-note.txt')
-    $hashes = @($paths | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $root $_) -Algorithm SHA256).Hash }) -join ','
-    $index = (& git -C $root diff --cached --binary | Out-String)
-    $status = (& git -C $root status --porcelain=v1 -uall -- @($paths) | Out-String)
-    "$hashes`n$index`n$status"
 }
 function Simulate([string]$case) {
     # Offline state-machine simulation only; NOT agent execution or live qualification.
@@ -96,7 +72,6 @@ function Simulate([string]$case) {
 $expected = @{ kael='gpt-6.1-sol#high'; atlas='gpt-6.1-sol#high'; argus='gpt-6.1-sol#high'; talos='gpt-6.1-sol#high'; helios='gpt-6.1-sol#high'; thales='gpt-6.1-sol#xhigh'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
-    if ($QualificationSlice -eq 'Offline') { Enable-OfflineOpenCodeStub $run }
     if ($QualificationSlice -ne 'Runtime') {
     $h = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/helios.md'))
     $k = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/kael.md'))
@@ -138,7 +113,10 @@ try {
     Check HE32 ($k -match 'Kael retains all routing, reconciliation and root completion' -and $h -match 'Kael retains routing, reconciliation and root completion')
     Check HE33 (@($expected.Keys | Where-Object { ([IO.File]::ReadAllText((Join-Path $source ".opencode/agents/$_.md"))) -notmatch ('(?m)^model: "?openai/' + [regex]::Escape($expected[$_]) + '"?\r?$') }).Count -eq 0)
     Check HE34 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
-    Check HE35 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and $b -match '\$OldReasoner = ''.opencode/agents/sorin.md''')
+    Check HE35 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and
+        $b.Contains("'.opencode/agents/sorin.md'") -and
+        $b.Contains('foreach ($retiredPath in $RetiredOpenCodeResources)') -and
+        $b.Contains("Fail 'ROSTER_MISMATCH'"))
     Check HE36 ((& git -C $source grep -n -i 'gpt-6-luna#fast' -- '.opencode/agents' 'opencode.jsonc' | Out-String).Length -eq 0)
     Check HE_ROADMAP ($r -match '8 — Helios The Optimizer \| \*\*SHIPPED\*\*' -and @('3 — Role Purity + Iterative Evidence','4 — Thales evolution','5 — Atlas The Planner','6 — Argus The Bug Hunter','7 — Talos The Sentinel' | Where-Object { $r -notmatch ([regex]::Escape($_) + ' \| \*\*SHIPPED\*\*') }).Count -eq 0)
     $a=Simulate proposal; Check CASE_A ($a.Status -eq 'OPTIMIZATION_PROPOSAL' -and $a.Sessions -eq 1 -and $a.Calls -eq 2 -and $a.WorkerParent -eq 'kael' -and $a.SameSession -and -not $a.Implemented)
@@ -154,35 +132,6 @@ try {
     }
     $script:CollectOfflineContracts = $false
 
-    if ($QualificationSlice -ne 'Runtime') {
-    & git -C $source worktree add --detach $old $production | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'production worktree fixture failed' }
-    $upgrade = Join-Path $run 'upgrade'; [IO.Directory]::CreateDirectory($upgrade) | Out-Null; & git -C $upgrade init --quiet
-    foreach ($path in @('src/local.txt','docs/staged.txt')) {
-        $dest=Join-Path $upgrade $path; [IO.Directory]::CreateDirectory((Split-Path $dest -Parent)) | Out-Null
-        [IO.File]::WriteAllText($dest,"original $path`n")
-    }
-    & git -C $upgrade add -- src docs
-    & git -C $upgrade -c user.name=Qualification -c user.email=qualification@example.invalid commit --quiet -m fixture
-    $initial=Install $old $upgrade
-    Check U_BASE ($initial.Code -eq 0 -and -not (Test-Path (Join-Path $upgrade '.opencode/agents/helios.md')))
-    [IO.File]::WriteAllText((Join-Path $upgrade 'src/local.txt'),"modified work`n")
-    [IO.File]::WriteAllText((Join-Path $upgrade 'docs/staged.txt'),"staged work`n")
-    & git -C $upgrade add -- docs/staged.txt
-    foreach ($path in @('notes.txt','.serena/project.yml','.opencode/user-note.txt')) {
-        $dest=Join-Path $upgrade $path; [IO.Directory]::CreateDirectory((Split-Path $dest -Parent)) | Out-Null
-        [IO.File]::WriteAllText($dest,"user owned $path`n")
-    }
-    $before=Snapshot $upgrade
-    $dry=Install $source $upgrade -DryRun
-    Check U_DRY ($dry.Code -eq 0 -and $dry.Output -match '\.opencode/agents/helios.md' -and -not (Test-Path (Join-Path $upgrade '.opencode/agents/helios.md')))
-    $installed=Install $source $upgrade
-    if ($installed.Code -ne 0) { Write-Output $installed.Output }
-    $manifest=[IO.File]::ReadAllText((Join-Path $upgrade '.opencode/orchestrator-install.json')) | ConvertFrom-Json
-    Check U_UPGRADE ($installed.Code -eq 0 -and (Test-Path (Join-Path $upgrade '.opencode/agents/helios.md')) -and @($manifest.managed_files | Where-Object path -eq '.opencode/agents/helios.md').Count -eq 1 -and @($manifest.managed_files | Where-Object path -eq '.opencode/agents/talos.md').Count -eq 1)
-    Check U_USER_INDEX ((Snapshot $upgrade) -ceq $before)
-    $again=Install $source $upgrade; Check U_IDEMPOTENT ($again.Code -eq 0 -and $again.Output -match '(?m)^NO_CHANGES\s*$')
-    }
     if ($QualificationSlice -ne 'Offline') {
     $fresh=Join-Path $run 'fresh'; [IO.Directory]::CreateDirectory($fresh) | Out-Null; & git -C $fresh init --quiet
     $freshResult=Install $source $fresh
@@ -194,24 +143,13 @@ try {
     Check F_EFFECTIVE_DENY ($effective.Count -eq 1 -and @('shell','edit','subagent','read','glob','grep','list','lsp' | Where-Object { $action=$_; @($effective[0].permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq 'deny' }).Count -lt 1 -or @($effective[0].permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq 'allow' }).Count -gt 0 }).Count -eq 0)
     Check F_ROSTER (@($expected.Keys | Where-Object { $id=$_; $want=$expected[$id].Split('#'); @($agents | Where-Object { $_.id -eq $id -and $_.model.id -eq $want[0] -and $_.model.variant -eq $want[1] }).Count -ne 1 }).Count -eq 0)
     }
-    if ($QualificationSlice -ne 'Runtime') {
-    $drift=Join-Path $run 'drift'; [IO.Directory]::CreateDirectory($drift) | Out-Null; & git -C $drift init --quiet
-    Check D_BASE ((Install $old $drift).Code -eq 0)
-    [IO.File]::AppendAllText((Join-Path $drift '.opencode/agents/kael.md'),"`n# user drift`n")
-    $blocked=Install $source $drift
-    Check D_REFUSED ($blocked.Code -ne 0 -and $blocked.Output -match 'MANAGED_FILE_DRIFT' -and -not (Test-Path (Join-Path $drift '.opencode/agents/helios.md')))
-    $foreign=Join-Path $run 'foreign'; [IO.Directory]::CreateDirectory((Join-Path $foreign '.opencode/agents')) | Out-Null; & git -C $foreign init --quiet
-    [IO.File]::WriteAllText((Join-Path $foreign '.opencode/agents/helios.md'),"user-owned helios`n")
-    $conflict=Install $source $foreign
-    Check D_UNOWNED_REFUSED ($conflict.Code -ne 0 -and $conflict.Output -match 'INSTALL_CONFLICT')
-    }
     if ($QualificationSlice -eq 'Offline' -and $script:OfflineContractFailures.Count -gt 0) {
         throw ('Offline static/synthetic check failures: ' + ($script:OfflineContractFailures -join ', '))
     }
     if ($QualificationSlice -eq 'Runtime') {
         Write-Output 'HELIOS RUNTIME QUALIFICATION: PASS (fresh installed effective agent; no interactive session executed)'
     } elseif ($QualificationSlice -eq 'Offline') {
-        Write-Output 'HELIOS OFFLINE QUALIFICATION: PASS (static/synthetic and installer/history checks; effective OpenCode queries not run)'
+        Write-Output 'HELIOS OFFLINE QUALIFICATION: PASS (static/synthetic policy checks; effective OpenCode queries not run)'
     } else {
         Write-Output 'HELIOS QUALIFICATION: PASS'
     }
@@ -220,8 +158,6 @@ try {
     Write-Output 'HELIOS QUALIFICATION: FAIL'
     exit 1
 } finally {
-    [Environment]::SetEnvironmentVariable('PATH',$originalPath,'Process')
-    if (Test-Path -LiteralPath $old) { & git -C $source worktree remove --force $old 2>$null | Out-Null }
     if (Test-Path -LiteralPath $run) {
         try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop }
         catch { Write-Output "CLEANUP_DEFERRED: $run" }

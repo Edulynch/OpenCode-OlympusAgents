@@ -9,7 +9,6 @@ import re
 import stat
 import subprocess
 import sys
-import tomllib
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
@@ -229,8 +228,9 @@ def _manifest_record(target: Path) -> tuple[ProjectManifest | None, bytes | None
 
 
 def _render_managed_outputs(source: Path, renderer, installed: tuple[str, ...]) -> dict[str, dict[str, bytes]]:
-    selector = "all" if set(installed) == {"opencode", "codex"} else installed[0]
-    rendered = renderer.outputs_for(source, selector)
+    if installed != ("opencode",):
+        raise PreviewFault(3, "unsupported_manifest_inventory", "Only the current OpenCode project inventory is supported.")
+    rendered = renderer.outputs_for(source, "opencode")
     by_harness: dict[str, dict[str, bytes]] = {name: {} for name in installed}
     for path, content in rendered.items():
         try:
@@ -242,10 +242,9 @@ def _render_managed_outputs(source: Path, renderer, installed: tuple[str, ...]) 
         if relative.startswith(".opencode/") or relative == "opencode.jsonc":
             harness = "opencode"
         elif relative.startswith(".codex/") or relative == "CODEX.md":
-            harness = "codex"
+            raise PreviewFault(3, "source_inventory_unsupported", f"Renderer returned an obsolete resource: {relative}")
         else:
-            # all also returns the source-side capability document, not an
-            # installed resource.
+            # The renderer may also return a source-side capability document.
             continue
         if harness not in by_harness:
             raise PreviewFault(3, "source_inventory_unsupported", f"Renderer returned an unselected managed resource: {relative}")
@@ -313,7 +312,6 @@ def _unknown_assignments() -> dict[str, Any]:
         "roles": [],
         "roots": {
             "opencode": {"state": "unknown", "current_status": "unknown", "current": None, "proposed": None},
-            "codex": {"state": "unknown", "current_status": "unknown", "current": None, "proposed": None},
         },
     }
 
@@ -385,18 +383,6 @@ def _verified_opencode_root(raw: bytes, expected: bytes) -> dict[str, str] | Non
     return {"model": model}
 
 
-def _verified_codex(raw: bytes) -> dict[str, str] | None:
-    try:
-        data = tomllib.loads(raw.decode("utf-8"))
-    except (UnicodeError, tomllib.TOMLDecodeError):
-        return None
-    model, effort = data.get("model"), data.get("model_reasoning_effort")
-    if (not isinstance(model, str) or not _MODEL_ID.fullmatch(model)
-            or not isinstance(effort, str) or not _MODEL_ID.fullmatch(effort)):
-        return None
-    return {"model": model, "effort": effort}
-
-
 def _assignment_preview(installed: tuple[str, ...], selected: tuple[str, ...], current: dict[str, bytes],
                         expected_by_harness: dict[str, dict[str, bytes]], renderer, source: Path,
                         assignment_query: Callable | None) -> dict[str, Any]:
@@ -414,79 +400,47 @@ def _assignment_preview(installed: tuple[str, ...], selected: tuple[str, ...], c
     except Exception:
         return result
 
-    def state_for(harness: str) -> str:
-        return "not_installed" if harness not in installed else "selected" if harness in selected else "preserved"
-
-    def current_for(harness: str, relative: str, root: bool = False) -> tuple[str, dict[str, str] | None]:
-        if harness not in installed:
-            return "not_installed", None
-        raw, expected = current.get(relative), expected_by_harness.get(harness, {}).get(relative)
+    def current_for(relative: str, root: bool = False) -> tuple[str, dict[str, str] | None]:
+        raw, expected = current.get(relative), expected_by_harness["opencode"].get(relative)
         if raw is None or expected is None:
             return "unsupported", None
-        if harness == "opencode":
-            value = (_verified_opencode_root(raw, expected) if root
-                     else _verified_opencode_agent(raw, expected))
-        else:
-            value = _verified_codex(raw)
+        value = (_verified_opencode_root(raw, expected) if root
+                 else _verified_opencode_agent(raw, expected))
         return ("verified", value) if value is not None else ("unsupported", None)
 
     roles: list[dict[str, Any]] = []
     statuses: list[str] = []
     for role in sorted(by_role):
         row = by_role[role]
-        representations: dict[str, Any] = {}
-        for harness in ("opencode", "codex"):
-            representation = row.get("representation", {}).get(harness, "unknown")
-            state = state_for(harness)
-            if harness == "codex" and representation == "root":
-                representations[harness] = {"representation": "root", "state": state}
-                continue
-            relative = (f".opencode/agents/{role}.md" if harness == "opencode"
-                        else f".codex/agents/{role}.toml")
-            current_status, current_value = current_for(harness, relative)
-            if harness in installed:
-                statuses.append(current_status)
-            models = row.get("models", {})
-            proposed = ({"model": models.get(harness), "effort": row.get("effort")}
-                        if harness in selected and isinstance(models, dict) else None)
-            representations[harness] = {
-                "representation": representation,
-                "state": state,
-                "current_status": current_status,
-                "current": current_value,
-                "proposed": proposed,
-            }
-        proposed_family = row.get("family") if any(harness in selected for harness in installed) else None
+        relative = f".opencode/agents/{role}.md"
+        current_status, current_value = current_for(relative)
+        statuses.append(current_status)
+        models = row.get("models", {})
+        proposed = ({"model": models.get("opencode"), "effort": row.get("effort")}
+                    if "opencode" in selected and isinstance(models, dict) else None)
         roles.append({
             "role": role,
             "identity": row.get("identity"),
-            "family": {"current": "unknown", "proposed": proposed_family},
-            "harnesses": representations,
+            "family": {"current": "unknown", "proposed": row.get("family")},
+            "harnesses": {"opencode": {
+                "representation": row.get("representation", {}).get("opencode", "unknown"),
+                "state": "selected",
+                "current_status": current_status,
+                "current": current_value,
+                "proposed": proposed,
+            }},
         })
 
-    root_specs = {
-        "opencode": ("opencode.jsonc", "opencode", "kael"),
-        "codex": (".codex/config.toml", "codex", "kael"),
-    }
-    roots: dict[str, Any] = {}
-    for harness, (relative, _, role) in root_specs.items():
-        state = state_for(harness)
-        current_status, current_value = current_for(harness, relative, root=True)
-        if harness in installed:
-            statuses.append(current_status)
-        row = by_role.get(role, {})
-        models = row.get("models", {}) if isinstance(row, dict) else {}
-        proposed = None
-        if harness in selected and isinstance(models, dict):
-            proposed = {"model": models.get(harness)}
-            if harness == "codex":
-                proposed["effort"] = row.get("effort")
-        roots[harness] = {
-            "state": state,
-            "current_status": current_status,
-            "current": current_value,
-            "proposed": proposed,
-        }
+    current_status, current_value = current_for("opencode.jsonc", root=True)
+    statuses.append(current_status)
+    kael = by_role.get("kael", {})
+    models = kael.get("models", {}) if isinstance(kael, dict) else {}
+    roots = {"opencode": {
+        "state": "selected",
+        "current_status": current_status,
+        "current": current_value,
+        "proposed": {"model": models.get("opencode")} if isinstance(models, dict) else None,
+    }}
 
     verified = statuses.count("verified")
     unsupported = statuses.count("unsupported")
@@ -531,26 +485,15 @@ def _updated_manifest_bytes(record: ProjectManifest, raw: bytes, selected: tuple
     for original in data["managed_files"]:
         entry = dict(original)
         relative = entry["path"].replace("\\", "/")
-        if relative.startswith(".opencode/") or relative == "opencode.jsonc":
-            harness = "opencode"
-        elif relative.startswith(".codex/") or relative == "CODEX.md":
-            harness = "codex"
-        else:
+        if not (relative.startswith(".opencode/") or relative == "opencode.jsonc"):
             raise PreviewFault(3, "unsupported_manifest_inventory", f"Unsupported manifest resource: {relative}")
-        if harness in selected:
-            content = expected_by_harness[harness].get(relative)
+        if "opencode" in selected:
+            content = expected_by_harness["opencode"].get(relative)
             if content is None:
                 raise PreviewFault(3, "unsupported_manifest_inventory", f"Renderer omitted owned resource: {relative}")
             entry["sha256"] = _digest(content)
         entries.append(entry)
     data["managed_files"] = sorted(entries, key=lambda item: item["path"].replace("\\", "/"))
-    provenance = data.get("harness_provenance")
-    if isinstance(provenance, dict):
-        retained = {name: value for name, value in provenance.items() if name not in selected}
-        if retained:
-            data["harness_provenance"] = retained
-        else:
-            data.pop("harness_provenance")
     # A local working checkout is not an immutable official release, even when
     # its installer marker has release-shaped text.
     data["installed_version"] = "local"
@@ -583,7 +526,7 @@ def preview(source: Path, args, response: dict, *, source_query: Callable, load_
                 "message": "A project-apply or source-edit journal is pending; explicitly recover that writer state before applying.",
             }])
 
-        for surface in (".opencode", ".codex"):
+        for surface in (".opencode",):
             path, metadata, issue = _lstat_target_path(target, surface)
             if issue:
                 return _blocked(response, [{"code": "unsafe_target_path", "message": issue, "path": surface}])
@@ -598,7 +541,7 @@ def preview(source: Path, args, response: dict, *, source_query: Callable, load_
         if blockers or record is None or manifest_raw is None:
             return _blocked(response, blockers or [{"code": "manifest_missing", "message": "No verifiable project manifest was found."}])
 
-        selected = ("opencode", "codex") if args.harness == "all" else (args.harness,)
+        selected = (args.harness,)
         installed = record.installed_harnesses
         if any(name not in installed for name in selected):
             absent = [name for name in selected if name not in installed]
@@ -612,7 +555,7 @@ def preview(source: Path, args, response: dict, *, source_query: Callable, load_
                 "manifest": {"path": record.relative_path, "ownership": "metadata_only"},
             })
 
-        selector = "all" if len(installed) == 2 else installed[0]
+        selector = "opencode"
         source_data, source_issues = source_query(source, "config check", selector)
         if source_issues:
             source_blockers = [
@@ -785,7 +728,7 @@ def _execution_plan(source: Path, args, response: dict, *, load_renderer: Callab
     record, manifest_raw, blockers = _manifest_record(target)
     if blockers or record is None or manifest_raw is None:
         raise PreviewFault(3, "target_changed", "Project ownership changed after preview; no writes were made.")
-    selected = ("opencode", "codex") if args.harness == "all" else (args.harness,)
+    selected = (args.harness,)
     try:
         renderer = load_renderer(source)
         by_harness = _render_managed_outputs(source, renderer, record.installed_harnesses)

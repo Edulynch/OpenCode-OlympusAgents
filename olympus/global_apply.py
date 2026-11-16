@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import stat
 from pathlib import Path
 from typing import Callable
@@ -31,24 +30,17 @@ def _build_plan(candidate: dict) -> dict:
     for relative, desired in sorted(expected.items()):
         old = current.get(relative)
         if relative not in entries:
-            if relative != "opencode.jsonc" or candidate["guard_state"] != "missing":
-                continue
-            if old is not None:
-                raise config_apply_transaction.TransactionError(
-                    "The unowned global OpenCode config appeared after preview; no write was made.", 3,
-                )
-            mode = 0o666 if os.name == "nt" else 0o600
-        else:
-            if old is None:
-                raise config_apply_transaction.TransactionError(
-                    f"A manifest-owned global resource disappeared: {relative}", 3,
-                )
-            if old == desired:
-                continue
-            path, metadata, issue = config_apply._lstat_target_path(root, relative)
-            if issue or path is None or metadata is None:
-                raise config_apply_transaction.TransactionError(issue or f"Cannot inspect global resource: {relative}", 3)
-            mode = stat.S_IMODE(metadata.st_mode)
+            continue
+        if old is None:
+            raise config_apply_transaction.TransactionError(
+                f"A manifest-owned global resource disappeared: {relative}", 3,
+            )
+        if old == desired:
+            continue
+        path, metadata, issue = config_apply._lstat_target_path(root, relative)
+        if issue or path is None or metadata is None:
+            raise config_apply_transaction.TransactionError(issue or f"Cannot inspect global resource: {relative}", 3)
+        mode = stat.S_IMODE(metadata.st_mode)
         if old != desired:
             changes.append(config_apply_transaction.GlobalChange(relative, old, desired, mode))
 
@@ -60,8 +52,6 @@ def _build_plan(candidate: dict) -> dict:
         if relative in expected:
             item["sha256"] = _digest(expected[relative])
         new_entries.append(item)
-    if any(change.path == "opencode.jsonc" and change.old is None for change in changes):
-        new_entries.append({"path": "opencode.jsonc", "sha256": _digest(expected["opencode.jsonc"])})
     new_data["managed_files"] = sorted(new_entries, key=lambda item: item["path"])
     manifest_new = (manifest_raw if new_data == manifest else
                     (json.dumps(new_data, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))

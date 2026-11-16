@@ -86,14 +86,18 @@ function New-Target([string]$name) {
     return $target
 }
 
-function New-SourceArchive([string]$sourceRoot, [string]$tag, [string]$archivePath, [switch]$MisreportStable) {
+function New-SourceArchive([string]$sourceRoot, [string]$tag, [string]$archivePath, [switch]$MisreportVersion) {
     $pack = Join-Path $run ('package-' + [guid]::NewGuid().ToString('N'))
     $top = Join-Path $pack "OpenCode-OlympusAgents-$tag"
     [IO.Directory]::CreateDirectory($top) | Out-Null
     # Keep the local archive fixture hermetic: unrelated user untracked files
-    # are not release source. Include the one in-scope new document explicitly.
+    # are not release source; deleted tracked files are not current source either.
     $files = @(& git -C $sourceRoot ls-files --cached)
     if ($LASTEXITCODE -ne 0 -or $files.Count -eq 0) { throw 'GIT_FIXTURE_SOURCE_INVENTORY_FAIL' }
+    $deletedFiles = @(& git -C $sourceRoot ls-files --deleted)
+    if ($LASTEXITCODE -ne 0) { throw 'GIT_FIXTURE_SOURCE_DELETION_INVENTORY_FAIL' }
+    $files = @($files | Where-Object { $_ -notin $deletedFiles })
+    if ($files.Count -eq 0) { throw 'GIT_FIXTURE_SOURCE_INVENTORY_FAIL' }
     $installationGuide = 'docs/INSTALLATION.md'
     if ((Test-Path -LiteralPath (Join-Path $sourceRoot $installationGuide) -PathType Leaf) -and $installationGuide -notin $files) {
         $files += $installationGuide
@@ -105,7 +109,7 @@ function New-SourceArchive([string]$sourceRoot, [string]$tag, [string]$archivePa
         [IO.Directory]::CreateDirectory($destinationParent) | Out-Null
         Copy-Item -LiteralPath $sourceFile -Destination $destination -Force
     }
-    if ($MisreportStable) {
+    if ($MisreportVersion) {
         $path = Join-Path $top 'install.ps1'
         $text = [IO.File]::ReadAllText($path)
         $text = $text.Replace("[string]`$Version = '$($script:CandidateVersion)'", "[string]`$Version = 'v0.2.0'")
@@ -121,92 +125,6 @@ function New-SourceArchive([string]$sourceRoot, [string]$tag, [string]$archivePa
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [IO.Compression.ZipFile]::CreateFromDirectory($pack, $archivePath)
     return $archivePath
-}
-
-function Assert-QualificationRunPath([string]$Path) {
-    if ([string]::IsNullOrWhiteSpace($Path) -or -not [IO.Path]::IsPathFullyQualified($Path)) {
-        throw 'HISTORICAL_FIXTURE_PATH_INVALID: Path must be absolute and inside the owned qualification run.'
-    }
-    $runPrefix = [IO.Path]::GetFullPath($run).TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
-    $fullPath = [IO.Path]::GetFullPath($Path).TrimEnd([char[]]@('\','/'))
-    if (-not $fullPath.StartsWith($runPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'HISTORICAL_FIXTURE_PATH_INVALID: Path must be inside the owned qualification run.'
-    }
-    return $fullPath
-}
-
-function New-GitTagArchive([string]$tag, [string]$archivePath) {
-    $archivePath = Assert-QualificationRunPath $archivePath
-    $prefix = "OpenCode-OlympusAgents-$tag/"
-    & git -C $source archive --format=zip "--prefix=$prefix" $tag -o $archivePath
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
-        throw "GIT_TAG_ARCHIVE_FAIL: $tag"
-    }
-    return $archivePath
-}
-
-function Get-HistoricalInstaller([string]$SourceRoot, [string]$ExpectedVersion) {
-    $source = Assert-QualificationRunPath $SourceRoot
-    if ($ExpectedVersion -notin @('v0.2.0','v0.3.0-beta.3') -or
-        (Split-Path -Leaf $source) -cne "OpenCode-OlympusAgents-$ExpectedVersion") {
-        throw "HISTORICAL_SOURCE_VERSION_MISMATCH: $ExpectedVersion is not an assigned historical tag source."
-    }
-    $installerPath = Assert-QualificationRunPath (Join-Path $source 'install.ps1')
-    $bootstrapPath = Assert-QualificationRunPath (Join-Path $source 'scripts/bootstrap.ps1')
-    if (-not (Test-Path -LiteralPath $source -PathType Container) -or
-        -not (Test-Path -LiteralPath $installerPath -PathType Leaf) -or
-        -not (Test-Path -LiteralPath $bootstrapPath -PathType Leaf)) {
-        throw 'HISTORICAL_SOURCE_INVALID: Installer or bootstrap is missing from the extracted tag source.'
-    }
-    $text = [IO.File]::ReadAllText($installerPath)
-    $default = [regex]::Match($text, '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''\s*,?\s*$')
-    $release = [regex]::Match($text, '(?m)^\s*\$ReleaseVersion\s*=\s*''([^'']+)''')
-    if (-not $default.Success -or $default.Groups[1].Value -cne $ExpectedVersion -or
-        ($release.Success -and $release.Groups[1].Value -cne $ExpectedVersion)) {
-        throw "HISTORICAL_SOURCE_VERSION_MISMATCH: Expected $ExpectedVersion in $installerPath."
-    }
-    return [pscustomobject]@{
-        SourceRoot = $source
-        InstallerPath = $installerPath
-        Version = $default.Groups[1].Value
-    }
-}
-
-function Expand-HistoricalSource([string]$ArchivePath, [string]$ExpectedVersion) {
-    $archive = Assert-QualificationRunPath $ArchivePath
-    $destination = Assert-QualificationRunPath (Join-Path $run ('historical-source-' + ($ExpectedVersion -replace '[^A-Za-z0-9.-]', '-')))
-    if (-not (Test-Path -LiteralPath $archive -PathType Leaf) -or (Test-Path -LiteralPath $destination)) {
-        throw 'HISTORICAL_SOURCE_INVALID: Archive is missing or the owned extraction destination already exists.'
-    }
-    [IO.Directory]::CreateDirectory($destination) | Out-Null
-    Expand-Archive -LiteralPath $archive -DestinationPath $destination -ErrorAction Stop
-    $roots = @(Get-ChildItem -LiteralPath $destination -Force)
-    $expectedRoot = "OpenCode-OlympusAgents-$ExpectedVersion"
-    if ($roots.Count -ne 1 -or -not $roots[0].PSIsContainer -or $roots[0].Name -cne $expectedRoot) {
-        throw "HISTORICAL_SOURCE_INVALID: Expected the single tag-shaped archive root '$expectedRoot'."
-    }
-    $source = Assert-QualificationRunPath $roots[0].FullName
-    [void](Get-HistoricalInstaller $source $ExpectedVersion)
-    return $source
-}
-
-function Install-Historical([string]$SourceRoot, [string]$Target, [string]$Version) {
-    $source = Assert-QualificationRunPath $SourceRoot
-    $targetRoot = Assert-QualificationRunPath $Target
-    $identity = Get-HistoricalInstaller $source $Version
-    if (-not (Test-Path -LiteralPath $targetRoot -PathType Container)) {
-        throw 'HISTORICAL_FIXTURE_TARGET_INVALID: Target must be an existing fixture directory.'
-    }
-    $args = @('-NoProfile', '-File', $identity.InstallerPath, '-Version', $identity.Version,
-        '-SourceRoot', $identity.SourceRoot, '-Target', $targetRoot)
-    $output = (& pwsh @args 2>&1 | Out-String)
-    [pscustomobject]@{
-        Text = $output
-        Code = $LASTEXITCODE
-        Version = $identity.Version
-        SourceRoot = $identity.SourceRoot
-        InstallerPath = $identity.InstallerPath
-    }
 }
 
 function Assert-QualificationCliTargets([string]$InstallRoot, [string]$PathStorePath) {
@@ -260,12 +178,8 @@ function Verify([string]$target, [string]$archive, [string]$version) {
     try {
         $fixture = Expand-ProjectQualificationSource $archive $version
         $bootstrap = Join-Path $fixture 'scripts/bootstrap.ps1'
-        if ([IO.File]::ReadAllText($bootstrap) -match '(?m)^\s*\[switch\]\$VerifyOnly') {
-            $output = (& pwsh -NoProfile -File $bootstrap -Target $target -SourceVersion $version -VerifyOnly 2>&1 | Out-String)
-            return [pscustomobject]@{ Text=$output; Code=$LASTEXITCODE }
-        }
-        Assert-LegacyOpenCodeInstall $fixture $version $target $bootstrap
-        return [pscustomobject]@{ Text="OLYMPUS_VERIFY: $version PASS"; Code=0 }
+        $output = (& pwsh -NoProfile -File $bootstrap -Target $target -SourceVersion $version -VerifyOnly 2>&1 | Out-String)
+        return [pscustomobject]@{ Text=$output; Code=$LASTEXITCODE }
     } catch {
         $message = $_.Exception.Message
         $reason = if ($message -match '^([A-Z_]+):') { $Matches[1] } else { 'VERIFY_FAILED' }
@@ -273,12 +187,11 @@ function Verify([string]$target, [string]$archive, [string]$version) {
     }
 }
 
-# Keep legacy project qualification on internal engines. Reuse the real source
-# identity functions without executing the now-global public installer body.
+# Reuse current source identity guards without executing the global installer body.
 $tokens = $null; $parseErrors = $null
 $installerAst = [Management.Automation.Language.Parser]::ParseFile($installer, [ref]$tokens, [ref]$parseErrors)
 if ($parseErrors.Count) { throw 'QUALIFICATION_INSTALLER_PARSE_FAILED' }
-foreach ($name in @('Get-DeclaredReleaseVersion','Assert-ArchiveTag','Get-ContentHash','Get-LegacyManagedSourcePaths','Assert-LegacyOpenCodeInstall')) {
+foreach ($name in @('Get-DeclaredReleaseVersion','Assert-ArchiveTag')) {
     $definition = $installerAst.Find({ param($node)
         $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name
     }.GetNewClosure(), $true)
@@ -345,20 +258,33 @@ try {
         Write-Output 'RUNTIME_OPEN_CODE: local stub responses; no live OpenCode session or authority smoke.'
     }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archiveInventoryRepo = Join-Path $run ('archive-inventory-' + [guid]::NewGuid().ToString('N'))
+    [IO.Directory]::CreateDirectory($archiveInventoryRepo) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $archiveInventoryRepo 'kept.txt'), "staged bytes`n", $utf8)
+    [IO.File]::WriteAllText((Join-Path $archiveInventoryRepo 'removed.txt'), "removed bytes`n", $utf8)
+    & git -C $archiveInventoryRepo init --quiet
+    if ($LASTEXITCODE -ne 0) { throw 'ARCHIVE_INVENTORY_GIT_INIT_FAIL' }
+    & git -C $archiveInventoryRepo add -- kept.txt removed.txt
+    if ($LASTEXITCODE -ne 0) { throw 'ARCHIVE_INVENTORY_GIT_ADD_FAIL' }
+    [IO.File]::WriteAllText((Join-Path $archiveInventoryRepo 'kept.txt'), "current worktree bytes`n", $utf8)
+    Remove-Item -LiteralPath (Join-Path $archiveInventoryRepo 'removed.txt') -Force
+    [IO.File]::WriteAllText((Join-Path $archiveInventoryRepo 'user-untracked.txt'), "untracked bytes`n", $utf8)
+    $archiveInventoryZip = Join-Path $run 'archive-inventory-regression.zip'
+    [void](New-SourceArchive $archiveInventoryRepo 'inventory-regression' $archiveInventoryZip)
+    $archiveInventoryExpanded = Join-Path $run ('archive-inventory-expanded-' + [guid]::NewGuid().ToString('N'))
+    Expand-Archive -LiteralPath $archiveInventoryZip -DestinationPath $archiveInventoryExpanded -ErrorAction Stop
+    $archiveInventoryRoot = Join-Path $archiveInventoryExpanded 'OpenCode-OlympusAgents-inventory-regression'
+    $keptArchivePath = Join-Path $archiveInventoryRoot 'kept.txt'
+    Check 'R0_SOURCE_ARCHIVE_CURRENT_WORKTREE_INVENTORY' (
+        (Test-Path -LiteralPath $keptArchivePath -PathType Leaf) -and
+        [IO.File]::ReadAllText($keptArchivePath) -eq "current worktree bytes`n" -and
+        -not (Test-Path -LiteralPath (Join-Path $archiveInventoryRoot 'removed.txt')) -and
+        -not (Test-Path -LiteralPath (Join-Path $archiveInventoryRoot 'user-untracked.txt')))
     $candidateArchive = New-SourceArchive $source $script:CandidateVersion (Join-Path $run "candidate-$($script:CandidateVersion).zip")
-    $stableArchive = New-GitTagArchive 'v0.2.0' (Join-Path $run 'stable-v020.zip')
-    $previousBetaArchive = New-GitTagArchive 'v0.3.0-beta.3' (Join-Path $run 'previous-beta3.zip')
-    $stableHistoricalSource = Expand-HistoricalSource $stableArchive 'v0.2.0'
-    $previousBetaHistoricalSource = Expand-HistoricalSource $previousBetaArchive 'v0.3.0-beta.3'
-    $wrongHistoricalVersionRejected = $false
-    try { [void](Get-HistoricalInstaller $stableHistoricalSource $script:CandidateVersion) }
-    catch { $wrongHistoricalVersionRejected = $_.Exception.Message -match '^HISTORICAL_SOURCE_VERSION_MISMATCH:' }
-    Check 'R0_HISTORICAL_SOURCE_REJECTS_CANDIDATE_VERSION' $wrongHistoricalVersionRejected `
-        'Historical source identity mismatch is rejected before any historical installer launch.'
     $alphaArchive = New-SourceArchive $source 'v0.3.0-alpha.1' (Join-Path $run 'alpha.zip')
     $betaArchive = New-SourceArchive $source 'v0.3.0-beta.2' (Join-Path $run 'beta.zip')
     $rcArchive = New-SourceArchive $source 'v0.3.0-rc.1' (Join-Path $run 'rc.zip')
-    $mismatchArchive = New-SourceArchive $source $script:CandidateVersion (Join-Path $run "mismatch-$($script:CandidateVersion)-to-v020.zip") -MisreportStable
+    $mismatchArchive = New-SourceArchive $source $script:CandidateVersion (Join-Path $run "mismatch-$($script:CandidateVersion)-to-v020.zip") -MisreportVersion
 
     $versionText = $installerText
     $releaseIdentityValid = ($versionText -match "(?m)^\s*\[string\]\`$Version\s*=\s*'$($script:CandidateRegex)'" -and
@@ -482,32 +408,7 @@ try {
     Check 'R11_FAST_POLICY' ($kaelText -match 'MAX_ACTIVE_CHILDREN = 4' -and $kaelText -match 'minimum useful parallelism' -and
         $kaelText -match 'FAST' -and $kaelText -match 'balanced shards: 20 items / 4 workers = 5/5/5/5')
 
-    # Stable SemVer remains installable explicitly; prerelease identifiers are accepted end-to-end.
-    $stableTarget = New-Target 'explicit-stable-v020'
-    $stable = Install-Historical $stableHistoricalSource $stableTarget 'v0.2.0'
-    $stableManifestPath = Join-Path $stableTarget '.opencode/orchestrator-install.json'
-    $stableManifest = if (Test-Path -LiteralPath $stableManifestPath -PathType Leaf) {
-        try { Get-Content -LiteralPath $stableManifestPath -Raw | ConvertFrom-Json -ErrorAction Stop }
-        catch { $null }
-    } else { $null }
-    $stableInstallPass = ($stable.Code -eq 0 -and $stable.Version -ceq 'v0.2.0' -and
-        $stable.SourceRoot -ceq $stableHistoricalSource -and
-        $stable.InstallerPath -ceq (Join-Path $stableHistoricalSource 'install.ps1') -and
-        $stable.Text -match 'OLYMPUS_INSTALL: v0\.2\.0 READY_OR_NO_CHANGES' -and
-        $null -ne $stableManifest -and $stableManifest.schema_version -eq 1 -and
-        @($stableManifest.managed_files).Count -gt 0)
-    Check 'R13_EXPLICIT_STABLE_INSTALL' $stableInstallPass `
-        "installer=$($stable.InstallerPath); exit=$($stable.Code)`n$($stable.Text)"
-    $stableVerify = Verify $stableTarget $stableArchive 'v0.2.0'
-    Check 'R24_STABLE_INSTALL_VERIFY_PASS' ($stableVerify.Code -eq 0 -and $stableVerify.Text -match '(?m)^OLYMPUS_VERIFY: v0\.2\.0 PASS\s*$')
-    $unexpectedLegacyAgent = Join-Path $stableTarget '.opencode/agents/aegis.md'
-    [IO.File]::WriteAllText($unexpectedLegacyAgent, "id: aegis`n", $utf8)
-    $unexpectedAgentSnapshot = Get-ProjectSnapshot $stableTarget
-    $unexpectedAgentVerify = Verify $stableTarget $stableArchive 'v0.2.0'
-    Check 'R24_LEGACY_VERIFY_REJECTS_UNEXPECTED_OLYMPUS_AGENT' ($unexpectedAgentVerify.Code -ne 0 -and
-        $unexpectedAgentVerify.Text -match 'OLYMPUS_VERIFY_REASON: ROSTER_MISMATCH')
-    Check 'R24_LEGACY_VERIFY_UNEXPECTED_AGENT_READ_ONLY' ((Get-ProjectSnapshot $stableTarget) -ceq $unexpectedAgentSnapshot)
-    Remove-Item -LiteralPath $unexpectedLegacyAgent -Force
+    # Prerelease identifiers are accepted end-to-end for current source archives.
     foreach ($entry in @(@('alpha','v0.3.0-alpha.1',$alphaArchive), @('beta','v0.3.0-beta.2',$betaArchive), @('rc','v0.3.0-rc.1',$rcArchive))) {
         $semverTarget = New-Target ('semver-' + $entry[0])
         $result = Install $semverTarget $entry[2] $entry[1]
@@ -518,55 +419,6 @@ try {
             $null -ne $semverManifest -and $semverManifest.installed_version -eq $entry[1])
     }
 
-    $legacyTarget = New-Target 'verify-legacy-unknown-commit'
-    $legacyInstall = Install $legacyTarget $candidateArchive $script:CandidateVersion
-    if ($legacyInstall.Code -ne 0) { throw 'Candidate fixture install failed before unknown-commit verification.' }
-    $legacyManifestPath = Join-Path $legacyTarget '.opencode/orchestrator-install.json'
-    $legacyManifest = Get-Content -LiteralPath $legacyManifestPath -Raw | ConvertFrom-Json
-    $legacyManifest.installed_from_commit = 'unknown'
-    [void]$legacyManifest.PSObject.Properties.Remove('installed_version')
-    [IO.File]::WriteAllText($legacyManifestPath, (($legacyManifest | ConvertTo-Json -Depth 30) + "`n"), $utf8)
-    $legacySnapshot = Get-ProjectSnapshot $legacyTarget
-    $legacyVerify = Verify $legacyTarget $candidateArchive $script:CandidateVersion
-    Check 'R24_UNKNOWN_COMMIT_VERIFIED_BY_CONTENT' ($legacyVerify.Code -eq 0 -and
-        $legacyVerify.Text -match "(?m)^OLYMPUS_VERIFY: $($script:CandidateRegex) PASS\s*$")
-    Check 'R24_VERIFY_ONLY_READ_ONLY' ((Get-ProjectSnapshot $legacyTarget) -ceq $legacySnapshot)
-
-    $oldStableMismatch = Verify $stableTarget $candidateArchive $script:CandidateVersion
-    Check 'R24_CANDIDATE_VS_INSTALLED_STABLE_FAIL' ($oldStableMismatch.Code -ne 0 -and
-        $oldStableMismatch.Text -match "(?m)^OLYMPUS_VERIFY: $($script:CandidateRegex) FAIL\s*$" -and
-        $oldStableMismatch.Text -match 'OLYMPUS_VERIFY_REASON: MANAGED_FILE_MISMATCH')
-    $previousBetaTarget = New-Target 'previous-beta3-historical-install'
-    $previousBetaInstall = Install-Historical $previousBetaHistoricalSource $previousBetaTarget 'v0.3.0-beta.3'
-    $previousBetaManifestPath = Join-Path $previousBetaTarget '.opencode/orchestrator-install.json'
-    $previousBetaManifest = if (Test-Path -LiteralPath $previousBetaManifestPath -PathType Leaf) {
-        try { Get-Content -LiteralPath $previousBetaManifestPath -Raw | ConvertFrom-Json -ErrorAction Stop }
-        catch { $null }
-    } else { $null }
-    $previousBetaInstallPass = ($previousBetaInstall.Code -eq 0 -and
-        $previousBetaInstall.Version -ceq 'v0.3.0-beta.3' -and
-        $previousBetaInstall.SourceRoot -ceq $previousBetaHistoricalSource -and
-        $previousBetaInstall.InstallerPath -ceq (Join-Path $previousBetaHistoricalSource 'install.ps1') -and
-        $previousBetaInstall.Text -match 'OLYMPUS_INSTALL: v0\.3\.0-beta\.3 READY_OR_NO_CHANGES' -and
-        $null -ne $previousBetaManifest -and $previousBetaManifest.schema_version -eq 1 -and
-        $previousBetaManifest.installed_version -ceq 'v0.3.0-beta.3' -and
-        @($previousBetaManifest.managed_files).Count -gt 0)
-    Check 'R27_PREVIOUS_BETA3_SAME_TAG_INSTALL' $previousBetaInstallPass `
-        "installer=$($previousBetaInstall.InstallerPath); exit=$($previousBetaInstall.Code)`n$($previousBetaInstall.Text)"
-    $previousBetaSnapshot = Get-ProjectSnapshot $previousBetaTarget
-    $previousBetaVerify = Verify $previousBetaTarget $previousBetaArchive 'v0.3.0-beta.3'
-    Check 'R27_PREVIOUS_BETA3_VERIFY_READ_ONLY' ($previousBetaVerify.Code -eq 0 -and
-        $previousBetaVerify.Text -match '(?m)^OLYMPUS_VERIFY: v0\.3\.0-beta\.3 PASS\s*$' -and
-        (Get-ProjectSnapshot $previousBetaTarget) -ceq $previousBetaSnapshot)
-    [IO.File]::WriteAllText((Join-Path $previousBetaTarget '.opencode/agents/maintenance.md'), "id: maintenance`n", $utf8)
-    $previousBetaRosterSnapshot = Get-ProjectSnapshot $previousBetaTarget
-    $previousBetaRosterVerify = Verify $previousBetaTarget $previousBetaArchive 'v0.3.0-beta.3'
-    $previousBetaRosterReadOnly = (Get-ProjectSnapshot $previousBetaTarget) -ceq $previousBetaRosterSnapshot
-    Check 'R27_PREVIOUS_BETA3_ROSTER_NEGATIVE_READ_ONLY' ($previousBetaRosterVerify.Code -ne 0 -and
-        $previousBetaRosterVerify.Text -match 'OLYMPUS_VERIFY_REASON: ROSTER_MISMATCH' -and
-        $previousBetaRosterReadOnly) `
-        "exit=$($previousBetaRosterVerify.Code); read_only=$previousBetaRosterReadOnly`n$($previousBetaRosterVerify.Text)"
-    Remove-Item -LiteralPath (Join-Path $previousBetaTarget '.opencode/agents/maintenance.md') -Force
     $otherBetaTarget = New-Target 'verify-other-beta'
     $otherBetaInstall = Install $otherBetaTarget $betaArchive 'v0.3.0-beta.2'
     if ($otherBetaInstall.Code -ne 0) { throw 'Other-beta fixture install failed before version verification.' }
@@ -601,23 +453,18 @@ try {
     $retiredInstall = Install $retiredAgentTarget $candidateArchive $script:CandidateVersion
     if ($retiredInstall.Code -ne 0) { throw 'Candidate fixture install failed before retired-agent verification.' }
     [IO.File]::WriteAllText((Join-Path $retiredAgentTarget '.opencode/agents/aegis.md'), "id: aegis`n", $utf8)
+    $retiredAgentSnapshot = Get-ProjectSnapshot $retiredAgentTarget
     $retiredVerify = Verify $retiredAgentTarget $candidateArchive $script:CandidateVersion
     Check 'R24_CANDIDATE_ROSTER_REJECTS_MAINTENANCE' ($retiredVerify.Code -ne 0 -and
-        $retiredVerify.Text -match 'OLYMPUS_VERIFY_REASON: ROSTER_MISMATCH')
+        $retiredVerify.Text -match 'OLYMPUS_VERIFY_REASON: ROSTER_MISMATCH' -and
+        (Get-ProjectSnapshot $retiredAgentTarget) -ceq $retiredAgentSnapshot)
 
-    $sourceMismatchVerify = Verify $legacyTarget $mismatchArchive $script:CandidateVersion
+    $sourceMismatchVerify = Verify $target $mismatchArchive $script:CandidateVersion
     Check 'R24_REQUESTED_SOURCE_VERSION_MISMATCH_FAIL' ($sourceMismatchVerify.Code -ne 0 -and
         $sourceMismatchVerify.Text -match 'OLYMPUS_VERIFY_REASON: SOURCE_VERSION_MISMATCH')
 
-    # Public wrappers (12 variants) must use tag-pinned executable sources.
-    function Test-PublicWrapperSource([string]$Content, [string]$Tag,
-        [string]$Action, [string]$Scope, [string]$Harness) {
-        if ($Scope -ne 'global' -or $Harness -ne 'opencode') {
-            $tokens = $null; $errors = $null
-            $ast = [Management.Automation.Language.Parser]::ParseInput($Content, [ref]$tokens, [ref]$errors)
-            return ($errors.Count -eq 0 -and $ast.EndBlock.Statements.Count -eq 1 -and
-                $ast.EndBlock.Statements[0] -is [Management.Automation.Language.ThrowStatementAst])
-        }
+    # Only the two global/OpenCode public wrappers remain.
+    function Test-PublicWrapperSource([string]$Content, [string]$Action) {
         $valid = if ($Action -eq 'install') {
             $Content.Contains('https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1')
         } else { $Content.Contains('uninstall --execute') }
@@ -625,18 +472,17 @@ try {
     }
 
     $wrapperIssues = @()
-    foreach ($action in @('install','uninstall')) {
-        foreach ($scope in @('project','global')) {
-            foreach ($harness in @('opencode','codex','all')) {
-                $relative = "$action/$scope/$harness.ps1"
-                $wrapperText = [IO.File]::ReadAllText((Join-Path $source ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)))
-                if (-not (Test-PublicWrapperSource $wrapperText $script:CandidateVersion $action $scope $harness)) {
-                    $wrapperIssues += $relative
-                }
-            }
+    foreach ($entry in @(
+        @('install/global/opencode.ps1','install'),
+        @('uninstall/global/opencode.ps1','uninstall')
+    )) {
+        $relative = $entry[0]
+        $wrapperText = [IO.File]::ReadAllText((Join-Path $source ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)))
+        if (-not (Test-PublicWrapperSource $wrapperText $entry[1])) {
+            $wrapperIssues += $relative
         }
     }
-    Check 'R25_PUBLIC_WRAPPER_TAGGED_SOURCES_AND_ARGUMENTS' ($wrapperIssues.Count -eq 0) ($wrapperIssues -join ', ')
+    Check 'R25_CURRENT_GLOBAL_OPENCODE_WRAPPERS' ($wrapperIssues.Count -eq 0) ($wrapperIssues -join ', ')
 
     function Test-UnifiedEntrypointSource([string]$Content, [string]$Action) {
         return ($Content.Contains('$launcherUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/scripts/launch-latest.ps1"') -and
@@ -646,7 +492,6 @@ try {
             $Content.Contains('LATEST_RELEASE_IDENTITY_MISMATCH') -and
             $Content.Contains('LAUNCHER_BOOTSTRAP_CONTRACT_MISSING') -and
             $Content.Contains('no older launcher fallback is attempted') -and
-            -not $Content.Contains('/v0.4.9/scripts/launch-latest.ps1') -and
             -not $Content.Contains('/master/scripts/launch-latest.ps1') -and
             $Content.Contains('Invoke-WebRequest -Uri $launcherUrl -OutFile $ownedLauncher -Headers $headers -ErrorAction Stop') -and
             $Content.Contains("'-Action', '$Action'") -and
@@ -676,10 +521,10 @@ try {
     $badOldTag = $sample.Replace('/releases/latest/download/install-olympus.ps1',
         '/v0.4.6/scripts/launch-latest.ps1')
     Check 'R25_PUBLIC_WRAPPER_MUTATIONS_REJECTED' (
-        -not (Test-PublicWrapperSource $badMutable $script:CandidateVersion 'install' 'global' 'opencode') -and
-        -not (Test-PublicWrapperSource $badWrongHarness $script:CandidateVersion 'install' 'global' 'opencode') -and
-        -not (Test-PublicWrapperSource $badForeignSource $script:CandidateVersion 'install' 'global' 'opencode') -and
-        -not (Test-PublicWrapperSource $badOldTag $script:CandidateVersion 'install' 'global' 'opencode'))
+        -not (Test-PublicWrapperSource $badMutable 'install') -and
+        -not (Test-PublicWrapperSource $badWrongHarness 'install') -and
+        -not (Test-PublicWrapperSource $badForeignSource 'install') -and
+        -not (Test-PublicWrapperSource $badOldTag 'install'))
 
     $changelog = [IO.File]::ReadAllText((Join-Path $source 'CHANGELOG.md'))
     $notesStart = $changelog.IndexOf($script:CandidateHeading, [StringComparison]::Ordinal)
@@ -717,203 +562,6 @@ try {
     Check 'R25_RELEASE_NO_MUTABLE_EXECUTABLE_SOURCE' ($releaseNotes -notmatch $mutableExecutableUrl -and
         $versionText -match 'archive/refs/tags/\$Version\.zip')
 
-    $readme = [IO.File]::ReadAllText((Join-Path $source 'README.md'))
-    $fastInstallUrl = 'https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1'
-    $pinnedInstallCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/install.ps1')))"
-    function Get-ReadmePowerShellCodeBlocks([string]$Markdown) {
-        $blocks = [System.Collections.Generic.List[string]]::new()
-        foreach ($block in [regex]::Matches($Markdown, '(?ims)^```(?:powershell|pwsh|ps1)[ \t]*\r?\n(?<body>.*?)^```[ \t]*\r?$')) {
-            $blocks.Add($block.Groups['body'].Value)
-        }
-        return $blocks.ToArray()
-    }
-    function Get-ReadmePowerShellParse([string]$Markdown) {
-        $statements = [System.Collections.Generic.List[object]]::new()
-        $hasParseErrors = $false
-        foreach ($code in @(Get-ReadmePowerShellCodeBlocks $Markdown)) {
-            $tokens = $null
-            $parseErrors = $null
-            $ast = [System.Management.Automation.Language.Parser]::ParseInput($code, [ref]$tokens, [ref]$parseErrors)
-            if ($parseErrors.Count -gt 0) { $hasParseErrors = $true }
-            foreach ($statement in $ast.EndBlock.Statements) { $statements.Add($statement) }
-        }
-        return [pscustomobject]@{ Statements = $statements.ToArray(); HasParseErrors = $hasParseErrors }
-    }
-    function Test-ReadmeExpectedBootstrapStatement($Statement, [string]$ExpectedCommand) {
-        $tokens = $null
-        $parseErrors = $null
-        $expectedAst = [System.Management.Automation.Language.Parser]::ParseInput($ExpectedCommand, [ref]$tokens, [ref]$parseErrors)
-        if ($parseErrors.Count -gt 0 -or $expectedAst.EndBlock.Statements.Count -ne 1 -or
-            $Statement -isnot [System.Management.Automation.Language.PipelineAst]) { return $false }
-        $expectedStatement = $expectedAst.EndBlock.Statements[0]
-        return ($Statement -is [System.Management.Automation.Language.PipelineAst] -and
-            $expectedStatement -is [System.Management.Automation.Language.PipelineAst] -and
-            -not $Statement.Background -and -not $expectedStatement.Background -and
-            $Statement.Extent.Text.Trim() -ceq $expectedStatement.Extent.Text.Trim())
-    }
-    function Get-ReadmeFastSection([string]$Markdown, [string]$Heading) {
-        return [regex]::Match($Markdown,
-            '(?ims)^##[ \t]+' + [regex]::Escape($Heading) + '[ \t]*\r?\n(?<body>.*?)(?=^##[ \t]+|\z)')
-    }
-    function Test-ReadmeFastCommandContract([string]$Markdown, [string]$InstallCommand, [string]$UninstallCommand) {
-        if ([regex]::Matches($Markdown, '(?im)^##[ \t]+Fast Install[ \t]*\r?$').Count -ne 1 -or
-            [regex]::Matches($Markdown, '(?im)^##[ \t]+Fast Uninstall[ \t]*\r?$').Count -ne 1 -or
-            [regex]::Matches($Markdown, '(?im)^##[ \t]+Fast\b[^\r\n]*\r?$').Count -ne 2) {
-            return $false
-        }
-        $installSection = Get-ReadmeFastSection $Markdown 'Fast Install'
-        $uninstallSection = Get-ReadmeFastSection $Markdown 'Fast Uninstall'
-        if (-not $installSection.Success -or -not $uninstallSection.Success) { return $false }
-        $installParsed = Get-ReadmePowerShellParse $installSection.Groups['body'].Value
-        $uninstallParsed = Get-ReadmePowerShellParse $uninstallSection.Groups['body'].Value
-        return (-not $installParsed.HasParseErrors -and -not $uninstallParsed.HasParseErrors -and
-            $installParsed.Statements.Count -eq 1 -and
-            (Test-ReadmeExpectedBootstrapStatement $installParsed.Statements[0] $InstallCommand) -and
-            $uninstallParsed.Statements.Count -eq 1 -and
-            (Test-ReadmeExpectedBootstrapStatement $uninstallParsed.Statements[0] $UninstallCommand) -and
-            [regex]::IsMatch($Markdown, '(?im)\[[^\]]+\]\(docs/INSTALLATION\.md(?:#[^)]+)?\)'))
-    }
-    function Test-ReadmeGlobalInstallerContract([string]$Markdown, [string]$InstallCommand, [string]$UninstallCommand) {
-        $parsed = Get-ReadmePowerShellParse $Markdown
-        if ($parsed.HasParseErrors) { return $false }
-        $remoteNames = '^(?:irm|iwr|curl(?:\.exe)?|wget(?:\.exe)?|invoke-restmethod|invoke-webrequest|iex|invoke-expression)$'
-        $launcherNames = '^(?:pwsh(?:\.exe)?|powershell(?:\.exe)?|start-process)$'
-        $installerPath = '(?i)(?:^|[\\/])(?:install|uninstall)(?:-olympus)?\.ps1$'
-        $installerFileMention = '(?i)(?:install|uninstall)(?:-olympus)?\.ps1\b'
-        $remoteStatements = [System.Collections.Generic.List[object]]::new()
-        $directInstallerFound = $false
-        foreach ($statement in $parsed.Statements) {
-            $commands = @($statement.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true))
-            $hasRemoteCommand = $false
-            foreach ($command in $commands) {
-                $name = [string]$command.GetCommandName()
-                if ($name -match $remoteNames) { $hasRemoteCommand = $true }
-                if (($name -match $launcherNames -and $statement.Extent.Text -match $installerFileMention) -or
-                    $name -match $installerPath) {
-                    $directInstallerFound = $true
-                }
-            }
-            if ($hasRemoteCommand) { $remoteStatements.Add($statement) }
-        }
-        if ($directInstallerFound -or $remoteStatements.Count -ne 2) { return $false }
-        $installCount = 0
-        $pinnedInstallCount = 0
-        $uninstallCount = 0
-        foreach ($statement in $remoteStatements) {
-            if (Test-ReadmeExpectedBootstrapStatement $statement $InstallCommand) { $installCount++ }
-            elseif (Test-ReadmeExpectedBootstrapStatement $statement $pinnedInstallCommand) { $pinnedInstallCount++ }
-            elseif (Test-ReadmeExpectedBootstrapStatement $statement $UninstallCommand) { $uninstallCount++ }
-            else { return $false }
-        }
-        return ($installCount -eq 1 -and $pinnedInstallCount -eq 1 -and $uninstallCount -eq 0)
-    }
-    $fastInstallCommand = "& ([scriptblock]::Create((irm '$fastInstallUrl')))"
-    $fastUninstallCommand = 'olympus uninstall'
-    $readmeWithLf = $readme.Replace("`r`n", "`n")
-    $readmeWithCrLf = $readmeWithLf.Replace("`n", "`r`n")
-    Check 'R25_README_FAST_CONTRACT_ACCEPTS_LF_AND_CRLF' (
-        (Test-ReadmeFastCommandContract $readmeWithLf $fastInstallCommand $fastUninstallCommand) -and
-        (Test-ReadmeFastCommandContract $readmeWithCrLf $fastInstallCommand $fastUninstallCommand) -and
-        $readme.Contains($fastInstallUrl) -and
-        $readme.Contains('olympus uninstall') -and
-        $readme.Contains('published, immutable') -and
-        $readme.Contains($pinnedInstallCommand) -and
-        $readme -match '(?i)global and OpenCode-only' -and
-        -not $readme.Contains('/' + $script:CandidateVersion + '/install-olympus.ps1') -and
-        -not $readme.Contains('/' + $script:CandidateVersion + '/uninstall-olympus.ps1'))
-    $readmeWithExtraFastHeadingLf = $readmeWithLf + "`n## Fast Extra`n"
-    $readmeWithExtraFastHeadingCrLf = $readmeWithCrLf + "`r`n## Fast Extra`r`n"
-    Check 'R25_README_REJECTS_EXTRA_FAST_HEADING_LF_AND_CRLF' (
-        -not (Test-ReadmeFastCommandContract $readmeWithExtraFastHeadingLf $fastInstallCommand $fastUninstallCommand) -and
-        -not (Test-ReadmeFastCommandContract $readmeWithExtraFastHeadingCrLf $fastInstallCommand $fastUninstallCommand))
-    Check 'R25_README_HAS_ONLY_TWO_PINNED_FAST_COMMANDS' (
-        (Test-ReadmeFastCommandContract $readme $fastInstallCommand $fastUninstallCommand) -and
-        (Test-Path -LiteralPath (Join-Path $source 'docs/INSTALLATION.md') -PathType Leaf))
-    Check 'R25_README_GLOBAL_INSTALL_COMMANDS_REMAIN_PINNED' (
-        Test-ReadmeGlobalInstallerContract $readme $fastInstallCommand $fastUninstallCommand)
-    $thirdPrimaryCommand = 'pwsh -NoProfile -File .\install-olympus.ps1 -Project -Here -Harness all'
-    $readmeWithThirdPrimaryCommand = $readme.Replace($fastInstallCommand, $fastInstallCommand + "`n" + $thirdPrimaryCommand)
-    if (-not $readmeWithThirdPrimaryCommand.Contains($thirdPrimaryCommand)) {
-        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: direct third Fast Install command was not inserted.'
-    }
-    Check 'R25_README_REJECTS_THIRD_EXECUTABLE_PRIMARY_COMMAND' (
-        -not (Test-ReadmeFastCommandContract $readmeWithThirdPrimaryCommand $fastInstallCommand $fastUninstallCommand))
-    $indirectThirdCommand = "& ([scriptblock]::Create((irm '$fastInstallUrl'))) -Global -Harness all"
-    $readmeWithIndirectThirdCommand = $readme.Replace($fastInstallCommand, $fastInstallCommand + "`n" + $indirectThirdCommand)
-    if (-not $readmeWithIndirectThirdCommand.Contains($indirectThirdCommand)) {
-        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: indirect ScriptBlock.Create command was not inserted.'
-    }
-    Check 'R25_README_REJECTS_INDIRECT_SCRIPTBLOCK_COMMAND' (
-        -not (Test-ReadmeFastCommandContract $readmeWithIndirectThirdCommand $fastInstallCommand $fastUninstallCommand))
-    $thirdBootstrapOutsideFast = $readme + "`n## Alternative setup`n`n" + '```powershell' + "`n" +
-        $fastInstallCommand + "`n" + '```' + "`n"
-    $alternativeSection = Get-ReadmeFastSection $thirdBootstrapOutsideFast 'Alternative setup'
-    if (-not $alternativeSection.Success -or
-        -not ($alternativeSection.Groups['body'].Value.Contains($fastInstallCommand))) {
-        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: third bootstrap was not placed under another heading.'
-    }
-    Check 'R25_README_REJECTS_GLOBAL_BOOTSTRAP_OUTSIDE_FAST' (
-        -not (Test-ReadmeGlobalInstallerContract $thirdBootstrapOutsideFast $fastInstallCommand $fastUninstallCommand))
-    $mutableBootstrapCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install-olympus.ps1')))"
-    $readmeWithMutableBootstrap = $readme.Replace($fastInstallCommand, $mutableBootstrapCommand)
-    if (-not $readmeWithMutableBootstrap.Contains($mutableBootstrapCommand)) {
-        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: mutable bootstrap command was not inserted.'
-    }
-    Check 'R25_README_REJECTS_MUTABLE_BOOTSTRAP_SOURCE' (
-        -not (Test-ReadmeFastCommandContract $readmeWithMutableBootstrap $fastInstallCommand $fastUninstallCommand))
-    $candidateBootstrapCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/install-olympus.ps1')))"
-    $readmeWithCandidateBootstrap = $readme.Replace($fastInstallCommand, $candidateBootstrapCommand)
-    if (-not $readmeWithCandidateBootstrap.Contains($candidateBootstrapCommand)) {
-        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: candidate bootstrap command was not inserted.'
-    }
-    Check 'R25_README_REJECTS_UNPUBLISHED_CANDIDATE_BOOTSTRAP' (
-        -not (Test-ReadmeFastCommandContract $readmeWithCandidateBootstrap $fastInstallCommand $fastUninstallCommand))
-    $legacyIexCommand = "irm $fastInstallUrl | iex"
-    $readmeWithLegacyIex = $readme.Replace($fastInstallCommand, $legacyIexCommand)
-    if (-not $readmeWithLegacyIex.Contains($legacyIexCommand)) {
-        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: legacy IEX command was not inserted.'
-    }
-    Check 'R25_README_REJECTS_PUBLISHED_LEGACY_IEX_INVOCATION' (
-        -not (Test-ReadmeFastCommandContract $readmeWithLegacyIex $fastInstallCommand $fastUninstallCommand))
-    $foreignBootstrapCommand = "& ([scriptblock]::Create((irm 'https://example.invalid/install-olympus.ps1')))"
-    $readmeWithForeignBootstrap = $readme.Replace($fastInstallCommand, $foreignBootstrapCommand)
-    if (-not $readmeWithForeignBootstrap.Contains($foreignBootstrapCommand)) {
-        throw 'R25_NEGATIVE_CONTROL_SETUP_FAILED: foreign bootstrap command was not inserted.'
-    }
-    Check 'R25_README_REJECTS_FOREIGN_BOOTSTRAP_ENDPOINT' (
-        -not (Test-ReadmeFastCommandContract $readmeWithForeignBootstrap $fastInstallCommand $fastUninstallCommand))
-    $readmeWithDescriptions = $readme + "`n## Command references`n`nThe example ``irm $fastInstallUrl | iex`` is descriptive only; see [installer reference](https://example.invalid/install-olympus.ps1).`n`n## Commented example`n`n" +
-        '```powershell' + "`n# irm https://example.invalid/install-olympus.ps1 | iex`n" + '```' + "`n"
-    Check 'R25_README_IGNORES_PROSE_LINKS_AND_COMMENTS' (
-        (Test-ReadmeFastCommandContract $readmeWithDescriptions $fastInstallCommand $fastUninstallCommand) -and
-        (Test-ReadmeGlobalInstallerContract $readmeWithDescriptions $fastInstallCommand $fastUninstallCommand))
-    Check 'R25_INSTALLATION_GUIDE_HAS_SCOPE_HARNESS_SAFETY_AND_STATUS' (
-        $installGuide.Contains($fastInstallUrl) -and $installGuide.Contains($fastUninstallCommand) -and
-        $installGuide.Contains($script:CandidateVersion) -and
-        $installGuide.Contains('https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest') -and
-        $installGuide.Contains($pinnedInstallCommand) -and
-        $installGuide.Contains('immutable=true') -and
-        $installGuide.Contains('time-zone-aware') -and
-        $installGuide.Contains('published_at') -and
-        $installGuide.Contains('tag_name') -and
-        $installGuide.Contains('matching version and release markers') -and
-        $installGuide.Contains('older-launcher fallback') -and
-        -not $installGuide.Contains('/' + $script:CandidateVersion + '/install-olympus.ps1') -and
-        -not $installGuide.Contains('/' + $script:CandidateVersion + '/uninstall-olympus.ps1') -and
-        $installGuide.Contains('ACTIVE DEVELOPMENT') -and
-        $installGuide.Contains('FROZEN COMPATIBILITY') -and
-        $installGuide.Contains('default_agent_receipt') -and $installGuide.Contains('pending_set') -and
-        $installGuide.Contains('pending_uninstall') -and $installGuide.Contains('opencode') -and
-        $installGuide.Contains('codex') -and $installGuide.Contains('all') -and
-        $installGuide.Contains('immutable=true') -and $installGuide.Contains('VerifyOnly'))
-    $v049Start = $changelog.IndexOf('## v0.4.9', [StringComparison]::Ordinal)
-    $afterV049 = if ($v049Start -ge 0) { $changelog.Substring($v049Start) } else { '' }
-    $v048Offset = $afterV049.IndexOf('## v0.4.8', [StringComparison]::Ordinal)
-    $v049History = if ($v048Offset -ge 0) { $afterV049.Substring(0, $v048Offset) } else { $afterV049 }
-    Check 'R25_CHANGELOG_PRESERVES_V049_HISTORY' ($v049Start -ge 0 -and
-        $v049History.Contains("-Version 'v0.4.9'") -and
-        $v049History.Contains('unified interactive and direct PowerShell installer'))
-
     $releaseGate = Join-Path $PSScriptRoot 'github-release-notes.ps1'
     $gateGood = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody $releaseNotes 2>&1 | Out-String)
     Check 'R26_RELEASE_GATE_ACCEPTS_PINNED_HARNESS_COMMANDS' ($LASTEXITCODE -eq 0 -and $gateGood -match "RELEASE_NOTES_CONTRACT: $($script:CandidateRegex) PASS") ("exit=$LASTEXITCODE`n$gateGood")
@@ -922,7 +570,7 @@ try {
         $gateDerived -match "RELEASE_NOTES_CONTRACT: $($script:CandidateRegex) PASS")
     $gateBad = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody ($releaseNotes -replace '(?s)## Verify installation.*', '') 2>&1 | Out-String)
     Check 'R26_RELEASE_GATE_REJECTS_MISSING_VERIFY' ($LASTEXITCODE -ne 0 -and $gateBad -match 'RELEASE_NOTES_VERIFY_MISSING')
-    $gateMutableWrapperBody = $releaseNotes + [Environment]::NewLine + 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/project/codex.ps1 | iex'
+    $gateMutableWrapperBody = $releaseNotes + [Environment]::NewLine + 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install/global/opencode.ps1 | iex'
     $gateMutableWrapper = (& pwsh -NoProfile -File $releaseGate -Version $script:CandidateVersion -ReleaseBody $gateMutableWrapperBody 2>&1 | Out-String)
     Check 'R26_GATE_REJECTS_MUTABLE_WRAPPER_SOURCE' ($LASTEXITCODE -ne 0 -and $gateMutableWrapper -match 'RELEASE_NOTES_MASTER_SOURCE')
     $gateMutableLauncherBody = $releaseNotes + [Environment]::NewLine + 'irm https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/scripts/launch-latest.ps1 | iex'
@@ -961,60 +609,11 @@ try {
         -not (Test-Path -LiteralPath (Join-Path $mismatchTarget '.opencode/orchestrator-install.json')) -and
         (Get-Content -LiteralPath (Join-Path $mismatchTarget 'user-notes.txt') -Raw) -eq "preserve me`n")
 
-    # The historical inventory owns maintenance.md; the current release retires its old routes.
-    $stableManifest = Get-Content -LiteralPath (Join-Path $stableTarget '.opencode/orchestrator-install.json') -Raw | ConvertFrom-Json
-    $stableMaintenancePath = Join-Path $stableTarget '.opencode/agents/maintenance.md'
-    $stableMaintenancePresent = Test-Path -LiteralPath $stableMaintenancePath -PathType Leaf
-    Check 'R22_STABLE_SOURCE_HAS_RETIRED_AGENT' ($stableMaintenancePresent)
-    $stableMaintenanceEntries = @($stableManifest.managed_files | Where-Object path -eq '.opencode/agents/maintenance.md')
-    Check 'R22_STABLE_HISTORICAL_INVENTORY' ($null -ne $stableManifest -and
-        $stableManifest.schema_version -eq 1 -and $stableManifest.managed_files.Count -eq 12 -and
-        $stableMaintenanceEntries.Count -eq 1 -and
-        @($stableManifest.managed_files | Where-Object path -eq '.opencode/scripts/worktree-setup.ps1').Count -eq 0)
-    $upgrade = Install $stableTarget $candidateArchive $script:CandidateVersion
-    $upManifestPath = Join-Path $stableTarget '.opencode/orchestrator-install.json'
-    $upManifestPresent = Test-Path -LiteralPath $upManifestPath -PathType Leaf
-    $upManifestParseError = $null
-    $upManifest = $null
-    if ($upManifestPresent) {
-        try { $upManifest = Get-Content -LiteralPath $upManifestPath -Raw | ConvertFrom-Json -Depth 100 -ErrorAction Stop }
-        catch { $upManifestParseError = $_.Exception.Message }
-    } else {
-        $upManifestParseError = 'Updated manifest is missing.'
-    }
-    $upManagedFilesProperty = if ($null -ne $upManifest) { $upManifest.PSObject.Properties['managed_files'] } else { $null }
-    $upSchemaProperty = if ($null -ne $upManifest) { $upManifest.PSObject.Properties['schema_version'] } else { $null }
-    $upVersionProperty = if ($null -ne $upManifest) { $upManifest.PSObject.Properties['installed_version'] } else { $null }
-    $upManifestHasManagedFiles = ($null -ne $upManagedFilesProperty -and $null -ne $upManagedFilesProperty.Value)
-    $upManagedFiles = @(if ($upManifestHasManagedFiles) { $upManagedFilesProperty.Value })
-    $upManifestSchema = if ($null -ne $upSchemaProperty) { $upSchemaProperty.Value } else { $null }
-    $upManifestVersion = if ($null -ne $upVersionProperty) { [string]$upVersionProperty.Value } else { $null }
-    $retiredOpenCodePaths = @(
-        '.opencode/agents/maintenance.md',
-        '.opencode/agents/aegis.md',
-        '.opencode/commands/maintain.md'
-    )
-    $retiredPathsPresent = @($retiredOpenCodePaths | Where-Object {
-        Test-Path -LiteralPath (Join-Path $stableTarget $_) -PathType Leaf
-    })
-    $retiredManifestEntries = @($upManagedFiles | Where-Object {
-        $pathProperty = if ($null -ne $_) { $_.PSObject.Properties['path'] } else { $null }
-        $null -ne $pathProperty -and $pathProperty.Value -in $retiredOpenCodePaths
-    } | ForEach-Object { [string]$_.PSObject.Properties['path'].Value })
-    $currentAgentDirectory = Join-Path $stableTarget '.opencode/agents'
-    $currentAgentCount = if (Test-Path -LiteralPath $currentAgentDirectory -PathType Container) {
-        @(Get-ChildItem -LiteralPath $currentAgentDirectory -Filter '*.md' -File).Count
-    } else { 0 }
-    $retiredFilesAbsent = $retiredPathsPresent.Count -eq 0
-    $upgradePass = ($upgrade.Code -eq 0 -and $null -ne $upManifest -and $upManifestPresent -and
-        $null -eq $upManifestParseError -and $upManifestSchema -eq 1 -and
-        $upManifestHasManagedFiles -and $upManifestVersion -ceq $script:CandidateVersion -and
-        $upManagedFiles.Count -eq 15 -and $currentAgentCount -eq 11 -and $retiredFilesAbsent -and
-        $retiredManifestEntries.Count -eq 0)
-    $upgradeEvidence = "exit=$($upgrade.Code); expected_version=$script:CandidateVersion; manifest_present=$upManifestPresent; schema=$upManifestSchema; installed_version=$upManifestVersion; managed_count=$($upManagedFiles.Count)/15; role_count=$currentAgentCount/11; retired_files_present=$($retiredPathsPresent -join ','); retired_manifest_entries=$($retiredManifestEntries -join ','); parse_error=$upManifestParseError`n$($upgrade.Text)"
-    Check 'R22_OWNED_RETIRED_AGENT_MIGRATED' $upgradePass $upgradeEvidence
-    $worktreeSetupPath = Join-Path $stableTarget '.opencode/scripts/worktree-setup.ps1'
-    $worktreeSetupEntry = @($upManagedFiles | Where-Object {
+    $currentManifestPath = Join-Path $target '.opencode/orchestrator-install.json'
+    $currentManifest = Get-Content -LiteralPath $currentManifestPath -Raw | ConvertFrom-Json
+    $currentManagedFiles = @($currentManifest.managed_files)
+    $worktreeSetupPath = Join-Path $target '.opencode/scripts/worktree-setup.ps1'
+    $worktreeSetupEntry = @($currentManagedFiles | Where-Object {
         $pathProperty = if ($null -ne $_) { $_.PSObject.Properties['path'] } else { $null }
         $null -ne $pathProperty -and $pathProperty.Value -eq '.opencode/scripts/worktree-setup.ps1'
     })
@@ -1023,43 +622,22 @@ try {
     $worktreeSetupHashMatches = ($worktreeSetupPresent -and $worktreeSetupEntry.Count -eq 1 -and
         $null -ne $worktreeHashProperty -and
         $worktreeHashProperty.Value -eq (Get-FileHash -LiteralPath $worktreeSetupPath -Algorithm SHA256).Hash.ToLowerInvariant())
-    $worktreeSetupPass = ($worktreeSetupPresent -and $upManagedFiles.Count -eq 15 -and
+    $worktreeSetupPass = ($worktreeSetupPresent -and $currentManagedFiles.Count -eq 15 -and
         $worktreeSetupEntry.Count -eq 1 -and $worktreeSetupHashMatches)
-    Check 'R22_WORKTREE_SETUP_INSTALLED_AND_OWNED' $worktreeSetupPass `
-        ("exit=$($upgrade.Code); helper_present=$worktreeSetupPresent; managed_count=$($upManagedFiles.Count); helper_entries=$($worktreeSetupEntry.Count); hash_matches=$worktreeSetupHashMatches`n$($upgrade.Text)")
-    $upgradeAgain = Install $stableTarget $candidateArchive $script:CandidateVersion
-    $upgradeAgainPass = ($upgradeAgain.Code -eq 0 -and $upgradeAgain.Text -match '(?m)^NO_CHANGES\s*$')
-    Check 'R22_UPGRADE_REINSTALL_NO_CHANGES' $upgradeAgainPass `
-        ("exit_code=$($upgradeAgain.Code); no_changes_output=$($upgradeAgain.Text -match '(?m)^NO_CHANGES\s*$')`n$($upgradeAgain.Text)")
-
-    $alteredLegacyTarget = New-Target 'altered-historical-inventory'
-    $alteredLegacyInstall = Install-Historical $stableHistoricalSource $alteredLegacyTarget 'v0.2.0'
-    if ($alteredLegacyInstall.Code -ne 0) { throw 'Stable legacy fixture install failed before inventory test.' }
-    $alteredManifestPath = Join-Path $alteredLegacyTarget '.opencode/orchestrator-install.json'
-    $alteredManifest = Get-Content -LiteralPath $alteredManifestPath -Raw | ConvertFrom-Json
-    $alteredManifest.managed_files = @($alteredManifest.managed_files | ForEach-Object {
-        if ($_.path -eq 'opencode.jsonc') {
-            [pscustomobject]@{ path='.opencode/scripts/worktree-setup.ps1'; sha256=$_.sha256 }
-        } else { $_ }
-    })
-    [IO.File]::WriteAllText($alteredManifestPath, (($alteredManifest | ConvertTo-Json -Depth 100) + "`n"), $utf8)
-    $alteredLegacySnapshot = Get-ProjectSnapshot $alteredLegacyTarget
-    $alteredLegacyUpgrade = Install $alteredLegacyTarget $candidateArchive $script:CandidateVersion
-    Check 'R22_ALTERED_HISTORICAL_INVENTORY_REJECTED_READ_ONLY' ($alteredLegacyUpgrade.Code -ne 0 -and
-        $alteredLegacyUpgrade.Text -match 'INSTALL_MANIFEST_INCOMPATIBLE' -and
-        (Get-ProjectSnapshot $alteredLegacyTarget) -ceq $alteredLegacySnapshot)
-
-    $modifiedLegacyTarget = New-Target 'modified-retired-agent'
-    $modifiedInstall = Install-Historical $stableHistoricalSource $modifiedLegacyTarget 'v0.2.0'
-    if ($modifiedInstall.Code -ne 0) { throw 'Stable legacy fixture install failed before drift test.' }
-    $retiredPath = Join-Path $modifiedLegacyTarget '.opencode/agents/maintenance.md'
-    [IO.File]::AppendAllText($retiredPath, "`n# local modification`n", $utf8)
-    $retiredHash = (Get-FileHash -LiteralPath $retiredPath -Algorithm SHA256).Hash
-    $modifiedUpgrade = Install $modifiedLegacyTarget $candidateArchive $script:CandidateVersion
-    Check 'R23_MODIFIED_RETIRED_FILE_CONFLICT_NONDESTRUCTIVE' ($modifiedUpgrade.Code -ne 0 -and
-        $modifiedUpgrade.Text -match 'MANAGED_FILE_DRIFT' -and
-        (Get-FileHash -LiteralPath $retiredPath -Algorithm SHA256).Hash -eq $retiredHash -and
-        -not (Test-Path -LiteralPath (Join-Path $modifiedLegacyTarget '.opencode/agents/aegis.md')))
+    Check 'R2_CURRENT_WORKTREE_SETUP_INSTALLED_AND_OWNED' $worktreeSetupPass `
+        ("installed_version=$($currentManifest.installed_version); helper_present=$worktreeSetupPresent; managed_count=$($currentManagedFiles.Count); helper_entries=$($worktreeSetupEntry.Count); hash_matches=$worktreeSetupHashMatches")
+    $invalidInventoryTarget = New-Target 'invalid-current-inventory'
+    $invalidInventoryInstall = Install $invalidInventoryTarget $candidateArchive $script:CandidateVersion
+    if ($invalidInventoryInstall.Code -ne 0) { throw 'Candidate fixture install failed before malformed-manifest verification.' }
+    $invalidManifestPath = Join-Path $invalidInventoryTarget '.opencode/orchestrator-install.json'
+    $invalidManifest = Get-Content -LiteralPath $invalidManifestPath -Raw | ConvertFrom-Json
+    $invalidManifest.managed_files[1].path = [string]$invalidManifest.managed_files[0].path
+    [IO.File]::WriteAllText($invalidManifestPath, (($invalidManifest | ConvertTo-Json -Depth 100) + "`n"), $utf8)
+    $invalidInventorySnapshot = Get-ProjectSnapshot $invalidInventoryTarget
+    $invalidInventoryUpgrade = Install $invalidInventoryTarget $candidateArchive $script:CandidateVersion
+    Check 'R22_CURRENT_DUPLICATE_INVENTORY_REJECTED_READ_ONLY' ($invalidInventoryUpgrade.Code -ne 0 -and
+        $invalidInventoryUpgrade.Text -match 'INSTALL_MANIFEST_INCOMPATIBLE' -and
+        (Get-ProjectSnapshot $invalidInventoryTarget) -ceq $invalidInventorySnapshot)
 
     $unownedTarget = New-Target 'unowned-retired-agent'
     $unownedInstall = Install $unownedTarget $candidateArchive

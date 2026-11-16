@@ -85,7 +85,6 @@ try {
     # unconditional Nox/Vera fan-out. Keep critical and mandatory gates intact.
     $gate = [regex]::Match($kael, '(?ms)^## Completion gate\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
     $core = Text 'olympus/policies/routing.md'
-    $codexRoot = Text 'CODEX.md'
     $kaelSource = Text 'olympus/harnesses/opencode/agent-prompts/kael.md'
     Check 'TFR_NORMAL_GATE_CONDITIONAL' (
         $gate -match 'NORMAL CHANGE: one scoped implementer' -and
@@ -100,11 +99,14 @@ try {
         $gate -match 'explicit user-requested independent review' -and
         $gate -match 'REQUIRED VALIDATION PASSED' -and
         $gate -match 'NO UNRESOLVED BLOCKING OR MATERIAL REVIEW FINDINGS')
-    Check 'TFR_CODEX_NORMAL_GATE_PARITY' (
-        $codexRoot -match 'For NORMAL CHANGE outside the fast path, use TFR' -and
-        $codexRoot -match 'do not invoke Nox or Vera by default' -and
-        $codexRoot -match 'Preserve mandatory independent validation or review' -and
-        $codexRoot -match 'all reconciled required results')
+    Check 'TFR_OPENCODE_NORMAL_GATE_PARITY' (
+        $gate -match 'NORMAL CHANGE: one scoped implementer and the smallest sufficient focused\s+validation' -and
+        $gate -match 'use Nox only when\s+distinct test/runtime evidence is needed' -and
+        $gate -match 'use Vera only when independent\s+review is justified or explicitly required' -and
+        $gate -match 'fast-path exclusion alone does\s+not require a separate tester or reviewer' -and
+        $gate -match 'explicit user-requested independent review and mandatory project, CI,\s+runtime, migration, release, or critical-change gates remain required' -and
+        $gate -match 'Master Orchestrator\s+reconciles all required evidence' -and
+        $gate -match 'Completion is DONE only when all required conditions hold')
     Check 'PROGRESS_NOT_FINAL' ($kael -match 'Progress\s+messages must explicitly say IN PROGRESS / waiting' -and
         $kael -match 'Never declare final completion while a required direct child is non-terminal')
     $nativeSessions = [regex]::Match($kaelSource, '(?ms)^## Native child sessions\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value

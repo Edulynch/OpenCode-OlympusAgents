@@ -89,7 +89,12 @@ try {
             (Test-Path -LiteralPath $manifestPath -PathType Leaf))
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
         $installedAssets = @($manifest.managed_files | ForEach-Object { ([string]$_.path).Replace('\','/') } | Sort-Object)
-        Check ($hostEntry.Id + '_ASSETS') ($manifest.managed_files.Count -eq 15 -and
+        Check ($hostEntry.Id + '_ASSETS') ($manifest.schema_version -eq 1 -and $manifest.scope -ceq 'project' -and
+            @($manifest.installed_harnesses).Count -eq 1 -and $manifest.installed_harnesses[0] -ceq 'opencode' -and
+            $manifest.installed_version -ceq $script:CandidateVersion -and
+            -not [string]::IsNullOrWhiteSpace([string]$manifest.installed_from_commit) -and
+            $manifest.managed_files.Count -eq 15 -and
+            @($manifest.managed_files | Where-Object { [string]$_.sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0 -and
             [string]::Join("`n", $installedAssets) -ceq [string]::Join("`n", $expectedOpenCodeAssets) -and
             (Test-Path -LiteralPath (Join-Path $target '.opencode/plugins/olympus-activity/activity.ts') -PathType Leaf))
         $toolStatus = (& git -C $target status --porcelain=v1 -uall -- .serena | Out-String)
@@ -98,21 +103,20 @@ try {
             $toolStatus -match '(?m)^\?\? \.serena/\.gitignore\s*$' -and
             $toolStatus -match '(?m)^\?\? \.serena/project\.yml\s*$')
 
-        $codexTarget = Join-Path $run ($hostEntry.Id + '-codex')
-        [IO.Directory]::CreateDirectory($codexTarget) | Out-Null
-        & git -C $codexTarget init --quiet
-        Check ($hostEntry.Id + '_CODEX_GIT_FIXTURE') ($LASTEXITCODE -eq 0)
-        $codexInstall = (& $engineHost -NoProfile -File $projectInstaller -SourceVersion $script:CandidateVersion -Target $codexTarget -Harness CODEX 2>&1 | Out-String)
-        $codexExit = $LASTEXITCODE
-        $codexManifestPath = Join-Path $codexTarget '.codex/orchestrator-install.json'
-        $codexManifest = if (Test-Path -LiteralPath $codexManifestPath) { Get-Content -LiteralPath $codexManifestPath -Raw | ConvertFrom-Json } else { $null }
-        Check ($hostEntry.Id + '_CASE_INSENSITIVE_CODEX_INSTALL') ($codexExit -eq 0 -and $null -ne $codexManifest -and
-            @($codexManifest.installed_harnesses).Count -eq 1 -and $codexManifest.installed_harnesses[0] -eq 'codex' -and
-            (Test-Path -LiteralPath (Join-Path $codexTarget 'CODEX.md') -PathType Leaf) -and
-            -not (Test-Path -LiteralPath (Join-Path $codexTarget '.opencode')) -and
-            -not (Test-Path -LiteralPath (Join-Path $codexTarget 'opencode.jsonc')))
-        $codexVerify = (& $engineHost -NoProfile -File $projectInstaller -SourceVersion $script:CandidateVersion -Target $codexTarget -Harness codex -VerifyOnly 2>&1 | Out-String)
-        Check ($hostEntry.Id + '_CODEX_VERIFYONLY') ($LASTEXITCODE -eq 0 -and $codexVerify -match '(?m)^OLYMPUS_VERIFY: .* PASS\s*$')
+        foreach ($selector in @('codex','all')) {
+            $unsupportedTarget = Join-Path $run ($hostEntry.Id + '-unsupported-' + $selector)
+            [IO.Directory]::CreateDirectory($unsupportedTarget) | Out-Null
+            & git -C $unsupportedTarget init --quiet
+            Check ($hostEntry.Id + '_UNSUPPORTED_GIT_FIXTURE_' + $selector.ToUpperInvariant()) ($LASTEXITCODE -eq 0)
+            $unsupportedBefore = (& git -C $unsupportedTarget status --porcelain=v1 --untracked-files=all | Out-String).Trim()
+            $unsupported = (& $engineHost -NoProfile -File $projectInstaller -SourceVersion $script:CandidateVersion `
+                -Target $unsupportedTarget -Harness $selector 2>&1 | Out-String)
+            $unsupportedCode = $LASTEXITCODE
+            $unsupportedAfter = (& git -C $unsupportedTarget status --porcelain=v1 --untracked-files=all | Out-String).Trim()
+            Check ($hostEntry.Id + '_UNSUPPORTED_SELECTOR_' + $selector.ToUpperInvariant()) ($unsupportedCode -ne 0 -and
+                $unsupportedAfter -ceq $unsupportedBefore -and
+                -not (Test-Path -LiteralPath (Join-Path $unsupportedTarget '.opencode/orchestrator-install.json')))
+        }
         $results += $target
     }
     if ($results.Count -eq 2) {

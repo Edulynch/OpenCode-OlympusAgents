@@ -1,5 +1,9 @@
 ## v0.4.8
 
+> Historical release record: statements below describe v0.4.8 only, not current
+> support or routes. Olympus currently supports OpenCode only; public
+> install/update/uninstall is global/OpenCode-only.
+
 ### Highlights
 
 - Refresh the README with an illustrated cover, clearer spacing, copyable commands, and a working Compatibility navigation anchor ([#43](https://github.com/Edulynch/OpenCode-OlympusAgents/commit/adc4b35), [#44](https://github.com/Edulynch/OpenCode-OlympusAgents/commit/6adcf81), [#45](https://github.com/Edulynch/OpenCode-OlympusAgents/commit/1527fba)).

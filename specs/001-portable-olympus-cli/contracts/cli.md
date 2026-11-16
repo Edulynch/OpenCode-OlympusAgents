@@ -1,14 +1,31 @@
-# Contrato propuesto de CLI
+# Contrato de CLI — feature 001
 
-**Estado de esta rama**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C1/C3 project, C4 doctor project, C5 install/uninstall routing y C6 asignaciones project ya integrados. C7 global read-only y C8 global OpenCode apply/recovery están implementados en esta rama, pendientes de review/CI hosted y cualificación independiente. macOS nativo **NOT VERIFIED**.
+**Estado histórico de la rama (2026-11-08)**: A **SHIPPED**; B **ACEPTADA** (T019 Windows + T020 Linux, G2 PASS); C1/C3 project, C4 doctor project, C5 install/uninstall routing y C6 asignaciones project ya integrados. C7 global read-only y C8 global OpenCode apply/recovery estaban implementados en esta rama, pendientes entonces de review/CI hosted y cualificación independiente. macOS nativo **NOT VERIFIED**. El límite vigente se define abajo.
+
+## Límite vigente — 2026-11-16
+
+OpenCode es el único runtime soportado. Esta enmienda sustituye las opciones
+Codex/`all` y la instalación pública project/global que aparecen en la
+propuesta original: no son rutas ni promesas de compatibilidad actuales.
+Public install/update/uninstall se fija a global OpenCode y rechaza los antiguos
+selectores scope/harness/target/version. Project-scoped OpenCode overrides,
+config list/check/apply/recovery, status y read-only doctor permanecen como
+operaciones distintas; ninguna instala recursos faltantes.
+
+Los formatos actuales son explícitos y fallan cerrados si están incompletos o
+no soportados. No hay conversión, adopción o eliminación automática de formatos
+antiguos. Una instalación completa en formato actual sigue válida
+independientemente de la release que la creó; para retirar una instalación
+antigua no soportada, usa su release correspondiente.
 
 ## Entrada, contexto y soporte
 
 - Inicial: `python -B -m olympus` desde el checkout confiable. Final: `olympus` mediante launcher anclado a ese checkout en PATH; Python >=3.11 explícito y sin escribir caches.
 - Linux A: launcher y contrato entregados con PR #69; la observación del run anterior que usó `chmod` y su pendiente de entonces se conservan como historia en research.md. Esta reconciliación no cambia A. Linux B está acreditada por T020; macOS NOT VERIFIED.
 - `--source <absolute-path>` es opción global anterior al subcomando; default de launcher es su checkout. No buscar automáticamente otro Core en el proyecto destino. Error si origen no existe, no contiene fuentes/renderer o es ambiguo.
-- Proyecto: `--scope project --target <absolute-worktree-root>`. Global: `--scope global`, usando resolución segura del motor, sin interpretar un target de proyecto como destino global. Para contexto de override global, identificarlo explícitamente sin modificarlo.
-- `--harness opencode|codex|all` selecciona representación/operación cuando aplique. Listado incluye ambos; check default all; mutaciones instaladas no usan un default silencioso.
+- Las operaciones de configuración pueden seleccionar `--scope project --target <absolute-worktree-root>` o `--scope global`; para global se usa resolución segura del motor, nunca un target de proyecto.
+- OpenCode es la única representación. `--harness opencode` es opcional donde se admite; OpenCode es el default. `codex` y `all` no son valores válidos ni aliases.
+- Public install/update/uninstall no aceptan `--scope`, `--harness`, `--target` ni selector de versión; se fijan a global OpenCode. `--version` en la raíz sólo informa versión de la herramienta.
 - Sintaxis inválida/opciones incompatibles se rechazan antes de iniciar un motor nativo. No `--force`, bypass de drift, proveedor nuevo ni instalación automática.
 - Consultas/preview no crean tempfiles, locks, backups, caches ni directorios, salvo las excepciones nativas explícitas. Excepción C4: PowerShell corre con `USERPROFILE` temporal para contener su cache de inicio; se elimina al salir y no persiste en source/target/perfil real. Excepción C5: el probe usa un perfil temporal y la adquisición oficial/ejecución nativa puede usar temp/cache, sin escribir recursos de instalación en preview. Un scratch previo se informa, no se repara. También propagar `PYTHONDONTWRITEBYTECODE=1` a hijos.
 
@@ -17,61 +34,98 @@
 | Comando propuesto | Slice / semántica | Escritura / condición |
 |---|---|---|
 | `--version`, `--help` | A; versión de herramienta y ayuda | Ninguna |
-| `models list [--json]` | A; once roles, familia/esfuerzo y IDs de ambos adaptadores | Ninguna |
-| `status [--scope ... --target ... --harness ...] [--json]` | A; origen y estado local/manifest disponible, no Verify profundo propio | Ninguna; sin descubrir destinos arbitrarios |
-| `config check [--harness ...] [--json]` | A; validación de fuentes y drift renderer | Ninguna; comparar expected en memoria |
-| `models set-family <existing> --opencode <id> --codex <id> [--dry-run [--json]]` | B; editar los dos IDs de esa familia | Preview sin escribir; ejecución una orden explícita |
+| `models list [--json]` | A; once roles, familia/esfuerzo e ID OpenCode | Ninguna |
+| `agents list [--scope ... --target ...] [--json]` | CLI actual; valores efectivos OpenCode y su procedencia | Ninguna |
+| `status [--scope project --target <root>\|--scope global] [--json]` | A/C7; estado local o metadatos del manifest seleccionado | Ninguna; global no certifica integridad |
+| `config check [--harness opencode] [--json]` | A; validar fuentes y drift renderer OpenCode | Ninguna; comparar expected en memoria |
+| `models set-family <existing> --opencode <id> [--dry-run [--json]]` | B; editar el ID OpenCode de esa familia | Preview sin escribir; ejecución es una orden explícita |
 | `agents set-model <role> [--family <existing>] [--effort <canonical-value>] [--dry-run [--json]]` | B; al menos un valor solicitado | Otros roles inalterados; preview de resolución completa |
 | `config recover` | B; rollback/cleanup de batch propio pendiente | Adquirir lock nativo estable existente antes de inspección del batch; sin dueño activo, identidad/estado/hashes/backups reconciliados; sin retry original |
-| `doctor --scope project --target <absolute-worktree-root> --harness opencode|codex|all [--json]` | C4; diagnóstico read-only de instalación project existente | PowerShell 7 en Windows y fuente local coherente para VerifyOnly; otras plataformas/verificador no disponible quedan bloqueadas; no runtime discovery |
-| `config apply --scope project --target <root> --harness ... --dry-run [--json]` | C1; preview read-only de recursos de una instalación existente | Exige manifiesto válido y hashes sin drift; no instala harnesses ausentes ni llama bootstrap/install |
-| `config apply --scope project --target <root> --harness ... --execute` | C3; actualización explícita de recursos ya administrados | Exclusión estable del target, revalidación bajo lock y journal PREPARING/PREPARED/COMMITTED; sólo escritura humana, nunca `--force` |
-| `config recover --scope project --target <root>` | C3; recuperación explícita del journal de apply project | Abre sólo el lock existente; PREPARED revierte estados new verificados y COMMITTED limpia evidencia; divergencias preservan journal y bloquean |
-| `install --scope project|global [--target <root>] --harness ... --version <exact-tag> (--dry-run|--execute) [--json]` | C5; delegación de release oficial publicado e inmutable | Windows + PowerShell 7; el target sólo aplica a project; sin source/archive override |
-| `uninstall --scope project|global [--target <root>] --harness ... (--dry-run|--execute) [--json]` | C5; delegación a los uninstallers existentes | Windows + PowerShell 7; project dry-run bloqueado, global dry-run soportado |
-| `status --scope global --harness ... [--json]` | C7; manifests de raíces globales independientes | Sólo metadatos reportados, sin certificar hashes ni runtime |
-| `doctor --scope global --harness ... [--json]` | C7; manifests/hashes y `global-install.ps1 -VerifyOnly` | Verificación nativa sólo Windows/PowerShell 7; Linux/macOS bloqueados explícitamente |
-| `config apply --scope global --harness ... --dry-run [--json]` | C7; delta y propuestas, con inventario/hash validado | Sólo preview; no crea lock/journal ni escribe |
-| `config apply --scope global --harness opencode --execute [--json]` | C8 (#122); actualización explícita de OpenCode global administrado | Lock estable compartido, revalidación bajo lock, journal global privado schema 2 y manifest al final |
-| `config recover --scope global --harness opencode` | C8 (#122); rollback/cleanup explícito de un journal OpenCode global | Abre sólo el lock existente; los estados ajenos o no acreditables preservan la evidencia |
+| `doctor --scope project --target <root> [--harness opencode] [--json]` | C4; diagnóstico read-only de instalación OpenCode project existente | Windows + PowerShell 7 para VerifyOnly; no runtime discovery |
+| `doctor --scope global [--harness opencode] [--json]` | C7; manifest/hashes y VerifyOnly global OpenCode | Windows + PowerShell 7 para verificación nativa; no repara |
+| `config apply --scope project --target <root> [--harness opencode] --dry-run [--json]` | C1; preview read-only de OpenCode ya administrado | Manifest válido e hashes intactos; no instala recursos |
+| `config apply --scope project --target <root> [--harness opencode] --execute` | C3; actualización explícita de recursos OpenCode ya administrados | Lock estable, revalidación y journal project schema 1; nunca `--force` |
+| `config recover --scope project --target <root>` | C3; recuperación explícita del journal project | Abre sólo el lock existente; preserva evidencia ante divergencia |
+| `status --scope global [--json]` | C7; metadata del manifest OpenCode global | Read-only; no certifica hashes ni runtime |
+| `config apply --scope global [--harness opencode] --dry-run [--json]` | C7; preview OpenCode global | Sólo preview; no lock/journal ni escrituras |
+| `config apply --scope global [--harness opencode] --execute [--json]` | C8 (#122); actualización de OpenCode global ya administrado | Lock estable, revalidación, journal global schema 2 y manifest al final |
+| `config recover --scope global [--harness opencode]` | C8 (#122); recovery del journal OpenCode global | Abre sólo el lock existente; preserva evidencia ante estado ajeno |
+| `install [--dry-run\|--execute] [--json]` | Instalación pública fija a global OpenCode | Sin scope/harness/target/version; Windows + PowerShell 7 |
+| `update` | Actualización pública fija a global OpenCode | Sin alias `upgrade` ni selectores; Windows + PowerShell 7 |
+| `uninstall [--dry-run] [--json]` | Retiro público fijo a global OpenCode | Sólo recursos intactos manifest-owned; Windows + PowerShell 7 |
 
-### Routing de instalación y retiro — Slice C5
+### Instalación pública y contratos de formato vigentes
 
-- `install --version` es distinto de la opción raíz `olympus --version`: requiere un tag Olympus exacto según el patrón release existente (`vMAJOR.MINOR.PATCH` con sufijo sintáctico opcional `alpha|beta|rc.N`); las banderas del release deben seguir calificándolo como estable (`prerelease=false`). Sólo se adquieren releases oficiales. El launcher solicita `releases/tags/<tag>` y exige tag devuelto idéntico, `immutable=true`, `draft=false`, `prerelease=false`, timestamp publicado válido e identidad coincidente del installer/archive. Omitir `Version` en los callers históricos conserva la selección `releases/latest`; la CLI siempre fija el tag solicitado. No `--SourceRoot`, `--SourceArchive` ni `--force` desde esta CLI.
-- Project requiere `--target` absoluto, existente y exactamente raíz de un Git worktree, validada en read-only antes de PowerShell. Global rechaza `--target`: sus raíces sólo las descubre el motor oficial. El cwd heredado sigue siendo contexto de sólo lectura para comprobaciones de override del motor; no es el destino global ni se suplanta `USERPROFILE`.
-- Instalar llama `scripts/launch-latest.ps1`, que conserva adquisición y validación del installer oficial; `--dry-run` se reenvía a `install.ps1`. Desinstalar project llama el `scripts/project-uninstall.ps1` local; global llama `scripts/global-install.ps1 -Uninstall`, sin descarga de release. `--dry-run` de project se bloquea con exit 3 antes de PowerShell porque ese motor no ofrece preview; global usa su `-DryRun`. `--harness all` global se ejecuta secuencialmente, no es atómico.
-- Sólo Windows con PowerShell 7. Preflight de `pwsh` está acotado a 10 s y el motor a 300 s; los argumentos se pasan como argv, sin `shell` ni script interpolado. Los previews no escriben recursos target/global, pero la adquisición oficial, PowerShell y sus caches pueden usar temp/cache. No se cambia permisos de source/target ni se usa perfil real para la prueba de versión.
-- JSON es un único documento stdout e incluye `native_exit_code`, `native_stdout` y `native_stderr`; la salida del motor no se mezcla fuera del documento. Dry-run nativo exitoso da `result=preview`, no `installed/removed`. Fallo nativo de una mutación, timeout o interrupción da exit 4/unconfirmed cuando no puede probarse ausencia de efectos; conserva código/salida nativa y nunca reintenta. Un error de preview read-only da exit 1. No se promete atomicidad de los motores oficiales.
+Install/update/uninstall públicos siempre seleccionan global OpenCode. No
+aceptan `--scope`, `--harness`, `--target` o una versión explícita; `install`
+puede usar `--dry-run` o `--execute`, `update` ejecuta la actualización y
+`uninstall` puede ofrecer preview. `upgrade` ya no es un alias de `update`.
+Las entradas de release eligen una release estable inmutable y validan la
+identidad entre launcher, instalador y archivo; no hay fallback a ramas
+mutables, versiones previas ni formatos alternativos. Operaciones nativas de
+instalación siguen cualificadas sólo en Windows con PowerShell 7.
 
-`--json` de edición project sólo se ofrece con `--dry-run`; la ejecución project muestra preview antes de escribir y luego resumen. El apply global OpenCode admite `--json` como un único resultado de operación. Diagnóstico/listado/preview comparten datos equivalentes entre formatos.
+La configuración de proyecto/global no instala ni descarga recursos faltantes.
+Project apply requiere un target absoluto que sea exactamente un worktree Git
+existente y un manifest OpenCode actual; global descubre la raíz OpenCode y
+rechaza `--target`. Preview es read-only. `--execute` actualiza sólo recursos
+ya administrados con hashes válidos, bajo el lock estable, revalidación y
+journal; recovery es una orden separada que preserva evidencia ante conflictos.
+Doctor es read-only y reutiliza VerifyOnly donde la plataforma lo admite.
 
-`doctor` C4 sólo admite scope project y reutiliza bootstrap `-Target ... -Harness ... -SourceVersion ... -VerifyOnly` desde fuente local coherente, sin public wrapper que descargue archives. Manifest ausente se informa como ausencia; ownership/inventario inválido bloquea; drift de recursos administrados falla. La verificación se cualifica únicamente con PowerShell 7 en Windows; sin plataforma/verificador apto se informa `verification_unavailable` sin afirmar integridad. PowerShell recibe un `USERPROFILE` temporal para contener su cache de inicio, que se elimina al terminar. No suplantar la verificación con un hash checker Python ni ejecutar runtime discovery. Las asignaciones se informan `unknown`: el manifest no las registra y C4 no analiza recursos generados para inferirlas.
+Los manifests actuales usan `schema_version=1`. Project requiere
+`scope=project`, `installed_harnesses=["opencode"]`, `installed_version` y
+`installed_from_commit` explícitos y no vacíos, y el inventario/hash actual de
+15 rutas. Global requiere `scope=global`, sólo OpenCode,
+`installed_version=local` o un release tag, `installed_from_commit` no vacío y
+`default_agent_receipt` válido. Si la config global segura ya pertenece al
+usuario, se administran 13 recursos y la config queda unowned con el receipt
+del campo; si Olympus crea esa config, se administran 14. Ambas formas son
+actuales. El guard de permisos requiere una
+lista V2 válida con `external_directory * ASK` o `DENY` efectivo; no se parchea
+la config del usuario para eludirla.
+
+Los overrides usan schema 1 y un mapa `overrides`; archivo ausente significa
+vacío y la precedencia es project > global > Core. Metadatos opcionales de
+provenance/detección son opacos y nunca prueban ownership. No se rellenan
+defaults ausentes ni se adopta un manifest antiguo. Formato incompleto o no
+soportado se bloquea sin conversión ni eliminación; si hace falta retirar una
+instalación anterior, usa su release correspondiente.
+
+Source-edit journal B y project apply usan schema 1; el journal privado global
+usa schema 2. Se mantienen los locks estables, la identidad/hash validation,
+rollback acotado y protección de conflictos descritos en
+[data-model.md](../data-model.md). Ningún preview escribe recursos de usuario;
+ninguna operación afirma atomicidad multiarquivo frente a writers externos.
+
+Las entradas de documentación detalladas para comandos públicos están en
+[Installation](../../../docs/INSTALLATION.md); los comandos históricos C5 de
+instalación project/Codex están reemplazados por esta frontera y no se deben
+usar con releases actuales.
 
 ### Asignaciones instaladas en preview — Slice C6
 
-- Tras validar inventario, ownership y hashes sin conflictos, `config apply --dry-run` agrega `data.assignments` en JSON y el mismo objeto serializado en salida humana. Las propuestas de harness seleccionado provienen de `model_assignments`/renderer canónico. Para cada recurso instalado actual, sólo se extraen campos soportados de los bytes ya leídos en memoria y cuya SHA-256 coincide con el manifest; no se vuelve a leer el destino para este informe.
+- Tras validar inventario, ownership y hashes sin conflictos, `config apply --dry-run` agrega `data.assignments` en JSON y el mismo objeto serializado en salida humana. Las propuestas OpenCode provienen de `model_assignments`/renderer canónico. Para cada recurso instalado actual, sólo se extraen campos soportados de los bytes ya leídos en memoria y cuya SHA-256 coincide con el manifest; no se vuelve a leer el destino para este informe.
 - `assignments.evidence=managed_hash_verified_bytes` indica únicamente bytes managed con hash coincidente, no configuración runtime efectiva, aceptación del proveedor ni disponibilidad remota. La familia instalada siempre es `unknown`: el manifest no contiene procedencia fiable para reconstruirla, aunque un ID coincida con Core.
-- Las filas distinguen `selected`, `preserved` y `not_installed`. Harness seleccionado muestra `current` y propuesta canónica; el no seleccionado conserva `current` y no presenta propuesta. OpenCode reporta el modelo del agente Kael y el modelo de `opencode.jsonc` de forma independiente. Codex informa a Kael sólo en `roots.codex`, nunca como agente especialista.
-- OpenCode acepta sólo la estructura de frontmatter generada con un campo `model` double-quoted sin escapes; todos los escalares bare, incluidos booleanos, nulls, números y palabras, quedan `unsupported` sin interpretación YAML. Un valor quoted como `"true"` sigue siendo una cadena de modelo. En el root JSONC se admite únicamente el envelope renderer-generado con su único modelo string cambiado. Codex usa `tomllib` y exige `model`/`model_reasoning_effort` top-level de tipo string en el archivo de rol/root conocido. Estructuras, comillas/escapes no soportados, TOML malformado/duplicado, valores faltantes, anidados o de tipo incorrecto quedan `unsupported` sin valores actuales inferidos. Esta incertidumbre sólo anota el preview: no cambia disponibilidad, resultado, plan ni exits de C1/C3.
+- Las filas distinguen `selected` y `not_installed`; OpenCode muestra valores actuales y propuesta canónica. Reporta el modelo del agente Kael y el modelo de `opencode.jsonc` por separado.
+- OpenCode acepta sólo la estructura de frontmatter generada con un campo `model` double-quoted sin escapes; todos los escalares bare, incluidos booleanos, nulls, números y palabras, quedan `unsupported` sin interpretación YAML. Un valor quoted como `"true"` sigue siendo una cadena de modelo. En el root JSONC se admite únicamente el envelope renderer-generado con su único modelo string cambiado. Estructuras, comillas/escapes no soportados, valores faltantes, anidados o de tipo incorrecto quedan `unsupported` sin valores actuales inferidos. Esta incertidumbre sólo anota el preview: no cambia disponibilidad, resultado, plan ni exits de C1/C3.
 - Si falla la validación de manifest/inventario/hash, `assignments` queda explícitamente `unknown` con evidencia `not_verified`; no se exponen valores aparentemente verificados de una lectura bloqueada. C4 sigue informando `assignments: unknown` y no analiza recursos.
 
 ### Alcance global — Slice C7/C8
 
-- `status --scope global` identifica de forma separada las raíces OpenCode (`OPENCODE_CONFIG_DIR` o `opencode debug paths`) y Codex (`CODEX_HOME` o raíz de usuario). Rechaza rutas relativas, enlaces/reparse en ancestros y raíces superpuestas; `--target` no está permitido. La ausencia es informativa; un manifest reportado no prueba integridad. La consulta no ejecuta `VerifyOnly`, runtime ni introspección de proveedores. El discovery de OpenCode puede utilizar un directorio temporal externo al checkout.
-- `doctor --scope global` y el preview validan fuente coherente, manifests separados (`olympus/orchestrator-install.json`), 14 recursos OpenCode o el inventario histórico de 13 sin guard, y 12 recursos Codex. Validan recursos regulares sin enlaces/hardlinks y hashes antes de dar valores. El guard OpenCode se verifica por hash cuando es manifest-owned; los archivos de configuración no se interpretan salvo la comprobación de seguridad necesaria para una operación global C8. En Windows `doctor` llama al `global-install.ps1 -VerifyOnly` oficial por harness, con override de raíz anclado, `USERPROFILE` temporal y PowerShell 7 verificado; Linux/macOS informan explícitamente verificación no disponible, sin éxito simulado.
-- `config apply --scope global --dry-run` informa delta de bytes, hashes y propuestas canónicas desde los once roles, sin lock/journal/escrituras. `apply_available=true` para OpenCode sólo indica que existe la vía separada `--execute`; Codex y `all` no ofrecen ejecución global. Codex Kael está sólo en el perfil raíz `olympus.config.toml`; el root OpenCode queda `not_managed`. Familias instaladas permanecen `unknown`, y los escalares OpenCode bare o formatos no soportados quedan `unsupported` sin inferencia.
-- C8 sólo ejecuta `config apply --scope global --harness opencode --execute` contra una instalación global OpenCode existente y validada. `codex`/`all` y cualquier intento de instalación, adopción o migración de manifest se bloquean antes de escribir. Los bytes de usuario no administrados se preservan; una configuración existente fuera del manifest no se adopta ni reemplaza. Para un inventario histórico de 13 recursos, sólo se crea y añade al manifest `opencode.jsonc` si no existe ninguno de los formatos globales `opencode.json`/`opencode.jsonc`; un guard inseguro o conflicto de precedencia bloquea antes de escribir.
-- Apply global usa el `.olympus-cli-edit.lock` estable compartido con el instalador PowerShell, revalida el inventario/hash bajo lock y reemplaza el manifest al final. El journal privado `.olympus-cli-config-apply` identifica `scope=global`, harness OpenCode y schema 2; el journal project v1 no cambia. PREPARED se revierte sólo desde old/new acreditados; COMMITTED sólo permite limpiar evidencia verificada. `config recover --scope global --harness opencode` abre sólo el lock existente, es repetible y conserva journal/bytes ante una tercera versión, identidad dudosa o evidencia inválida. El global installer rehúsa mutar mientras haya un journal pendiente. Esto no promete atomicidad multiarquivo visible a otros procesos ni protege frente a writers externos no cooperantes.
-- El reporte continúa soportando `opencode`, `codex` y `all` para lecturas sin convertir el éxito de una raíz en éxito de la otra. Sólo los archivos manifest-owned con hash acreditado generan asignaciones actuales. Ninguna validación prueba el modelo efectivo del runtime, proveedor/autenticación ni overrides locales. C8 está implementado pero pendiente de review/CI hosted; las pruebas locales de esta rama usan raíces sintéticas en Windows y no cualifican perfiles globales reales, Linux/macOS ni runtime OpenCode.
-- Cuando `--harness all` mezcla raíces instaladas y ausentes, el resultado público permanece en el enum contratado: `result=absent`, exit 0, con `data.selection_state=partial` y `issues[].code=harness_absent`; no se inventa `result=partial`. El preview deja `assignments.status=unknown` si no se acreditaron todos los seleccionados. `data.selection_state=complete` o `absent` distingue los demás casos sin alterar los estados por raíz.
-- Los manifests globales sólo admiten `installed_version=local` o una etiqueta `vMAJOR.MINOR.PATCH` con sufijo prerelease reconocido por el router oficial; otras versiones quedan `unsupported_global_version`/blocked/exit 3. En Codex, un `AGENTS.override.md` global, aunque no sea managed, tiene precedencia y bloquea preview/doctor con `global_install_conflict`/exit 3; los enlaces o reparse points se rechazan como `unsafe_global_resource`. Ninguno de esos controles inspecciona el contenido del override.
-- La discrepancia de hash de un recurso managed es `global_managed_file_drift`, estado por raíz `drift`, `result=failed`, exit 1 si no hay otro bloqueo de exit 3. `doctor` interpreta exclusivamente marcadores oficiales `GLOBAL_HARNESS_FAILED` para distinguir `version_mismatch`, `invalid_global_manifest`, `global_install_conflict` y drift; ausencia de marcador acreditable queda `native_verify_unavailable`, nunca un éxito supuesto. En selección múltiple prevalece exit 3 sobre exit 1 y no se diluyen los errores independientes.
+- `status --scope global` informa sólo metadata del manifest OpenCode, sin `VerifyOnly`, runtime ni introspección de proveedores. Rechaza rutas relativas, enlaces/reparse en ancestros y raíces inseguras; `--target` no está permitido.
+- `doctor --scope global` y el preview validan el manifest OpenCode schema 1, inventario esperado, archivos regulares y hashes. En Windows, doctor llama a `global-install.ps1 -VerifyOnly` con raíz anclada, `USERPROFILE` temporal y PowerShell 7; otras plataformas informan `verification_unavailable`, no éxito simulado.
+- Global preview informa bytes/hashes y propuestas de los once roles, sin lock/journal/escrituras. `apply_available=true` sólo señala la vía separada `--execute`; las asignaciones instaladas siguen `unknown` si no pueden acreditarse desde bytes manifest-owned con hash verificado.
+- Global apply sólo actualiza una instalación OpenCode existente y validada. Preserva bytes de usuario no administrados y no adopta una configuración o manifest externos. Un guard inseguro, conflicto de precedencia, drift, manifest inválido o journal previo bloquea antes de escribir.
+- Apply global comparte el `.olympus-cli-edit.lock`, revalida inventario/hash bajo lock y reemplaza el manifest al final. El journal privado `.olympus-cli-config-apply` es schema 2; el journal project conserva schema 1. PREPARED revierte sólo desde estados old/new acreditados; COMMITTED limpia evidencia verificada. `config recover --scope global --harness opencode` abre sólo el lock existente y preserva journal/bytes ante una tercera versión, identidad dudosa o evidencia inválida. No se promete atomicidad multiarquivo visible ni protección frente a writers externos no cooperantes.
+- La ausencia de instalación es informativa; un manifest inválido, incompleto o de formato no soportado falla cerrado, sin defaults, adopción, conversión o eliminación automáticas. Formatos globales actuales son schema 1 con receipt válido y 13/14 recursos según ownership de la configuración, no un inventario histórico de 13 sin guard.
+- Ninguna validación prueba el modelo efectivo del runtime, proveedor/autenticación ni overrides locales. La evidencia de implementación de esta feature no cualifica perfiles globales reales, Linux/macOS o runtime OpenCode.
 
 ### Identificadores — contrato inicial definitivo de Slice B
 
-Todos los IDs existentes utilizados por el candidato y los IDs propuestos deben coincidir **por completo** con `[A-Za-z0-9][A-Za-z0-9._:/-]*`. No trim, normalización, matching parcial ni ancla que acepte un newline final. Primer carácter ASCII alfanumérico; los restantes sólo ASCII alfanuméricos, punto, underscore, dos puntos, slash o guion. Se aceptan los actuales conformes, incluidos `openai/gpt-6.1-sol` y `gpt-6-luna`.
+Los IDs existentes OpenCode utilizados por el candidato y los IDs propuestos deben coincidir **por completo** con `[A-Za-z0-9][A-Za-z0-9._:/-]*`. No trim, normalización, matching parcial ni ancla que acepte un newline final. Primer carácter ASCII alfanumérico; los restantes sólo ASCII alfanuméricos, punto, underscore, dos puntos, slash o guion. Se aceptan los actuales conformes, incluidos `openai/gpt-6.1-sol` y `openai/gpt-6-luna`.
 
-Vacío, comillas, backslashes, espacios, controles, saltos, `#`, braces y cualquier carácter fuera del alfabeto se rechazan con exit 2 **antes de cualquier staging o escritura, incluida creación del lock**. Un ID existente no conforme rechaza la operación B con el mismo exit 2, sin repararlo; no modifica el comportamiento read-only de A. El renderer existente no cambia. Sintaxis válida no acredita disponibilidad, soporte live ni autenticación; no consultar proveedores. Es una restricción inicial de B, no una limitación universal de OpenCode o Codex.
+Vacío, comillas, backslashes, espacios, controles, saltos, `#`, braces y cualquier carácter fuera del alfabeto se rechazan con exit 2 **antes de cualquier staging o escritura, incluida creación del lock**. Un ID existente no conforme rechaza la operación B con el mismo exit 2, sin repararlo; no modifica el comportamiento read-only de A. El renderer existente no cambia. Sintaxis válida no acredita disponibilidad, soporte live ni autenticación; no consultar proveedores. Es una restricción inicial de B, no una limitación universal de OpenCode.
 
 Familias/roles de fuente. Esfuerzo inicial extraído del conjunto de esfuerzos presente en el documento canónico; no registry de esfuerzos/proveedor adicional. Kael es el único orquestador y la CLI no agrega roles.
 
@@ -82,7 +136,7 @@ Familias/roles de fuente. Esfuerzo inicial extraído del conjunto de esfuerzos p
 - Scratch pendiente bloquea B en preflight incluso con lock libre o ausente, sin crear/recrear lock ni staging. `config recover` es orden humana separada; adquiere exclusión antes de leer el batch, valida identidad/registro/read-set/hashes/backups y mantiene el lock hasta rollback/cleanup o reporte de bloqueo. PID, timestamp y directorio no acreditan terminación; no auto-cleanup por antigüedad.
 - PREPARING sólo se descarta si todos los targets siguen old; PREPARED deja old y restaura sólo new mediante copia staged de backup verificado (all-new también revierte); COMMITTED sólo limpia tras verificar todo new. Tercer estado, modo divergente, entrada externa modificada, backup necesario inválido o identidad distinta bloquean sin overwrite; conservar evidencia. Recovery interrumpido puede repetirse sin consumir respaldos. Protocolo completo: [data-model.md](../data-model.md).
 - C3 project usa el mismo `.olympus-cli-edit.lock` del target que los escritores Python/PowerShell C2.3. El journal privado `.olympus-cli-config-apply` mantiene evidencia old/new; manifiesto se reemplaza al final. `--dry-run` no crea lock/scratch. La recuperación project exige `config recover --scope project --target ...`; no interpreta el journal B del source como estado del target. Recovery vuelve a validar con el renderer del checkout fuente original; conserva ese renderer sin modificaciones mientras el journal esté pendiente y usa ese mismo checkout mediante `--source`.
-- C3 cambia sólo hashes de harnesses seleccionados y conserva los no seleccionados; conserva provenance opaca sólo para harnesses no seleccionados. La fuente local se registra como `installed_version=local` y `installed_from_commit=unknown`, nunca como release oficial inmutable. No se instala/adopta harness ausente ni se migran manifests.
+- C3 actualiza únicamente recursos OpenCode ya administrados y conserva otros bytes no seleccionados. Una fuente local se registra explícitamente como `installed_version=local` y con su valor `installed_from_commit`; `unknown` no acredita una revisión real. No se instala/adopta recurso ausente ni se migra un manifest.
 - Coherencia y ownership acreditados permiten éxito; rollback confirmado de un cambio fallido sigue siendo fallo operacional/exit 1, no éxito de edición. Conflicto confirmado produce blocked/exit 3; efectos parciales o resultado no acreditado producen unconfirmed/exit 4 con recursos/estado concretos. Ningún resultado parcial se presenta como aplicado.
 - Se excluyen protección absoluta contra procesos externos no cooperantes, atomicidad multiarquivo visible a lectores y durabilidad absoluta ante pérdida de energía. No hay sobrescritura automática de modificaciones externas; el hash previo a os.replace no es compare-and-swap. Estas exclusiones no habilitan ignorar conflictos detectados.
 
@@ -92,11 +146,11 @@ T019 Windows y T020 Linux acreditaron la selección integrada y el protocolo loc
 
 ## Salida y códigos
 
-Salida humana concisa con origen/contexto, afectados, ambos IDs y valores old/new antes de mutar. Errores nombran recurso/causa y corrección disponible; no emitir credenciales o logs nativos completos por defecto.
+Salida humana concisa con origen/contexto, afectados, ID OpenCode y valores old/new antes de mutar. Errores nombran recurso/causa y corrección disponible; no emitir credenciales o logs nativos completos por defecto.
 
 JSON de comando permitido es un documento único en stdout; diagnósticos de proceso/presentación van a stderr. Envoltorio `schema_version=1`, `operation`, `result`, `context`, `data`, `issues`. Los datos usan los mismos objetos del formato humano, sin segundo resolver. `result` puede ser `ok`, `no_changes`, `absent`, `preview` (C5: dry-run nativo completado, sin ejecutar instalación/retiro), `failed`, `blocked`, `unconfirmed`.
 
-- Listado: `data.roles` con `role`, `identity`, `family`, `effort`, `models.opencode`, `models.codex`, y representación de cada harness (`agent`, `root`, `absent`).
+- Listado: `data.roles` con `role`, `identity`, `family`, `effort`, `models.opencode` y su representación OpenCode.
 - Preview: affected roles, old/new intención/resolución, recursos cambiantes relativos y bloqueos; no tabla de mappings persistente.
 - Estado/doctor: installed harnesses, scope, versión registrada, integridad y soporte/evidencia disponible. Cuando no puede conocerse una asignación instalada segura, informar unknown, no copiar la asignación del source como si estuviese aplicada.
 - Preview C1: delta de archivos renderizados sólo después de validar raíz, manifiesto, inventario y hashes; conflictos bloquean el plan. El preview sigue read-only (`preview_only=true`); `apply_available=true` sólo indica que existe la vía separada `--execute`, que vuelve a previsualizar y revalida bajo lock. Nunca representa una escritura ya ejecutada.
@@ -113,4 +167,10 @@ El código nativo y su salida relevante se conservan en datos del resultado; se 
 
 ## Protección de fronteras
 
-Edición de source no acepta target instalado ni lo modifica. Apply no edita models, instala harness ausente o migra manifests implícitamente; `--execute` sólo reemplaza recursos renderer-managed que constan en el manifest y fueron seleccionados. No cambia permisos de acceso, autenticación ni configuración de proveedores. Install oficial usa identidad immutable y motores existentes. Ningún comando cierra gaps de Codex. Soporte por operación/plataforma siempre explícito; macOS NOT VERIFIED.
+Edición de source no acepta target instalado ni lo modifica. Apply no edita
+models, instala recursos ausentes o migra manifests implícitamente;
+`--execute` sólo reemplaza recursos OpenCode renderer-managed que constan en el
+manifest y fueron seleccionados. No cambia permisos de acceso, autenticación ni
+configuración de proveedores. Install oficial usa identidad immutable y motores
+existentes. Soporte por operación/plataforma siempre explícito; macOS NOT
+VERIFIED.

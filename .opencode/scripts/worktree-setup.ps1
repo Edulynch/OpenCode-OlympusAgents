@@ -53,12 +53,10 @@ function Normalize-Managed-Path([string]$Path) {
         $relative -match '[:\x00]') {
         Fail 'WORKTREE_SETUP_MANIFEST_INVALID' "Unsafe managed path: $Path"
     }
-    $allowed = $relative -ceq 'opencode.jsonc' -or $relative -ceq 'CODEX.md' -or
+    $allowed = $relative -ceq 'opencode.jsonc' -or
         $relative -match '^\.opencode/agents/[A-Za-z0-9_-]+\.md$' -or
         $relative -match '^\.opencode/plugins/olympus-activity/(activity\.ts|tui\.tsx)$' -or
-        $relative -ceq '.opencode/scripts/worktree-setup.ps1' -or
-        $relative -match '^\.codex/agents/[A-Za-z0-9_-]+\.toml$' -or
-        $relative -ceq '.codex/config.toml'
+        $relative -ceq '.opencode/scripts/worktree-setup.ps1'
     if (-not $allowed) { Fail 'WORKTREE_SETUP_MANIFEST_INVALID' "Unexpected managed path: $relative" }
     return $relative
 }
@@ -146,28 +144,33 @@ try {
     }
 
     $manifestRelative = '.opencode/orchestrator-install.json'
+    foreach ($checkout in @($base, $target)) {
+        $codexManifestPath = Get-Contained-Path $checkout '.codex/orchestrator-install.json'
+        if (Test-Path -LiteralPath $codexManifestPath) {
+            Fail 'WORKTREE_SETUP_MANIFEST_INVALID' "Codex project manifests are unsupported and will not be migrated: $checkout"
+        }
+    }
     $sourceManifestPath = Get-Contained-Path $base $manifestRelative
     if (-not (Test-Path -LiteralPath $sourceManifestPath -PathType Leaf)) {
         Fail 'WORKTREE_SETUP_MANIFEST_MISSING' 'The source checkout has no Olympus project install manifest.'
     }
     try { $manifestText = [IO.File]::ReadAllText($sourceManifestPath); $manifest = $manifestText | ConvertFrom-Json -Depth 100 }
     catch { Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'The source checkout has an invalid Olympus install manifest.' }
-    if ($manifest.schema_version -ne 1 -or $null -eq $manifest.managed_files -or
-        ('scope' -in @($manifest.PSObject.Properties | ForEach-Object Name) -and [string]$manifest.scope -cne 'project')) {
-        Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'Only a schema v1 project install manifest is supported.'
+    if ($manifest.schema_version -ne 1 -or [string]$manifest.scope -cne 'project' -or
+        $manifest.installed_version -isnot [string] -or [string]::IsNullOrWhiteSpace($manifest.installed_version) -or
+        $manifest.installed_from_commit -isnot [string] -or [string]::IsNullOrWhiteSpace($manifest.installed_from_commit) -or
+        $null -eq $manifest.managed_files) {
+        Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'A current schema v1 project install manifest is required.'
     }
-    # A new worktree helper only ships in modern manifests, so it must not
-    # silently accept the legacy no-harness format.
+    if ($manifest.installed_harnesses -isnot [System.Collections.IList]) {
+        Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'installed_harnesses must be an array.'
+    }
     $harnesses = @($manifest.installed_harnesses | ForEach-Object { [string]$_ })
-    if ($harnesses.Count -lt 1 -or $harnesses.Count -gt 2 -or
-        @($harnesses | Where-Object { $_ -cnotin @('opencode', 'codex') }).Count -gt 0 -or
-        @($harnesses | Select-Object -Unique).Count -ne $harnesses.Count -or
-        'opencode' -cnotin $harnesses) {
-        Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'The source manifest must declare OpenCode and at most one Codex harness.'
+    if ($harnesses.Count -ne 1 -or $harnesses[0] -cne 'opencode') {
+        Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'The source manifest must declare only OpenCode.'
     }
 
-    # Installed projects lack Core renderer sources; this is the exact current
-    # bootstrap-generated roster. Historical sets remain bootstrap-only.
+    # Installed projects lack Core renderer sources; require the current exact roster.
     $expectedOpenCode = @(
         '.opencode/agents/argus.md',
         '.opencode/agents/atlas.md',
@@ -185,22 +188,7 @@ try {
         '.opencode/scripts/worktree-setup.ps1',
         'opencode.jsonc'
     )
-    $expectedCodex = @(
-        '.codex/agents/argus.toml',
-        '.codex/agents/atlas.toml',
-        '.codex/agents/helios.toml',
-        '.codex/agents/kovan.toml',
-        '.codex/agents/nox.toml',
-        '.codex/agents/orin.toml',
-        '.codex/agents/talos.toml',
-        '.codex/agents/thales.toml',
-        '.codex/agents/vera.toml',
-        '.codex/agents/veyra.toml',
-        '.codex/config.toml',
-        'CODEX.md'
-    )
     $expected = @($expectedOpenCode)
-    if ('codex' -in $harnesses) { $expected += $expectedCodex }
 
     $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $payloads = [Collections.Generic.List[object]]::new()

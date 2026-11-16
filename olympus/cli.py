@@ -44,7 +44,7 @@ def parser() -> Parser:
                 "  olympus install\n"
                 "  olympus uninstall\n"
                 "  olympus models list --json\n"
-                "  olympus models set-family sol --opencode openai/new-sol --codex codex/new-sol --dry-run --json\n"
+                "  olympus models set-family sol --opencode openai/new-sol --dry-run --json\n"
                 "  olympus agents set-model veyra --effort high --dry-run\n"
                 "  olympus config recover\n"
                 "  olympus config check\n"
@@ -52,9 +52,8 @@ def parser() -> Parser:
                 "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --execute\n"
                 "  olympus config apply --scope global --harness opencode --execute\n"
                 "  olympus config recover --scope global --harness opencode\n"
-                 "  olympus doctor --scope project --target <absolute-worktree-root> --harness all [--json]\n"
+                 "  olympus doctor --scope project --target <absolute-worktree-root> --harness opencode [--json]\n"
                  "  olympus doctor --scope global --harness opencode [--json]\n"
-                 "  olympus config apply --scope global --harness codex --dry-run --json\n"
                  "  olympus status --scope project --target <absolute-worktree-root>\n"
                  "Source-edit and project-apply commands are advanced checkout operations.\n"
                  "Config apply writes only with --execute; global execution currently supports OpenCode only.\n"
@@ -67,15 +66,15 @@ def parser() -> Parser:
     commands = root.add_subparsers(dest="command", parser_class=Parser)
     commands.add_parser("help", help="show Olympus commands and model configuration guidance", allow_abbrev=False)
     commands.add_parser("version", help="show the installed Olympus product version", allow_abbrev=False)
-    commands.add_parser("update", aliases=["upgrade"], help="update the global OpenCode installation", allow_abbrev=False)
+    commands.add_parser("update", aliases=["upgrade"], help="update the global OpenCode installation",
+                        allow_abbrev=False).set_defaults(command="update")
     models = commands.add_parser("models", help="query or explicitly edit canonical model assignments", allow_abbrev=False)
     model_commands = models.add_subparsers(dest="action", required=True, parser_class=Parser)
-    listing = model_commands.add_parser("list", help="list all eleven roles and both adapters", allow_abbrev=False)
+    listing = model_commands.add_parser("list", help="list all eleven OpenCode role assignments", allow_abbrev=False)
     listing.add_argument("--json", action="store_true")
-    set_family = model_commands.add_parser("set-family", help="explicitly edit both IDs of an existing family", allow_abbrev=False)
+    set_family = model_commands.add_parser("set-family", help="explicitly edit an existing family", allow_abbrev=False)
     set_family.add_argument("family")
     set_family.add_argument("--opencode", required=True)
-    set_family.add_argument("--codex", required=True)
     set_family.add_argument("--dry-run", action="store_true")
     set_family.add_argument("--json", action="store_true", help="JSON preview; requires --dry-run")
     agents = commands.add_parser("agents", help="list effective agents or edit canonical role model intent", allow_abbrev=False)
@@ -111,14 +110,14 @@ def parser() -> Parser:
     config_list.add_argument("--scope", choices=("project", "global"), help="select scope (default: effective scope)")
     config_list.add_argument("--target", type=Path, help="absolute managed project worktree root; project scope only")
     check = config_commands.add_parser("check", help="compare renderer outputs without writing", allow_abbrev=False)
-    check.add_argument("--harness", choices=("opencode", "codex", "all"), default="all")
+    check.add_argument("--harness", choices=("opencode",), default="opencode")
     check.add_argument("--json", action="store_true")
     apply = config_commands.add_parser(
         "apply", help="preview an existing project/global installation; execute explicitly", allow_abbrev=False,
     )
     apply.add_argument("--scope", choices=("project", "global"), required=True)
     apply.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
-    apply.add_argument("--harness", choices=("opencode", "codex", "all"), required=True)
+    apply.add_argument("--harness", choices=("opencode",), required=True)
     mode = apply.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="read-only preview; no target writes")
     mode.add_argument("--execute", action="store_true", help="explicitly apply project or OpenCode global configuration")
@@ -136,16 +135,16 @@ def parser() -> Parser:
     doctor = commands.add_parser("doctor", help="read-only managed installation diagnostic", allow_abbrev=False)
     doctor.add_argument("--scope", choices=("project", "global"), help="select scope (default: effective scope)")
     doctor.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
-    doctor.add_argument("--harness", choices=("opencode", "codex", "all"), default="opencode")
+    doctor.add_argument("--harness", choices=("opencode",), default="opencode")
     doctor.add_argument("--json", action="store_true")
     recover = config_commands.add_parser("recover", help="explicitly recover one pending source edit or config apply", allow_abbrev=False)
     recover.add_argument("--scope", choices=("project", "global"), help="project selects a target apply journal")
     recover.add_argument("--target", type=Path, help="absolute project root for project-apply recovery")
-    recover.add_argument("--harness", choices=("opencode", "codex", "all"), help="global recovery currently supports opencode only")
+    recover.add_argument("--harness", choices=("opencode",), help="global recovery requires opencode")
     status = commands.add_parser("status", help="read reported installation metadata; no integrity verification", allow_abbrev=False)
     status.add_argument("--scope", choices=("project", "global"), default="project")
     status.add_argument("--target", type=Path, help="absolute Git worktree root; required for project scope")
-    status.add_argument("--harness", choices=("opencode", "codex", "all"), default="all")
+    status.add_argument("--harness", choices=("opencode",), default="opencode")
     status.add_argument("--json", action="store_true")
     return root
 
@@ -209,17 +208,15 @@ def model_assignments(renderer, source: Path) -> dict:
     rows = []
     for role in sorted(roles):
         resolved = {}
-        for harness in ("opencode", "codex"):
-            model, effort = renderer.role_model(models, role, harness)
-            if not isinstance(model, str) or not model.strip() or any(ord(c) < 32 or ord(c) == 127 for c in model):
-                raise CLIError(f"Invalid {harness} model identifier for {role}")
-            resolved[harness] = model
+        model, effort = renderer.role_model(models, role)
+        if not isinstance(model, str) or not model.strip() or any(ord(c) < 32 or ord(c) == 127 for c in model):
+            raise CLIError(f"Invalid OpenCode model identifier for {role}")
         if not isinstance(effort, str) or not effort.strip():
             raise CLIError(f"Invalid canonical effort for {role}")
         rows.append({"role": role, "identity": identities[role],
                      "family": models["roles"][role]["family"], "effort": effort,
-                     "models": resolved,
-                     "representation": {"opencode": "agent", "codex": "root" if role == "kael" else "agent"}})
+                     "models": {"opencode": model},
+                     "representation": {"opencode": "agent"}})
     return {"roles": rows}
 
 
@@ -294,9 +291,8 @@ def installation_status(source: Path, args, response: dict) -> int:
     response["data"].update({"installation_state": "reported", "installed_harnesses": installed,
                              "recorded_version": record.installed_version,
                              "recorded_source_commit": record.installed_from_commit,
-                             "evidence": "reported_manifest",
-                             "metadata_format": record.metadata_format})
-    selected = ("opencode", "codex") if args.harness == "all" else (args.harness,)
+                             "evidence": "reported_manifest"})
+    selected = (args.harness,)
     response["data"]["harnesses"] = {name: "reported" if name in installed else "absent" for name in selected}
     if not any(name in installed for name in selected):
         response["result"] = "absent"
@@ -319,8 +315,7 @@ def emit(response: dict, as_json: bool) -> None:
                           f"model source={role['model_source']} | effort source={role['effort_source']}")
                 else:
                     print(f"{role['role']} | {role['identity']} | family={role['family']} | effort={role['effort']} | "
-                          f"opencode={role['models']['opencode']} ({role['representation']['opencode']}) | "
-                          f"codex={role['models']['codex']} ({role['representation']['codex']})")
+                          f"opencode={role['models']['opencode']} ({role['representation']['opencode']})")
         elif key == "manual_edit_reminder" and response["operation"] == "config list":
             continue
         else:
@@ -333,7 +328,7 @@ def emit(response: dict, as_json: bool) -> None:
         guidance = {
             "managed_file_drift": "Inspect the listed managed path and compare it with the trusted source; preserve local edits and reconcile ownership before any update or uninstall.",
             "global_managed_file_drift": "Inspect the listed global managed path and preserve local edits; reconcile ownership before any update or uninstall.",
-            "source_drift": "Run `python scripts/render_harnesses.py check --harness all` in the displayed source; reconcile intentional source/output differences before applying anything.",
+            "source_drift": "Run `python scripts/render_harnesses.py check --harness opencode` in the displayed source; reconcile intentional source/output differences before applying anything.",
             "invalid_manifest": "Preserve the manifest and managed files; inspect and manually reconcile the manifest format and ownership before install, update, or uninstall.",
             "invalid_global_manifest": "Preserve the global manifest and resources; inspect and manually reconcile its format and ownership before install, update, or uninstall.",
             "ambiguous_manifest": "Preserve both manifest locations and all managed files; resolve which manifest owns this displayed project before taking action.",
@@ -360,7 +355,6 @@ def emit(response: dict, as_json: bool) -> None:
             "target_unconfirmed": "Verify the displayed directory is the actual Git worktree root and that Git can inspect it; no target was changed.",
             "invalid_global_root": "Select the intended absolute global configuration root and verify it is not a filesystem root before retrying.",
             "global_path_unavailable": "Verify the OpenCode CLI or configured global path and inspect the selected global root before retrying; do not guess or move the root.",
-            "overlapping_global_roots": "Inspect the resolved OpenCode and Codex roots and keep them distinct; do not change either installation until ownership is clear.",
             "unsafe_global_root": "Inspect the displayed global path components for links, reparse points, or non-directory entries; preserve them until ownership is clear.",
             "unsafe_global_resource": "Preserve the reported global resource and inspect its path/type manually before any operation that could change it.",
             "global_external_guard_unsafe": "Inspect the existing global OpenCode config and resolve ambiguous rules manually; establish an external_directory ASK or DENY fallback before applying configuration.",
@@ -443,7 +437,7 @@ def _run_model_edit(source: Path, args, response: dict) -> int:
     try:
         if args.command == "models":
             candidate = model_edit._build_set_family_candidate(
-                source, args.family, args.opencode, args.codex,
+                source, args.family, args.opencode,
             )
         else:
             if args.family is None and args.effort is None:
@@ -594,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.version or args.command == "version":
             print(f"olympus {release_version(source)}")
             return 0
-        if args.command in ("update", "upgrade"):
+        if args.command == "update":
             from . import system_cli
 
             return system_cli.update(source)
@@ -631,7 +625,7 @@ def main(argv: list[str] | None = None) -> int:
             emit(response, False)
             return 0
         if response["operation"] in ("models list", "config check"):
-            harness = getattr(args, "harness", "all")
+            harness = getattr(args, "harness", "opencode")
             response["context"]["harness"] = harness
             response["data"], response["issues"] = source_query(source, response["operation"], harness)
             if response["issues"]:

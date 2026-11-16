@@ -188,13 +188,13 @@ if ($env:OLYMPUS_EDITOR_CASE -notin @('set-absent','restore-remove')) {
 [IO.File]::WriteAllText($config, $before, $Utf8NoBom)
 $script:OriginalManifestWriter = (Get-Command Write-GlobalManifestObject).ScriptBlock
 $script:Interleaved = $false
-$script:ArmEditor = $env:OLYMPUS_EDITOR_CASE -ne 'set-managed'
+$script:ArmEditor = $true
 function Write-GlobalManifestObject([string]$Path, [System.Collections.IDictionary]$Manifest) {
     & $script:OriginalManifestWriter $Path $Manifest
     if ($script:ArmEditor -and -not $script:Interleaved -and $env:OLYMPUS_EDITOR_CASE -like 'set-*' -and
         $Manifest.default_agent_receipt.state -ceq 'pending_set') {
         $during = $before.Insert(1, '"editor_note":true,')
-        if ($env:OLYMPUS_EDITOR_CASE -in @('set-absent','set-managed')) {
+        if ($env:OLYMPUS_EDITOR_CASE -eq 'set-absent') {
             $during = $during.Insert(1, '"default_agent":"user-during-install",')
         } elseif ($env:OLYMPUS_EDITOR_CASE -eq 'set-present') {
             $during = $during.Replace('"before"', '"user-during-install"')
@@ -202,18 +202,6 @@ function Write-GlobalManifestObject([string]$Path, [System.Collections.IDictiona
         [IO.File]::WriteAllText($config, $during, $Utf8NoBom)
         $script:Interleaved = $true
     }
-}
-if ($env:OLYMPUS_EDITOR_CASE -eq 'set-managed') {
-    [IO.File]::Delete($config)
-    Invoke-OneHarness 'opencode'
-    $before = Get-OpenCodeDefaultGuard
-    [IO.File]::WriteAllText($config, $before, $Utf8NoBom)
-    $manifestPath = Join-Path $root $ManifestRelative
-    $legacy = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
-    $legacy.PSObject.Properties.Remove('default_agent_receipt')
-    ($legacy.managed_files | Where-Object path -CEQ 'opencode.jsonc').sha256 = Get-FileHashText $config
-    [IO.File]::WriteAllText($manifestPath, ($legacy | ConvertTo-Json -Depth 30), $Utf8NoBom)
-    $script:ArmEditor = $true
 }
 if ($env:OLYMPUS_EDITOR_CASE -like 'restore-*') {
     Invoke-OneHarness 'opencode'
@@ -252,18 +240,16 @@ if ($env:OLYMPUS_EDITOR_CASE -like 'restore-*') {
     if ($text.default_agent -cne 'user-during-install' -or $receipt.state -cne 'pending_set') {
         throw 'SET_LOST_EDITOR_CHANGE'
     }
-    if ($env:OLYMPUS_EDITOR_CASE -ne 'set-managed') {
-        $Uninstall = $true
-        Invoke-OneHarness 'opencode'
-        if (([IO.File]::ReadAllText($config) | ConvertFrom-Json).default_agent -cne 'user-during-install') {
-            throw 'UNINSTALL_RESTORED_STALE_VALUE'
-        }
+    $Uninstall = $true
+    Invoke-OneHarness 'opencode'
+    if (([IO.File]::ReadAllText($config) | ConvertFrom-Json).default_agent -cne 'user-during-install') {
+        throw 'UNINSTALL_RESTORED_STALE_VALUE'
     }
 }
 if (-not $script:Interleaved) { throw 'EDITOR_HOOK_NOT_REACHED' }
 Write-Output 'EDITOR_INTERLEAVING_PASS'
 '''
-        for case in ("set-present", "set-absent", "set-managed", "set-unrelated", "restore-set", "restore-remove"):
+        for case in ("set-present", "set-absent", "set-unrelated", "restore-set", "restore-remove"):
             with self.subTest(case=case):
                 result = subprocess.run(
                     [self.pwsh, "-NoProfile", "-NonInteractive", "-Command", script],
@@ -357,7 +343,7 @@ Write-Output 'EDITOR_INTERLEAVING_PASS'
         self.assertEqual(0, updated.returncode, updated.stdout + updated.stderr)
         self.assertFalse(config.exists())
 
-    def test_unowned_kael_is_refused_and_old_intact_agent_proves_owned_kael(self):
+    def test_unowned_and_receiptless_kael_are_refused_without_adoption(self):
         original = self.write_config(BASE_CONFIG.replace("{\n", '{\n  "default_agent": "kael",\n', 1))
         before = snapshot(self.root)
         refused = self.run_installer()
@@ -368,22 +354,17 @@ Write-Output 'EDITOR_INTERLEAVING_PASS'
         self.assertFalse(self.cli_root.exists())
         (self.root / "opencode.jsonc").write_bytes(original)
 
-        # A valid old manifest owns the intact Kael agent; receipt-less Kael is
-        # then adopted with restore_action=remove, never as an orphaned default.
-        (self.root / "opencode.jsonc").write_bytes(BASE_CONFIG.encode("utf-8"))
+        self.write_config()
         self.install_ok()
         record = json.loads(self.manifest.read_text(encoding="utf-8"))
         record.pop("default_agent_receipt")
         self.manifest.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-        self.assertEqual("kael", self.config_object()["default_agent"])
-        self.install_ok()
-        receipt = self.receipt()
-        self.assertTrue(receipt["previous_present"])
-        self.assertEqual('"kael"', receipt["previous_value_json"])
-        self.assertEqual("remove", receipt["restore_action"])
-        removed = self.run_installer("-Uninstall")
-        self.assertEqual(0, removed.returncode, removed.stdout + removed.stderr)
-        self.assertNotIn("default_agent", self.config_object())
+        before_root, before_cli = snapshot(self.root), snapshot(self.cli_root)
+        refused = self.run_installer("-Update")
+        self.assertNotEqual(0, refused.returncode, refused.stdout + refused.stderr)
+        self.assertIn("GLOBAL_DEFAULT_AGENT_RECEIPT_MISSING", refused.stdout + refused.stderr)
+        self.assertEqual(before_root, snapshot(self.root))
+        self.assertEqual(before_cli, snapshot(self.cli_root))
 
     def test_pending_set_recovery_conflict_and_pending_uninstall_resume(self):
         original = self.write_config(
@@ -536,7 +517,7 @@ Write-Output 'EDITOR_INTERLEAVING_PASS'
                 self.assertEqual(before, snapshot(self.root))
                 self.assertFalse(self.cli_root.exists())
 
-    def test_owned_config_pending_uninstall_and_existing_kael_comments_survive(self):
+    def test_owned_config_pending_uninstall_resumes_and_receiptless_uninstall_is_refused(self):
         self.install_ok()
         record = json.loads(self.manifest.read_text(encoding="utf-8"))
         record["default_agent_receipt"]["state"] = "pending_uninstall"
@@ -551,19 +532,12 @@ Write-Output 'EDITOR_INTERLEAVING_PASS'
         record = json.loads(self.manifest.read_text(encoding="utf-8"))
         record.pop("default_agent_receipt")
         self.manifest.write_text(json.dumps(record), encoding="utf-8")
-        text = (
-            '{"permissions":[{"action":"external_directory","resource":"*","effect":"ask"}],\n'
-            '// before\n"default_agent": /* key */ /* value */ "kael" /* after */\n}\n'
-        )
-        config = self.root / "opencode.jsonc"
-        config.write_bytes(text.encode("utf-8"))
-        self.install_ok()
+        before_root, before_cli = snapshot(self.root), snapshot(self.cli_root)
         removed = self.run_installer("-Uninstall")
-        self.assertEqual(0, removed.returncode, removed.stdout + removed.stderr)
-        expected = text.replace('],\n', ']\n').replace(
-            '"default_agent": /* key */ /* value */ "kael"', ' /* key */ /* value */ ')
-        self.assertEqual(expected.encode(), config.read_bytes())
-        self.assertNotIn("default_agent", self.config_object())
+        self.assertNotEqual(0, removed.returncode, removed.stdout + removed.stderr)
+        self.assertIn("GLOBAL_DEFAULT_AGENT_RECEIPT_MISSING", removed.stdout + removed.stderr)
+        self.assertEqual(before_root, snapshot(self.root))
+        self.assertEqual(before_cli, snapshot(self.cli_root))
 
 
 if __name__ == "__main__":

@@ -4,15 +4,30 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Target,
     [Parameter(Mandatory = $true)]
-    [ValidateSet('opencode', 'codex', 'all')]
+    [ValidateSet('opencode')]
     [string]$Harness
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$Utf8NoBom = [Text.UTF8Encoding]::new($false)
 $OpenCodeManifestRel = '.opencode/orchestrator-install.json'
-$CodexManifestRel = '.codex/orchestrator-install.json'
+$CurrentProjectInventory = @(
+    '.opencode/agents/argus.md',
+    '.opencode/agents/atlas.md',
+    '.opencode/agents/helios.md',
+    '.opencode/agents/kael.md',
+    '.opencode/agents/kovan.md',
+    '.opencode/agents/nox.md',
+    '.opencode/agents/orin.md',
+    '.opencode/agents/talos.md',
+    '.opencode/agents/thales.md',
+    '.opencode/agents/vera.md',
+    '.opencode/agents/veyra.md',
+    '.opencode/plugins/olympus-activity/activity.ts',
+    '.opencode/plugins/olympus-activity/tui.tsx',
+    '.opencode/scripts/worktree-setup.ps1',
+    'opencode.jsonc'
+)
 $writerLock = $null
 $pathComparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
     [StringComparison]::OrdinalIgnoreCase
@@ -75,26 +90,23 @@ function Get-PathHarness([string]$Relative) {
     if ($path -ceq 'opencode.jsonc' -or $path.StartsWith('.opencode/', [StringComparison]::OrdinalIgnoreCase)) {
         return 'opencode'
     }
-    if ($path -ceq 'CODEX.md' -or $path.StartsWith('.codex/', [StringComparison]::OrdinalIgnoreCase)) {
-        return 'codex'
-    }
-    Fail 'PROJECT_MANIFEST_INVALID' "Managed path cannot be attributed to a supported harness: $path"
+    Fail 'PROJECT_MANIFEST_INVALID' "Managed path is outside the current OpenCode inventory: $path"
 }
 
 function Get-InstalledHarnesses($Manifest) {
     $properties = @(Get-ManifestPropertyNames $Manifest)
     if ('installed_harnesses' -notin $properties) {
-        # Older project manifests were OpenCode-only before the dual-harness inventory existed.
-        return @('opencode')
+        Fail 'PROJECT_MANIFEST_INVALID' 'Manifest must explicitly declare only the OpenCode harness.'
     }
 
-    $values = @($Manifest.installed_harnesses | ForEach-Object { ([string]$_).ToLowerInvariant() })
-    $unique = @($values | Select-Object -Unique)
-    if ($values.Count -eq 0 -or $values.Count -ne $unique.Count -or
-        @($values | Where-Object { $_ -notin @('opencode', 'codex') }).Count -ne 0) {
-        Fail 'PROJECT_MANIFEST_INVALID' 'installed_harnesses is empty, duplicated, or unsupported.'
+    if ($Manifest.installed_harnesses -isnot [System.Collections.IList]) {
+        Fail 'PROJECT_MANIFEST_INVALID' 'installed_harnesses must be an array.'
     }
-    return @($values)
+    $values = @($Manifest.installed_harnesses | ForEach-Object { [string]$_ })
+    if ($values.Count -ne 1 -or $values[0] -cne 'opencode') {
+        Fail 'PROJECT_MANIFEST_INVALID' 'installed_harnesses must be exactly ["opencode"].'
+    }
+    return @('opencode')
 }
 
 function Get-HarnessProvenance($Manifest) {
@@ -136,30 +148,28 @@ function Get-HarnessProvenance($Manifest) {
 
 function Read-ProjectManifest([string]$Repo) {
     $openCodePath = Resolve-ManagedPath $Repo $OpenCodeManifestRel
-    $codexPath = Resolve-ManagedPath $Repo $CodexManifestRel
-    $hasOpenCode = Test-Path -LiteralPath $openCodePath -PathType Leaf
-    $hasCodex = Test-Path -LiteralPath $codexPath -PathType Leaf
-
-    if ($hasOpenCode -and $hasCodex) {
-        Fail 'PROJECT_MANIFEST_CONFLICT' 'Both project manifest locations exist; refusing ambiguous ownership metadata.'
+    $codexPath = Resolve-ManagedPath $Repo '.codex/orchestrator-install.json'
+    if (Test-Path -LiteralPath $codexPath) {
+        Fail 'PROJECT_MANIFEST_INVALID' 'Codex project manifests are unsupported and will not be migrated.'
     }
-    if (-not $hasOpenCode -and -not $hasCodex) {
+    $hasOpenCode = Test-Path -LiteralPath $openCodePath -PathType Leaf
+
+    if (-not $hasOpenCode) {
         Fail 'PROJECT_MANIFEST_MISSING' 'No Olympus project install manifest exists.'
     }
 
-    $path = if ($hasOpenCode) { $openCodePath } else { $codexPath }
+    $path = $openCodePath
     try {
         $manifest = [IO.File]::ReadAllText($path) | ConvertFrom-Json -AsHashtable -Depth 100
     } catch {
         Fail 'PROJECT_MANIFEST_INVALID' 'Olympus project manifest is invalid JSON.'
     }
 
-    if ($manifest.schema_version -ne 1 -or $null -eq $manifest.managed_files) {
-        Fail 'PROJECT_MANIFEST_INVALID' 'Unsupported project manifest schema or missing managed_files.'
-    }
-    $properties = @(Get-ManifestPropertyNames $manifest)
-    if ('scope' -in $properties -and [string]$manifest.scope -cne 'project') {
-        Fail 'PROJECT_MANIFEST_INVALID' 'Manifest does not describe a project-scope installation.'
+    if ($manifest.schema_version -ne 1 -or [string]$manifest.scope -cne 'project' -or
+        $manifest.installed_version -isnot [string] -or [string]::IsNullOrWhiteSpace($manifest.installed_version) -or
+        $manifest.installed_from_commit -isnot [string] -or [string]::IsNullOrWhiteSpace($manifest.installed_from_commit) -or
+        $null -eq $manifest.managed_files) {
+        Fail 'PROJECT_MANIFEST_INVALID' 'Current schema v1 project metadata is incomplete or unsupported.'
     }
     [void](Get-HarnessProvenance $manifest)
 
@@ -193,7 +203,7 @@ try {
     $manifestHashSnapshot = Get-FileHashText $state.Path
     $manifest = $state.Manifest
     $installed = @(Get-InstalledHarnesses $manifest)
-    $selected = if ($Harness -eq 'all') { @($installed) } else { @($Harness) }
+    $selected = @('opencode')
 
     foreach ($name in $selected) {
         if ($name -notin $installed) {
@@ -202,7 +212,9 @@ try {
     }
 
     $entries = @($manifest.managed_files)
-    if ($entries.Count -eq 0) { Fail 'PROJECT_MANIFEST_INVALID' 'managed_files is empty.' }
+    if ($entries.Count -ne $CurrentProjectInventory.Count) {
+        Fail 'PROJECT_MANIFEST_INVALID' 'managed_files is not the exact current OpenCode inventory.'
+    }
 
     $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $validated = [System.Collections.Generic.List[object]]::new()
@@ -210,6 +222,9 @@ try {
         $relative = Normalize-Relative ([string]$entry.path)
         if (-not $seen.Add($relative)) {
             Fail 'PROJECT_MANIFEST_INVALID' "Duplicate managed path: $relative"
+        }
+        if ($relative -cnotin $CurrentProjectInventory) {
+            Fail 'PROJECT_MANIFEST_INVALID' "Managed path is not in the current OpenCode inventory: $relative"
         }
         $owner = Get-PathHarness $relative
         if ($owner -notin $installed) {
@@ -238,21 +253,10 @@ try {
     }
 
     $remove = @($validated | Where-Object { $_.Harness -in $selected })
-    $keep = @($validated | Where-Object { $_.Harness -notin $selected })
     if ($remove.Count -eq 0) {
         Fail 'PROJECT_MANIFEST_INVALID' 'The selected harness has no managed files recorded.'
     }
 
-    $remainingHarnesses = @($installed | Where-Object { $_ -notin $selected })
-    $nextManifestPath = $null
-    if ($remainingHarnesses.Count -gt 0) {
-        $nextManifestRel = if ('opencode' -in $remainingHarnesses) { $OpenCodeManifestRel } else { $CodexManifestRel }
-        $nextManifestPath = Resolve-ManagedPath $repo $nextManifestRel
-        if (-not [string]::Equals($nextManifestPath, $state.Path, $pathComparison) -and
-            (Test-Path -LiteralPath $nextManifestPath)) {
-            Fail 'PROJECT_MANIFEST_CONFLICT' "Next manifest location already exists: $nextManifestRel"
-        }
-    }
 
     # All read-only rejection checks finish before acquiring the stable lock.
     # Revalidate the manifest and managed bytes under that lock before writing.
@@ -271,50 +275,13 @@ try {
             Fail 'TARGET_CHANGED' "Managed file changed after preflight: $($item.Relative)"
         }
     }
-    if ($null -ne $nextManifestPath -and
-        -not [string]::Equals($nextManifestPath, $state.Path, $pathComparison) -and
-        (Test-Path -LiteralPath $nextManifestPath)) {
-        Fail 'PROJECT_MANIFEST_CONFLICT' 'Next manifest destination appeared after preflight.'
-    }
-
     Assert-OlympusTargetWriterLock $writerLock
     foreach ($item in $remove) {
         [IO.File]::Delete($item.Full)
         Write-Output "REMOVED: $($item.Relative)"
     }
 
-    if ($remainingHarnesses.Count -eq 0) {
-        [IO.File]::Delete($state.Path)
-    } else {
-        $properties = @(Get-ManifestPropertyNames $manifest)
-        if ('installed_harnesses' -in $properties) {
-            $manifest['installed_harnesses'] = @($remainingHarnesses)
-        } else {
-            $manifest['installed_harnesses'] = @($remainingHarnesses)
-        }
-        $manifest['managed_files'] = @($keep | ForEach-Object { $_.Entry })
-        if ('harness_provenance' -in $properties) {
-            $provenance = Get-HarnessProvenance $manifest
-            foreach ($name in @($provenance.Keys)) {
-                if ($name -cin $selected) { $provenance.Remove($name) }
-            }
-            if ($provenance.Count -gt 0) {
-                $manifest['harness_provenance'] = $provenance
-            } else {
-                [void]$manifest.Remove('harness_provenance')
-            }
-        }
-        $manifestText = ($manifest | ConvertTo-Json -Depth 100) + [Environment]::NewLine
-
-        $parent = Split-Path -Parent $nextManifestPath
-        if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
-            [IO.Directory]::CreateDirectory($parent) | Out-Null
-        }
-        [IO.File]::WriteAllText($nextManifestPath, $manifestText, $Utf8NoBom)
-        if (-not [string]::Equals($nextManifestPath, $state.Path, $pathComparison)) {
-            [IO.File]::Delete($state.Path)
-        }
-    }
+    [IO.File]::Delete($state.Path)
 
     Write-Output "OLYMPUS_PROJECT_UNINSTALL: $Harness REMOVED_MANAGED_RESOURCES_ONLY"
 } catch {

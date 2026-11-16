@@ -1,5 +1,9 @@
 ## v0.7.0
 
+> Historical release record: statements below describe v0.7.0 only, not current
+> support or routes. Olympus currently supports OpenCode only; public
+> install/update/uninstall is global/OpenCode-only.
+
 🏛️ **Safer configuration changes, clearer diagnostics, and bounded OpenCode lifecycle handling.**
 
 ### Highlights

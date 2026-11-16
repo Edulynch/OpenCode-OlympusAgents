@@ -1,18 +1,28 @@
 # OpenCode Git worktrees with Olympus
 
-Olympus is installed separately in each project checkout. A new Git worktree does **not** inherit untracked Olympus files from the base checkout.
+This optional helper provisions a linked worktree from a base checkout that
+already has a **current-format, managed OpenCode project installation**. It does
+not install Olympus. The public Fast Install is global-only: a global
+installation does not create a project manifest or require this helper for
+global agent discovery. Complete current-format project installations can
+remain valid regardless of the release that created them.
 
 | | Requirement |
 |---|---|
 | Harness | OpenCode V2, project-installed Olympus |
 | System | Windows, Git, PowerShell 7 |
-| Source | A trusted checkout with a valid Olympus project manifest |
+| Source | A trusted checkout with a valid current-format OpenCode project manifest |
 | Target | Another linked worktree of the **same** Git repository |
 | Setup | Explicit opt-in; not a global agent installation |
 
-## 1. Install in the base checkout
+## 1. Verify the base checkout
 
-Run the [Fast Install command](../README.md#fast-install) and confirm it completed successfully.
+Confirm that the base checkout already contains its current-format
+`.opencode/orchestrator-install.json` manifest and managed OpenCode resources.
+Public install/update/uninstall does not create project installations. An
+unsupported or incomplete older format must fail closed; this helper does not
+convert, delete, or adopt it. If removal is needed, use the release that owns
+that installation.
 
 ## 2. Enable automatic setup for new worktrees
 

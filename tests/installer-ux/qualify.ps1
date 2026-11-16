@@ -104,24 +104,17 @@ try {
         }
     }
 
-    $rejectedWrappers = 0
-    foreach ($action in @('install','uninstall')) {
-        foreach ($scope in @('project','global')) {
-            foreach ($harness in @('opencode','codex','all')) {
-                $result = Invoke-Subject "$action/$scope/$harness.ps1"
-                if ($scope -eq 'global' -and $harness -eq 'opencode') {
-                    Check "ALIAS_${action}_GLOBAL_OPENCODE" ($result.Code -eq 0 -and $result.Dispatched) $result.Text
-                } else {
-                    Check "WRAPPER_${action}_${scope}_${harness}_REJECTED" (
-                        $result.Code -ne 0 -and $result.Text -match 'PUBLIC_(?:INSTALL|UNINSTALL)_ROUTE_UNSUPPORTED' -and
-                        -not $result.Dispatched -and $script:downloads.Count -eq 0 -and $script:metadataCalls -eq 0
-                    ) $result.Text
-                    $rejectedWrappers++
-                }
-            }
-        }
+    foreach ($entry in @(
+        @('install/global/opencode.ps1','install'),
+        @('uninstall/global/opencode.ps1','uninstall')
+    )) {
+        $result = Invoke-Subject $entry[0]
+        Check "CURRENT_GLOBAL_OPENCODE_ALIAS_$($entry[1].ToUpperInvariant())" (
+            $result.Code -eq 0 -and $result.Dispatched -and
+            $result.Dispatch.Contains($entry[1]) -and
+            $result.Dispatch -notmatch '-Harness|-Scope|-Target'
+        ) $result.Text
     }
-    Check 'EXACTLY_TEN_UNSUPPORTED_WRAPPERS' ($rejectedWrappers -eq 10)
     foreach ($selection in @(@{Scope='project'}, @{Harness='codex'}, @{Harness='all'}, @{Target='C:\not-used'})) {
         $parameters = @{ SourceRoot='C:\must-not-be-read' }
         foreach ($key in $selection.Keys) { $parameters[$key] = $selection[$key] }

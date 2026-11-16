@@ -4,11 +4,11 @@ Esta guía registra la auditoría documental de Spec Kit realizada contra Olympu
 
 ## Decisión de versión — 2026-10-26
 
-**Decisión: KEEP_PINNED — Spec Kit 1.1.0.** La CLI instalada informa `1.1.0`; `.specify/integration.json` registra OpenCode como única integración activa y los manifests Codex/OpenCode indican `1.1.0`. Los wrappers de skills/comandos Codex presentes en el checkout no registran una integración Codex activa. El método documentado de preparación instala el CLI desde el tag versionado `v1.1.0` con `uv`.
+**Decisión histórica: KEEP_PINNED — Spec Kit 1.1.0 (2026-10-26).** La auditoría de esa fecha registró OpenCode como integración activa y también inspeccionó manifests/wrappers de Spec Kit. Ese inventario es evidencia histórica del checkout entonces; no define soporte de Olympus ni autoriza habilitar una integración Codex.
 
 La [última versión estable consultada](https://github.com/github/spec-kit/releases/tag/v1.2.3), publicada el 2026-10-22, incluye mejoras de rutas PowerShell, salida JSON, despacho/propiedad de archivos, integración y workflows. La [guía oficial de upgrade](https://github.com/github/spec-kit/blob/v1.2.3/docs/upgrade.md) y `specify self check`/`specify self upgrade --dry-run --tag v1.2.3` se consultaron sin aplicar cambios. No se encontró una corrección que resuelva un defecto demostrado en Olympus ni una función necesaria para los flujos locales actuales; el beneficio observado no justifica regenerar los recursos de integración ni volver a validar en este cambio las personalizaciones de constitución y overrides. No se afirma compatibilidad runtime con 1.2.3.
 
-La comprobación local de 1.1.0 quedó satisfecha sin reescrituras: 32 rutas de manifests presentes; 20 wrappers con hashes exactos y las otras 12 rutas compartidas coincidentes después de normalizar CRLF/LF; cero rutas ausentes o inválidas y cero diferencias de contenido. Los seis scripts PowerShell pasaron análisis AST, los tres overrides resolvieron desde Spec Kit, `create-new-feature -DryRun -Json` devolvió `FEATURE_NUM=002`, y self-check/dry-run finalizaron correctamente sin mutaciones. La ejecución runtime de OpenCode y Codex queda **NOT RUN**; Codex continúa registrado solo como wrappers, no como integración activa.
+La comprobación local de 1.1.0 quedó satisfecha sin reescrituras: 32 rutas de manifests presentes; 20 wrappers con hashes exactos y las otras 12 rutas compartidas coincidentes después de normalizar CRLF/LF; cero rutas ausentes o inválidas y cero diferencias de contenido. Los seis scripts PowerShell pasaron análisis AST, los tres overrides resolvieron desde Spec Kit, `create-new-feature -DryRun -Json` devolvió `FEATURE_NUM=002`, y self-check/dry-run finalizaron correctamente sin mutaciones. Estos resultados pertenecen a la auditoría de esa fecha, no a la cualificación actual de Olympus.
 
 Se conserva 1.1.0 y sus personalizaciones, sin ejecutar `integration upgrade`, `--force`, `refresh` ni `init --here`. Revisar de nuevo la versión de forma ligera durante la preparación de releases o trimestralmente, y antes si Spec Kit cambia los mecanismos de integración usados aquí. Toda actualización debe ensayarse por tag en un checkout aislado, revisar el diff completo y repetir las comprobaciones de manifests y overrides antes de modificar este checkout.
 
@@ -64,27 +64,26 @@ El resolver existente permite plantillas de proyecto en `templates/overrides/` a
 
 Los manifests `integrations/codex.manifest.json` y `integrations/opencode.manifest.json` registran diez rutas y hashes cada uno; no incluyen los wrappers ni prueban que estén disponibles. `integration.json` registra sólo OpenCode. Este PR regenera los wrappers localmente por checkout con Spec Kit oficial v1.1.0 (tag `v1.1.0`, commit `f1d3a4f8337ebbd3ae22760a9c12e3352b93a175`), para no copiar wrappers upstream al repositorio. Es una decisión de este PR, no una prohibición de Spec Kit de versionarlos. Véase la [referencia oficial de integraciones fijada a v1.1.0](https://github.com/github/spec-kit/blob/f1d3a4f8337ebbd3ae22760a9c12e3352b93a175/docs/reference/integrations.md).
 
-Desde la raíz del checkout, prepara los wrappers en PowerShell 7 con `uv`, Git, Python 3.11+ y el runtime del adaptador que se usará:
+Para la integración Spec Kit actualmente registrada, prepara los wrappers OpenCode desde la raíz del checkout con PowerShell 7, `uv`, Git y Python 3.11+:
 
 ```powershell
 uv tool install specify-cli --from git+https://github.com/github/spec-kit.git@v1.1.0
 specify version
 specify integration upgrade opencode --script ps
-specify integration install codex --script ps # opcional si se usará Codex
 specify integration status
 ```
 
-`install opencode` será no-op porque `integration.json` ya lo registra; `upgrade opencode` regenera sus wrappers. `install codex` registra Codex y conserva OpenCode como predeterminado. Confirma `1.1.0` con `specify version`; los cambios locales a manifests e `integration.json` aparecen en `git diff` y no obligan a hacer commit.
+`upgrade opencode` regenera los wrappers de esa integración. Confirma `1.1.0` con `specify version`; los cambios locales a manifests e `integration.json` aparecen en `git diff` y no obligan a hacer commit. Do not install another integration as part of Olympus setup.
 
-Como el perfil Codex trata `.opencode/` como sólo lectura, un operador debe ejecutar estos comandos desde la raíz y en terminal. No uses `--force`, `specify init --here` ni `refresh` indiscriminado: esto prepara wrappers de Spec Kit, no el bootstrap de Olympus, y no autoriza modificar Olympus Core, perfiles ni outputs productivos. Versionar wrappers sería posible con ownership y política de actualización explícitos y acceso legítimo a `.opencode/`, pero no es necesario para este PR.
+No uses `--force`, `specify init --here` ni `refresh` indiscriminado: esto prepara wrappers de Spec Kit, no el bootstrap de Olympus, y no autoriza modificar Olympus Core, perfiles ni outputs productivos. The local audit and its exact manifest inventory remain a dated record, not a current Olympus runtime compatibility claim.
 
 En la prueba aislada desde `git archive HEAD` se generaron 20 wrappers con hashes exactos de sus manifests; el estado final mostró `missing=0`, `invalid=0` y `WARNING` por 12 `shared modified` que coinciden con el baseline al normalizar CRLF a LF. Sólo cambiaron tres metadatos (`integration.json` y los manifests Codex/OpenCode, con timestamps); constitución, overrides, specs históricas, Core y outputs productivos quedaron intactos. Esto valida la CLI aislada, no los runtimes ni el workflow completo.
 
 ## Principios y referencias canónicas
 
-La constitución adopta Olympus Core como fuente canónica y define límites de adaptadores, autoridad de Kael, controles reales del runtime, simplicidad, TFR, compatibilidad, integridad de instalaciones, evidencia y alcance autorizado. Su versión vigente es **2.0.0** (ratificada inicialmente como **1.0.0** el 2026-10-14), con la enmienda #28 del 2026-11-07; el historial conserva que no había una versión constitucional ratificada previa.
+La constitución adopta Olympus Core como fuente canónica y define límites de adaptadores, autoridad de Kael, controles reales del runtime, simplicidad, TFR, integridad de instalaciones, evidencia y alcance autorizado. Su versión vigente es **3.0.0** (ratificada inicialmente como **1.0.0** el 2026-10-14), con enmiendas el 2026-11-07 y 2026-11-16.
 
-La constitución enlaza los documentos técnicos canónicos en lugar de duplicarlos: [Olympus Core](../olympus/README.md), [roles](../olympus/roles/), [identidades](../olympus/core/identities.toml), [modelos](../olympus/core/models.toml), [políticas](../olympus/policies/), [capacidades](../olympus/harnesses/capabilities.toml), [harnesses](../docs/HARNESSES.md), [compatibilidad de Codex](../docs/CODEX-COMPATIBILITY.md), [desarrollo](../docs/DEVELOPMENT.md), [release v0.4.9](../docs/RELEASE-v0.4.9.md) y [contribución](../CONTRIBUTING.md).
+La constitución enlaza los documentos técnicos canónicos en lugar de duplicarlos: [Olympus Core](../olympus/README.md), [roles](../olympus/roles/), [identidades](../olympus/core/identities.toml), [modelos](../olympus/core/models.toml), [políticas](../olympus/policies/), [capacidades](../olympus/harnesses/capabilities.toml), [harnesses](../docs/HARNESSES.md), [desarrollo](../docs/DEVELOPMENT.md), [release v0.4.9](../docs/RELEASE-v0.4.9.md) y [contribución](../CONTRIBUTING.md). El soporte vigente es OpenCode solamente; las notas históricas de Codex permanecen en el [baseline inmutable](https://github.com/Edulynch/OpenCode-OlympusAgents/tree/8534e94337797f0c734d5abcf91b10a13b013c62).
 
 ## Uso de las plantillas
 

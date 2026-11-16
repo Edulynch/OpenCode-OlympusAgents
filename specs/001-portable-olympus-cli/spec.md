@@ -1,12 +1,34 @@
 # Feature Specification: CLI portátil Olympus y configuración de modelos/agentes
 
+> **Propuesta histórica**: los requisitos y alternativas iniciales que siguen
+> describen la feature antes del clean break OpenCode-only. El límite actual está
+> en la enmienda vigente y en `contracts/cli.md`; el resto conserva evidencia
+> fechada y no es un contrato de soporte o compatibilidad actual.
+
 **Feature Branch**: `001-portable-olympus-cli` (rama preexistente; esta sesión no crea ni cambia ramas)  
 **Created**: 2026-10-14  
 **Status (2026-11-08)**: Slice A SHIPPED; Slice B **ACEPTADA** (T019 Windows, T020 Linux, G2 PASS); Slice C3 apply project, C4 doctor project y C5 install/uninstall routing implementados; C6 añade asignaciones al preview project y sus regresiones focalizadas pasan localmente (sin cualificación hosted); scope global, resto de Slice C y feature completa siguen pendientes; macOS **NOT VERIFIED**.
 **Documentation Mode**: New  
 **Baseline**: `master` con Slice A integrada por PR [#69](https://github.com/Edulynch/OpenCode-OlympusAgents/pull/69), commit `b7f8404061847a58d5e8122e4baa2fa643b69a46`. Baseline histórico: post-PR #68 `1900da45250ddec817a6141396e0ec1268b2dfca`; producto v0.4.9 `c30a19dd410b1815f4591b204615cae0dd9e9a5f`.\
 **Restricciones de especificación inicial (históricas)**: Sólo especificación; sin implementación, planes, tareas, commits, push ni pruebas pesadas. Conservar fuentes, renderer, roles, diferencias de adaptadores y protecciones de instalación. Windows/Linux como objetivos; macOS sin cualificación acreditada. Excluir #66 y #67.\
-**Evidence Reviewed**: Issue [#64](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/64) completo, incluidos aceptación y límites de ejecución; sin comentarios al consultar el 2026-10-14. Constitución [1.0.0](../../.specify/memory/constitution.md). Plantilla activa [spec-template](../../.specify/templates/overrides/spec-template.md), resuelta mediante el stack de Spec Kit. Fuentes y documentos del baseline: [models.toml](../../olympus/core/models.toml), [identities.toml](../../olympus/core/identities.toml), [capabilities.toml](../../olympus/harnesses/capabilities.toml), [renderer](../../scripts/render_harnesses.py), [bootstrap](../../scripts/bootstrap.ps1), [instalación global](../../scripts/global-install.ps1), [desinstalación de proyecto](../../scripts/project-uninstall.ps1), [entrypoint público](../../install.ps1), [desarrollo](../../docs/DEVELOPMENT.md), [release](../../docs/RELEASE-v0.4.9.md), [compatibilidad Codex](../../docs/CODEX-COMPATIBILITY.md) y retrospectivas [001](../retrospective/v0.4.9/001-core-and-adapters/spec.md), [006](../retrospective/v0.4.9/006-public-installation-ux/spec.md) y [007](../retrospective/v0.4.9/007-managed-installation/spec.md).
+**Evidence Reviewed**: Issue [#64](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/64) completo, incluidos aceptación y límites de ejecución; sin comentarios al consultar el 2026-10-14. Constitución [1.0.0](../../.specify/memory/constitution.md). Plantilla activa [spec-template](../../.specify/templates/overrides/spec-template.md), resuelta mediante el stack de Spec Kit. Fuentes y documentos del baseline: [models.toml](../../olympus/core/models.toml), [identities.toml](../../olympus/core/identities.toml), [capabilities.toml](../../olympus/harnesses/capabilities.toml), [renderer](../../scripts/render_harnesses.py), [bootstrap](../../scripts/bootstrap.ps1), [instalación global](../../scripts/global-install.ps1), [desinstalación de proyecto](../../scripts/project-uninstall.ps1), [entrypoint público](../../install.ps1), [desarrollo](../../docs/DEVELOPMENT.md), [release](../../docs/RELEASE-v0.4.9.md), [guía histórica Codex del baseline inmutable](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/docs/CODEX-COMPATIBILITY.md) y retrospectivas [001](../retrospective/v0.4.9/001-core-and-adapters/spec.md), [006](../retrospective/v0.4.9/006-public-installation-ux/spec.md) y [007](../retrospective/v0.4.9/007-managed-installation/spec.md).
+
+## Current support amendment — 2026-11-16
+
+This original feature proposal records historical dual-adapter and public
+project-install alternatives; those are not current product routes or
+compatibility promises. OpenCode is the only currently supported runtime.
+Public install/update/uninstall is fixed to global OpenCode and rejects the old
+scope, harness, target, and version selectors. Project-scoped OpenCode model
+overrides, config list/check/apply/recovery, status, and read-only doctor remain
+separate CLI operations.
+
+Current installation formats fail closed if incomplete or unsupported; there is
+no automatic conversion, adoption, or deletion. Complete current-format
+installations remain valid regardless of which release created them. Use the
+matching release to remove an unsupported older installation. The current
+command/manifest details are specified in [contracts/cli.md](contracts/cli.md);
+dated proposal and evidence below are retained as history, not current support.
 
 **Input**: Especificar `001-portable-olympus-cli`, primera nueva funcionalidad bajo Spec Kit, a partir del issue #64 y la constitución 1.0.0: consultar, configurar y aplicar asignaciones de modelos y agentes reutilizando la arquitectura existente.
 

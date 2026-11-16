@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Support boundary
+
+- Make OpenCode the only currently supported Olympus runtime; prior Codex behavior remains historical evidence, not a compatibility promise.
+- Keep public install/update/uninstall global and OpenCode-only. Project-scoped OpenCode configuration, overrides, apply/recovery, status, and read-only doctor remain separate CLI behavior.
+- Reject unsupported or incomplete installation formats without automatic conversion, adoption, or deletion. Existing complete current-format installations remain valid; remove an older unsupported installation with its matching release.
+- This section is unreleased; it assigns no new version and records no publication.
+
+### Breaking changes
+
+- Retire the `-Harness codex` and `-Harness all` selectors, project/Codex installer wrappers, and the Codex adapter. Keep `upgrade` as an alias of `update`. Complete current-format installations remain accepted; older or incomplete formats are not migrated and must be removed with their matching release.
+
 ## v0.8.0
 
 ### Highlights
@@ -504,7 +515,7 @@ Each command verifies only the selected managed project-local harness subset and
 ### Highlights
 
 - Add a contributor-facing qualification entry point with the `FAST`, `FULL`, and `RUNTIME` profiles. FAST and FULL remain offline and deterministic; RUNTIME is separate and contains only supported runtime boundaries. Authority Runtime uses an isolated, hermetic fixture environment ([qualification details](docs/DEVELOPMENT.md#unified-contributor-profiles-issue-11)).
-- Phase 11 Integrated Routing Qualification is **SHIPPED** with no pending native cases; Case I remains guided PARTIAL and Argus/Thales same-session follow-up runtime coverage remains NOT_EXERCISED ([closure evidence](tests/phase11-integrated-routing/baseline.md)).
+- Phase 11 Integrated Routing Qualification is **SHIPPED** with no pending native cases; Case I remains guided PARTIAL and Argus/Thales same-session follow-up runtime coverage remains NOT_EXERCISED ([closure evidence](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/baseline.md)).
 - Phase 12 cross-harness evaluation is **CLOSED**: 3 matched pairs / 6 verified executions, with PASS limited to tested invariants; capability gaps remain and no total parity or winner is claimed ([results](docs/history/PHASE12-CROSS-HARNESS-RESULTS.md)).
 - [Issue #10 is CLOSED](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10) after the maintenance-specific exact-field handoff fix was integrated ([commit](https://github.com/Edulynch/OpenCode-OlympusAgents/commit/a83847b84d6603aed144f5a8ce4b77de8a48fe32)); its Runtime fidelity PASS predates integration, and no post-integration smoke was repeated.
 - Retain the Dual Harness Installer with explicit `-Harness opencode`, `-Harness codex`, and `-Harness all` entrypoints. Installation is additive; `installed_harnesses` records manifest ownership, and existing legacy OpenCode installations remain upgradeable. Project scope remains the default, and installation and uninstall are available for both project and global scope.

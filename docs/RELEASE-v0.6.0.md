@@ -1,5 +1,9 @@
 ## v0.6.0
 
+> Historical release record: statements below describe v0.6.0 only, not current
+> support or routes. Olympus currently supports OpenCode only; public
+> install/update/uninstall is global/OpenCode-only.
+
 🏛️ **One prompt. Eleven roles. One `olympus` CLI.**
 
 ### Highlights

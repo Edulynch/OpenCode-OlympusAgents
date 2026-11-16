@@ -1097,17 +1097,14 @@ try {
     # inventoried only in their dedicated directories, while other generated
     # destinations are explicit. Do not recurse whole adapter trees, where
     # unrelated project files such as SpecKit commands may also reside.
-    $managedPaths = @('opencode.jsonc', 'CODEX.md', '.opencode/orchestrator-install.json',
-        '.codex/orchestrator-install.json')
+    $managedPaths = @('opencode.jsonc', '.opencode/orchestrator-install.json')
     $managedPaths += @(Get-ChildItem -LiteralPath (Join-Path $root '.opencode/agents') -Filter '*.md' -File -Recurse -Force | ForEach-Object {
         $_.FullName.Substring(([IO.Path]::GetFullPath($root).TrimEnd([char[]]@('\','/')).Length + 1)).Replace('\','/')
     })
     $managedPaths += @('.opencode/plugins/olympus-activity/activity.ts',
         '.opencode/plugins/olympus-activity/tui.tsx', '.opencode/scripts/worktree-setup.ps1')
-    $managedPaths += @(Get-ChildItem -LiteralPath (Join-Path $root '.codex/agents') -Filter '*.toml' -File -Recurse -Force | ForEach-Object {
-        $_.FullName.Substring(([IO.Path]::GetFullPath($root).TrimEnd([char[]]@('\','/')).Length + 1)).Replace('\','/')
-    })
-    $managedPaths += '.codex/config.toml'
+    $managedPaths += @('.opencode/plugins/olympus-activity/activity.ts',
+        '.opencode/plugins/olympus-activity/tui.tsx', '.opencode/scripts/worktree-setup.ps1')
     # Verify Windows paths really became repository-relative forward-slash
     # paths; a malformed path must never make the DENY assertion meaningless.
     Check 'AUTH9B_WINDOWS_MANAGED_PATH_NORMALIZED' (

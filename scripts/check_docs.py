@@ -64,10 +64,6 @@ def markdown_files() -> list[Path]:
         raise RuntimeError("Git could not enumerate repository Markdown.")
 
     roots = {"docs", "specs", "tests", "olympus", ".specify"}
-    excluded_fixtures = {
-        ("tests", "codex", "fixtures"),
-        ("tests", "phase11-integrated-routing", "fixtures"),
-    }
     files: set[Path] = set()
     for raw_name in result.stdout.split(b"\0"):
         if not raw_name:
@@ -77,8 +73,6 @@ def markdown_files() -> list[Path]:
             continue
         parts = relative.parts
         if len(parts) == 1 or parts[0] in roots:
-            if any(parts[: len(prefix)] == prefix for prefix in excluded_fixtures):
-                continue  # Synthetic Markdown fixtures can intentionally name absent paths.
             files.add((ROOT / relative).resolve())
     return sorted(files)
 

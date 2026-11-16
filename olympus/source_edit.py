@@ -489,9 +489,10 @@ def _validate_candidate(candidate: Any, source: Path) -> tuple[tuple[Any, ...], 
         )
     try:
         old_models, policies, capabilities, identities, roles = renderer.checked_sources(source)
-        old_outputs = renderer.outputs_for(source, "all")
+        old_outputs = renderer.outputs_for(source, "opencode")
         if not isinstance(old_outputs, dict) or not old_outputs:
             raise BatchConflict("Canonical renderer returned no managed outputs")
+        old_outputs[source / "docs" / "HARNESS-CAPABILITIES.md"] = renderer.capability_doc(capabilities)
     except BatchError:
         raise
     except Exception as error:
@@ -573,11 +574,11 @@ def _validate_candidate(candidate: Any, source: Path) -> tuple[tuple[Any, ...], 
         if operation == "models set-family":
             family = request.get("family")
             model_ids = request.get("models")
-            if not isinstance(family, str) or not isinstance(model_ids, dict):
+            if (not isinstance(request, dict) or set(request) != {"family", "models"} or not isinstance(family, str)
+                    or not isinstance(model_ids, dict) or set(model_ids) != {"opencode"}):
                 raise BatchConflict("Family candidate request is malformed")
             expected_updates = {
                 ("families", family, "opencode"): model_ids.get("opencode"),
-                ("families", family, "codex"): model_ids.get("codex"),
             }
         else:
             role = request.get("role")
@@ -599,7 +600,6 @@ def _validate_candidate(candidate: Any, source: Path) -> tuple[tuple[Any, ...], 
 
         try:
             new_outputs = renderer.opencode_outputs(source, new_models, policies, identities, roles)
-            new_outputs.update(renderer.codex_outputs(source, new_models, policies, identities, roles))
             new_outputs[source / "docs" / "HARNESS-CAPABILITIES.md"] = renderer.capability_doc(capabilities)
         except Exception as error:
             raise BatchConflict(f"Renderer rejected candidate models.toml: {error}") from error
@@ -1208,9 +1208,10 @@ def _live_batch(
 
     try:
         renderer = _load_checked_renderer(source)
-        outputs = renderer.outputs_for(source, "all")
+        outputs = renderer.outputs_for(source, "opencode")
         if not isinstance(outputs, dict) or not outputs:
             raise BatchConflict("Canonical renderer returned no managed outputs during recovery")
+        outputs[source / "docs" / "HARNESS-CAPABILITIES.md"] = renderer.capability_doc(renderer.checked_sources(source)[2])
         output_paths = {path.relative_to(source).as_posix() for path in outputs}
     except BatchError:
         raise

@@ -2,9 +2,9 @@
 
 ## Start here
 
-The new [Fast Install](../README.md#fast-install) is global and OpenCode-only. It has no project/harness selectors or menus, and the current directory never selects the installation target. It sets up the per-user `olympus` command and its user PATH entry; open a new PowerShell 7 shell afterward.
+The [Fast Install](../README.md#fast-install) is global and OpenCode-only. It has no project/harness selectors or menus, and the current directory never selects the installation target. It sets up the per-user `olympus` command and its user PATH entry; open a new PowerShell 7 shell afterward.
 
-**Publication prerequisite:** this source prepares a future release. The immutable `v0.7.0` release has no generic installer asset. The URL below is intended, not a currently working endpoint. Publish a new release using the [asset publication procedure](DEVELOPMENT.md#publishing-the-generic-installer-asset); never modify `v0.7.0` or execute code from `master`.
+Choose the latest release below or [install a specific version](#install-a-specific-version). Do not execute installers from a mutable `master` URL.
 
 Then use `olympus version` and `olympus update` from any directory. The public [Fast Uninstall](../README.md#fast-uninstall) entrypoint and `olympus uninstall` remove only managed resources and Olympus's PATH entry.
 
@@ -29,6 +29,14 @@ olympus uninstall
 Invoke the downloaded script block with `&` as shown.
 
 Both source entrypoints, `install-olympus.ps1` and `uninstall-olympus.ps1`, are fixed to global OpenCode. Install accepts `-DryRun` or `-Update`; uninstall has no selection arguments. No interactive selection is required.
+
+### Install a specific version
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.8.0/install.ps1')))
+```
+
+The tagged `install.ps1` defaults to its embedded version and downloads the exact tag archive, so no extra `-Version` argument is needed. This bypasses `latest` selection. A versioned URL for `install-olympus.ps1` would not pin the installed version: that bootstrap still selects the latest release.
 
 ### Removed installation selectors
 

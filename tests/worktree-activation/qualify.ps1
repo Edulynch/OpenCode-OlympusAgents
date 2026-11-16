@@ -22,6 +22,12 @@ $originalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
 $originalBase = [Environment]::GetEnvironmentVariable('OPENCODE_WORKTREE_BASE','Process')
 $originalTarget = [Environment]::GetEnvironmentVariable('OPENCODE_WORKTREE_PATH','Process')
 $utf8 = [Text.UTF8Encoding]::new($false)
+. (Join-Path $root 'tests/installer-test-environment.ps1')
+$isolatedEnvironment = $null
+$candidateVersionMatch = [regex]::Match([IO.File]::ReadAllText((Join-Path $root 'install.ps1')),
+    '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''')
+if (-not $candidateVersionMatch.Success) { throw 'CANDIDATE_VERSION_MISSING' }
+$candidateVersion = $candidateVersionMatch.Groups[1].Value
 
 function Check([string]$Id, [bool]$Condition, [string]$Evidence = '') {
     if (-not $Condition) {
@@ -95,6 +101,7 @@ try {
         throw 'PLATFORM_UNQUALIFIED: OpenCode V2 worktree startup qualification is Windows-only.'
     }
     [IO.Directory]::CreateDirectory($run) | Out-Null
+    $isolatedEnvironment = Enter-OlympusInstallerTestEnvironment $run
     [IO.Directory]::CreateDirectory($treeRoot) | Out-Null
     [IO.Directory]::CreateDirectory($mockBin) | Out-Null
 
@@ -140,7 +147,7 @@ try {
     try {
         [IO.File]::AppendAllText($legacyAgent, "`n# intentional v0.4.4 drift probe`n", $utf8)
         $legacySnapshot = Get-Worktree-Snapshot $main
-        $rejectedUpgrade = Run-Script (Join-Path $root 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$root)
+        $rejectedUpgrade = Run-Script (Join-Path $root 'scripts/bootstrap.ps1') @('-Target',$main,'-Harness','opencode','-SourceVersion',$candidateVersion)
         Check 'V044_MANAGED_DRIFT_BLOCKS_UPGRADE_WITHOUT_WRITES' (
             $rejectedUpgrade.Code -ne 0 -and
             $rejectedUpgrade.Text -match 'MANAGED_FILE_DRIFT' -and
@@ -150,8 +157,8 @@ try {
     }
 
     # Upgrade the project checkout from the immutable stable baseline to the
-    # candidate installer before using its opted-in native startup hook.
-    $candidateUpgrade = Run-Script (Join-Path $root 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$root)
+    # internal project engine before using its opted-in native startup hook.
+    $candidateUpgrade = Run-Script (Join-Path $root 'scripts/bootstrap.ps1') @('-Target',$main,'-Harness','opencode','-SourceVersion',$candidateVersion)
     Check 'V044_TO_CANDIDATE_UPGRADE' ($candidateUpgrade.Code -eq 0 -and
         (Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json).managed_files.path -contains '.opencode/scripts/worktree-setup.ps1') $candidateUpgrade.Text
     # A successful upgrade must retire legacy maintenance resources only when owned.
@@ -312,4 +319,5 @@ try {
         }
         Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction SilentlyContinue
     }
+    if ($null -ne $isolatedEnvironment) { Exit-OlympusInstallerTestEnvironment $isolatedEnvironment }
 }

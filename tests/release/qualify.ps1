@@ -719,6 +719,7 @@ try {
 
     $readme = [IO.File]::ReadAllText((Join-Path $source 'README.md'))
     $fastInstallUrl = 'https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1'
+    $pinnedInstallCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($script:CandidateVersion)/install.ps1')))"
     function Get-ReadmePowerShellCodeBlocks([string]$Markdown) {
         $blocks = [System.Collections.Generic.List[string]]::new()
         foreach ($block in [regex]::Matches($Markdown, '(?ims)^```(?:powershell|pwsh|ps1)[ \t]*\r?\n(?<body>.*?)^```[ \t]*\r?$')) {
@@ -794,15 +795,17 @@ try {
             }
             if ($hasRemoteCommand) { $remoteStatements.Add($statement) }
         }
-        if ($directInstallerFound -or $remoteStatements.Count -ne 1) { return $false }
+        if ($directInstallerFound -or $remoteStatements.Count -ne 2) { return $false }
         $installCount = 0
+        $pinnedInstallCount = 0
         $uninstallCount = 0
         foreach ($statement in $remoteStatements) {
             if (Test-ReadmeExpectedBootstrapStatement $statement $InstallCommand) { $installCount++ }
+            elseif (Test-ReadmeExpectedBootstrapStatement $statement $pinnedInstallCommand) { $pinnedInstallCount++ }
             elseif (Test-ReadmeExpectedBootstrapStatement $statement $UninstallCommand) { $uninstallCount++ }
             else { return $false }
         }
-        return ($installCount -eq 1 -and $uninstallCount -eq 0)
+        return ($installCount -eq 1 -and $pinnedInstallCount -eq 1 -and $uninstallCount -eq 0)
     }
     $fastInstallCommand = "& ([scriptblock]::Create((irm '$fastInstallUrl')))"
     $fastUninstallCommand = 'olympus uninstall'
@@ -814,7 +817,7 @@ try {
         $readme.Contains($fastInstallUrl) -and
         $readme.Contains('olympus uninstall') -and
         $readme.Contains('published, immutable') -and
-        $readme -match '(?i)future release' -and
+        $readme.Contains($pinnedInstallCommand) -and
         $readme -match '(?i)global and OpenCode-only' -and
         -not $readme.Contains('/' + $script:CandidateVersion + '/install-olympus.ps1') -and
         -not $readme.Contains('/' + $script:CandidateVersion + '/uninstall-olympus.ps1'))
@@ -888,7 +891,7 @@ try {
         $installGuide.Contains($fastInstallUrl) -and $installGuide.Contains($fastUninstallCommand) -and
         $installGuide.Contains($script:CandidateVersion) -and
         $installGuide.Contains('https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest') -and
-        $installGuide.Contains('future release') -and
+        $installGuide.Contains($pinnedInstallCommand) -and
         $installGuide.Contains('immutable=true') -and
         $installGuide.Contains('time-zone-aware') -and
         $installGuide.Contains('published_at') -and

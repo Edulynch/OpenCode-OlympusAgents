@@ -34,9 +34,7 @@ After installation, open OpenCode in your project and try a prompt:
 
 ## Fast Install
 
-⚠️ **Prepared for a future release; not available from v0.7.0.** The immutable `v0.7.0` release has no `install-olympus.ps1` asset. The versionless command below requires a new release with that asset attached before publication. Do not substitute a `master` URL.
-
-The new installer is **global and OpenCode-only**, regardless of the current directory. There are no project or harness menus. It selects a published, immutable stable release, then runs the installer and archive from that exact tag. GitHub's immutability flag is not independent cryptographic signature verification. Installation sets Kael as the global default, installs the per-user `olympus` command, and adds only its `bin` folder to the user PATH.
+The installer is **global and OpenCode-only**, regardless of the current directory. There are no project or harness menus. It selects a published, immutable stable release, then runs the installer and archive from that exact tag. GitHub's immutability flag is not independent cryptographic signature verification. Installation sets Kael as the global default, installs the per-user `olympus` command, and adds only its `bin` folder to the user PATH.
 
 v0.8.0 makes public installation global/OpenCode-only and selects Kael through a reversible default-agent receipt. Configuration previews and recovery preserve that config and later user choices.
 
@@ -45,6 +43,16 @@ v0.8.0 makes public installation global/OpenCode-only and selects Kael through a
 ```
 
 Open a new PowerShell 7 window, then use `olympus version` and `olympus update` to see and maintain the installed product version. [Installation and safety details →](docs/INSTALLATION.md).
+
+## Install a specific version
+
+To install `v0.8.0` instead of the latest release:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.8.0/install.ps1')))
+```
+
+The tagged installer defaults to that version and downloads its exact tag archive; no extra `-Version` argument is needed.
 
 <a id="normal-vs-fast"></a>
 

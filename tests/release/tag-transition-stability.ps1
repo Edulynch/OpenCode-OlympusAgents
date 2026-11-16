@@ -30,8 +30,9 @@ function Get-PowerShellStatements([string]$Markdown) {
     }
 }
 
-function Test-ReadmeCommands([string]$Readme) {
+function Test-ReadmeCommands([string]$Readme, [string]$Version) {
     try {
+        $pinnedCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$Version/install.ps1')))"
         foreach ($action in @('Install','Uninstall')) {
             $section = [regex]::Matches($Readme, '(?ms)^## Fast ' + $action + '[ \t]*\r?\n(?<body>.*?)(?=^## |\z)')
             if ($section.Count -ne 1) { return $false }
@@ -40,6 +41,10 @@ function Test-ReadmeCommands([string]$Readme) {
             if ($statements.Count -ne 1 -or $statements[0].Extent.Text.Trim() -cne $expected) { return $false }
         }
         if ([regex]::Matches($Readme, '(?m)^## Fast ').Count -ne 2) { return $false }
+        $pinnedSection = [regex]::Matches($Readme, '(?ms)^## Install a specific version[ \t]*\r?\n(?<body>.*?)(?=^## |\z)')
+        if ($pinnedSection.Count -ne 1) { return $false }
+        $pinnedStatements = @(Get-PowerShellStatements $pinnedSection[0].Groups['body'].Value)
+        if ($pinnedStatements.Count -ne 1 -or $pinnedStatements[0].Extent.Text.Trim() -cne $pinnedCommand) { return $false }
         $remoteCount = 0
         foreach ($statement in @(Get-PowerShellStatements $Readme)) {
             $commands = @($statement.FindAll({ param($node)
@@ -48,7 +53,7 @@ function Test-ReadmeCommands([string]$Readme) {
             foreach ($command in $commands) {
                 $name = [string]$command.GetCommandName()
                 if ($name -match '^(?i:irm|iwr|curl(?:\.exe)?|wget(?:\.exe)?|Invoke-RestMethod|Invoke-WebRequest|iex|Invoke-Expression)$') {
-                    if ($statement.Extent.Text.Trim() -cne $installCommand -or $name -cne 'irm') { return $false }
+                    if ($statement.Extent.Text.Trim() -cnotin @($installCommand, $pinnedCommand) -or $name -cne 'irm') { return $false }
                     $remoteCount++
                 }
                 if ($name -match '^(?i:pwsh(?:\.exe)?|powershell(?:\.exe)?|Start-Process)$' -and
@@ -56,7 +61,7 @@ function Test-ReadmeCommands([string]$Readme) {
                 if ($name -match '(?i)(?:^|[\\/])(?:un)?install(?:-olympus)?\.ps1$') { return $false }
             }
         }
-        return $remoteCount -eq 1
+        return $remoteCount -eq 2
     } catch { return $false }
 }
 
@@ -85,15 +90,19 @@ function Get-DocumentationErrors([hashtable]$Docs, [string]$Version) {
     if ($Docs['CHANGELOG.md'] -notmatch '\A# Release notes\s+## \[Unreleased\]') {
         $issues.Add('DOC_UNRELEASED_SECTION_MISSING')
     }
-    # Future asset availability is separate from the identity of the existing release.
+    # Static release notes must not encode ephemeral tag state.
     if ($section -match '(?i)is not tagged|is already tagged|is already published|do not publish|old v0\.3\.0-beta\.5') {
         $issues.Add('DOC_EPHEMERAL_RELEASE_STATE')
     }
-    if (-not (Test-ReadmeCommands $Docs['README.md'])) { $issues.Add('DOC_README_IMMUTABLE_ENTRYPOINT_INVALID') }
-    foreach ($path in @('README.md','docs/INSTALLATION.md','docs/DEVELOPMENT.md')) {
-        if (-not $Docs[$path].Contains('v0.7.0') -or $Docs[$path] -notmatch '(?i)future release' -or
-            $Docs[$path] -notmatch '(?i)no .{0,30}asset|no assets') {
+    if (-not (Test-ReadmeCommands $Docs['README.md'] $Version)) { $issues.Add('DOC_README_IMMUTABLE_ENTRYPOINT_INVALID') }
+    foreach ($token in @('**draft**', '**before publishing**', 'verify its bytes match the tag', 'immutability enabled')) {
+        if (-not $Docs['docs/DEVELOPMENT.md'].Contains($token)) {
             $issues.Add('DOC_ASSET_PUBLICATION_PREREQUISITE_MISSING')
+        }
+    }
+    foreach ($path in @('README.md','docs/INSTALLATION.md')) {
+        if ($Docs[$path] -match '(?i)future release|not a currently working endpoint|not available from v0\.7\.0') {
+            $issues.Add('DOC_STALE_PUBLICATION_WARNING')
         }
     }
     foreach ($token in @('immutable=true','draft=false','prerelease=false','published_at','tag_name',
@@ -178,6 +187,7 @@ function Assert-Rejected([hashtable]$Docs, [string]$Version, [string]$Expected) 
 
 $docs = Read-ReleaseDocs
 $version = [regex]::Match($docs['install.ps1'], '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''').Groups[1].Value
+$pinnedCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$version/install.ps1')))"
 foreach ($tagState in @('PRE_TAG','SIMULATED_POST_TAG')) {
     $issues = @(Get-DocumentationErrors $docs $version)
     if ($issues.Count) { throw "${tagState}_SEMANTIC_VALIDATION_FAIL: $($issues -join ',')" }
@@ -200,6 +210,16 @@ Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
 $bad = $docs.Clone()
 $bad['README.md'] += "`n## Alternative`n" + '```powershell' + "`n$installCommand`n" + '```'
 Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
+foreach ($replacement in @(
+    $pinnedCommand.Replace("/$version/", '/master/'),
+    $pinnedCommand.Replace('/install.ps1', '/install-olympus.ps1'),
+    "$pinnedCommand -Version '$version'",
+    '# missing pinned installer'
+)) {
+    $bad = $docs.Clone()
+    $bad['README.md'] = $bad['README.md'].Replace($pinnedCommand, $replacement)
+    Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
+}
 $bad = $docs.Clone()
 $bad['install.ps1'] = $bad['install.ps1'].Replace("`$ReleaseVersion = '$version'", "`$ReleaseVersion = 'v9.9.9'")
 Assert-Rejected $bad $version 'DOC_ACTIVE_RELEASE_IDENTITY_MISMATCH'
@@ -213,8 +233,11 @@ $bad = $docs.Clone()
 $bad['docs/INSTALLATION.md'] = $bad['docs/INSTALLATION.md'].Replace('pending_uninstall','omitted')
 Assert-Rejected $bad $version 'DOC_INSTALLATION_SAFETY_INCOMPLETE'
 $bad = $docs.Clone()
-$bad['README.md'] = $bad['README.md'].Replace('no `install-olympus.ps1` asset', 'an installer asset')
+$bad['docs/DEVELOPMENT.md'] = $bad['docs/DEVELOPMENT.md'].Replace('**before publishing**', 'after publishing')
 Assert-Rejected $bad $version 'DOC_ASSET_PUBLICATION_PREREQUISITE_MISSING'
+$bad = $docs.Clone()
+$bad['README.md'] += "`nPrepared for a future release.`n"
+Assert-Rejected $bad $version 'DOC_STALE_PUBLICATION_WARNING'
 $bad = $docs.Clone()
 $bad['docs/HARNESS-CAPABILITIES.md'] = $bad['docs/HARNESS-CAPABILITIES.md'].Replace(
     '| `CONTEXTUAL_OLYMPUS_MAINTENANCE` | SUPPORTED | GAP |',

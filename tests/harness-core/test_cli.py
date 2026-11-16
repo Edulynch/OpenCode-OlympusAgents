@@ -195,9 +195,10 @@ class SliceA(unittest.TestCase):
         entry["sha256"] = hashlib.sha256(raw).hexdigest()
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
 
-    def create_global_managed_install(self, harnesses=("opencode", "codex"), version="local"):
+    def create_global_managed_install(self, harnesses=("opencode", "codex"), version="local", *, default_agent=False):
         """Prepare official global inventories under synthetic, isolated roots."""
-        inventories = global_readonly._expected(self.source, self.renderer, tuple(harnesses))
+        inventories = global_readonly._expected(self.source, self.renderer, tuple(harnesses),
+                                                include_default_agent=default_agent)
         paths = {}
         for harness in harnesses:
             root = Path(self.env["OPENCODE_CONFIG_DIR" if harness == "opencode" else "CODEX_HOME"])
@@ -209,7 +210,13 @@ class SliceA(unittest.TestCase):
                 entries.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest()})
             manifest = {"schema_version": 1, "scope": "global", "installed_harnesses": [harness],
                         "installed_version": version, "installed_from_commit": "synthetic-commit",
-                        "managed_files": entries}
+                         "managed_files": entries}
+            if harness == "opencode" and default_agent:
+                manifest["default_agent_receipt"] = {
+                    "version": 1, "state": "committed", "config_path": "opencode.jsonc",
+                    "installed_value": "kael", "previous_present": False,
+                    "previous_value_json": None, "restore_action": "remove",
+                }
             manifest_path = root / "olympus/orchestrator-install.json"
             manifest_path.parent.mkdir(parents=True, exist_ok=True)
             manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
@@ -261,8 +268,8 @@ class SliceA(unittest.TestCase):
         self.assertIn("--dry-run", apply_help.stdout)
         self.assertIn("--execute", apply_help.stdout)
         install_help = self.query("install", "--help")
-        self.assertIn("--version", install_help.stdout)
-        self.assertIn("--scope", install_help.stdout)
+        self.assertNotIn("--version", install_help.stdout)
+        self.assertNotIn("--scope", install_help.stdout)
         uninstall_help = self.query("uninstall", "--help")
         self.assertIn("--execute", uninstall_help.stdout)
         version = self.query("--version")
@@ -1183,34 +1190,25 @@ class SliceA(unittest.TestCase):
         self.smoke_entry("posix_launcher")
 
     def test_slice_c5_parser_and_root_version_are_separate(self):
-        args = cli_parser().parse_args(("install", "--scope", "project", "--target", str(self.target),
-                                        "--harness", "opencode", "--version", "v1.2.3", "--dry-run"))
-        self.assertFalse(args.version)
-        self.assertEqual("v1.2.3", args.release_version)
-        self.assertTrue(args.dry_run)
         self.assertTrue(cli_parser().parse_args(("--version",)).version)
-        install_defaults = cli_parser().parse_args(("install",))
-        self.assertEqual(("global", "opencode", None, False, False),
-                         (install_defaults.scope, install_defaults.harness, install_defaults.release_version,
-                          install_defaults.dry_run, install_defaults.execute))
-        uninstall_defaults = cli_parser().parse_args(("uninstall",))
-        self.assertEqual(("global", "opencode", False, False),
-                         (uninstall_defaults.scope, uninstall_defaults.harness,
-                          uninstall_defaults.dry_run, uninstall_defaults.execute))
-        for arguments in (("install", "--scope", "global", "--harness", "all", "--version", "v1.2.3", "--dry-run", "--execute"),):
+        for arguments in (("install",), ("install", "--dry-run"), ("install", "--execute"),
+                          ("uninstall",), ("uninstall", "--dry-run"), ("uninstall", "--execute")):
             with self.subTest(arguments=arguments):
-                self.assertEqual(2, self.call_main(*arguments)[0])
+                args = cli_parser().parse_args(arguments)
+                for name in ("scope", "harness", "target", "release_version"):
+                    self.assertFalse(hasattr(args, name))
+        self.assertTrue(cli_parser().parse_args(("install", "--dry-run")).dry_run)
+        self.assertTrue(cli_parser().parse_args(("uninstall", "--execute")).execute)
 
     def test_slice_c5_invalid_requests_do_not_start_subprocesses(self):
         invalid = (
-            ("install", "--scope", "global", "--target", str(self.target), "--harness", "all",
-             "--version", "v1.2.3", "--dry-run"),
-            ("install", "--scope", "project", "--target", "relative", "--harness", "all",
-             "--version", "v1.2.3", "--dry-run"),
-            ("install", "--scope", "project", "--target", str(self.target), "--harness", "all",
-             "--version", "v1.2.3\n", "--dry-run"),
-            ("uninstall", "--scope", "project", "--target", str(self.sandbox / "not a worktree"),
-             "--harness", "all", "--execute"),
+            ("install", "--scope", "project"),
+            ("install", "--harness", "codex"),
+            ("install", "--target", str(self.target)),
+            ("install", "--version", "v1.2.3"),
+            ("uninstall", "--scope", "project", "--target", str(self.target)),
+            ("uninstall", "--harness", "all"),
+            ("update", "--scope", "project"),
         )
         before = self.snapshot()
         with mock.patch("olympus.install_routing.subprocess.run") as run_process, \
@@ -1225,7 +1223,7 @@ class SliceA(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
 
     def test_slice_c5_platform_and_missing_pwsh_block_without_engine(self):
-        arguments = ("uninstall", "--scope", "global", "--harness", "opencode", "--dry-run", "--json")
+        arguments = ("uninstall", "--dry-run", "--json")
         for platform in ("linux", "darwin"):
             with self.subTest(platform=platform), \
                  mock.patch("olympus.install_routing.sys.platform", platform), \
@@ -1267,25 +1265,19 @@ class SliceA(unittest.TestCase):
         run_process.assert_called_once()
 
     def test_slice_c5_argv_is_literal_and_dry_run_keeps_one_json_document(self):
-        target = self.sandbox / "project ñ quote' & ;$` space"
-        target.mkdir()
-        (target / ".git").mkdir()
         before = self.snapshot()
         completed = subprocess.CompletedProcess([], 0, "native preview\n", "native diagnostic\n")
         with mock.patch("olympus.install_routing.sys.platform", "win32"), \
              mock.patch("olympus.install_routing.shutil.which", return_value="C:/PowerShell/pwsh.exe"), \
              mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.5.0", "")), \
-             mock.patch("olympus.install_routing._validate_project_target", return_value=target), \
-             mock.patch("olympus.install_routing.subprocess.run", return_value=completed) as run_process:
+              mock.patch("olympus.install_routing.subprocess.run", return_value=completed) as run_process:
             code, stdout, stderr = self.call_main(
-                "install", "--scope", "project", "--target", str(target), "--harness", "opencode",
-                "--version", "v1.2.3", "--dry-run", "--json",
+                "install", "--dry-run", "--json",
             )
         response = json.loads(stdout)
         command = run_process.call_args.args[0]
         self.assertEqual(0, code)
         self.assertEqual("preview", response["result"])
-        self.assertEqual("not_installed", response["data"]["installation_state"])
         self.assertEqual(0, response["data"]["native_exit_code"])
         self.assertEqual("native preview\n", response["data"]["native_stdout"])
         self.assertEqual("native diagnostic\n", response["data"]["native_stderr"])
@@ -1293,21 +1285,24 @@ class SliceA(unittest.TestCase):
         self.assertIsInstance(command, list)
         self.assertFalse(run_process.call_args.kwargs["shell"])
         self.assertEqual(300, run_process.call_args.kwargs["timeout"])
-        self.assertEqual(str(target), command[command.index("-Target") + 1])
         self.assertIn("-NonInteractive", command)
         self.assertIn("-DryRun", command)
+        self.assertEqual("install", command[command.index("-Action") + 1])
+        self.assertNotIn("-Target", command)
+        self.assertNotIn("-Scope", command)
+        self.assertNotIn("-Harness", command)
+        self.assertEqual("global", response["context"]["scope"])
+        self.assertEqual("opencode", response["context"]["harness"])
         self.assertEqual(before, self.snapshot())
 
     def test_slice_c5_native_failure_and_timeout_are_unconfirmed_without_retry(self):
         failed = subprocess.CompletedProcess([], 17, "partial output", "native error")
         with mock.patch("olympus.install_routing.sys.platform", "win32"), \
-             mock.patch("olympus.install_routing.shutil.which", return_value="pwsh"), \
-             mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.4.0", "")), \
-             mock.patch("olympus.install_routing._validate_project_target", return_value=self.target), \
-             mock.patch("olympus.install_routing.subprocess.run", return_value=failed) as run_process:
+              mock.patch("olympus.install_routing.shutil.which", return_value="pwsh"), \
+              mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.4.0", "")), \
+              mock.patch("olympus.install_routing.subprocess.run", return_value=failed) as run_process:
             code, stdout, _ = self.call_main(
-                "uninstall", "--scope", "project", "--target", str(self.target), "--harness", "opencode",
-                "--execute", "--json",
+                "uninstall", "--execute", "--json",
             )
         response = json.loads(stdout)
         self.assertEqual(4, code)
@@ -1319,13 +1314,11 @@ class SliceA(unittest.TestCase):
 
         timeout = subprocess.TimeoutExpired(["pwsh"], 300, output=b"partial", stderr=b"diagnostic")
         with mock.patch("olympus.install_routing.sys.platform", "win32"), \
-             mock.patch("olympus.install_routing.shutil.which", return_value="pwsh"), \
-             mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.4.0", "")), \
-             mock.patch("olympus.install_routing._validate_project_target", return_value=self.target), \
-             mock.patch("olympus.install_routing.subprocess.run", side_effect=timeout) as run_process:
+              mock.patch("olympus.install_routing.shutil.which", return_value="pwsh"), \
+              mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.4.0", "")), \
+              mock.patch("olympus.install_routing.subprocess.run", side_effect=timeout) as run_process:
             code, stdout, _ = self.call_main(
-                "uninstall", "--scope", "project", "--target", str(self.target), "--harness", "opencode",
-                "--execute", "--json",
+                "uninstall", "--execute", "--json",
             )
         response = json.loads(stdout)
         self.assertEqual(4, code)
@@ -1335,13 +1328,11 @@ class SliceA(unittest.TestCase):
         run_process.assert_called_once()
 
         with mock.patch("olympus.install_routing.sys.platform", "win32"), \
-             mock.patch("olympus.install_routing.shutil.which", return_value="pwsh"), \
-             mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.4.0", "")), \
-             mock.patch("olympus.install_routing._validate_project_target", return_value=self.target), \
-             mock.patch("olympus.install_routing.subprocess.run", side_effect=KeyboardInterrupt) as run_process:
+              mock.patch("olympus.install_routing.shutil.which", return_value="pwsh"), \
+              mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.4.0", "")), \
+              mock.patch("olympus.install_routing.subprocess.run", side_effect=KeyboardInterrupt) as run_process:
             code, stdout, _ = self.call_main(
-                "uninstall", "--scope", "project", "--target", str(self.target), "--harness", "opencode",
-                "--execute", "--json",
+                "uninstall", "--execute", "--json",
             )
         response = json.loads(stdout)
         self.assertEqual(4, code)
@@ -1349,16 +1340,14 @@ class SliceA(unittest.TestCase):
         self.assertEqual("unconfirmed", response["data"]["state"])
         run_process.assert_called_once()
 
-    def test_slice_c5_project_dry_run_is_blocked_and_global_dry_run_routes(self):
+    def test_slice_c5_obsolete_project_route_is_blocked_and_fixed_global_routes(self):
         with mock.patch("olympus.install_routing.subprocess.run") as run_process, \
-             mock.patch("olympus.install_routing.shutil.which") as find_pwsh:
+              mock.patch("olympus.install_routing.shutil.which") as find_pwsh:
             code, stdout, _ = self.call_main(
-                "uninstall", "--scope", "project", "--target", str(self.target), "--harness", "all",
-                "--dry-run", "--json",
+                "uninstall", "--scope", "project", "--dry-run", "--json",
             )
-        response = json.loads(stdout)
-        self.assertEqual(3, code)
-        self.assertEqual("dry_run_unsupported", response["issues"][0]["code"])
+        self.assertEqual(2, code)
+        self.assertTrue(stdout)
         run_process.assert_not_called()
         find_pwsh.assert_not_called()
 
@@ -1367,7 +1356,7 @@ class SliceA(unittest.TestCase):
              mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.4.0", "")), \
              mock.patch("olympus.install_routing.subprocess.run", return_value=subprocess.CompletedProcess([], 0, "preview", "")) as run_process:
             code, stdout, _ = self.call_main(
-                "uninstall", "--scope", "global", "--harness", "all", "--dry-run", "--json",
+                "uninstall", "--dry-run", "--json",
             )
         response = json.loads(stdout)
         command = run_process.call_args.args[0]
@@ -1376,30 +1365,60 @@ class SliceA(unittest.TestCase):
         self.assertEqual("scripts/global-install.ps1", response["data"]["engine"])
         self.assertIn("-Uninstall", command)
         self.assertIn("-DryRun", command)
+        self.assertEqual("opencode", command[command.index("-Harness") + 1])
         self.assertNotIn("-Target", command)
-        self.assertEqual("read_only_project_override_context", response["context"]["cwd_role"])
+        self.assertEqual("ignored_for_global_target_resolution", response["data"]["cwd_role"])
 
         with mock.patch("olympus.install_routing.sys.platform", "win32"), \
              mock.patch("olympus.install_routing.shutil.which", return_value="pwsh"), \
              mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.4.0", "")), \
              mock.patch("olympus.install_routing.subprocess.run", return_value=subprocess.CompletedProcess([], 0, "preview", "")) as run_process:
             code, stdout, _ = self.call_main(
-                "install", "--scope", "global", "--harness", "all", "--version", "v1.2.3", "--dry-run", "--json",
+                "install", "--dry-run", "--json",
             )
         response = json.loads(stdout)
         command = run_process.call_args.args[0]
         self.assertEqual(0, code)
         self.assertEqual("preview", response["result"])
         self.assertEqual("scripts/launch-latest.ps1", response["data"]["engine"])
-        self.assertEqual("v1.2.3", command[command.index("-Version") + 1])
-        self.assertEqual("global", command[command.index("-Scope") + 1])
+        self.assertEqual("install", command[command.index("-Action") + 1])
         self.assertIn("-DryRun", command)
         self.assertNotIn("-Target", command)
+        self.assertNotIn("-Scope", command)
+        self.assertNotIn("-Harness", command)
+
+    def test_slice_c5_update_ignores_managed_project_cwd(self):
+        self.create_managed_install(("opencode",))
+        previous = Path.cwd()
+        try:
+            os.chdir(self.target)
+            with mock.patch("olympus.system_cli.sys.platform", "win32"), \
+                 mock.patch("olympus.system_cli.shutil.which", return_value="pwsh"), \
+                 mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.5", "")), \
+                 mock.patch("olympus.user_config.select_scope", side_effect=AssertionError("CWD must not select update target")), \
+                 mock.patch("olympus.system_cli.subprocess.run", return_value=subprocess.CompletedProcess([], 0)) as native:
+                code, _, _ = self.call_main("update")
+            self.assertEqual(0, code)
+            command = native.call_args.args[0]
+            self.assertIn("-Update", command)
+            for selector in ("-Target", "-Scope", "-Harness"):
+                self.assertNotIn(selector, command)
+        finally:
+            os.chdir(previous)
 
     @unittest.skipUnless(os.name == "nt", "Native project uninstall is Windows-qualified only")
     def test_slice_c5_windows_project_uninstall_preserves_unmanaged_and_blocks_drift(self):
         if shutil.which("pwsh") is None:
             self.skipTest("PowerShell 7 is unavailable")
+        def invoke_internal_uninstall(target: Path):
+            return subprocess.run(
+                ["pwsh", "-NoProfile", "-NonInteractive", "-File",
+                 str(self.source / "scripts/project-uninstall.ps1"), "-Target", str(target),
+                 "-Harness", "opencode"],
+                cwd=self.source, env=self.env, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", check=False, timeout=30,
+            )
+
         sentinel = self.target / "user sentinel.txt"
         sentinel.write_bytes(b"keep this file\n")
         sentinel_mode = stat.S_IMODE(sentinel.stat().st_mode)
@@ -1409,13 +1428,9 @@ class SliceA(unittest.TestCase):
             (path.read_bytes() if path.is_file() else None, stat.S_IMODE(path.stat().st_mode))
             for path in self.source.rglob("*")
         }
-        removed = self.invoke_cli("uninstall", "--scope", "project", "--target", str(self.target),
-                                  "--harness", "opencode", "--execute", "--json")
+        removed = invoke_internal_uninstall(self.target)
         self.assertEqual(0, removed.returncode, removed.stdout + removed.stderr)
-        result = json.loads(removed.stdout)
-        self.assertEqual("ok", result["result"])
-        self.assertEqual(0, result["data"]["native_exit_code"])
-        self.assertIn("OLYMPUS_PROJECT_UNINSTALL", result["data"]["native_stdout"])
+        self.assertIn("OLYMPUS_PROJECT_UNINSTALL", removed.stdout)
         self.assertEqual(b"keep this file\n", sentinel.read_bytes())
         self.assertEqual(sentinel_mode, stat.S_IMODE(sentinel.stat().st_mode))
         self.assertFalse((self.target / ".opencode/orchestrator-install.json").exists())
@@ -1440,13 +1455,9 @@ class SliceA(unittest.TestCase):
             (path.read_bytes() if path.is_file() else None, stat.S_IMODE(path.stat().st_mode))
             for path in drift_target.rglob("*")
         }
-        blocked = self.invoke_cli("uninstall", "--scope", "project", "--target", str(drift_target),
-                                  "--harness", "opencode", "--execute", "--json")
-        self.assertEqual(4, blocked.returncode, blocked.stdout + blocked.stderr)
-        blocked_result = json.loads(blocked.stdout)
-        self.assertEqual("unconfirmed", blocked_result["result"])
-        self.assertNotEqual(0, blocked_result["data"]["native_exit_code"])
-        self.assertIn("MANAGED_FILE_DRIFT", blocked_result["data"]["native_stderr"])
+        blocked = invoke_internal_uninstall(drift_target)
+        self.assertNotEqual(0, blocked.returncode, blocked.stdout + blocked.stderr)
+        self.assertIn("MANAGED_FILE_DRIFT", blocked.stderr + blocked.stdout)
         drift_after = {
             path.relative_to(drift_target).as_posix():
             (path.read_bytes() if path.is_file() else None, stat.S_IMODE(path.stat().st_mode))
@@ -1468,12 +1479,9 @@ class SliceA(unittest.TestCase):
             (path.read_bytes() if path.is_file() else None, stat.S_IMODE(path.stat().st_mode))
             for path in ownership_target.rglob("*")
         }
-        invalid_ownership = self.invoke_cli("uninstall", "--scope", "project", "--target", str(ownership_target),
-                                            "--harness", "opencode", "--execute", "--json")
-        self.assertEqual(4, invalid_ownership.returncode, invalid_ownership.stdout + invalid_ownership.stderr)
-        ownership_result = json.loads(invalid_ownership.stdout)
-        self.assertIn("HARNESS_NOT_INSTALLED",
-                      ownership_result["data"]["native_stderr"] + ownership_result["data"]["native_stdout"])
+        invalid_ownership = invoke_internal_uninstall(ownership_target)
+        self.assertNotEqual(0, invalid_ownership.returncode, invalid_ownership.stdout + invalid_ownership.stderr)
+        self.assertIn("HARNESS_NOT_INSTALLED", invalid_ownership.stderr + invalid_ownership.stdout)
         ownership_after = {
             path.relative_to(ownership_target).as_posix():
             (path.read_bytes() if path.is_file() else None, stat.S_IMODE(path.stat().st_mode))
@@ -1525,7 +1533,7 @@ class SliceA(unittest.TestCase):
         with mock.patch.dict(os.environ, self.env, clear=True), \
              mock.patch("olympus.install_routing.subprocess.run", side_effect=observe_child):
             preview_code, preview_stdout, preview_stderr = self.call_main(
-                "uninstall", "--scope", "global", "--harness", "all", "--dry-run", "--json",
+                "uninstall", "--dry-run", "--json",
             )
         preview = json.loads(preview_stdout)
         native_output = preview["data"]["native_stdout"]
@@ -1533,9 +1541,9 @@ class SliceA(unittest.TestCase):
         self.assertEqual("preview", preview["result"])
         self.assertEqual(0, preview["data"]["native_exit_code"])
         self.assertIn("GLOBAL_UNINSTALL_DRY_RUN: opencode", native_output)
-        self.assertIn("GLOBAL_UNINSTALL_DRY_RUN: codex", native_output)
+        self.assertNotIn("GLOBAL_UNINSTALL_DRY_RUN: codex", native_output)
         self.assertIn("REMOVE: agents/kael.md", native_output)
-        self.assertIn("REMOVE: agents/kael.toml", native_output)
+        self.assertNotIn("REMOVE: agents/kael.toml", native_output)
         self.assertEqual(2, len(child_calls), "Only the bounded pwsh probe and one global preview should run")
         probe_args, probe_kwargs = child_calls[0]
         engine_args, engine_kwargs = child_calls[1]
@@ -1833,6 +1841,38 @@ class SliceA(unittest.TestCase):
         self.assertTrue((root / ".olympus-cli-edit.lock").is_file())
         self.assertFalse((root / ".olympus-cli-config-apply").exists())
 
+    def test_slice_c8_global_transaction_rejects_receipted_config_rewrite(self):
+        self.create_global_managed_install(("opencode",), default_agent=True)
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        manifest = root / "olympus/orchestrator-install.json"
+        old = manifest.read_bytes()
+        proposed = json.loads(old)
+        expected = config_apply_transaction._global_expected(self.source, cli_load_renderer)
+        guard = expected["opencode.jsonc"]
+        for entry in proposed["managed_files"]:
+            if entry["path"] == "opencode.jsonc":
+                entry["sha256"] = hashlib.sha256(guard).hexdigest()
+        changes = (
+            config_apply_transaction.GlobalChange("opencode.jsonc", (root / "opencode.jsonc").read_bytes(),
+                                                  guard, 0o600),
+            config_apply_transaction.GlobalChange("olympus/orchestrator-install.json", old,
+                                                  json.dumps(proposed).encode(), 0o600, manifest=True),
+        )
+        before = self.snapshot()
+        with self.assertRaisesRegex(config_apply_transaction.TransactionError, "preserve.*receipted"):
+            config_apply_transaction._validate_global_candidates(changes, expected)
+        self.assertEqual(before, self.snapshot())
+
+    def test_slice_c8_global_expected_retains_coherent_crlf_source_bytes(self):
+        agent = self.source / ".opencode/agents/veyra.md"
+        crlf = agent.read_bytes().replace(b"\n", b"\r\n")
+        agent.write_bytes(crlf)
+        expected = global_readonly._expected(self.source, self.renderer, ("opencode",))["opencode"]
+        self.assertEqual(crlf, expected["agents/veyra.md"])
+        self.create_global_managed_install(("opencode",), default_agent=True)
+        preview = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
+        self.assertEqual([], preview["data"]["changes"])
+
     def test_slice_c8_global_apply_rejects_codex_all_drift_conflict_and_unsafe_guard(self):
         self.create_global_managed_install()
         for harness in ("codex", "all"):
@@ -1967,11 +2007,12 @@ class SliceA(unittest.TestCase):
         self.assertFalse((alternate / ".olympus-cli-edit.lock").exists())
 
     def test_slice_c8_global_recovery_can_resume_an_interrupted_rollback(self):
-        self.create_global_managed_install(("opencode",))
+        self.create_global_managed_install(("opencode",), default_agent=True)
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         managed = root / "agents/veyra.md"
         manifest = root / "olympus/orchestrator-install.json"
         old_agent, old_manifest = managed.read_bytes(), manifest.read_bytes()
+        config = (root / "opencode.jsonc").read_bytes()
         prompt = self.source / "olympus/harnesses/opencode/agent-prompts/veyra.md"
         prompt.write_text(prompt.read_text(encoding="utf-8") + "\nInterrupted rollback fixture.\n", encoding="utf-8")
         self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
@@ -2024,11 +2065,13 @@ class SliceA(unittest.TestCase):
         self.assertIn("rolled_back", recovery_output)
         self.assertEqual(old_manifest, manifest.read_bytes())
         self.assertFalse((root / ".olympus-cli-config-apply").exists())
+        self.assertEqual(config, (root / "opencode.jsonc").read_bytes())
 
     def test_slice_c8_global_recovery_cleans_a_committed_journal(self):
-        self.create_global_managed_install(("opencode",))
+        self.create_global_managed_install(("opencode",), default_agent=True)
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         managed = root / "agents/veyra.md"
+        config = (root / "opencode.jsonc").read_bytes()
         prompt = self.source / "olympus/harnesses/opencode/agent-prompts/veyra.md"
         prompt.write_text(prompt.read_text(encoding="utf-8") + "\nCommitted cleanup fixture.\n", encoding="utf-8")
         self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
@@ -2063,6 +2106,7 @@ class SliceA(unittest.TestCase):
         self.assertIn("no_changes", repeat_output)
         self.assertEqual(expected, managed.read_bytes())
         self.assertFalse(journal.exists())
+        self.assertEqual(config, (root / "opencode.jsonc").read_bytes())
 
     def test_slice_c8_global_apply_legacy_guard_recovery_is_explicit_and_repeatable(self):
         self.create_global_managed_install(("opencode",))
@@ -2177,7 +2221,7 @@ class SliceA(unittest.TestCase):
             process.communicate(timeout=15)
 
     def test_slice_c7_global_doctor_native_gate_is_explicit(self):
-        self.create_global_managed_install()
+        self.create_global_managed_install(default_agent=True)
         response = self.json_query("doctor", "--scope", "global", "--harness", "all", code=3 if os.name != "nt" else 0)
         if os.name == "nt":
             self.assertEqual("ok", response["result"])

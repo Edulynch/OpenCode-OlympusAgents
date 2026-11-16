@@ -82,60 +82,24 @@ def _timeout_output(value) -> str:
 
 def run(source: Path, args, response: dict, *, emit, as_json: bool) -> int:
     operation = args.command
-    scope = args.scope
-    harness = args.harness
     dry_run = args.dry_run
     mode = "dry-run" if dry_run else "execute"
     response["context"] = {
-        "source": str(source), "kind": "native_install_routing", "scope": scope,
-        "harness": harness, "mode": mode,
+        "source": str(source), "kind": "native_install_routing", "scope": "global",
+        "harness": "opencode", "mode": mode,
     }
     response["data"] = {
         "mode": mode, "engine": "not_started", "native_exit_code": None,
         "native_stdout": "", "native_stderr": "", "effects": "none_confirmed",
     }
     response["issues"] = []
-
-    requested_target = args.target
-    if scope == "global" and requested_target is not None:
-        return _finish(response, emit, as_json, 2, "failed", "invalid_arguments",
-                       "--target is incompatible with --scope global; global roots are resolved by the official engine.")
+    response["data"]["cwd_role"] = "ignored_for_global_target_resolution"
     if operation == "install":
-        release = args.release_version
-        if release is not None and _RELEASE_TAG.fullmatch(release) is None:
-            return _finish(response, emit, as_json, 2, "failed", "invalid_release_tag",
-                           "--version must be one exact Olympus release tag (for example v1.2.3).")
-        response["data"]["release_version"] = release or "latest stable"
-    elif scope == "project" and (requested_target is None or not requested_target.is_absolute()):
-        return _finish(response, emit, as_json, 2, "failed", "invalid_target",
-                       "Project install/uninstall requires an absolute --target worktree root.")
-    if operation == "uninstall" and scope == "project" and dry_run:
-        return _finish(response, emit, as_json, 3, "blocked", "dry_run_unsupported",
-                       "The existing project uninstaller has no dry-run mode; no native process was started.")
-
-    target = None
-    if scope == "project":
-        from . import config_apply
-
-        try:
-            target = _validate_project_target(source, requested_target)
-        except config_apply.PreviewFault as error:
-            result = "blocked" if error.code == 3 else "failed"
-            return _finish(response, emit, as_json, error.code, result, error.issue_code, str(error))
-        response["context"]["target"] = str(target)
-        response["data"]["target"] = str(target)
-
-    if scope == "global":
-        cwd = Path.cwd()
-        response["context"].update({"cwd": str(cwd), "cwd_role": "read_only_project_override_context"})
-        response["data"]["cwd_role"] = "read_only_project_override_context"
+        response["data"]["release_version"] = "latest stable"
 
     if operation == "install":
         script = source / "scripts" / "launch-latest.ps1"
         engine = "scripts/launch-latest.ps1"
-    elif scope == "project":
-        script = source / "scripts" / "project-uninstall.ps1"
-        engine = "scripts/project-uninstall.ps1"
     else:
         script = source / "scripts" / "global-install.ps1"
         engine = "scripts/global-install.ps1"
@@ -160,17 +124,11 @@ def run(source: Path, args, response: dict, *, emit, as_json: bool) -> int:
 
     command = [executable, "-NoProfile", "-NonInteractive", "-File", str(script)]
     if operation == "install":
-        command.extend(["-Action", "install", "-Scope", scope, "-Harness", harness])
-        if args.release_version:
-            command.extend(["-Version", args.release_version])
-        if target is not None:
-            command.extend(["-Target", str(target)])
+        command.extend(["-Action", "install"])
         if dry_run:
             command.append("-DryRun")
-    elif scope == "project":
-        command.extend(["-Target", str(target), "-Harness", harness])
     else:
-        command.extend(["-Harness", harness, "-Uninstall"])
+        command.extend(["-Harness", "opencode", "-Uninstall"])
         if dry_run:
             command.append("-DryRun")
 
@@ -212,7 +170,7 @@ def run(source: Path, args, response: dict, *, emit, as_json: bool) -> int:
         "native_stderr": completed.stderr or "",
     })
     if completed.returncode == 0:
-        if operation == "uninstall" and scope == "global" and not dry_run:
+        if operation == "uninstall" and not dry_run:
             cli_uninstaller = source / "scripts" / "install-cli.ps1"
             if cli_uninstaller.is_file():
                 cleanup = subprocess.run(

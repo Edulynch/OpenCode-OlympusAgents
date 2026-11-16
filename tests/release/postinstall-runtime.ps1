@@ -20,7 +20,8 @@ $utf8 = [Text.UTF8Encoding]::new($false)
 $envNames = @('PATH','TEMP','TMP','APPDATA','LOCALAPPDATA','USERPROFILE','HOME',
     'OPENCODE_CONFIG_DIR','OPENCODE_DATA_DIR','OPENCODE_CACHE_DIR','OPENCODE_STATE_DIR',
     'OLYMPUS_CONFIG_HOME','OLYMPUS_CONFIG_FILE','OLYMPUS_132_FIXTURE_ROOT','OLYMPUS_132_RUNTIME_MODE',
-    'XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_CACHE_HOME','XDG_STATE_HOME')
+    'XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_CACHE_HOME','XDG_STATE_HOME',
+    'CODEX_HOME','OLYMPUS_CLI_ROOT','OLYMPUS_CLI_PATH_STORE')
 $originalEnvironment = @{}
 foreach ($name in $envNames) { $originalEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $originalUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -40,14 +41,21 @@ function New-Target([string]$name) {
 }
 
 function Invoke-Installer([string]$target, [string]$cliRoot, [string]$pathStore, [switch]$VerifyOnly) {
-    $arguments = @('-NoProfile','-File',$installer,'-SourceRoot',$source,'-Target',$target,
-        '-CliInstallRoot',$cliRoot,'-CliPathStorePath',$pathStore)
+    # This suite protects the retained internal project engine, not a public route.
+    $arguments = @('-NoProfile','-File',(Join-Path $source 'scripts/bootstrap.ps1'),
+        '-SourceVersion',$candidateVersion,'-Target',$target)
     if ($VerifyOnly) { $arguments += '-VerifyOnly' }
     $previousPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
         $text = (& pwsh @arguments 2>&1 | Out-String)
         $code = $LASTEXITCODE
+        if ($code -eq 0 -and -not $VerifyOnly) {
+            $text += (& pwsh -NoProfile -File (Join-Path $source 'scripts/install-cli.ps1') `
+                -Action install -Version $candidateVersion -SourceRoot $source `
+                -InstallRoot $cliRoot -PathStorePath $pathStore 2>&1 | Out-String)
+            $code = $LASTEXITCODE
+        }
     } finally { $ErrorActionPreference = $previousPreference }
     return [pscustomobject]@{ Text=$text; Code=$code }
 }
@@ -92,6 +100,9 @@ try {
         @('OLYMPUS_CONFIG_HOME',(Join-Path $run 'olympus-config')), @('OLYMPUS_CONFIG_FILE',''),
         @('XDG_CONFIG_HOME',(Join-Path $run 'xdg-config')), @('XDG_DATA_HOME',(Join-Path $run 'xdg-data')),
         @('XDG_CACHE_HOME',(Join-Path $run 'xdg-cache')), @('XDG_STATE_HOME',(Join-Path $run 'xdg-state')),
+        @('CODEX_HOME',(Join-Path $run 'codex')),
+        @('OLYMPUS_CLI_ROOT',(Join-Path $run 'fallback-cli')),
+        @('OLYMPUS_CLI_PATH_STORE',(Join-Path $run 'fallback-cli/path-store.txt')),
         @('OLYMPUS_132_FIXTURE_ROOT',$run), @('OLYMPUS_132_RUNTIME_MODE','config-fails'))) {
         [Environment]::SetEnvironmentVariable([string]$mapping[0], [string]$mapping[1], 'Process')
     }
@@ -143,7 +154,7 @@ exit 2
     Write-Output "DEBUG_CONFIG_RED_CASE: installer_exit=$($install.Code); cli_created=$cliCreated; fixture_log=$($calls -join ','); failure=$($failureEvidence -join '')"
     $warning = "OLYMPUS_RUNTIME_VALIDATION_WARNING: OpenCode runtime configuration and effective agents could not be verified; installation continues. Run 'olympus doctor' for static checks."
     Check 'P1_RUNTIME_CONFIG_FAILURE_IS_WARNING' ($install.Code -eq 0 -and $install.Text.Contains($warning) -and
-        $install.Text -match "OLYMPUS_INSTALL: $candidateVersionPattern READY_OR_NO_CHANGES" -and
+        $install.Text -match '(?m)^READY\s*$' -and
         @($calls | Where-Object { $_ -ceq 'debug config exit=23' }).Count -eq 1 -and $cliCreated -and
         $install.Text -notmatch '(?i)runtime[^\r\n]*\bPASS\b')
     $cliBin = Join-Path $cliRoot 'bin'

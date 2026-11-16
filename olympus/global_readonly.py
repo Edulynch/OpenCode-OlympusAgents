@@ -24,6 +24,7 @@ from . import config_apply, install_routing
 _MANIFEST = "olympus/orchestrator-install.json"
 _OPENCODE_GUARD_INTENT = "olympus/opencode-guard-pending.json"
 _GLOBAL_APPLY_SCRATCH = ".olympus-cli-config-apply"
+_DEFAULT_AGENT_RECEIPT = "default_agent_receipt"
 _HASH = re.compile(r"[0-9a-fA-F]{64}\Z")
 _POWERSHELL_VERSION = re.compile(r"(?m)^PowerShell ([0-9]+)\.")
 _CONFIG_PATH = re.compile(r"(?m)^\s*config\s{2,}(?P<path>.+?)\s*$")
@@ -107,7 +108,7 @@ def resolve_roots(selected: tuple[str, ...]) -> dict[str, Path]:
     return roots
 
 
-def _expected(source: Path, renderer, selected: tuple[str, ...]) -> dict[str, dict[str, bytes]]:
+def _expected(source: Path, renderer, selected: tuple[str, ...], *, include_default_agent: bool = False) -> dict[str, dict[str, bytes]]:
     rendered = renderer.outputs_for(source, "all")
     outputs = {name: {} for name in selected}
     for file, content in rendered.items():
@@ -129,6 +130,12 @@ def _expected(source: Path, renderer, selected: tuple[str, ...]) -> dict[str, di
                 raise GlobalFault("source_invalid", "Codex root instructions lack the expected global adaptation anchor.", 1)
             content = _CODEX_INTRO.sub(_GLOBAL_INTRO, content, count=1)
         if harness in outputs:
+            # The native installer retains checkout line endings. Do not turn
+            # a coherent CRLF source into a different managed byte inventory.
+            if harness == "opencode" and file.is_file():
+                raw = file.read_bytes()
+                if raw == content.replace("\n", "\r\n").encode("utf-8"):
+                    content = raw.decode("utf-8")
             outputs[harness][destination] = content.encode("utf-8")
     if "opencode" in outputs:
         # The native global installer owns this guard only when no user config
@@ -136,7 +143,13 @@ def _expected(source: Path, renderer, selected: tuple[str, ...]) -> dict[str, di
         guard_path = source / "olympus/harnesses/opencode/global-permissions.jsonc"
         if not guard_path.is_file():
             raise GlobalFault("source_invalid", "Global permission guard template is missing.", 1)
-        outputs["opencode"]["opencode.jsonc"] = guard_path.read_bytes()
+        guard = guard_path.read_bytes()
+        if include_default_agent:
+            opening = guard.find(b"{")
+            if opening < 0:
+                raise GlobalFault("source_invalid", "Global permission guard template is not an object.", 1)
+            guard = guard[:opening + 1] + b'\n  "default_agent": "kael",' + guard[opening + 1:]
+        outputs["opencode"]["opencode.jsonc"] = guard
     if ("opencode" in outputs and len(outputs["opencode"]) != 14) or ("codex" in outputs and len(outputs["codex"]) != 12):
         raise GlobalFault("source_inventory_unsupported", "Global renderer inventory differs from the official engine.")
     return outputs
@@ -172,6 +185,10 @@ def _parse_manifest_bytes(raw: bytes, harness: str, expected: dict[str, bytes] |
     # An unknown string must not silently become an actionable global preview.
     if data["installed_version"] != "local" and install_routing._RELEASE_TAG.fullmatch(data["installed_version"]) is None:
         raise GlobalFault("unsupported_global_version", "Global manifest has an unsupported installed version.")
+    if _DEFAULT_AGENT_RECEIPT in data:
+        _validate_default_agent_receipt(data[_DEFAULT_AGENT_RECEIPT])
+        if harness != "opencode":
+            raise GlobalFault("invalid_global_manifest", "Default-agent ownership is valid only for OpenCode.")
     entries: dict[str, str] = {}
     for item in data["managed_files"]:
         if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("sha256"), str):
@@ -196,6 +213,77 @@ def _parse_manifest_bytes(raw: bytes, harness: str, expected: dict[str, bytes] |
     return data, entries
 
 
+def _validate_default_agent_receipt(receipt: Any) -> dict:
+    expected = {
+        "version", "state", "config_path", "installed_value", "previous_present",
+        "previous_value_json", "restore_action",
+    }
+    if (not isinstance(receipt, dict) or set(receipt) != expected
+            or type(receipt["version"]) is not int or receipt["version"] != 1
+            or receipt["state"] not in ("pending_set", "committed", "pending_uninstall")
+            or receipt["config_path"] not in ("opencode.json", "opencode.jsonc")
+            or receipt["installed_value"] != "kael"
+            or type(receipt["previous_present"]) is not bool
+            or receipt["restore_action"] not in ("set", "remove")):
+        raise GlobalFault("invalid_global_manifest", "OpenCode default-agent receipt is malformed or unsupported.")
+    if receipt["previous_present"]:
+        if not isinstance(receipt["previous_value_json"], str):
+            raise GlobalFault("invalid_global_manifest", "OpenCode default-agent receipt has no recorded prior value.")
+        try:
+            previous = json.loads(receipt["previous_value_json"],
+                                  parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
+        except (ValueError, json.JSONDecodeError) as error:
+            raise GlobalFault("invalid_global_manifest", "OpenCode default-agent receipt prior value is invalid.") from error
+        if not isinstance(previous, str):
+            raise GlobalFault("invalid_global_manifest", "OpenCode default-agent receipt prior value is not a string.")
+        action = "remove" if previous == "kael" else "set"
+        if receipt["restore_action"] != action:
+            raise GlobalFault("invalid_global_manifest", "OpenCode default-agent receipt restore action contradicts its prior value.")
+    elif receipt["previous_value_json"] is not None or receipt["restore_action"] != "remove":
+        raise GlobalFault("invalid_global_manifest", "OpenCode default-agent receipt has inconsistent prior absence data.")
+    return receipt
+
+
+def _default_agent_status(root: Path, manifest: dict) -> str:
+    receipt = manifest.get(_DEFAULT_AGENT_RECEIPT)
+    if receipt is None:
+        raise GlobalFault("global_default_agent_receipt_missing",
+                          "Global OpenCode installation has no default-agent ownership receipt; run a normal install/update.")
+    if receipt["state"] != "committed":
+        raise GlobalFault("global_default_agent_recovery_pending",
+                          f"OpenCode default-agent receipt is {receipt['state']}; reconcile with a normal install or uninstall.")
+    json_file = _read(root, "opencode.json")
+    jsonc_file = _read(root, "opencode.jsonc")
+    if json_file is not None and jsonc_file is not None:
+        raise GlobalFault("global_external_guard_unsafe", "Both global OpenCode config formats exist; precedence is ambiguous.")
+    relative = receipt["config_path"]
+    raw = json_file if relative == "opencode.json" else jsonc_file
+    if raw is None:
+        raise GlobalFault("global_default_agent_drift",
+                          "The recorded OpenCode config is missing; read-only verification will not recreate it.")
+    try:
+        def unique_pairs(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("Duplicate JSONC field")
+                result[key] = value
+            return result
+
+        def invalid_constant(value):
+            raise ValueError(f"Invalid JSONC constant {value}")
+
+        config = json.loads(_jsonc_without_comments(raw), object_pairs_hook=unique_pairs,
+                            parse_constant=invalid_constant)
+    except (ValueError, UnicodeError, json.JSONDecodeError) as error:
+        raise GlobalFault("global_default_agent_config_invalid",
+                          "OpenCode global config is invalid or has duplicate keys.") from error
+    if not isinstance(config, dict) or config.get("default_agent") != "kael":
+        raise GlobalFault("global_default_agent_drift",
+                          "OpenCode global default_agent is not the receipt-owned kael value.")
+    return "kael"
+
+
 def _manifest(root: Path, harness: str, expected: dict[str, bytes] | None):
     raw = _read(root, _MANIFEST)
     if raw is None:
@@ -216,7 +304,12 @@ def _verified_files(root: Path, entries: dict[str, str]) -> dict[str, bytes]:
 
 def _jsonc_without_comments(raw: bytes) -> str:
     """Discard JSONC comments and trailing commas without touching string data."""
-    text = raw.decode("utf-8")
+    if raw.startswith(b"\xef\xbb\xbf"):
+        text = raw.decode("utf-8-sig")
+    elif raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        text = raw.decode("utf-16")
+    else:
+        text = raw.decode("utf-8")
     output: list[str] = []
     index = 0
     in_string = False
@@ -380,6 +473,10 @@ def _native_failure_reason(stdout: str, harness: str) -> tuple[str, str, int]:
         "GLOBAL_VERSION_DRIFT": ("version_mismatch", "version_mismatch", 3),
         "GLOBAL_MANIFEST_INVALID": ("invalid_manifest", "invalid_global_manifest", 3),
         "GLOBAL_INSTALL_CONFLICT": ("conflict", "global_install_conflict", 3),
+        "GLOBAL_DEFAULT_AGENT_RECEIPT_MISSING": ("default_agent_unmanaged", "global_default_agent_receipt_missing", 3),
+        "GLOBAL_DEFAULT_AGENT_RECOVERY_PENDING": ("recovery_pending", "global_default_agent_recovery_pending", 3),
+        "GLOBAL_DEFAULT_AGENT_DRIFT": ("default_agent_drift", "global_default_agent_drift", 1),
+        "GLOBAL_DEFAULT_AGENT_CONFIG_INVALID": ("config_invalid", "global_default_agent_config_invalid", 3),
     }
     prefix = f"GLOBAL_HARNESS_FAILED: {harness} "
     for line in stdout.splitlines():
@@ -454,7 +551,7 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
             if issues or not source_data.get("coherent"):
                 raise GlobalFault("source_drift", "Canonical generated source is not coherent with the renderer.")
             renderer = load_renderer(source)
-            expected = _expected(source, renderer, selected)
+            expected = _expected(source, renderer, selected, include_default_agent=operation == "doctor")
             if "opencode" in expected:
                 from . import user_config
 
@@ -479,11 +576,15 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                 if operation == "status":
                     item["state"] = "reported"
                     item["integrity"] = "unverified"
+                    receipt = manifest.get(_DEFAULT_AGENT_RECEIPT)
+                    item["default_agent"] = receipt["state"] if receipt else "not_recorded"
                     continue
                 current = _verified_files(root, entries)
                 current_by_harness[harness] = current
                 item["integrity"] = "hash_verified"
                 if harness == "opencode":
+                    item["default_agent"] = (_default_agent_status(root, manifest)
+                                             if _DEFAULT_AGENT_RECEIPT in manifest else "not_recorded")
                     if operation == "config apply":
                         json_file = _read(root, "opencode.json")
                         jsonc_file = _read(root, "opencode.jsonc")
@@ -502,6 +603,10 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                             changes.append({"harness": "opencode", "path": "opencode.jsonc", "action": "create",
                                             "proposed_sha256": hashlib.sha256(expected[harness]["opencode.jsonc"]).hexdigest()})
                     if operation == "config apply":
+                        if _DEFAULT_AGENT_RECEIPT in manifest and "opencode.jsonc" in current:
+                            # The installer owns this field lifecycle, not the
+                            # legacy guard renderer. Preview and execution share it.
+                            expected[harness]["opencode.jsonc"] = current["opencode.jsonc"]
                         apply_candidates[harness] = {
                             "root": root, "manifest": manifest, "entries": entries,
                             "manifest_raw": manifest_raw, "expected": expected[harness],

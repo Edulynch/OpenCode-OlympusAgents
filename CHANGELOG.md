@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## v0.8.0
+
+### Highlights
+
+- Restrict public install/update/uninstall to global OpenCode, independent of CWD. This removes public project/Codex installation and their selectors; ten wrappers reject before effects and two global/OpenCode aliases remain.
+- Provide one versionless installer asset for an immutable stable release. The bootstrap validates release metadata and executes the installer/archive from the same selected tag; attach the asset while the release is a draft.
+- Select Kael through a reversible `default_agent_receipt`, preserving existing config bytes, comments, encoding, actual prior values, later preferences and deleted configs. Reconcile `pending_set`, `committed` and `pending_uninstall` under the existing writer lock; `VerifyOnly` remains read-only.
+- Preserve the receipted config across `config apply --dry-run`, `--execute` and transaction recovery. Reject an intervening field change before set/restore, and retain coherent CRLF source bytes to match native installation.
+- Retain internal project/configuration engines and frozen Codex adapters.
+
+### Capability limits
+
+- Windows with PowerShell 7 remains the qualified installer platform; Python 3.11+ is required by the CLI. OpenCode V2 remains in active development; Codex remains frozen compatibility.
+- Codex retains `DENY = GAP` and `CONTEXTUAL_OLYMPUS_MAINTENANCE = GAP`; `QUESTION_CENTRALIZATION = PARTIAL`, `RESULT_RECONCILIATION = PARTIAL`, and `ACTIVITY_VISIBILITY = PARTIAL`. No full parity is claimed.
+- Scoped OpenCode v2.3.0 evidence covers isolated global config discovery and registration of eleven Olympus agents with Kael as primary; it does not establish broad version compatibility, provider inference, interactive default-agent selection, native permission UI or TUI rendering.
+- Field preconditions are not an atomic compare-and-swap against arbitrary editors writing after the last check. GitHub immutability and tag identity are not independent cryptographic verification.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.8.0 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.8.0/docs/INSTALLATION.md). Installation is global/OpenCode-only. The generic installer asset must be attached before immutable publication; the historical v0.7.0 release has no such asset.
+
+## Verify installation
+
+See [release selection, identity and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.8.0/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and static validation guidance. Fixture and local runtime evidence do not replace a public-endpoint smoke.
+
 ## v0.7.0
 
 ### Highlights

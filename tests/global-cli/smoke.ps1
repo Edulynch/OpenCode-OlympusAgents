@@ -56,7 +56,7 @@ if ($MockLatest) {
 
     if (-not $env:OLYMPUS_SMOKE_LAUNCHER) { throw 'SMOKE_LAUNCHER_MISSING' }
     $launchArguments = @{}
-    foreach ($name in @('Action', 'Scope', 'Harness', 'Target', 'Version', 'DryRun', 'Update')) {
+    foreach ($name in @('Action', 'DryRun', 'Update')) {
         if ($PSBoundParameters.ContainsKey($name)) { $launchArguments[$name] = $PSBoundParameters[$name] }
     }
     & $env:OLYMPUS_SMOKE_LAUNCHER @launchArguments
@@ -93,7 +93,7 @@ if ($Child) {
     try {
         $env:PYTHONPATH = $env:OLYMPUS_SMOKE_HOOK_DIR
         $env:OLYMPUS_SMOKE_UPDATE_HOOK = '1'
-        [void](Invoke-Olympus 'uninstall' @('uninstall', '--scope', 'global', '--harness', 'opencode', '--execute') 'REMOVED_MANAGED_RESOURCES_ONLY')
+        [void](Invoke-Olympus 'uninstall' @('uninstall', '--execute') 'REMOVED_MANAGED_RESOURCES_ONLY')
     } finally {
         [Environment]::SetEnvironmentVariable('PYTHONPATH', $oldPythonPath, 'Process')
         [Environment]::SetEnvironmentVariable('OLYMPUS_SMOKE_UPDATE_HOOK', $oldHook, 'Process')
@@ -141,7 +141,7 @@ if (-not $apiRepo.Success -or -not $rawRepo.Success -or $apiRepo.Groups['repo'].
 $repository = $apiRepo.Groups['repo'].Value
 
 $tempRoot = if ($env:TEMP) { [IO.Path]::GetFullPath($env:TEMP) } else { [IO.Path]::GetFullPath([IO.Path]::GetTempPath()) }
-$fixtureParent = Join-Path $tempRoot 'opencode-issue128-85b307ed71504453a2e1d1e3a6327f75'
+$fixtureParent = Join-Path $tempRoot 'olympus-cli-smoke'
 $run = Join-Path $fixtureParent ('run-' + [guid]::NewGuid().ToString('N'))
 $createdParent = $false
 $runCreated = $false
@@ -153,7 +153,8 @@ $environmentNames = @(
     'OLYMPUS_SMOKE_METADATA_URI', 'OLYMPUS_SMOKE_RAW_BASE', 'OLYMPUS_SMOKE_ARCHIVE_URI', 'OLYMPUS_SMOKE_PWSH',
     'OLYMPUS_SMOKE_SCRIPT', 'OLYMPUS_SMOKE_HOOK_DIR', 'OLYMPUS_SMOKE_OTHER_DIR', 'OLYMPUS_SMOKE_LAUNCHER_PATH',
     'OLYMPUS_SMOKE_OPENCODE_CONFIG', 'OLYMPUS_SMOKE_GLOBAL_MARKER', 'OLYMPUS_SMOKE_BIN_MARKER',
-    'OLYMPUS_SMOKE_VERSION_MARKER', 'OLYMPUS_SMOKE_GLOBAL_MANIFEST', 'OLYMPUS_SMOKE_USER_CONFIG'
+    'OLYMPUS_SMOKE_VERSION_MARKER', 'OLYMPUS_SMOKE_GLOBAL_MANIFEST', 'OLYMPUS_SMOKE_USER_CONFIG',
+    'OLYMPUS_CLI_ROOT', 'OLYMPUS_CLI_PATH_STORE', 'XDG_CONFIG_HOME'
 )
 $originalEnvironment = @{}
 foreach ($name in $environmentNames) { $originalEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
@@ -199,10 +200,15 @@ try {
     $env:USERPROFILE = $profile
     $env:HOME = $profile
     $env:OPENCODE_CONFIG_DIR = $opencodeRoot
+    $env:OLYMPUS_CLI_ROOT = $installRoot
+    $env:OLYMPUS_CLI_PATH_STORE = $pathStore
+    $env:XDG_CONFIG_HOME = Join-Path $run 'xdg'
     $env:PYTHONDONTWRITEBYTECODE = '1'
     foreach ($name in @('OLYMPUS_CONFIG_HOME', 'OLYMPUS_CONFIG_FILE', 'CODEX_HOME')) {
         [Environment]::SetEnvironmentVariable($name, $null, 'Process')
     }
+    $env:OLYMPUS_CONFIG_FILE = $userConfig
+    $env:CODEX_HOME = Join-Path $run 'codex'
 
     $userOpenCodeConfig = [IO.File]::ReadAllText((Join-Path $source 'olympus/harnesses/opencode/global-permissions.jsonc'))
     [IO.File]::WriteAllText($opencodeConfig, $userOpenCodeConfig, $Utf8NoBom)

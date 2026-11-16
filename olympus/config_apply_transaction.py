@@ -607,6 +607,8 @@ def _global_manifest_receipts(record: dict[str, Any], expected: dict[str, bytes]
         raise TransactionError("New global guard ownership does not match the canonical guard", 4)
     changed = {path for path in set(old_entries) | set(new_entries)
                if old_entries.get(path) != new_entries.get(path)}
+    if global_readonly._DEFAULT_AGENT_RECEIPT in old_manifest and "opencode.jsonc" in changed:
+        raise TransactionError("Global apply must preserve the installer-receipted OpenCode config", 4)
     for path in changed:
         if new_entries.get(path) != hashlib.sha256(expected[path]).hexdigest():
             raise TransactionError(f"Global manifest candidate differs from canonical output: {path}", 4)

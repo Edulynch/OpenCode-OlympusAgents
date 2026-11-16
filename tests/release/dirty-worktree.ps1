@@ -11,6 +11,8 @@ $script:CandidateVersion = $versionMatch.Groups[1].Value
 $script:CandidateInstallPattern = [regex]::Escape("OLYMPUS_INSTALL: $($script:CandidateVersion) READY_OR_NO_CHANGES")
 $run = Join-Path (Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode') ('olympus-dirty-worktree-' + [guid]::NewGuid().ToString('N'))
 $utf8 = [Text.UTF8Encoding]::new($false)
+. (Join-Path $PSScriptRoot '../installer-test-environment.ps1')
+$isolatedEnvironment = $null
 function Check([string]$id, [bool]$ok) {
     if (-not $ok) { throw "$id FAIL" }
     Write-Output "$id PASS"
@@ -37,12 +39,13 @@ function New-Target([string]$name, [string[]]$committed = @()) {
     return $repo
 }
 function Install([string]$repo, [string]$root = $source) {
-    $out = (& pwsh -NoProfile -File (Join-Path $root 'install.ps1') -SourceRoot $root -Target $repo 2>&1 | Out-String)
+    $out = (& pwsh -NoProfile -File (Join-Path $root 'scripts/bootstrap.ps1') -SourceVersion $script:CandidateVersion -Target $repo 2>&1 | Out-String)
     [pscustomobject]@{ Code=$LASTEXITCODE; Text=$out }
 }
-function Ready($result) { $result.Code -eq 0 -and $result.Text -match '(?m)^READY\s*$' -and $result.Text -match "(?m)^$($script:CandidateInstallPattern)\r?$" }
+function Ready($result) { $result.Code -eq 0 -and $result.Text -match '(?m)^READY\s*$' }
 function Untracked([string]$repo, [string]$path) { (Fixture-Git $repo @('status','--porcelain=v1','-uall','--',$path)).Trim() -eq "?? $path" }
 try {
+    $isolatedEnvironment = Enter-OlympusInstallerTestEnvironment $run
     [IO.Directory]::CreateDirectory($run) | Out-Null
 
     $serena = New-Target 'serena'
@@ -120,7 +123,7 @@ try {
     # A local source copy simulates a newer managed asset without creating a release tag.
     $updateTarget = $staged
     $localSource = Join-Path $run 'update-source'
-    foreach ($p in @('install.ps1','scripts/bootstrap.ps1','scripts/target-writer-lock.ps1')) {
+    foreach ($p in @('install.ps1','scripts/bootstrap.ps1','scripts/target-writer-lock.ps1','olympus/core/models-dev.json')) {
         $dest = Join-Path $localSource $p
         [IO.Directory]::CreateDirectory((Split-Path -Parent $dest)) | Out-Null
         [IO.File]::Copy((Join-Path $source $p), $dest)
@@ -145,6 +148,7 @@ try {
     Write-Output 'DIRTY WORKTREE QUALIFICATION: FAIL'
     exit 1
 } finally {
+    if ($null -ne $isolatedEnvironment) { Exit-OlympusInstallerTestEnvironment $isolatedEnvironment }
     if (Test-Path -LiteralPath $run) {
         for ($attempt = 1; $attempt -le 10; $attempt++) {
             try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop; break }

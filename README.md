@@ -30,16 +30,18 @@ After installation, open OpenCode in your project and try a prompt:
 
 ## Requirements
 
-🪟 **Windows** · **PowerShell 7 (`pwsh`)** · **OpenCode V2 and/or Codex CLI** · **Git** for project installation.
+🪟 **Windows** · **PowerShell 7 (`pwsh`)** · **OpenCode V2** · **Python 3.11+** for the Olympus CLI.
 
 ## Fast Install
 
-⚡ **Olympus source identity: v0.7.0.** The two public commands stay pinned to the published `v0.6.1` bootstrap. It uses `releases/latest` metadata to select a published, immutable stable release, then runs the installer and archive from that selected tag; the bootstrap pin is not the installed product version. Release metadata checks fail closed for invalid or mismatched sources. GitHub's immutability flag is not independent cryptographic signature verification. No checkout is required. PowerShell asks **where** (current project, another project, global) and **which harness** (OpenCode, Codex, both). Every successful project or global install also sets up the per-user `olympus` command and adds only its `bin` folder to your user PATH.
+⚠️ **Prepared for a future release; not available from v0.7.0.** The immutable `v0.7.0` release has no `install-olympus.ps1` asset. The versionless command below requires a new release with that asset attached before publication. Do not substitute a `master` URL.
 
-v0.7.0 adds safer configuration previews and scoped recovery, read-only diagnostics, and bounded handling of OpenCode background results.
+The new installer is **global and OpenCode-only**, regardless of the current directory. There are no project or harness menus. It selects a published, immutable stable release, then runs the installer and archive from that exact tag. GitHub's immutability flag is not independent cryptographic signature verification. Installation sets Kael as the global default, installs the per-user `olympus` command, and adds only its `bin` folder to the user PATH.
+
+v0.8.0 makes public installation global/OpenCode-only and selects Kael through a reversible default-agent receipt. Configuration previews and recovery preserve that config and later user choices.
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/install-olympus.ps1')))
+& ([scriptblock]::Create((irm 'https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1')))
 ```
 
 Open a new PowerShell 7 window, then use `olympus version` and `olympus update` to see and maintain the installed product version. [Installation and safety details →](docs/INSTALLATION.md).
@@ -77,10 +79,10 @@ Model IDs use the exact `provider/model-id` form from [Models.dev](https://model
 
 ## Fast Uninstall
 
-🗑️ **Use `olympus uninstall`** to remove the global OpenCode installation and CLI, or choose a scope and harness in the entrypoint below. Uninstall removes only intact managed files and the Olympus PATH entry; user configuration and unrelated files are preserved.
+🗑️ **Use `olympus uninstall`** to remove the global OpenCode installation and CLI. Uninstall removes only intact managed files and the Olympus PATH entry. It reverses only the still-owned `default_agent` field; later user choices, comments, preferences, and unrelated files are preserved.
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/uninstall-olympus.ps1')))
+olympus uninstall
 ```
 
 <a id="guides"></a>

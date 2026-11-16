@@ -3,11 +3,7 @@ param([ValidateSet('Both','Offline','Runtime')][string]$QualificationSlice = 'Bo
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$phase4Base = 'dea863168fc16a6b97e0b6404c4334f4265f1e52'
 $run = Join-Path (Join-Path $env:LOCALAPPDATA 'Temp/opencode') ('atlas-qualification-' + [guid]::NewGuid().ToString('N'))
-$old = Join-Path $run 'master-source'
-$target = Join-Path $run 'upgrade'
-$originalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
 $script:CollectOfflineContracts = $QualificationSlice -eq 'Offline'
 $script:OfflineContractFailures = [Collections.Generic.List[string]]::new()
 function Check([string]$id, [bool]$ok) {
@@ -28,31 +24,10 @@ function Get-CanonicalRoleDisplay([string]$SourceRoot, [string]$RoleId) {
     if (-not $match.Success) { return $null }
     return $match.Groups[1].Value
 }
-function Enable-OfflineOpenCodeStub([string]$FixtureRoot) {
-    $mockBin = Join-Path $FixtureRoot 'mock-opencode'
-    [IO.Directory]::CreateDirectory($mockBin) | Out-Null
-    Copy-Item -LiteralPath (Join-Path $source 'tests/release/fixtures/opencode.ps1') -Destination (Join-Path $mockBin 'opencode.ps1')
-    $pwsh = Join-Path $PSHOME 'pwsh.exe'
-    $wrapper = "@echo off`r`n`"$pwsh`" -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
-    [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), $wrapper, [Text.Encoding]::ASCII)
-    $windowsApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
-    $parts = @($originalPath -split [regex]::Escape([IO.Path]::PathSeparator) | Where-Object {
-        $_ -and $_.Trim('"') -ine $windowsApps -and $_.Trim('"') -ine $PSHOME
-    })
-    $env:PATH = (@($mockBin,$PSHOME) + $parts) -join [IO.Path]::PathSeparator
-}
-function Install([string]$root, [string]$repo, [switch]$DryRun) {
-    $args = @('-NoProfile','-File',(Join-Path $root 'install.ps1'),'-SourceRoot',$root,'-Target',$repo)
-    if ($DryRun) { $args += '-DryRun' }
+function Install([string]$root, [string]$repo) {
+    $args = @('-NoProfile','-File',(Join-Path $root 'scripts/bootstrap.ps1'),'-Target',$repo)
     $result = (& pwsh @args 2>&1 | Out-String)
     [pscustomobject]@{ Code=$LASTEXITCODE; Output=$result }
-}
-function Snapshot([string]$repo) {
-    $paths = @('src/local.txt','docs/staged.txt','notes.txt','.serena/project.yml','.opencode/user-note.txt')
-    $hashes = @($paths | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $repo $_) -Algorithm SHA256).Hash }) -join ','
-    $index = (& git -C $repo diff --cached --binary | Out-String)
-    $status = (& git -C $repo status --porcelain=v1 -uall -- @($paths) | Out-String)
-    "$hashes`n$index`n$status"
 }
 # Deterministic policy simulation; asserts routing invariants, not live agent behavior.
 function Simulate([string]$case, [string]$workerState = 'TERMINAL') {
@@ -81,7 +56,6 @@ function Simulate([string]$case, [string]$workerState = 'TERMINAL') {
 }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
-    if ($QualificationSlice -eq 'Offline') { Enable-OfflineOpenCodeStub $run }
     if ($QualificationSlice -ne 'Runtime') {
     $a = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/atlas.md'))
     $k = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/kael.md'))
@@ -142,42 +116,6 @@ try {
     }
     $script:CollectOfflineContracts = $false
 
-    if ($QualificationSlice -ne 'Runtime') {
-    [IO.Directory]::CreateDirectory($old) | Out-Null
-    $baselineArchive = Join-Path $run 'phase4-baseline.zip'
-    & git -C $source archive --format=zip $phase4Base -o $baselineArchive
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $baselineArchive -PathType Leaf)) { throw 'Phase 4 baseline archive failed' }
-    Expand-Archive -LiteralPath $baselineArchive -DestinationPath $old -Force
-    [IO.Directory]::CreateDirectory($target) | Out-Null
-    & git -C $target init --quiet
-    foreach ($path in @('src/local.txt','docs/staged.txt')) {
-        $file = Join-Path $target $path
-        [IO.Directory]::CreateDirectory((Split-Path -Parent $file)) | Out-Null
-        [IO.File]::WriteAllText($file,"original $path`n")
-    }
-    & git -C $target add -- src docs
-    & git -C $target -c user.name=Qualification -c user.email=qualify@example.invalid commit --quiet -m fixture
-    $initial = Install $old $target
-    Check 'AT_UPGRADE_BASELINE' ($initial.Code -eq 0 -and -not (Test-Path (Join-Path $target '.opencode/agents/atlas.md')))
-    [IO.File]::WriteAllText((Join-Path $target 'src/local.txt'),"modified work`n")
-    [IO.File]::WriteAllText((Join-Path $target 'docs/staged.txt'),"staged work`n")
-    & git -C $target add -- docs/staged.txt
-    foreach ($path in @('notes.txt','.serena/project.yml','.opencode/user-note.txt')) {
-        $file = Join-Path $target $path
-        [IO.Directory]::CreateDirectory((Split-Path -Parent $file)) | Out-Null
-        [IO.File]::WriteAllText($file,"user owned $path`n")
-    }
-    $before = Snapshot $target
-    $dry = Install $source $target -DryRun
-    Check 'AT_UPGRADE_DRY_RUN' ($dry.Code -eq 0 -and $dry.Output -match '\.opencode/agents/atlas.md' -and -not (Test-Path (Join-Path $target '.opencode/agents/atlas.md')))
-    $upgrade = Install $source $target
-    if ($upgrade.Code -ne 0) { Write-Output $upgrade.Output }
-    $manifest = [IO.File]::ReadAllText((Join-Path $target '.opencode/orchestrator-install.json')) | ConvertFrom-Json
-    Check 'AT_UPGRADE' ($upgrade.Code -eq 0 -and (Test-Path (Join-Path $target '.opencode/agents/atlas.md')) -and @($manifest.managed_files | Where-Object path -eq '.opencode/agents/atlas.md').Count -eq 1)
-    Check 'AT_UNRELATED_INDEX_BYTES' ((Snapshot $target) -ceq $before)
-    $again = Install $source $target
-    Check 'AT_IDEMPOTENT' ($again.Code -eq 0 -and $again.Output -match '(?m)^NO_CHANGES\s*$')
-    }
     if ($QualificationSlice -ne 'Offline') {
     $fresh = Join-Path $run 'fresh'
     [IO.Directory]::CreateDirectory($fresh) | Out-Null
@@ -190,28 +128,13 @@ try {
         @($agents | Where-Object { $_.id -eq 'atlas' -and $_.model.id -eq 'gpt-6.1-sol' -and $_.model.variant -eq 'high' -and $_.mode -eq 'subagent' }).Count -eq 1 -and
         @($agents | Where-Object id -eq 'sorin').Count -eq 0)
     }
-    if ($QualificationSlice -ne 'Runtime') {
-    $drift = Join-Path $run 'drift'
-    [IO.Directory]::CreateDirectory($drift) | Out-Null
-    & git -C $drift init --quiet
-    Check 'AT_DRIFT_BASELINE' ((Install $old $drift).Code -eq 0)
-    [IO.File]::AppendAllText((Join-Path $drift '.opencode/agents/kael.md'),"`n# user drift`n")
-    $blocked = Install $source $drift
-    Check 'AT_MANAGED_DRIFT_REFUSED' ($blocked.Code -ne 0 -and $blocked.Output -match 'MANAGED_FILE_DRIFT' -and -not (Test-Path (Join-Path $drift '.opencode/agents/atlas.md')))
-    $foreign = Join-Path $run 'foreign'
-    [IO.Directory]::CreateDirectory((Join-Path $foreign '.opencode/agents')) | Out-Null
-    & git -C $foreign init --quiet
-    [IO.File]::WriteAllText((Join-Path $foreign '.opencode/agents/atlas.md'),"user-owned atlas`n")
-    $conflict = Install $source $foreign
-    Check 'AT_UNOWNED_ATLAS_REFUSED' ($conflict.Code -ne 0 -and $conflict.Output -match 'INSTALL_CONFLICT')
-    }
     if ($QualificationSlice -eq 'Offline' -and $script:OfflineContractFailures.Count -gt 0) {
         throw ('Offline static/synthetic check failures: ' + ($script:OfflineContractFailures -join ', '))
     }
     if ($QualificationSlice -eq 'Runtime') {
         Write-Output 'ATLAS RUNTIME QUALIFICATION: PASS (fresh installed effective agent; no interactive session executed)'
     } elseif ($QualificationSlice -eq 'Offline') {
-        Write-Output 'ATLAS OFFLINE QUALIFICATION: PASS (static/synthetic and installer/history checks; effective OpenCode queries not run)'
+        Write-Output 'ATLAS OFFLINE QUALIFICATION: PASS (static/synthetic policy checks; effective OpenCode queries not run)'
     } else {
         Write-Output 'ATLAS QUALIFICATION: PASS'
     }
@@ -220,7 +143,6 @@ try {
     Write-Output 'ATLAS QUALIFICATION: FAIL'
     exit 1
 } finally {
-    [Environment]::SetEnvironmentVariable('PATH',$originalPath,'Process')
     if (Test-Path -LiteralPath $run) {
         try { Remove-Item -LiteralPath $run -Recurse -Force -ErrorAction Stop }
         catch { Write-Output "CLEANUP_DEFERRED: $run" }

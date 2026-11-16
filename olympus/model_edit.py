@@ -92,10 +92,9 @@ def _validate_model_data(models: object) -> tuple[dict[str, Any], dict[str, Any]
     for family_name, family in families.items():
         if not isinstance(family_name, str) or not isinstance(family, dict):
             raise ModelEditError("Model families must be named tables")
-        for runtime in ("opencode", "codex"):
-            if runtime not in family:
-                raise ModelEditError(f"Family {family_name!r} is missing {runtime} model ID")
-            _validate_id(family[runtime], f"existing {runtime} ID in family {family_name!r}")
+        if set(family) != {"opencode"}:
+            raise ModelEditError(f"Family {family_name!r} must contain only its OpenCode model ID")
+        _validate_id(family["opencode"], f"existing OpenCode ID in family {family_name!r}")
 
     efforts: set[str] = set()
     for role, intent in roles.items():
@@ -209,7 +208,7 @@ def _prepare_toml_candidate(
                 or not all(isinstance(part, str) for part in path)):
             raise ModelEditError("Only existing three-part model scalar paths may be edited")
         area, name, field = path
-        if area == "families" and name in families and field in ("opencode", "codex"):
+        if area == "families" and name in families and field == "opencode":
             _validate_id(value, f"proposed {field} ID for family {name!r}")
         elif area == "roles" and name in roles and field == "family":
             if not isinstance(value, str) or value not in families:
@@ -433,8 +432,6 @@ def _load_renderer(source: Path):
 def _compose_outputs(renderer: Any, source: Path, models: dict[str, Any], policies: dict[str, Any],
                      capabilities: dict[str, Any], identities: dict[str, str], roles: set[str]) -> dict[Path, str]:
     outputs = renderer.opencode_outputs(source, models, policies, identities, roles)
-    codex = renderer.codex_outputs(source, models, policies, identities, roles)
-    outputs.update(codex)
     outputs[source / "docs" / "HARNESS-CAPABILITIES.md"] = renderer.capability_doc(capabilities)
     return outputs
 
@@ -459,14 +456,11 @@ def _role_rows(old_models: dict[str, Any], new_models: dict[str, Any], identitie
             "identity": identities[role],
             "family": {"old": old_intent["family"], "new": new_intent["family"]},
             "effort": {"old": old_intent["effort"], "new": new_intent["effort"]},
-            "models": {
-                runtime: {"old": old_models_by_runtime[runtime], "new": new_models_by_runtime[runtime]}
-                for runtime in ("opencode", "codex")
-            },
-            "representation": {
-                "opencode": "agent",
-                "codex": "root" if role == "kael" else "agent",
-            },
+            "models": {"opencode": {
+                "old": old_models_by_runtime["opencode"],
+                "new": new_models_by_runtime["opencode"],
+            }},
+            "representation": {"opencode": "agent"},
         })
     return rows
 
@@ -499,7 +493,6 @@ def _make_candidate(source_root: str | Path, operation: str,
     if operation == "models set-family":
         family = request["family"]
         opencode_id = _validate_id(request["opencode_id"], "proposed OpenCode ID")
-        codex_id = _validate_id(request["codex_id"], "proposed Codex ID")
         if family not in old_families:
             raise ModelEditError(f"Unknown model family: {family}")
         affected = sorted(role for role, intent in old_role_data.items()
@@ -508,11 +501,10 @@ def _make_candidate(source_root: str | Path, operation: str,
             raise ModelEditError(f"Model family has no canonical roles: {family}")
         updates = {
             ("families", family, "opencode"): opencode_id,
-            ("families", family, "codex"): codex_id,
         }
         preview_request = {
             "family": family,
-            "models": {"opencode": opencode_id, "codex": codex_id},
+            "models": {"opencode": opencode_id},
         }
     elif operation == "agents set-model":
         role = request["role"]
@@ -621,16 +613,15 @@ def _file_candidate(path: Path, source: Path, old_bytes: bytes, new_bytes: bytes
 
 
 def _build_set_family_candidate(source_root: str | Path, family: str,
-                                opencode_id: str, codex_id: str) -> _EditCandidate:
+                                opencode_id: str) -> _EditCandidate:
     _validate_id(opencode_id, "proposed OpenCode ID")
-    _validate_id(codex_id, "proposed Codex ID")
     if not isinstance(family, str) or not family:
         raise ModelEditError("Family name must be a non-empty existing family")
 
     return _make_candidate(
         source_root,
         "models set-family",
-        {"family": family, "opencode_id": opencode_id, "codex_id": codex_id},
+        {"family": family, "opencode_id": opencode_id},
     )
 
 
@@ -660,9 +651,7 @@ def _format_preview_human(preview: dict[str, Any]) -> str:
         lines.append(
             f"{row['role']} ({row['identity']}): family {row['family']['old']} -> {row['family']['new']}; "
             f"effort {row['effort']['old']} -> {row['effort']['new']}; "
-            f"OpenCode {row['models']['opencode']['old']} -> {row['models']['opencode']['new']}; "
-            f"Codex {row['models']['codex']['old']} -> {row['models']['codex']['new']} "
-            f"({row['representation']['codex']})"
+            f"OpenCode {row['models']['opencode']['old']} -> {row['models']['opencode']['new']}"
         )
     paths = preview["data"]["write_set"]
     lines.append("write_set: " + (", ".join(paths) if paths else "(none)"))

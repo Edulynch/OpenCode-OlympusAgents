@@ -1,12 +1,17 @@
 # Data model: estado temporal de edición de fuentes
 
-**Estado vigente (2026-10-16)**: B ACEPTADA por T019 Windows + T020 Linux, G2 PASS; A SHIPPED; C y feature completa BLOCKED; macOS NOT VERIFIED. El protocolo documentado fue validado en la selección integrada sin ampliar sus garantías cooperantes. Recuperación acotada de una edición, sin API transaccional ni schemas de modelos/manifests alternativos. Historial del diseño anterior y experimentos: [research.md](research.md) y [tasks.md](tasks.md).
+**Estado de evidencia (2026-10-16)**: B ACEPTADA por T019 Windows + T020 Linux, G2 PASS; A SHIPPED; C y feature completa BLOCKED; macOS NOT VERIFIED. El protocolo documentado fue validado en la selección integrada sin ampliar sus garantías cooperantes. Recuperación acotada de una edición, sin API transaccional ni schemas de modelos/manifests alternativos. Historial del diseño anterior y experimentos: [research.md](research.md) y [tasks.md](tasks.md).
+
+**Contrato vigente (2026-11-16)**: OpenCode es el único runtime soportado.
+Este modelo describe la edición canónica OpenCode; las propuestas originales
+para Codex, instalación pública project y compatibilidad de formatos antiguos
+son historia, no contrato vigente. Véase [contracts/cli.md](contracts/cli.md).
 
 ## Datos en memoria
 
 - **Contexto**: origen confiable canónico resuelto; operación e identidad de filesystem del lock. No ejecutar código de destinos instalados.
 - **Intención candidata**: copia transitoria de modelos, sólo paths solicitados distintos. IDs efectivos coinciden completamente con `[A-Za-z0-9][A-Za-z0-9._:/-]*`; sin normalización ni catálogo remoto.
-- **Preview**: afectados, familia/esfuerzo e IDs old/new de ambos adaptadores; Kael raíz y Aegis ausente en Codex. No crea/adquiere lock ni scratch.
+- **Preview**: roles afectados, familia/esfuerzo e ID OpenCode old/new. No crea/adquiere lock ni scratch.
 - **Batch fijo**: path relativo, bytes/hashes old/new y modo previo; sólo `models.toml` y outputs existentes que realmente cambian. No altas/bajas, recursos instalados ni paths arbitrarios. No-op de edición sobre estado válido y sin scratch pendiente no crea lock/scratch.
 - **Read-set**: hashes de entradas renderer, inventario relevante y outputs actuales. Un cambio observable invalida el candidato; durante recovery los write targets sólo admiten los hashes old/new registrados, mientras entradas ajenas al write-set deben coincidir con el snapshot.
 
@@ -66,6 +71,10 @@ Hash old/new acredita pertenencia al estado del intento dentro del contrato loca
 
 ## Instalaciones y límites
 
-B no modifica manifests ni destinos instalados y no reutiliza este registro como ownership de C. El schema de personalización instalada sigue no adoptado; C BLOCKED sin cambios de alcance.
+B modifica sólo la fuente canónica y el output OpenCode que derive; no modifica
+manifests ni destinos instalados ni reutiliza este registro como ownership.
+Los formatos actuales de configuración de proyecto/global y su comportamiento
+fail-closed se especifican en [contracts/cli.md](contracts/cli.md). Los formatos
+incompletos o no soportados no se convierten, adoptan ni eliminan automáticamente.
 
 FR-012 excluye protección absoluta frente a procesos no cooperantes, atomicidad multiarquivo visible para lectores concurrentes y durabilidad absoluta ante pérdida de energía. No permite sobrescritura automática de trabajo externo ni éxito parcial. T019/T020 acreditan el protocolo integrado, lock vacío/identidad/recovery en Windows/Linux; tres fixtures symlink omitidos en Windows (`WinError 1314`) pasaron en Linux. La evidencia exacta es T019/T020 en [tasks.md](tasks.md) y el run T020 [38857503366 / job 116832156025](https://github.com/Edulynch/OpenCode-OlympusAgents/actions/runs/38857503366/job/116832156025). No resolver fallos añadiendo servicio, SQLite, polling permanente, gestores transaccionales o agentes. macOS sigue NOT VERIFIED.

@@ -19,12 +19,19 @@ function New-SourceFixture([string]$Name) {
     [IO.Directory]::CreateDirectory($source) | Out-Null
     $trackedOpenCodeFiles = @(& git -C $repoRoot ls-files -- '.opencode')
     if ($LASTEXITCODE -ne 0) { throw 'Unable to list tracked OpenCode fixture files.' }
-    # The dirty clean-break worktree can still list intentionally retired outputs in the index.
-    $retiredTrackedOutputs = @('.opencode/agents/aegis.md', '.opencode/commands/maintain.md')
+    $agentSources = @($trackedOpenCodeFiles | Where-Object { $_ -match '^\.opencode/agents/[^/]+\.md$' })
+    $requiredGeneratedSources = @(
+        '.opencode/plugins/olympus-activity/activity.ts',
+        '.opencode/plugins/olympus-activity/tui.tsx',
+        '.opencode/scripts/worktree-setup.ps1'
+    )
+    if ($agentSources.Count -ne 11 -or
+        @($requiredGeneratedSources | Where-Object { $_ -notin $trackedOpenCodeFiles }).Count -ne 0) {
+        throw 'Current OpenCode source fixture does not contain the 15-resource generated inventory.'
+    }
     foreach ($relative in $trackedOpenCodeFiles) {
         $sourcePath = Join-Path $repoRoot $relative
         if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
-            if ($relative -in $retiredTrackedOutputs) { continue }
             throw "Tracked OpenCode fixture file is missing: $relative"
         }
         $destinationPath = Join-Path $source $relative

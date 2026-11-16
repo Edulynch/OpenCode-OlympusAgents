@@ -93,9 +93,9 @@ def main() -> int:
           and "Kael remains shell DENY" not in source_prompt
           and re.search(r'(?m)^  - action: shell\n    resource: "\*"\n    effect: ask$', kael_metadata)
           and re.search(r'(?m)^  - action: edit\n    resource: "\*"\n    effect: allow$', kael_metadata))
-    check("ADAPTER_CAPABILITY_CONTRACT", capabilities["opencode"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "SUPPORTED"
-          and capabilities["codex"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "GAP"
-          and "AEGIS" not in capabilities["opencode"] and "AEGIS" not in capabilities["codex"])
+    check("ADAPTER_CAPABILITY_CONTRACT", set(capabilities) == {"opencode"}
+          and capabilities["opencode"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "SUPPORTED"
+          and "AEGIS" not in capabilities["opencode"])
     check("NO_BUNDLED_MCP_SERVERS", no_bundled_mcp_servers(opencode_config))
     check("NO_BUNDLED_MCP_SERVER_QUALIFICATION_REJECTS_DECLARATION",
           not no_bundled_mcp_servers({"mcp": {"servers": {"synthetic": {"type": "local"}}}}))

@@ -3,24 +3,23 @@
 
 `SUPPORTED`, `ADAPTABLE`, `PARTIAL`, `GAP`, and `NOT_NEEDED` describe the Olympus guarantee available through each adapter. A GAP never weakens Core policy.
 
-| Capability | OpenCode | Codex |
-|---|---|---|
-| `ROOT_ORCHESTRATOR` | SUPPORTED | SUPPORTED |
-| `CUSTOM_SPECIALISTS` | SUPPORTED | SUPPORTED |
-| `PER_ROLE_MODEL` | SUPPORTED | SUPPORTED |
-| `PER_ROLE_REASONING` | SUPPORTED | SUPPORTED |
-| `MULTI_AGENT` | SUPPORTED | SUPPORTED |
-| `BOUNDED_PARALLELISM` | SUPPORTED | SUPPORTED |
-| `QUESTION_CENTRALIZATION` | SUPPORTED | PARTIAL |
-| `COMPLETION_BARRIER` | SUPPORTED | SUPPORTED |
-| `RESULT_DELIVERY` | SUPPORTED | SUPPORTED |
-| `RESULT_RECONCILIATION` | SUPPORTED | PARTIAL |
-| `ALLOW` | SUPPORTED | SUPPORTED |
-| `ASK` | SUPPORTED | ADAPTABLE |
-| `DENY` | SUPPORTED | GAP |
-| `CONTEXTUAL_OLYMPUS_MAINTENANCE` | SUPPORTED | GAP |
-| `ACTIVITY_VISIBILITY` | SUPPORTED | PARTIAL |
-| `GLOBAL_RUNTIME_DISCOVERY` | SUPPORTED | SUPPORTED |
+| Capability | OpenCode |
+|---|---|
+| `ROOT_ORCHESTRATOR` | SUPPORTED |
+| `CUSTOM_SPECIALISTS` | SUPPORTED |
+| `PER_ROLE_MODEL` | SUPPORTED |
+| `PER_ROLE_REASONING` | SUPPORTED |
+| `MULTI_AGENT` | SUPPORTED |
+| `BOUNDED_PARALLELISM` | SUPPORTED |
+| `QUESTION_CENTRALIZATION` | SUPPORTED |
+| `COMPLETION_BARRIER` | SUPPORTED |
+| `RESULT_DELIVERY` | SUPPORTED |
+| `RESULT_RECONCILIATION` | SUPPORTED |
+| `ALLOW` | SUPPORTED |
+| `ASK` | SUPPORTED |
+| `DENY` | SUPPORTED |
+| `CONTEXTUAL_OLYMPUS_MAINTENANCE` | SUPPORTED |
+| `ACTIVITY_VISIBILITY` | SUPPORTED |
+| `GLOBAL_RUNTIME_DISCOVERY` | SUPPORTED |
 
-OpenCode supports contextual OlympusAgents maintenance through Kael's normal routing. Codex currently declares contextual OlympusAgents maintenance and DENY as gaps, uses adaptable/native ASK, and relies on basic/partial native activity visibility. Do not infer stronger enforcement than these states claim.
 Global install file placement and global runtime discovery are separate claims. `GLOBAL_RUNTIME_DISCOVERY = GAP` means an isolated runtime omitted required global agents; `PARTIAL` means evidence is incomplete or inconclusive; `SUPPORTED` requires isolated paths and the expected runtime roster.

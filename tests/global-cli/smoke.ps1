@@ -147,7 +147,7 @@ $createdParent = $false
 $runCreated = $false
 $environmentNames = @(
     'APPDATA', 'LOCALAPPDATA', 'USERPROFILE', 'HOME', 'OPENCODE_CONFIG_DIR', 'OLYMPUS_CONFIG_HOME',
-    'OLYMPUS_CONFIG_FILE', 'CODEX_HOME', 'PYTHONDONTWRITEBYTECODE', 'OLYMPUS_SMOKE_INSTALL_ROOT',
+    'OLYMPUS_CONFIG_FILE', 'PYTHONDONTWRITEBYTECODE', 'OLYMPUS_SMOKE_INSTALL_ROOT',
     'OLYMPUS_SMOKE_PATH_STORE', 'OLYMPUS_SMOKE_RELEASE_VERSION', 'OLYMPUS_SMOKE_RELEASE_INSTALLER',
     'OLYMPUS_SMOKE_RELEASE_ARCHIVE', 'OLYMPUS_SMOKE_METADATA_FIXTURE', 'OLYMPUS_SMOKE_REQUEST_LOG',
     'OLYMPUS_SMOKE_METADATA_URI', 'OLYMPUS_SMOKE_RAW_BASE', 'OLYMPUS_SMOKE_ARCHIVE_URI', 'OLYMPUS_SMOKE_PWSH',
@@ -204,22 +204,20 @@ try {
     $env:OLYMPUS_CLI_PATH_STORE = $pathStore
     $env:XDG_CONFIG_HOME = Join-Path $run 'xdg'
     $env:PYTHONDONTWRITEBYTECODE = '1'
-    foreach ($name in @('OLYMPUS_CONFIG_HOME', 'OLYMPUS_CONFIG_FILE', 'CODEX_HOME')) {
+    foreach ($name in @('OLYMPUS_CONFIG_HOME', 'OLYMPUS_CONFIG_FILE')) {
         [Environment]::SetEnvironmentVariable($name, $null, 'Process')
     }
     $env:OLYMPUS_CONFIG_FILE = $userConfig
-    $env:CODEX_HOME = Join-Path $run 'codex'
 
-    $userOpenCodeConfig = [IO.File]::ReadAllText((Join-Path $source 'olympus/harnesses/opencode/global-permissions.jsonc'))
+    $userOpenCodeConfig = '{"user_owned":true,"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"C:/fixture/prohibited/*","effect":"deny"}]}' + "`n"
     [IO.File]::WriteAllText($opencodeConfig, $userOpenCodeConfig, $Utf8NoBom)
     $savedOpenCodeConfig = [IO.File]::ReadAllBytes($opencodeConfig)
 
     [IO.Directory]::CreateDirectory($releaseSource) | Out-Null
-    $clonePaths = @('olympus', 'scripts', '.opencode', '.codex')
+    $clonePaths = @('olympus', 'scripts', '.opencode')
     foreach ($relative in $clonePaths) {
         Copy-Item -LiteralPath (Join-Path $source $relative) -Destination $releaseSource -Recurse
     }
-    Copy-Item -LiteralPath (Join-Path $source 'CODEX.md') -Destination $releaseSource
     Copy-Item -LiteralPath (Join-Path $source 'opencode.jsonc') -Destination $releaseSource
     Copy-Item -LiteralPath (Join-Path $source 'install.ps1') -Destination $releaseSource
 
@@ -355,9 +353,10 @@ subprocess.run = _run
     Assert 'PACKAGED_OPENCODE_GENERATED_ASSETS' ((Test-Path -LiteralPath (Join-Path $packagedSource '.opencode/agents/kael.md')) -and
         (Test-Path -LiteralPath (Join-Path $packagedSource '.opencode/plugins/olympus-activity/activity.ts')) -and
         (Test-Path -LiteralPath (Join-Path $packagedSource '.opencode/scripts/worktree-setup.ps1')))
-    Assert 'PACKAGED_CODEX_FROZEN_ASSETS' ((Test-Path -LiteralPath (Join-Path $packagedSource '.codex/agents/veyra.toml')) -and
-        (Test-Path -LiteralPath (Join-Path $packagedSource '.codex/config.toml')) -and
-        (Test-Path -LiteralPath (Join-Path $packagedSource 'CODEX.md')))
+    Assert 'PACKAGED_SOURCE_HAS_NO_RETIRED_CODEX_OUTPUTS' (
+        -not (Test-Path -LiteralPath (Join-Path $packagedSource '.codex')) -and
+        -not (Test-Path -LiteralPath (Join-Path $packagedSource 'CODEX.md'))
+    )
     Assert 'PROJECT_COMMANDS_NOT_PACKAGED' (-not (Test-Path -LiteralPath (Join-Path $packagedSource '.opencode/commands')))
     $persistedPath = [IO.File]::ReadAllText($pathStore)
     Assert 'PATH_STORE_ISOLATED' ($persistedPath -ceq [IO.Path]::GetFullPath($bin))

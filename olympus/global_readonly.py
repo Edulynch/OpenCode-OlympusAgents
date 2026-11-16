@@ -1,7 +1,6 @@
 """Inspect managed global installations without becoming a global writer.
 
-Global OpenCode and Codex installations have different roots and inventories.
-This reader keeps that distinction explicit and never adopts an unowned file.
+This reader never adopts an unowned file.
 """
 
 from __future__ import annotations
@@ -28,15 +27,6 @@ _DEFAULT_AGENT_RECEIPT = "default_agent_receipt"
 _HASH = re.compile(r"[0-9a-fA-F]{64}\Z")
 _POWERSHELL_VERSION = re.compile(r"(?m)^PowerShell ([0-9]+)\.")
 _CONFIG_PATH = re.compile(r"(?m)^\s*config\s{2,}(?P<path>.+?)\s*$")
-_CODEX_INTRO = re.compile(
-    r"This file is the Codex adapter's root representation:.*?Codex owns the user-facing result\.",
-    re.DOTALL,
-)
-_GLOBAL_INTRO = (
-    "This is the global Olympus root instruction and Kael identity. "
-    "Start Codex with `codex --profile olympus` to use the global Olympus model and agent defaults. "
-    "Project-local instructions and overrides remain in place and take precedence where Codex defines them."
-)
 _REPARSE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 
 
@@ -93,23 +83,16 @@ def _opencode_root() -> Path:
     return _root(Path(paths[0]))
 
 
-def _codex_root() -> Path:
-    return _root(Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex"))
-
-
 def resolve_roots(selected: tuple[str, ...]) -> dict[str, Path]:
-    roots = {name: _opencode_root() if name == "opencode" else _codex_root() for name in selected}
-    if len(roots) == 2:
-        left, right = roots["opencode"], roots["codex"]
-        # A nested pair of roots could share the same manifest/resources; refuse
-        # to report two independent owners where path isolation is unproven.
-        if left == right or left in right.parents or right in left.parents:
-            raise GlobalFault("overlapping_global_roots", "OpenCode and Codex global roots overlap; ownership is ambiguous.")
-    return roots
+    if selected != ("opencode",):
+        raise GlobalFault("global_harness_unsupported", "Only the OpenCode global installation is supported.")
+    return {"opencode": _opencode_root()}
 
 
 def _expected(source: Path, renderer, selected: tuple[str, ...], *, include_default_agent: bool = False) -> dict[str, dict[str, bytes]]:
-    rendered = renderer.outputs_for(source, "all")
+    if selected != ("opencode",):
+        raise GlobalFault("global_harness_unsupported", "Only the OpenCode global installation is supported.")
+    rendered = renderer.outputs_for(source, "opencode")
     outputs = {name: {} for name in selected}
     for file, content in rendered.items():
         if not file.is_relative_to(source) or not isinstance(content, str):
@@ -120,15 +103,8 @@ def _expected(source: Path, renderer, selected: tuple[str, ...], *, include_defa
             harness, destination = "opencode", relative.removeprefix(".opencode/")
         elif relative.startswith(".opencode/plugins/olympus-activity/"):
             harness, destination = "opencode", relative.removeprefix(".opencode/")
-        elif relative.startswith(".codex/agents/"):
-            harness, destination = "codex", relative.removeprefix(".codex/")
-        elif relative == ".codex/config.toml":
-            harness, destination = "codex", "olympus.config.toml"
-        elif relative == "CODEX.md":
-            harness, destination = "codex", "AGENTS.md"
-            if len(_CODEX_INTRO.findall(content)) != 1:
-                raise GlobalFault("source_invalid", "Codex root instructions lack the expected global adaptation anchor.", 1)
-            content = _CODEX_INTRO.sub(_GLOBAL_INTRO, content, count=1)
+        elif relative.startswith(".codex/") or relative == "CODEX.md":
+            raise GlobalFault("source_inventory_unsupported", f"Renderer returned an obsolete resource: {relative}")
         if harness in outputs:
             # The native installer retains checkout line endings. Do not turn
             # a coherent CRLF source into a different managed byte inventory.
@@ -150,7 +126,7 @@ def _expected(source: Path, renderer, selected: tuple[str, ...], *, include_defa
                 raise GlobalFault("source_invalid", "Global permission guard template is not an object.", 1)
             guard = guard[:opening + 1] + b'\n  "default_agent": "kael",' + guard[opening + 1:]
         outputs["opencode"]["opencode.jsonc"] = guard
-    if ("opencode" in outputs and len(outputs["opencode"]) != 14) or ("codex" in outputs and len(outputs["codex"]) != 12):
+    if len(outputs["opencode"]) != 14:
         raise GlobalFault("source_inventory_unsupported", "Global renderer inventory differs from the official engine.")
     return outputs
 
@@ -176,19 +152,21 @@ def _parse_manifest_bytes(raw: bytes, harness: str, expected: dict[str, bytes] |
     except (ValueError, UnicodeError) as error:
         raise GlobalFault("invalid_global_manifest", "Global manifest is not valid JSON.") from error
     if (not isinstance(data, dict) or type(data.get("schema_version")) is not int or data["schema_version"] != 1
-            or data.get("scope") != "global" or data.get("installed_harnesses") != [harness]
+            or data.get("scope") != "global" or data.get("installed_harnesses") != ["opencode"]
             or not isinstance(data.get("installed_version"), str) or not data["installed_version"]
             or not isinstance(data.get("installed_from_commit"), str) or not data["installed_from_commit"]
-            or not isinstance(data.get("managed_files"), list)):
+            or not isinstance(data.get("managed_files"), list) or not data["managed_files"]):
         raise GlobalFault("invalid_global_manifest", "Global manifest ownership, version or schema is unsupported.")
     # Only the local marker and official release tag grammar are interpretable.
     # An unknown string must not silently become an actionable global preview.
     if data["installed_version"] != "local" and install_routing._RELEASE_TAG.fullmatch(data["installed_version"]) is None:
         raise GlobalFault("unsupported_global_version", "Global manifest has an unsupported installed version.")
-    if _DEFAULT_AGENT_RECEIPT in data:
-        _validate_default_agent_receipt(data[_DEFAULT_AGENT_RECEIPT])
-        if harness != "opencode":
-            raise GlobalFault("invalid_global_manifest", "Default-agent ownership is valid only for OpenCode.")
+    if harness != "opencode":
+        raise GlobalFault("global_harness_unsupported", "Only the OpenCode global installation is supported.")
+    if _DEFAULT_AGENT_RECEIPT not in data:
+        raise GlobalFault("global_default_agent_receipt_missing",
+                          "Receipt-less global OpenCode manifests are unsupported; reconcile ownership before a matching-version removal.")
+    _validate_default_agent_receipt(data[_DEFAULT_AGENT_RECEIPT])
     entries: dict[str, str] = {}
     for item in data["managed_files"]:
         if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("sha256"), str):
@@ -199,17 +177,21 @@ def _parse_manifest_bytes(raw: bytes, harness: str, expected: dict[str, bytes] |
                 path.casefold() in (existing.casefold() for existing in entries) or
                 _HASH.fullmatch(digest) is None):
             raise GlobalFault("invalid_global_manifest", "Global manifest has a duplicate or unsafe managed resource.")
+        if (path.startswith(".codex/") or path in ("CODEX.md", "AGENTS.md", "olympus.config.toml")
+                or (path.startswith("agents/") and path.endswith(".toml"))):
+            raise GlobalFault("unsupported_global_inventory", "Global manifest contains an obsolete Codex resource.")
         if expected is not None and path not in expected:
             raise GlobalFault("unsupported_global_inventory", "Global manifest owns a resource outside the current adapter inventory.")
         entries[path] = digest.lower()
     if expected is not None:
-        allowed_inventory = {frozenset(expected)}
-        if harness == "opencode":
-            # A pre-existing safe user-owned config is intentionally absent
-            # from the manifest; older 13-resource installs use the same shape.
-            allowed_inventory.add(frozenset(set(expected) - {"opencode.jsonc"}))
+        allowed_inventory = {
+            frozenset(expected),
+            frozenset(set(expected) - {"opencode.jsonc"}),
+        }
         if frozenset(entries) not in allowed_inventory:
             raise GlobalFault("unsupported_global_inventory", "Global manifest inventory does not match the current adapter inventory.")
+    elif len(entries) not in (13, 14):
+        raise GlobalFault("unsupported_global_inventory", "Global manifest must contain the current 13- or 14-resource OpenCode inventory.")
     return data, entries
 
 
@@ -248,7 +230,7 @@ def _default_agent_status(root: Path, manifest: dict) -> str:
     receipt = manifest.get(_DEFAULT_AGENT_RECEIPT)
     if receipt is None:
         raise GlobalFault("global_default_agent_receipt_missing",
-                          "Global OpenCode installation has no default-agent ownership receipt; run a normal install/update.")
+                          "Receipt-less global OpenCode manifests are unsupported; reconcile ownership before a matching-version removal.")
     if receipt["state"] != "committed":
         raise GlobalFault("global_default_agent_recovery_pending",
                           f"OpenCode default-agent receipt is {receipt['state']}; reconcile with a normal install or uninstall.")
@@ -370,7 +352,7 @@ def _jsonc_without_comments(raw: bytes) -> str:
 
 
 def _unowned_opencode_guard(root: Path) -> str:
-    """Match the installer's safe-user-config contract before trusting a legacy inventory."""
+    """Verify the safety boundary in a receipt-owned installation's user config."""
     json_file = _read(root, "opencode.json")
     jsonc_file = _read(root, "opencode.jsonc")
     if json_file is not None and jsonc_file is not None:
@@ -430,35 +412,21 @@ def _assignments(installed: dict[str, dict[str, bytes]], expected: dict[str, dic
                  canonical: dict) -> dict:
     rows = []
     for row in canonical["roles"]:
-        harnesses = {}
-        for harness in ("opencode", "codex"):
-            if harness not in installed:
-                harnesses[harness] = {"state": "not_selected", "current_status": "unknown", "current": None, "proposed": None}
-                continue
-            if harness == "codex" and row["role"] == "kael":
-                harnesses[harness] = {"state": "root", "current_status": "see_roots", "current": None, "proposed": None}
-                continue
-            path = f"agents/{row['role']}.{'md' if harness == 'opencode' else 'toml'}"
-            raw, template = installed[harness].get(path), expected[harness].get(path)
-            parsed = (config_apply._verified_opencode_agent(raw, template) if harness == "opencode"
-                      else config_apply._verified_codex(raw)) if raw is not None and template is not None else None
-            harnesses[harness] = {"state": "selected", "current_status": "verified" if parsed else "unsupported",
-                                   "current": parsed, "proposed": {"model": row["models"][harness], "effort": row["effort"]}}
+        path = f"agents/{row['role']}.md"
+        raw, template = installed["opencode"].get(path), expected["opencode"].get(path)
+        parsed = config_apply._verified_opencode_agent(raw, template) if raw is not None and template is not None else None
+        harnesses = {"opencode": {
+            "state": "selected",
+            "current_status": "verified" if parsed else "unsupported",
+            "current": parsed,
+            "proposed": {"model": row["models"]["opencode"], "effort": row["effort"]},
+        }}
         rows.append({"role": row["role"], "identity": row["identity"],
                      "family": {"current": "unknown", "proposed": row["family"]}, "harnesses": harnesses})
     roots = {"opencode": {"state": "not_managed", "current": None, "proposed": None}}
-    if "codex" in installed:
-        parsed = config_apply._verified_codex(installed["codex"].get("olympus.config.toml", b""))
-        kael = next(row for row in canonical["roles"] if row["role"] == "kael")
-        roots["codex"] = {"state": "selected", "current_status": "verified" if parsed else "unsupported",
-                          "current": parsed, "proposed": {"model": kael["models"]["codex"], "effort": kael["effort"]}}
-    else:
-        roots["codex"] = {"state": "not_selected", "current_status": "unknown", "current": None, "proposed": None}
     statuses = [representation["current_status"] for role in rows
                 for representation in role["harnesses"].values()
                 if representation["current_status"] in ("verified", "unsupported")]
-    statuses.extend(item["current_status"] for item in roots.values()
-                    if item.get("current_status") in ("verified", "unsupported"))
     verified = statuses.count("verified")
     return {"status": "partial" if verified and "unsupported" in statuses else
             "unsupported" if "unsupported" in statuses else "verified",
@@ -486,7 +454,7 @@ def _native_failure_reason(stdout: str, harness: str) -> tuple[str, str, int]:
     return "unavailable", "native_verify_unavailable", 3
 
 
-def _native_verify(source: Path, root: Path, harness: str, version: str) -> tuple[str, str, str | None, int]:
+def _native_verify(source: Path, root: Path, version: str) -> tuple[str, str, str | None, int]:
     if sys.platform != "win32":
         return "unavailable", "Global native VerifyOnly is qualified only on Windows.", "native_verify_unavailable", 3
     executable = shutil.which("pwsh")
@@ -498,7 +466,7 @@ def _native_verify(source: Path, root: Path, harness: str, version: str) -> tupl
         env = os.environ.copy()
         env["USERPROFILE"] = profile
         env["PYTHONDONTWRITEBYTECODE"] = "1"
-        env["OPENCODE_CONFIG_DIR" if harness == "opencode" else "CODEX_HOME"] = str(root)
+        env["OPENCODE_CONFIG_DIR"] = str(root)
         try:
             probe = subprocess.run(
                 [executable, "-Version"], env=env, cwd=source, capture_output=True,
@@ -510,16 +478,16 @@ def _native_verify(source: Path, root: Path, harness: str, version: str) -> tupl
                 return "unavailable", "The native verifier requires PowerShell 7 or later.", "native_verify_unavailable", 3
             result = subprocess.run(
                 [executable, "-NoProfile", "-NonInteractive", "-File", str(source / "scripts/global-install.ps1"),
-                 "-Harness", harness, "-SourceVersion", version, "-VerifyOnly"],
+                 "-Harness", "opencode", "-SourceVersion", version, "-VerifyOnly"],
                 env=env, cwd=source, capture_output=True, text=True, encoding="utf-8", errors="replace",
                 check=False, timeout=30, shell=False,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             return "unavailable", f"Global native verifier could not finish: {error}", "native_verify_unavailable", 3
-    line = f"OLYMPUS_GLOBAL_VERIFY: {harness} {version} PASS"
+    line = f"OLYMPUS_GLOBAL_VERIFY: opencode {version} PASS"
     if result.returncode == 0 and any(item.startswith(line + " (") for item in result.stdout.splitlines()):
         return "verified", "Official global VerifyOnly passed.", None, 0
-    state, issue_code, exit_code = _native_failure_reason(result.stdout, harness)
+    state, issue_code, exit_code = _native_failure_reason(result.stdout, "opencode")
     return state, "Official global VerifyOnly did not pass; see the reported failure category.", issue_code, exit_code
 
 
@@ -527,7 +495,7 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
             release_version: Callable, assignment_query: Callable, operation: str,
             plan_sink: dict | None = None) -> int:
     """Report each global harness independently and preserve the original failure."""
-    selected = ("opencode", "codex") if args.harness == "all" else (args.harness,)
+    selected = ("opencode",)
     response.update({"operation": operation, "context": {"scope": "global", "harness": args.harness, "source": str(source)},
                      "data": {"harnesses": {}, "runtime_discovery": "not_performed"}, "issues": []})
     if getattr(args, "target", None) is not None:
@@ -535,6 +503,8 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
         response["issues"] = [{"code": "invalid_target", "message": "--target is incompatible with --scope global."}]
         return 2
     try:
+        if args.harness != "opencode":
+            raise GlobalFault("global_harness_unsupported", "Only the OpenCode global installation is supported.")
         roots = resolve_roots(selected)
         if operation in ("config apply", "doctor") and "opencode" in roots:
             try:
@@ -552,10 +522,9 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                 raise GlobalFault("source_drift", "Canonical generated source is not coherent with the renderer.")
             renderer = load_renderer(source)
             expected = _expected(source, renderer, selected, include_default_agent=operation == "doctor")
-            if "opencode" in expected:
-                from . import user_config
+            from . import user_config
 
-                user_config.apply_to_expected(source, expected["opencode"])
+            user_config.apply_to_expected(source, expected["opencode"])
         current_by_harness: dict[str, dict[str, bytes]] = {}
         apply_candidates: dict[str, dict] = {}
         changes: list[dict[str, str]] = []
@@ -576,53 +545,37 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                 if operation == "status":
                     item["state"] = "reported"
                     item["integrity"] = "unverified"
-                    receipt = manifest.get(_DEFAULT_AGENT_RECEIPT)
-                    item["default_agent"] = receipt["state"] if receipt else "not_recorded"
+                    item["default_agent"] = manifest[_DEFAULT_AGENT_RECEIPT]["state"]
                     continue
                 current = _verified_files(root, entries)
                 current_by_harness[harness] = current
                 item["integrity"] = "hash_verified"
-                if harness == "opencode":
-                    item["default_agent"] = (_default_agent_status(root, manifest)
-                                             if _DEFAULT_AGENT_RECEIPT in manifest else "not_recorded")
-                    if operation == "config apply":
-                        json_file = _read(root, "opencode.json")
-                        jsonc_file = _read(root, "opencode.jsonc")
-                        if json_file is not None and jsonc_file is not None:
-                            raise GlobalFault("global_external_guard_unsafe", "Both global OpenCode config formats exist; precedence is ambiguous.")
-                        if "opencode.jsonc" in entries and json_file is not None:
-                            raise GlobalFault("global_external_guard_unsafe", "An unowned opencode.json conflicts with the Olympus-managed opencode.jsonc.")
-                    if _read(root, _OPENCODE_GUARD_INTENT) is not None:
-                        # The Windows writer owns pending recovery; a read-only
-                        # preview must not declare an interrupted install done.
-                        raise GlobalFault("global_guard_recovery_pending", "An OpenCode guard transaction is pending; rerun the global installer to reconcile ownership.")
-                    if "opencode.jsonc" not in entries:
-                        guard_state = _unowned_opencode_guard(root)
-                        item["external_guard"] = guard_state
-                        if guard_state == "missing" and operation == "config apply":
-                            changes.append({"harness": "opencode", "path": "opencode.jsonc", "action": "create",
-                                            "proposed_sha256": hashlib.sha256(expected[harness]["opencode.jsonc"]).hexdigest()})
-                    if operation == "config apply":
-                        if _DEFAULT_AGENT_RECEIPT in manifest and "opencode.jsonc" in current:
-                            # The installer owns this field lifecycle, not the
-                            # legacy guard renderer. Preview and execution share it.
-                            expected[harness]["opencode.jsonc"] = current["opencode.jsonc"]
-                        apply_candidates[harness] = {
-                            "root": root, "manifest": manifest, "entries": entries,
-                            "manifest_raw": manifest_raw, "expected": expected[harness],
-                            "current": current, "guard_state": item.get("external_guard"),
-                        }
-                if harness == "codex":
-                    # The native installer refuses this user-owned, higher-priority
-                    # instruction file, even if every Olympus-managed byte matches.
-                    _, override, override_issue = config_apply._lstat_target_path(root, "AGENTS.override.md")
-                    if override_issue:
-                        raise GlobalFault("unsafe_global_resource", override_issue)
-                    if override is not None:
-                        raise GlobalFault("global_install_conflict", "Global Codex AGENTS.override.md takes precedence over managed AGENTS.md.")
+                item["default_agent"] = _default_agent_status(root, manifest)
+                if operation == "config apply":
+                    json_file = _read(root, "opencode.json")
+                    jsonc_file = _read(root, "opencode.jsonc")
+                    if json_file is not None and jsonc_file is not None:
+                        raise GlobalFault("global_external_guard_unsafe", "Both global OpenCode config formats exist; precedence is ambiguous.")
+                    if "opencode.jsonc" in entries and json_file is not None:
+                        raise GlobalFault("global_external_guard_unsafe", "An unowned opencode.json conflicts with the Olympus-managed opencode.jsonc.")
+                if _read(root, _OPENCODE_GUARD_INTENT) is not None:
+                    # The Windows writer owns pending recovery; a read-only
+                    # preview must not declare an interrupted install done.
+                    raise GlobalFault("global_guard_recovery_pending", "An OpenCode guard transaction is pending; rerun the global installer to reconcile ownership.")
+                if "opencode.jsonc" not in entries:
+                    item["external_guard"] = _unowned_opencode_guard(root)
+                if operation == "config apply":
+                    if "opencode.jsonc" in current:
+                        # The installer owns this field lifecycle, not the renderer.
+                        expected[harness]["opencode.jsonc"] = current["opencode.jsonc"]
+                    apply_candidates[harness] = {
+                        "root": root, "manifest": manifest, "entries": entries,
+                        "manifest_raw": manifest_raw, "expected": expected[harness],
+                        "current": current,
+                    }
                 if operation == "doctor":
                     version = "local" if manifest["installed_version"] == "local" else release_version(source)
-                    state, detail, issue_code, exit_code = _native_verify(source, root, harness, version)
+                    state, detail, issue_code, exit_code = _native_verify(source, root, version)
                     item.update({"state": state, "verification": detail})
                     if state != "verified":
                         blocked.append(harness)
@@ -633,9 +586,7 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                     item["state"] = "ready"
                     for path, desired in sorted(expected[harness].items()):
                         if path not in current:
-                            # Preserve pre-existing user config and historical
-                            # 13-file inventories; native VerifyOnly handles
-                            # their safety in the supported Windows runtime.
+                            # Preserve the pre-existing user-owned config recorded by the receipt.
                             continue
                         if current[path] != desired:
                             changes.append({"harness": harness, "path": path, "action": "update",
@@ -646,15 +597,13 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                 failure_codes.append(error.code)
                 response["data"]["harnesses"][harness]["state"] = "drift" if error.code == 1 else "blocked"
                 response["issues"].append({"code": error.reason, "message": str(error), "harness": harness})
-        response["data"]["selection_state"] = "partial" if absent and len(absent) != len(selected) else "absent" if absent else "complete"
-        if absent and len(absent) != len(selected):
-            response["issues"].append({"code": "harness_absent", "message": "At least one selected global harness is not installed."})
+        response["data"]["selection_state"] = "absent" if absent else "complete"
         if operation == "config apply":
-            response["data"].update({"preview_only": True, "apply_available": args.harness == "opencode", "changes": changes,
+            response["data"].update({"preview_only": True, "apply_available": True, "changes": changes,
                                      "assignments": {"status": "unknown", "evidence": "not_verified", "roles": [], "roots": {}}})
             if not blocked and not absent:
                 response["data"]["assignments"] = _assignments(current_by_harness, expected, assignment_query(load_renderer(source), source))
-                if plan_sink is not None and args.harness == "opencode":
+                if plan_sink is not None:
                     plan_sink.clear()
                     plan_sink.update(apply_candidates["opencode"])
         if blocked:

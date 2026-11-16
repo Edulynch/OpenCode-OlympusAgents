@@ -63,7 +63,7 @@ class SliceA(unittest.TestCase):
         shutil.copy2(ROOT / "install.ps1", self.source / "install.ps1")
         self.source_version = release_version(self.source)
         self.renderer = load_file("fixture_renderer", self.source / "scripts/render_harnesses.py")
-        self.outputs = self.renderer.outputs_for(self.source, "all")
+        self.outputs = self.renderer.outputs_for(self.source, "opencode")
         for path, content in self.outputs.items():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8", newline="\n")
@@ -82,8 +82,19 @@ class SliceA(unittest.TestCase):
 
     def snapshot(self):
         paths = set(self.sandbox.rglob("*"))
-        return ({path.relative_to(self.sandbox).as_posix(): ("file" if path.is_file() else "directory", path.stat().st_mode)
-                 for path in paths}, helpers.snapshot_outputs({path for path in paths if path.is_file()}))
+        inventory = {}
+        files = set()
+        for path in paths:
+            relative = path.relative_to(self.sandbox).as_posix()
+            metadata = path.lstat()
+            if path.is_symlink():
+                inventory[relative] = ("symlink", metadata.st_mode, os.readlink(path), metadata.st_mtime_ns)
+            elif path.is_file():
+                inventory[relative] = ("file", metadata.st_mode)
+                files.add(path)
+            else:
+                inventory[relative] = ("directory", metadata.st_mode)
+        return inventory, helpers.snapshot_outputs(files)
 
     def query(self, *arguments: str, entry="module"):
         environment = self.env.copy()
@@ -148,38 +159,40 @@ class SliceA(unittest.TestCase):
         return response
 
     def write_manifest(self, harnesses=None, **changes):
-        harnesses = ["codex"] if harnesses is None else harnesses
-        folder = ".opencode" if "opencode" in harnesses else ".codex"
-        path = self.target / folder / "orchestrator-install.json"
-        path.parent.mkdir(exist_ok=True)
-        data = {"schema_version": 1, "scope": "project", "installed_harnesses": harnesses,
-                "installed_version": "v0.4.9", "installed_from_commit": "unknown", "managed_files": []}
+        harnesses = ["opencode"] if harnesses is None else harnesses
+        if harnesses == ["opencode"]:
+            path = self.create_managed_install(version="v0.4.9")
+            data = json.loads(path.read_text(encoding="utf-8"))
+        else:
+            folder = ".codex" if "opencode" not in harnesses else ".opencode"
+            path = self.target / folder / "orchestrator-install.json"
+            path.parent.mkdir(exist_ok=True)
+            data = {"schema_version": 1, "scope": "project", "installed_harnesses": harnesses,
+                    "installed_version": "v0.4.9", "installed_from_commit": "unknown", "managed_files": []}
         data.update(changes)
         path.write_text(json.dumps(data), encoding="utf-8")
         return path
 
-    def create_managed_install(self, harnesses=("opencode",), version="v0.4.11"):
+    def create_managed_install(self, version="v0.4.11"):
         entries = []
-        for harness in harnesses:
-            for path, content in self.renderer.outputs_for(self.source, harness).items():
-                relative = path.relative_to(self.source).as_posix()
-                if not (relative.startswith(f".{harness}/") or relative in ("opencode.jsonc", "CODEX.md")):
-                    continue
-                raw = content.encode("utf-8")
-                destination = self.target / Path(relative)
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(raw)
-                entries.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest()})
+        for path, content in self.renderer.outputs_for(self.source, "opencode").items():
+            relative = path.relative_to(self.source).as_posix()
+            if not (relative.startswith(".opencode/") or relative == "opencode.jsonc"):
+                continue
+            raw = content.encode("utf-8")
+            destination = self.target / Path(relative)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(raw)
+            entries.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest()})
         manifest = {
             "schema_version": 1,
             "scope": "project",
             "installed_version": version,
             "installed_from_commit": "fixture-commit",
-            "installed_harnesses": list(harnesses),
+            "installed_harnesses": ["opencode"],
             "managed_files": sorted(entries, key=lambda item: item["path"]),
         }
-        folder = ".opencode" if "opencode" in harnesses else ".codex"
-        manifest_path = self.target / folder / "orchestrator-install.json"
+        manifest_path = self.target / ".opencode/orchestrator-install.json"
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
         return manifest_path
@@ -188,44 +201,38 @@ class SliceA(unittest.TestCase):
         path = self.target / relative
         path.write_bytes(raw)
         manifest_path = self.target / ".opencode/orchestrator-install.json"
-        if not manifest_path.exists():
-            manifest_path = self.target / ".codex/orchestrator-install.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         entry = next(item for item in manifest["managed_files"] if item["path"] == relative)
         entry["sha256"] = hashlib.sha256(raw).hexdigest()
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
 
-    def create_global_managed_install(self, harnesses=("opencode", "codex"), version="local", *, default_agent=False):
+    def create_global_managed_install(self, version="local"):
         """Prepare official global inventories under synthetic, isolated roots."""
-        inventories = global_readonly._expected(self.source, self.renderer, tuple(harnesses),
-                                                include_default_agent=default_agent)
-        paths = {}
-        for harness in harnesses:
-            root = Path(self.env["OPENCODE_CONFIG_DIR" if harness == "opencode" else "CODEX_HOME"])
-            entries = []
-            for relative, raw in sorted(inventories[harness].items()):
-                destination = root / relative
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(raw)
-                entries.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest()})
-            manifest = {"schema_version": 1, "scope": "global", "installed_harnesses": [harness],
-                        "installed_version": version, "installed_from_commit": "synthetic-commit",
-                         "managed_files": entries}
-            if harness == "opencode" and default_agent:
-                manifest["default_agent_receipt"] = {
-                    "version": 1, "state": "committed", "config_path": "opencode.jsonc",
-                    "installed_value": "kael", "previous_present": False,
-                    "previous_value_json": None, "restore_action": "remove",
-                }
-            manifest_path = root / "olympus/orchestrator-install.json"
-            manifest_path.parent.mkdir(parents=True, exist_ok=True)
-            manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
-            paths[harness] = manifest_path
-        return paths
+        inventories = global_readonly._expected(self.source, self.renderer, ("opencode",),
+                                                include_default_agent=True)
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        entries = []
+        for relative, raw in sorted(inventories["opencode"].items()):
+            destination = root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(raw)
+            entries.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest()})
+        manifest = {"schema_version": 1, "scope": "global", "installed_harnesses": ["opencode"],
+                    "installed_version": version, "installed_from_commit": "synthetic-commit",
+                    "managed_files": entries}
+        manifest["default_agent_receipt"] = {
+            "version": 1, "state": "committed", "config_path": "opencode.jsonc",
+            "installed_value": "kael", "previous_present": False,
+            "previous_value_json": None, "restore_action": "remove",
+        }
+        manifest_path = root / "olympus/orchestrator-install.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        return {"opencode": manifest_path}
 
     def update_global_managed_bytes(self, harness, relative, raw):
         """An independently owned fixture may change a model without losing its hash evidence."""
-        root = Path(self.env["OPENCODE_CONFIG_DIR" if harness == "opencode" else "CODEX_HOME"])
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
         (root / relative).write_bytes(raw)
         manifest_path = root / "olympus/orchestrator-install.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -233,16 +240,25 @@ class SliceA(unittest.TestCase):
         entry["sha256"] = hashlib.sha256(raw).hexdigest()
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
 
-    def make_legacy_global_opencode(self):
+    def make_global_user_config_install(self):
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         manifest_path = root / "olympus/orchestrator-install.json"
-        original = manifest_path.read_bytes()
-        manifest = json.loads(original)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["managed_files"] = [item for item in manifest["managed_files"]
                                      if item["path"] != "opencode.jsonc"]
+        config_path = root / "opencode.json"
+        config_path.write_text(
+            '{"default_agent":"kael","permissions":[{"action":"external_directory","resource":"*","effect":"ask"}]}\n',
+            encoding="utf-8",
+        )
+        manifest["default_agent_receipt"] = {
+            "version": 1, "state": "committed", "config_path": "opencode.json",
+            "installed_value": "kael", "previous_present": True,
+            "previous_value_json": '"other"', "restore_action": "set",
+        }
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
         (root / "opencode.jsonc").unlink()
-        return manifest_path, original, manifest_path.read_bytes()
+        return manifest_path
 
     def canonical_role(self, role):
         return next(item for item in cli_model_assignments(self.renderer, self.source)["roles"]
@@ -260,6 +276,7 @@ class SliceA(unittest.TestCase):
             self.assertIn(text, help_result.stdout)
         for command in ("models set-family", "agents set-model", "config recover"):
             self.assertIn(command, help_result.stdout)
+        self.assertIn("update (upgrade)", help_result.stdout)
         for command in ("install", "uninstall"):
             self.assertRegex(help_result.stdout, rf"(?m)^\s*{command}\s+")
         self.assertIn("doctor --scope project", help_result.stdout)
@@ -278,6 +295,15 @@ class SliceA(unittest.TestCase):
         self.assertNotIn(str(self.source), version.stdout)
         self.assertIn(f"olympus {self.source_version}", self.query("version").stdout)
         self.assertEqual(0, self.query("help").returncode)
+
+    def test_slice_a_update_and_upgrade_share_update_handler(self):
+        for command in ("update", "upgrade"):
+            self.assertEqual("update", cli_parser().parse_args([command]).command)
+            for code in (0, 3):
+                with self.subTest(command=command, code=code):
+                    with mock.patch("olympus.system_cli.update", return_value=code) as update:
+                        self.assertEqual((code, "", ""), self.call_main(command))
+                        update.assert_called_once_with(self.source)
 
     def test_slice_a_models_human_json_canonical_assignments(self):
         response = self.json_query("models", "list")
@@ -298,28 +324,30 @@ class SliceA(unittest.TestCase):
             for value in (row["role"], row["identity"], row["family"], row["effort"], *row["models"].values()):
                 self.assertIn(value, human.stdout)
         by_role = {row["role"]: row for row in rows}
-        self.assertEqual("root", by_role["kael"]["representation"]["codex"])
+        self.assertEqual({"opencode"}, set(by_role["kael"]["models"]))
+        self.assertEqual({"opencode"}, set(by_role["kael"]["representation"]))
         self.assertNotIn("aegis", by_role)
-        self.assertEqual(10, sum(row["representation"]["codex"] == "agent" for row in rows))
 
     def test_slice_a_check_renderer_interface_and_human_json(self):
-        for harness in ("all", "opencode", "codex"):
-            with self.subTest(harness=harness):
-                response = self.json_query("config", "check", "--harness", harness)
-                self.assertTrue(response["data"]["coherent"])
-                self.assertEqual(len(self.renderer.outputs_for(self.source, harness)), response["data"]["managed_outputs"])
-                human = self.query("config", "check", "--harness", harness)
-                self.assertEqual(0, human.returncode)
-                for key, value in response["data"].items():
-                    self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
-                self.assertEqual("unknown", response["data"]["model_availability"])
-                self.assertEqual("not_performed", response["data"]["installation_verification"])
+        response = self.json_query("config", "check", "--harness", "opencode")
+        self.assertTrue(response["data"]["coherent"])
+        self.assertEqual(len(self.renderer.outputs_for(self.source, "opencode")), response["data"]["managed_outputs"])
+        human = self.query("config", "check", "--harness", "opencode")
+        self.assertEqual(0, human.returncode)
+        for key, value in response["data"].items():
+            self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
+        self.assertEqual("unknown", response["data"]["model_availability"])
+        self.assertEqual("not_performed", response["data"]["installation_verification"])
+        for harness in ("codex", "all"):
+            self.json_query("config", "check", "--harness", harness, code=2)
 
     def test_slice_a_invalid_arguments_and_unavailable_commands(self):
         for arguments in (("models", "missing"), ("models", "set-family", "sol"),
                           ("agents", "set-model", "kael"), ("config", "recover"),
                           ("config", "apply"), ("doctor", "--scope", "invalid"),
                           ("config", "check", "--harness", "invalid"), ("models", "list", "--force"),
+                          ("config", "check", "--harness", "codex"), ("config", "check", "--harness", "all"),
+                          ("update", "--unsupported"), ("upgrade", "--unsupported"),
                           ("--source", "relative", "models", "list"),
                           ("models", "list", "--source", str(self.source)),
                           ("--version", "models", "list"), ("config",)):
@@ -354,15 +382,13 @@ class SliceA(unittest.TestCase):
         self.assertIn("roster", response["issues"][0]["message"])
 
     def test_slice_a_output_drift_and_missing(self):
-        path = self.source / ".codex/agents/veyra.toml"
+        path = self.source / ".opencode/agents/veyra.md"
         path.write_text("fixture drift", encoding="utf-8")
-        response = self.json_query("config", "check", "--harness", "codex", code=1)
+        response = self.json_query("config", "check", "--harness", "opencode", code=1)
         self.assertEqual("drift", response["issues"][0]["code"])
         path.unlink()
-        response = self.json_query("config", "check", "--harness", "codex", code=1)
+        response = self.json_query("config", "check", "--harness", "opencode", code=1)
         self.assertEqual("missing", response["issues"][0]["code"])
-        # Harness selection must not treat unrelated Codex drift as OpenCode drift.
-        self.assertEqual("ok", self.json_query("config", "check", "--harness", "opencode")["result"])
 
     def test_slice_a_status_absent_and_human_json(self):
         arguments = ("status", "--target", str(self.target))
@@ -375,10 +401,10 @@ class SliceA(unittest.TestCase):
             self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
 
     def test_slice_a_status_reported_never_verified(self):
-        self.write_manifest(["opencode", "codex"])
-        arguments = ("status", "--target", str(self.target), "--harness", "codex")
+        self.write_manifest()
+        arguments = ("status", "--target", str(self.target), "--harness", "opencode")
         response = self.json_query(*arguments)
-        self.assertEqual(["opencode", "codex"], response["data"]["installed_harnesses"])
+        self.assertEqual(["opencode"], response["data"]["installed_harnesses"])
         self.assertEqual("v0.4.9", response["data"]["recorded_version"])
         self.assertEqual("unverified", response["data"]["integrity"])
         self.assertEqual("unverified", response["data"]["ownership"])
@@ -389,12 +415,13 @@ class SliceA(unittest.TestCase):
 
     def test_slice_a_status_invalid_metadata(self):
         path = self.write_manifest()
-        for value in ("{broken", "[]", json.dumps({"schema_version": 2, "managed_files": []}),
-                      json.dumps({"schema_version": 1, "managed_files": [], "installed_harnesses": []})):
+        for value, code in (("{broken", 1), ("[]", 1),
+                            (json.dumps({"schema_version": 2, "managed_files": []}), 1),
+                            (json.dumps({"schema_version": 1, "managed_files": [], "installed_harnesses": []}), 3)):
             with self.subTest(value=value):
                 path.write_text(value, encoding="utf-8")
-                response = self.json_query("status", "--target", str(self.target), code=1)
-                self.assertEqual("failed", response["result"])
+                response = self.json_query("status", "--target", str(self.target), code=code)
+                self.assertEqual("failed" if code == 1 else "blocked", response["result"])
                 self.assertEqual("invalid", response["data"]["installation_state"])
 
     def test_slice_a_status_contradictory_manifests(self):
@@ -404,16 +431,15 @@ class SliceA(unittest.TestCase):
         self.assertEqual("blocked", response["result"])
         self.assertEqual("contradictory", response["data"]["installation_state"])
 
-    def test_slice_a_status_legacy_and_selected_absent(self):
+    def test_slice_a_status_rejects_missing_current_metadata_without_writes(self):
         path = self.write_manifest(["opencode"])
         data = json.loads(path.read_text(encoding="utf-8"))
         del data["installed_harnesses"]
-        del data["installed_version"]
         path.write_text(json.dumps(data), encoding="utf-8")
-        response = self.json_query("status", "--target", str(self.target), "--harness", "codex")
-        self.assertEqual("absent", response["result"])
-        self.assertEqual("legacy", response["data"]["metadata_format"])
-        self.assertEqual("unknown", response["data"]["recorded_version"])
+        before = path.read_bytes()
+        response = self.json_query("status", "--target", str(self.target), code=1)
+        self.assertEqual("invalid", response["data"]["installation_state"])
+        self.assertEqual(before, path.read_bytes())
 
     def test_slice_a_status_context_and_global_absent(self):
         for arguments in (("status",), ("status", "--target", "relative"),
@@ -433,8 +459,8 @@ class SliceA(unittest.TestCase):
         response = self.json_query("models", "list")
         self.assertIn("unconfirmed", response["context"]["source_edit"])
 
-    def test_slice_c_preview_lists_updates_and_preserves_other_harness_without_writes(self):
-        manifest_path = self.create_managed_install(("opencode", "codex"))
+    def test_slice_c_preview_lists_opencode_updates_without_writes(self):
+        manifest_path = self.create_managed_install()
         old_path = self.target / ".opencode/agents/kael.md"
         old_bytes = b"previous managed OpenCode configuration\n"
         old_path.write_bytes(old_bytes)
@@ -452,9 +478,8 @@ class SliceA(unittest.TestCase):
         self.assertIn(".opencode/agents/kael.md", changed)
         self.assertEqual("update", changed[".opencode/agents/kael.md"]["action"])
         self.assertTrue(response["data"]["unchanged"])
-        codex_paths = {item["path"] for item in response["data"]["preserved"]["resources"]}
-        self.assertIn("CODEX.md", codex_paths)
-        self.assertEqual(["codex"], response["data"]["preserved"]["harnesses"])
+        self.assertEqual([], response["data"]["preserved"]["resources"])
+        self.assertEqual([], response["data"]["preserved"]["harnesses"])
 
         human = self.query(*self.config_apply_arguments("opencode"))
         self.assertEqual(0, human.returncode, human.stderr)
@@ -463,7 +488,7 @@ class SliceA(unittest.TestCase):
         self.assertIn("no target writes", human.stdout)
 
     def test_slice_c6_opencode_reports_custom_agent_and_independent_root_assignments(self):
-        self.create_managed_install(("opencode",))
+        self.create_managed_install()
         veyra = self.canonical_role("veyra")
         kael = self.canonical_role("kael")
         agent_relative = ".opencode/agents/veyra.md"
@@ -506,7 +531,7 @@ class SliceA(unittest.TestCase):
         self.assertIn(f"assignments: {json.dumps(assignments, ensure_ascii=False)}", human.stdout)
 
     def test_slice_c_fr008_execute_discloses_the_dry_run_assignments_before_writing(self):
-        self.create_managed_install(("opencode",))
+        self.create_managed_install()
         veyra = self.canonical_role("veyra")
         relative = ".opencode/agents/veyra.md"
         canonical = self.outputs[self.source / relative]
@@ -539,74 +564,8 @@ class SliceA(unittest.TestCase):
         self.assertIn("execution: no_changes", repeated.stdout)
         self.assertEqual(before_noop, self.snapshot())
 
-    def test_slice_c6_codex_specialist_and_kael_root_are_separate(self):
-        self.create_managed_install(("codex",))
-        veyra = self.canonical_role("veyra")
-        kael = self.canonical_role("kael")
-        agent_relative = ".codex/agents/veyra.toml"
-        agent = self.outputs[self.source / agent_relative].replace(
-            f'model = "{veyra["models"]["codex"]}"\nmodel_reasoning_effort = "{veyra["effort"]}"',
-            'model = "vendor/custom-veyra"\nmodel_reasoning_effort = "medium"', 1,
-        ).encode("utf-8")
-        self.assertIn(f'model = "{veyra["models"]["codex"]}"\nmodel_reasoning_effort = "{veyra["effort"]}"',
-                      self.outputs[self.source / agent_relative])
-        root_relative = ".codex/config.toml"
-        root = self.outputs[self.source / root_relative].replace(
-            f'model = "{kael["models"]["codex"]}"\nmodel_reasoning_effort = "{kael["effort"]}"',
-            'model = "vendor/custom-root"\nmodel_reasoning_effort = "low"', 1,
-        ).encode("utf-8")
-        self.update_managed_bytes(agent_relative, agent)
-        self.update_managed_bytes(root_relative, root)
-
-        response = self.json_query(*self.config_apply_arguments("codex"))
-        assignments = response["data"]["assignments"]
-        role = next(item for item in assignments["roles"] if item["role"] == "veyra")
-        self.assertEqual("verified", role["harnesses"]["codex"]["current_status"])
-        self.assertEqual({"model": "vendor/custom-veyra", "effort": "medium"},
-                         role["harnesses"]["codex"]["current"])
-        self.assertEqual({"model": veyra["models"]["codex"], "effort": veyra["effort"]},
-                         role["harnesses"]["codex"]["proposed"])
-        self.assertEqual({"model": "vendor/custom-root", "effort": "low"},
-                         assignments["roots"]["codex"]["current"])
-        self.assertEqual({"model": kael["models"]["codex"], "effort": kael["effort"]},
-                         assignments["roots"]["codex"]["proposed"])
-        self.assertIn(f'model = "{kael["models"]["codex"]}"\nmodel_reasoning_effort = "{kael["effort"]}"',
-                      self.outputs[self.source / root_relative])
-        kael_codex = next(item for item in assignments["roles"] if item["role"] == "kael")["harnesses"]["codex"]
-        self.assertEqual({"representation": "root", "state": "selected"}, kael_codex)
-
-    def test_slice_c6_selected_and_preserved_harness_assignments_are_distinct(self):
-        self.create_managed_install(("opencode", "codex"))
-        for selected, preserved in (("opencode", "codex"), ("codex", "opencode")):
-            with self.subTest(selected=selected):
-                data = self.json_query(*self.config_apply_arguments(selected))["data"]
-                assignments = data["assignments"]
-                self.assertEqual("unknown", assignments["family"])
-                self.assertEqual([selected], assignments["selected_harnesses"])
-                self.assertEqual([preserved], assignments["preserved_harnesses"])
-                row = next(item for item in assignments["roles"] if item["role"] == "veyra")
-                self.assertEqual("selected", row["harnesses"][selected]["state"])
-                self.assertIsNotNone(row["harnesses"][selected]["proposed"])
-                self.assertEqual("preserved", row["harnesses"][preserved]["state"])
-                self.assertIsNone(row["harnesses"][preserved]["proposed"])
-                self.assertEqual("verified", row["harnesses"][preserved]["current_status"])
-                root = assignments["roots"][preserved]
-                self.assertEqual("preserved", root["state"])
-                self.assertIsNotNone(root["current"])
-                self.assertIsNone(root["proposed"])
-
-        both = self.json_query(*self.config_apply_arguments("all"))["data"]["assignments"]
-        self.assertEqual(11, len(both["roles"]))
-        self.assertNotIn("aegis", {item["role"] for item in both["roles"]})
-        self.assertEqual(["opencode", "codex"], both["selected_harnesses"])
-        row = next(item for item in both["roles"] if item["role"] == "veyra")
-        self.assertEqual("selected", row["harnesses"]["opencode"]["state"])
-        self.assertEqual("selected", row["harnesses"]["codex"]["state"])
-        self.assertEqual("selected", both["roots"]["opencode"]["state"])
-        self.assertEqual("selected", both["roots"]["codex"]["state"])
-
     def test_slice_c6_unsupported_opencode_envelopes_never_guess_values(self):
-        self.create_managed_install(("opencode",))
+        self.create_managed_install()
         relative = ".opencode/agents/veyra.md"
         expected = self.outputs[self.source / relative]
         model = self.canonical_role("veyra")
@@ -648,7 +607,7 @@ class SliceA(unittest.TestCase):
         self.assertIsNone(assignments["roots"]["opencode"]["current"])
 
     def test_slice_c6_quoted_boolean_like_opencode_model_is_a_string(self):
-        self.create_managed_install(("opencode",))
+        self.create_managed_install()
         relative = ".opencode/agents/veyra.md"
         expected = self.outputs[self.source / relative]
         role = self.canonical_role("veyra")
@@ -660,58 +619,8 @@ class SliceA(unittest.TestCase):
         self.assertEqual("verified", current["harnesses"]["opencode"]["current_status"])
         self.assertEqual({"model": "true"}, current["harnesses"]["opencode"]["current"])
 
-    def test_slice_c6_malformed_codex_assignments_are_unknown_not_guessed(self):
-        self.create_managed_install(("codex",))
-        role_relative = ".codex/agents/veyra.toml"
-        role = self.canonical_role("veyra")
-        original = self.outputs[self.source / role_relative]
-        model_line = f'model = "{role["models"]["codex"]}"'
-        effort_line = f'model_reasoning_effort = "{role["effort"]}"'
-        variants = {
-            "duplicate": original.replace(model_line, model_line + '\nmodel = "vendor/duplicate"', 1),
-            "wrong_type": original.replace(model_line, "model = 42", 1),
-            "missing": original.replace(effort_line + "\n", "", 1),
-            "nested_only": original.replace(model_line + "\n", "", 1).replace(
-                effort_line + "\n", "", 1).replace("[agents]\n", "[agents]\nmodel = \"vendor/nested\"\n", 1),
-            "malformed": original.replace(model_line, 'model = "unterminated', 1),
-        }
-        for name, value in variants.items():
-            with self.subTest(case=name):
-                self.update_managed_bytes(role_relative, value.encode("utf-8"))
-                response = self.json_query(*self.config_apply_arguments("codex"))
-                self.assertEqual("ok", response["result"])
-                self.assertTrue(response["data"]["apply_available"])
-                assignments = response["data"]["assignments"]
-                current = next(item for item in assignments["roles"] if item["role"] == "veyra")["harnesses"]["codex"]
-                self.assertEqual("unsupported", current["current_status"])
-                self.assertIsNone(current["current"])
-
-        root_relative = ".codex/config.toml"
-        root = self.outputs[self.source / root_relative]
-        kael = self.canonical_role("kael")
-        root_model = f'model = "{kael["models"]["codex"]}"'
-        root_effort = f'model_reasoning_effort = "{kael["effort"]}"'
-        malformed_root = root.replace(root_effort, "model_reasoning_effort = 7", 1)
-        self.update_managed_bytes(root_relative, malformed_root.encode("utf-8"))
-        response = self.json_query(*self.config_apply_arguments("codex"))
-        self.assertEqual("ok", response["result"])
-        self.assertTrue(response["data"]["apply_available"])
-        assignments = response["data"]["assignments"]
-        self.assertEqual("unsupported", assignments["roots"]["codex"]["current_status"])
-        self.assertIsNone(assignments["roots"]["codex"]["current"])
-
-        nested_root = root.replace(root_model + "\n", "", 1).replace(root_effort + "\n", "", 1).replace(
-            "[agents]\n", '[agents]\nmodel = "vendor/nested"\nmodel_reasoning_effort = "high"\n', 1)
-        self.update_managed_bytes(root_relative, nested_root.encode("utf-8"))
-        response = self.json_query(*self.config_apply_arguments("codex"))
-        self.assertEqual("ok", response["result"])
-        self.assertTrue(response["data"]["apply_available"])
-        assignments = response["data"]["assignments"]
-        self.assertEqual("unsupported", assignments["roots"]["codex"]["current_status"])
-        self.assertIsNone(assignments["roots"]["codex"]["current"])
-
     def test_slice_c6_blocked_inventory_keeps_assignments_unknown(self):
-        self.create_managed_install(("opencode",))
+        self.create_managed_install()
         resource = self.target / ".opencode/agents/veyra.md"
         resource.write_bytes(resource.read_bytes() + b"drift\n")
         response = self.json_query(*self.config_apply_arguments("opencode"), code=3)
@@ -723,7 +632,7 @@ class SliceA(unittest.TestCase):
         self.assertIn("managed_file_drift", {issue["code"] for issue in response["issues"]})
 
     def test_slice_c6_noop_assignments_leave_execution_plan_unchanged(self):
-        manifest_path = self.create_managed_install(("opencode",), version="local")
+        manifest_path = self.create_managed_install(version="local")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["installed_from_commit"] = "unknown"
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
@@ -736,10 +645,10 @@ class SliceA(unittest.TestCase):
         self.assertEqual("no_changes", plan_response["data"]["preview_state"])
 
     def test_slice_c2_3_schema1_provenance_preview_is_read_only(self):
-        manifest_path = self.create_managed_install(("opencode", "codex"))
+        manifest_path = self.create_managed_install()
         provenance = {
             "opencode": {"kind": "custom", "source_digest": "a" * 64},
-            "codex": {"kind": "custom", "source_digest": "b" * 64},
+            "codex": {"historical": ["opaque", 1]},
         }
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["harness_provenance"] = provenance
@@ -751,7 +660,7 @@ class SliceA(unittest.TestCase):
         self.assertIn(response["result"], ("ok", "no_changes"))
         self.assertTrue(response["data"]["preview_only"])
         self.assertTrue(response["data"]["apply_available"])
-        self.assertEqual(["opencode", "codex"], response["data"]["installed_harnesses"])
+        self.assertEqual(["opencode"], response["data"]["installed_harnesses"])
         self.assertEqual(before, manifest_path.read_bytes())
 
         execute = self.json_query(*self.config_apply_arguments("opencode"), "--execute", code=2)
@@ -761,7 +670,7 @@ class SliceA(unittest.TestCase):
         self.assertEqual(before, manifest_path.read_bytes())
 
     def test_slice_c_preview_blocks_manifest_hash_drift_and_writes_nothing(self):
-        self.create_managed_install(("opencode",))
+        self.create_managed_install()
         path = self.target / ".opencode/agents/kael.md"
         path.write_bytes(path.read_bytes() + b"user edit\n")
         response = self.json_query(*self.config_apply_arguments(), code=3)
@@ -771,7 +680,7 @@ class SliceA(unittest.TestCase):
 
     def test_slice_c_oversized_manifest_read_is_bounded_and_preview_is_read_only(self):
         limit = 2_000_000
-        manifest_path = self.create_managed_install(("opencode",))
+        manifest_path = self.create_managed_install()
         manifest_path.write_bytes(b"x" * (limit * 2))
         reads = []
         original_fdopen = os.fdopen
@@ -817,26 +726,24 @@ class SliceA(unittest.TestCase):
         response = self.json_query(*self.config_apply_arguments(), code=3)
         self.assertIn("manifest_missing", {item["code"] for item in response["issues"]})
 
-        self.create_managed_install(("opencode",))
-        response = self.json_query(*self.config_apply_arguments("all"), code=3)
-        self.assertIn("harness_not_installed", {item["code"] for item in response["issues"]})
+        self.create_managed_install()
+        response = self.json_query(*self.config_apply_arguments("all"), code=2)
+        self.assertEqual("failed", response["result"])
+        self.assertEqual("invalid_arguments", response["issues"][0]["code"])
 
         (self.target / "opencode.json").write_text("user config\n", encoding="utf-8")
         response = self.json_query(*self.config_apply_arguments(), code=3)
         self.assertIn("unowned_destination_conflict", {item["code"] for item in response["issues"]})
 
-    def test_slice_c_codex_only_preview_and_invalid_manifest_are_safe(self):
-        manifest_path = self.create_managed_install(("codex",), version=self.source_version)
-        response = self.json_query(*self.config_apply_arguments("codex"))
-        self.assertEqual("ok", response["result"])
-        self.assertEqual(["codex"], response["data"]["installed_harnesses"])
-        self.assertEqual([], response["data"]["preserved"]["harnesses"])
-
+    def test_slice_c_preview_rejects_codex_project_manifest_without_writes(self):
+        manifest_path = self.create_managed_install(version=self.source_version)
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest["scope"] = "global"
+        manifest["installed_harnesses"] = ["codex"]
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
-        response = self.json_query(*self.config_apply_arguments("codex"), code=3)
-        self.assertEqual("invalid_manifest", response["issues"][0]["code"])
+        before = self.snapshot()
+        response = self.json_query(*self.config_apply_arguments("opencode"), code=3)
+        self.assertIn(response["issues"][0]["code"], {"invalid_manifest", "invalid_harnesses"})
+        self.assertEqual(before, self.snapshot())
 
     def test_slice_c_preview_rejects_non_root_and_incoherent_source_without_writes(self):
         child = self.target / "child"
@@ -844,7 +751,7 @@ class SliceA(unittest.TestCase):
         response = self.json_query(*self.config_apply_arguments(target=child), code=2)
         self.assertEqual("invalid_target", response["issues"][0]["code"])
 
-        self.create_managed_install(("opencode",))
+        self.create_managed_install()
         generated = self.source / ".opencode/agents/kael.md"
         generated.write_text(generated.read_text(encoding="utf-8") + "source drift\n", encoding="utf-8")
         response = self.json_query(*self.config_apply_arguments(), code=3)
@@ -884,12 +791,12 @@ class SliceA(unittest.TestCase):
             self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
 
     def test_slice_c4_invalid_requests_and_manifest_ownership_are_read_only(self):
-        invalid = self.query("doctor", "--scope", "global", "--target", str(self.target), "--harness", "all")
+        invalid = self.query("doctor", "--scope", "global", "--target", str(self.target), "--harness", "opencode")
         self.assertEqual(2, invalid.returncode)
-        invalid_path = self.json_query("doctor", "--scope", "project", "--target", "relative", "--harness", "all", code=2)
+        invalid_path = self.json_query("doctor", "--scope", "project", "--target", "relative", "--harness", "opencode", code=2)
         self.assertEqual("invalid_target", invalid_path["issues"][0]["code"])
 
-        manifest_path = self.create_managed_install(("opencode",), version=self.source_version)
+        manifest_path = self.create_managed_install(version=self.source_version)
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["scope"] = "global"
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
@@ -914,7 +821,7 @@ class SliceA(unittest.TestCase):
         run_verify.assert_not_called()
 
     def test_slice_c4_doctor_classifies_drift_and_invalid_inventory_without_writes(self):
-        manifest_path = self.create_managed_install(("opencode",), version=self.source_version)
+        manifest_path = self.create_managed_install(version=self.source_version)
         managed = self.target / ".opencode/agents/veyra.md"
         original = managed.read_bytes()
         managed.write_bytes(original + b"foreign drift\n")
@@ -957,7 +864,7 @@ class SliceA(unittest.TestCase):
 
     def test_slice_c4_doctor_diagnoses_a_c3_applied_project_read_only(self):
         self.assertEqual("'C:\\one''two'", doctor._powershell_literal("C:\\one'two"))
-        self.create_managed_install(("opencode",), version=self.source_version)
+        self.create_managed_install(version=self.source_version)
         role = self.source / "olympus/roles/veyra.md"
         role.write_text(role.read_text(encoding="utf-8") + "\nC4 isolated fixture change.\n", encoding="utf-8")
         self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
@@ -988,16 +895,12 @@ class SliceA(unittest.TestCase):
             self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
 
     def test_slice_c3_explicit_apply_updates_selected_harness_and_is_idempotent(self):
-        manifest_path = self.create_managed_install(("opencode", "codex"))
+        manifest_path = self.create_managed_install()
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         provenance = {"opencode": {"kind": "custom", "source_digest": "a" * 64},
-                     "codex": {"kind": "custom", "source_digest": "b" * 64}}
+                     "codex": {"historical": {"opaque": True}}}
         manifest["harness_provenance"] = provenance
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
-        codex_before = {path.relative_to(self.source).as_posix(): (self.target / path.relative_to(self.source)).read_bytes()
-                        for path in self.renderer.outputs_for(self.source, "codex")
-                        if path.relative_to(self.source).as_posix().startswith(".codex/")
-                        or path.relative_to(self.source).as_posix() == "CODEX.md"}
         custom = self.target / ".opencode/custom-user-file.md"
         custom.parent.mkdir(parents=True, exist_ok=True)
         custom.write_text("preserve me\n", encoding="utf-8")
@@ -1013,12 +916,10 @@ class SliceA(unittest.TestCase):
         self.assertIn("execution: committed", result.stdout)
         self.assertEqual(self.outputs[self.source / ".opencode/agents/kael.md"].encode("utf-8"), kael.read_bytes())
         self.assertEqual("preserve me\n", custom.read_text(encoding="utf-8"))
-        for relative, raw in codex_before.items():
-            self.assertEqual(raw, (self.target / relative).read_bytes())
         updated = json.loads(manifest_path.read_text(encoding="utf-8"))
         self.assertEqual("local", updated["installed_version"])
         self.assertEqual("unknown", updated["installed_from_commit"])
-        self.assertEqual({"codex": provenance["codex"]}, updated["harness_provenance"])
+        self.assertEqual(provenance, updated["harness_provenance"])
         self.assertFalse((self.target / ".olympus-cli-config-apply").exists())
         self.assertTrue((self.target / ".olympus-cli-edit.lock").is_file())
 
@@ -1030,7 +931,7 @@ class SliceA(unittest.TestCase):
         self.assertEqual(before_noop, self.snapshot(), "Idempotent apply must not rewrite a no-op target")
 
     def test_slice_c3_execute_rejects_drift_before_lock_or_target_writes(self):
-        self.create_managed_install(("opencode",))
+        self.create_managed_install()
         managed = self.target / ".opencode/agents/kael.md"
         managed.write_bytes(managed.read_bytes() + b"user drift\n")
         before = self.snapshot()
@@ -1042,7 +943,7 @@ class SliceA(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
 
     def test_slice_c3_execute_rejects_invalid_ownership_and_linked_resources(self):
-        manifest_path = self.create_managed_install(("opencode",))
+        manifest_path = self.create_managed_install()
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["managed_files"].append(dict(manifest["managed_files"][0]))
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
@@ -1074,7 +975,7 @@ class SliceA(unittest.TestCase):
         self.assertEqual(before_link_check, self.snapshot())
 
     def test_slice_c3_partial_failure_rolls_back_and_preserves_evidence_on_interruption(self):
-        manifest_target = self.create_managed_install(("opencode",))
+        manifest_target = self.create_managed_install()
         kael_path = self.target / ".opencode/agents/kael.md"
         kael_old = b"previous valid managed configuration\n"
         kael_path.write_bytes(kael_old)
@@ -1173,8 +1074,8 @@ class SliceA(unittest.TestCase):
         self.json_query("models", "bad", code=2, entry=entry)
         self.assertEqual("absent", self.json_query("status", "--scope", "global", entry=entry)["result"])
         # Fixture drift prepared outside the snapshot window; verify exit propagation.
-        (self.source / ".codex/agents/veyra.toml").write_text("fixture drift", encoding="utf-8")
-        self.json_query("config", "check", "--harness", "codex", code=1, entry=entry)
+        (self.source / ".opencode/agents/veyra.md").write_text("fixture drift", encoding="utf-8")
+        self.json_query("config", "check", "--harness", "opencode", code=1, entry=entry)
 
     def test_slice_a_module_external_context(self):
         self.smoke_entry("module_external")
@@ -1388,7 +1289,7 @@ class SliceA(unittest.TestCase):
         self.assertNotIn("-Harness", command)
 
     def test_slice_c5_update_ignores_managed_project_cwd(self):
-        self.create_managed_install(("opencode",))
+        self.create_managed_install()
         previous = Path.cwd()
         try:
             os.chdir(self.target)
@@ -1422,7 +1323,7 @@ class SliceA(unittest.TestCase):
         sentinel = self.target / "user sentinel.txt"
         sentinel.write_bytes(b"keep this file\n")
         sentinel_mode = stat.S_IMODE(sentinel.stat().st_mode)
-        self.create_managed_install(("opencode",))
+        self.create_managed_install()
         source_before = {
             path.relative_to(self.source).as_posix():
             (path.read_bytes() if path.is_file() else None, stat.S_IMODE(path.stat().st_mode))
@@ -1447,7 +1348,7 @@ class SliceA(unittest.TestCase):
                        capture_output=True, text=True, encoding="utf-8")
         original_target = self.target
         self.target = drift_target
-        self.create_managed_install(("opencode",))
+        self.create_managed_install()
         drifted = drift_target / ".opencode/agents/kael.md"
         drifted.write_bytes(drifted.read_bytes() + b"foreign edit\n")
         drift_before = {
@@ -1470,7 +1371,7 @@ class SliceA(unittest.TestCase):
         subprocess.run(["git", "init", "--quiet", str(ownership_target)], check=True, timeout=15,
                        capture_output=True, text=True, encoding="utf-8")
         self.target = ownership_target
-        manifest_path = self.create_managed_install(("opencode",))
+        manifest_path = self.create_managed_install()
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["installed_harnesses"] = ["codex"]
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
@@ -1481,7 +1382,7 @@ class SliceA(unittest.TestCase):
         }
         invalid_ownership = invoke_internal_uninstall(ownership_target)
         self.assertNotEqual(0, invalid_ownership.returncode, invalid_ownership.stdout + invalid_ownership.stderr)
-        self.assertIn("HARNESS_NOT_INSTALLED", invalid_ownership.stderr + invalid_ownership.stdout)
+        self.assertIn("PROJECT_MANIFEST_INVALID", invalid_ownership.stderr + invalid_ownership.stdout)
         ownership_after = {
             path.relative_to(ownership_target).as_posix():
             (path.read_bytes() if path.is_file() else None, stat.S_IMODE(path.stat().st_mode))
@@ -1490,27 +1391,14 @@ class SliceA(unittest.TestCase):
         self.assertEqual(ownership_before, ownership_after)
         self.target = original_target
 
-        def seed_global_manifest(root: Path, harness: str, relative: str) -> None:
-            managed = root / relative
-            managed.parent.mkdir(parents=True, exist_ok=True)
-            content = f"isolated {harness} managed resource\n".encode("utf-8")
-            managed.write_bytes(content)
-            manifest = {
-                "schema_version": 1,
-                "scope": "global",
-                "installed_harnesses": [harness],
-                "managed_files": [{"path": relative, "sha256": hashlib.sha256(content).hexdigest()}],
-            }
-            manifest_path = root / "olympus/orchestrator-install.json"
-            manifest_path.parent.mkdir(parents=True, exist_ok=True)
-            manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
-
         roots = {
             "opencode": Path(self.env["OPENCODE_CONFIG_DIR"]),
             "codex": Path(self.env["CODEX_HOME"]),
         }
-        seed_global_manifest(roots["opencode"], "opencode", "agents/kael.md")
-        seed_global_manifest(roots["codex"], "codex", "agents/kael.toml")
+        self.create_global_managed_install()
+        foreign_codex = roots["codex"] / "agents/kael.toml"
+        foreign_codex.parent.mkdir(parents=True, exist_ok=True)
+        foreign_codex.write_bytes(b"unrelated foreign data\n")
 
         def tree_snapshot(root: Path):
             return {
@@ -1565,83 +1453,76 @@ class SliceA(unittest.TestCase):
 
     def test_slice_c7_global_status_reports_metadata_without_integrity_claim(self):
         manifests = self.create_global_managed_install()
-        response = self.json_query("status", "--scope", "global", "--harness", "all")
+        response = self.json_query("status", "--scope", "global", "--harness", "opencode")
         self.assertEqual("ok", response["result"])
-        for harness, manifest in manifests.items():
-            item = response["data"]["harnesses"][harness]
-            self.assertEqual("reported", item["state"])
-            self.assertEqual("unverified", item["integrity"])
-            self.assertEqual("synthetic-commit", item["installed_from_commit"])
-            self.assertEqual(str(manifest.parent.parent), item["root"])
-            self.assertEqual(14 if harness == "opencode" else 12, item["managed_files"])
+        manifest = manifests["opencode"]
+        item = response["data"]["harnesses"]["opencode"]
+        self.assertEqual("reported", item["state"])
+        self.assertEqual("unverified", item["integrity"])
+        self.assertEqual("synthetic-commit", item["installed_from_commit"])
+        self.assertEqual(str(manifest.parent.parent), item["root"])
+        self.assertEqual(14, item["managed_files"])
         self.assertEqual("not_performed", response["data"]["runtime_discovery"])
 
-    def test_slice_c7_global_legacy_user_config_is_not_adopted(self):
-        # Previously installed global resources may use the 13-file inventory.
-        # A safe user config remains unowned; the read-only CLI must not try to
-        # silently replace it with Olympus' managed 14th resource.
-        manifests = self.create_global_managed_install(("opencode",))
+    def test_slice_c7_global_current_13_resource_user_config_is_preserved(self):
+        manifest_path = self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
-        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
-        manifest["managed_files"] = [entry for entry in manifest["managed_files"]
-                                     if entry["path"] != "opencode.jsonc"]
-        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
-        user_config = '{"permissions":[{"action":"external_directory","resource":"*","effect":"deny"}]}\n'
-        (root / "opencode.jsonc").write_text(user_config, encoding="utf-8")
+        manifest_path = self.make_global_user_config_install()
+        user_config = (root / "opencode.json").read_bytes()
         preview = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
         self.assertEqual("no_changes", preview["result"])
         self.assertEqual([], preview["data"]["changes"])
         self.assertEqual(13, preview["data"]["harnesses"]["opencode"]["managed_files"])
-        self.assertEqual(user_config, (root / "opencode.jsonc").read_text(encoding="utf-8"))
+        self.assertEqual(user_config, (root / "opencode.json").read_bytes())
+        self.assertTrue(manifest_path.is_file())
 
-    def test_slice_c7_global_legacy_missing_guard_is_a_preview_change(self):
-        # A historical 13-file install with no user config is unguarded.
-        # The read-only CLI must propose the missing guard, not report no_changes.
-        manifests = self.create_global_managed_install(("opencode",))
+    def test_slice_c7_global_13_resource_inventory_without_receipted_config_is_refused(self):
+        manifests = self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
         manifest["managed_files"] = [item for item in manifest["managed_files"]
                                      if item["path"] != "opencode.jsonc"]
         manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
         (root / "opencode.jsonc").unlink()
-        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
-        self.assertEqual("ok", response["result"])
-        self.assertEqual("missing", response["data"]["harnesses"]["opencode"]["external_guard"])
-        self.assertEqual(["opencode.jsonc"], [change["path"] for change in response["data"]["changes"]])
-        self.assertEqual("create", response["data"]["changes"][0]["action"])
+        before = self.snapshot()
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode",
+                                   "--dry-run", code=3)
+        self.assertEqual("global_default_agent_drift", response["issues"][0]["code"])
+        self.assertEqual(before, self.snapshot())
         self.assertFalse((root / "opencode.jsonc").exists())
 
-    def test_slice_c7_global_legacy_unsafe_user_config_blocks_preview(self):
-        # Do not conceal a global ALLOW fallback behind a valid 13-file manifest.
-        manifests = self.create_global_managed_install(("opencode",))
+    def test_slice_c7_global_current_13_resource_unsafe_user_config_blocks_preview(self):
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
-        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
-        manifest["managed_files"] = [item for item in manifest["managed_files"]
-                                     if item["path"] != "opencode.jsonc"]
-        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
-        (root / "opencode.jsonc").write_text('{"permissions":[{"action":"external_directory","resource":"*","effect":"allow"}]}', encoding="utf-8")
+        self.make_global_user_config_install()
+        (root / "opencode.json").write_text(
+            '{"default_agent":"kael","permissions":[{"action":"external_directory","resource":"*","effect":"allow"}]}',
+            encoding="utf-8",
+        )
         response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
         self.assertEqual("blocked", response["result"])
         self.assertEqual("global_external_guard_unsafe", response["issues"][0]["code"])
         # An alternative JSON file makes ownership/precedence ambiguous too.
-        (root / "opencode.json").write_text('{"permissions":[]}', encoding="utf-8")
+        (root / "opencode.jsonc").write_text('{"permissions":[]}', encoding="utf-8")
         again = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
         self.assertEqual("global_external_guard_unsafe", again["issues"][0]["code"])
 
-    def test_slice_c7_global_legacy_ambiguous_wildcards_do_not_bypass_ask(self):
+    def test_slice_c7_global_current_13_resource_ambiguous_wildcards_do_not_bypass_ask(self):
         # V2 treats '**', '?*', '*/**', and '?:/**' as broad matches on paths.
         # A later ALLOW must not be certified as an ASK/DENY fallback.
-        manifests = self.create_global_managed_install(("opencode",))
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
-        manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
-        manifest["managed_files"] = [item for item in manifest["managed_files"]
-                                     if item["path"] != "opencode.jsonc"]
-        manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
-        user_config = root / "opencode.jsonc"
+        self.make_global_user_config_install()
+        user_config = root / "opencode.json"
         cases = ("**", "?*", "*/**", "***", "?:/**", "*:*")
         for broad in cases:
             with self.subTest(pattern=broad):
                 text = json.dumps({"permissions": [
+                    {"action": "default_agent", "resource": "*", "effect": "kael"},
+                    {"action": "external_directory", "resource": "*", "effect": "ask"},
+                    {"action": "external_directory", "resource": broad, "effect": "allow"},
+                ]})
+                text = json.dumps({"default_agent": "kael", "permissions": [
                     {"action": "external_directory", "resource": "*", "effect": "ask"},
                     {"action": "external_directory", "resource": broad, "effect": "allow"},
                 ]})
@@ -1656,6 +1537,11 @@ class SliceA(unittest.TestCase):
         for pattern, effect in (("?", "deny"), ("??", "ask")):
             with self.subTest(false_fallback=pattern):
                 text = json.dumps({"permissions": [
+                    {"action": "default_agent", "resource": "*", "effect": "kael"},
+                    {"action": "external_directory", "resource": "*", "effect": "allow"},
+                    {"action": "external_directory", "resource": pattern, "effect": effect},
+                ]})
+                text = json.dumps({"default_agent": "kael", "permissions": [
                     {"action": "external_directory", "resource": "*", "effect": "allow"},
                     {"action": "external_directory", "resource": pattern, "effect": effect},
                 ]})
@@ -1666,7 +1552,7 @@ class SliceA(unittest.TestCase):
 
         # The effective last broad rule can restore ASK, while a narrow DENY
         # remains a user-owned exception and is never claimed by Olympus.
-        safe_text = json.dumps({"permissions": [
+        safe_text = json.dumps({"default_agent": "kael", "permissions": [
             {"action": "external_directory", "resource": "**", "effect": "allow"},
             {"action": "external_directory", "resource": "*", "effect": "ask"},
             {"action": "external_directory", "resource": "C:/fixture/authorized/*", "effect": "allow"},
@@ -1679,15 +1565,15 @@ class SliceA(unittest.TestCase):
         self.assertEqual("safe_user_config", response["data"]["harnesses"]["opencode"]["external_guard"])
         self.assertEqual(safe_text, user_config.read_text(encoding="utf-8"))
 
-    def test_slice_c7_global_legacy_safe_jsonc_is_preserved(self):
+    def test_slice_c7_global_current_13_resource_safe_jsonc_is_preserved(self):
         # Comments, URLs in strings, and trailing commas are supported by V2.
-        manifests = self.create_global_managed_install(("opencode",))
+        manifests = self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
         manifest["managed_files"] = [item for item in manifest["managed_files"]
                                      if item["path"] != "opencode.jsonc"]
         manifests["opencode"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
-        safe = '{"url":"https://local.invalid/a,b",/* user guard */"permissions":[{"action":"external_directory","resource":"*","effect":"ask",},],}'
+        safe = '{"url":"https://local.invalid/a,b",/* user guard */"default_agent":"kael","permissions":[{"action":"external_directory","resource":"*","effect":"ask",},],}'
         (root / "opencode.jsonc").write_text(safe, encoding="utf-8")
         response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
         self.assertEqual("no_changes", response["result"])
@@ -1696,7 +1582,7 @@ class SliceA(unittest.TestCase):
 
     def test_slice_c7_global_pending_guard_recovery_blocks_preview(self):
         # An unfinished native install is not equivalent to a complete manifest.
-        self.create_global_managed_install(("opencode",))
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         intent = root / "olympus/opencode-guard-pending.json"
         intent.write_text('{"schema_version":1}', encoding="utf-8")
@@ -1705,35 +1591,12 @@ class SliceA(unittest.TestCase):
         self.assertEqual("global_guard_recovery_pending", response["issues"][0]["code"])
         self.assertTrue(intent.exists())
 
-    def test_slice_c7_global_preview_both_harnesses_assignments_and_human_output(self):
-        self.create_global_managed_install()
-        arguments = ("config", "apply", "--scope", "global", "--harness", "all", "--dry-run")
-        response = self.json_query(*arguments)
-        self.assertEqual("no_changes", response["result"])
-        self.assertFalse(response["data"]["apply_available"])
-        self.assertTrue(response["data"]["preview_only"])
-        self.assertEqual([], response["data"]["changes"])
-        assignments = response["data"]["assignments"]
-        self.assertEqual("partial", assignments["status"])
-        self.assertEqual("unknown", assignments["family"])
-        self.assertEqual(11, len(assignments["roles"]))
-        self.assertEqual("not_managed", assignments["roots"]["opencode"]["state"])
-        self.assertEqual("verified", assignments["roots"]["codex"]["current_status"])
-        kael = next(item for item in assignments["roles"] if item["role"] == "kael")
-        self.assertEqual("root", kael["harnesses"]["codex"]["state"])
-        self.assertEqual("unknown", kael["family"]["current"])
-        human = self.query(*arguments)
-        self.assertEqual(0, human.returncode, human.stderr)
-        for key, value in response["data"].items():
-            self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
-
     def test_slice_c7_global_preview_single_harness_and_canonical_proposals(self):
-        self.create_global_managed_install(("opencode",))
+        self.create_global_managed_install()
         response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
         self.assertEqual("no_changes", response["result"])
         assignments = response["data"]["assignments"]
         self.assertEqual(["opencode"], assignments["selected_harnesses"])
-        self.assertEqual("not_selected", assignments["roots"]["codex"]["state"])
         self.assertEqual("partial", assignments["status"])
         for role in assignments["roles"]:
             current = role["harnesses"]["opencode"]
@@ -1750,7 +1613,7 @@ class SliceA(unittest.TestCase):
         altered = raw.replace(b'model: "', b'model: bare-value # "', 1)
         self.assertNotEqual(raw, altered)
         self.update_global_managed_bytes("opencode", relative, altered)
-        response = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--dry-run")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
         self.assertEqual("ok", response["result"])
         self.assertEqual("partial", response["data"]["assignments"]["status"])
         role = next(item for item in response["data"]["assignments"]["roles"] if item["role"] == "kael")
@@ -1763,13 +1626,16 @@ class SliceA(unittest.TestCase):
     def test_slice_c7_global_preview_manifest_drift_and_foreign_inventory_block(self):
         manifests = self.create_global_managed_install()
         # A trusted manifest cannot authorize arbitrary paths or outdated bytes.
-        root = Path(self.env["CODEX_HOME"])
-        (root / "agents/veyra.toml").write_text("drift", encoding="utf-8")
-        response = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--dry-run", code=1)
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        managed = root / "agents/veyra.md"
+        original = managed.read_bytes()
+        managed.write_text("drift", encoding="utf-8")
+        response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode",
+                                   "--dry-run", code=1)
         self.assertEqual("failed", response["result"])
         self.assertEqual("global_managed_file_drift", response["issues"][0]["code"])
-        self.assertEqual("ready", response["data"]["harnesses"]["opencode"]["state"])
-        self.assertEqual("drift", response["data"]["harnesses"]["codex"]["state"])
+        self.assertEqual("drift", response["data"]["harnesses"]["opencode"]["state"])
+        managed.write_bytes(original)
         manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
         manifest["managed_files"].append({"path": "private.txt", "sha256": "0" * 64})
         manifests["opencode"].write_text(json.dumps(manifest), encoding="utf-8")
@@ -1781,39 +1647,24 @@ class SliceA(unittest.TestCase):
         response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
         self.assertEqual("invalid_global_manifest", response["issues"][0]["code"])
 
-    def test_slice_c7_global_root_overlap_and_hardlinks_fail_closed(self):
+    def test_slice_c7_global_hardlinked_resource_fails_closed(self):
         self.create_global_managed_install()
-        self.env["CODEX_HOME"] = self.env["OPENCODE_CONFIG_DIR"]
-        response = self.json_query("status", "--scope", "global", "--harness", "all", code=3)
-        self.assertEqual("overlapping_global_roots", response["issues"][0]["code"])
-        self.env["CODEX_HOME"] = str(self.sandbox / "codex_home")
-        self.env["CODEX_HOME"] += os.sep + ".." + os.sep + "codex_home"
-        response = self.json_query("status", "--scope", "global", "--harness", "codex", code=2)
-        self.assertEqual("invalid_global_root", response["issues"][0]["code"])
-        self.env["CODEX_HOME"] = str(self.sandbox / "codex_home")
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         os.link(root / "agents/kael.md", root / "linked-sentinel.txt")
         response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
         self.assertEqual("unsafe_global_resource", response["issues"][0]["code"])
 
-    def test_slice_c7_global_all_execute_and_unlocked_recovery_remain_blocked(self):
+    def test_slice_c7_global_unlocked_recovery_remains_blocked(self):
         self.create_global_managed_install()
-        response = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--execute", code=3)
-        self.assertEqual("blocked", response["result"])
-        self.assertEqual("global_harness_unsupported", response["issues"][0]["code"])
-        # Global recovery never creates a lock just to discover an empty profile.
-        recovery = self.query("config", "recover", "--scope", "global")
+        # Recovery does not create a lock when no journal exists.
+        before = self.snapshot()
+        recovery = self.query("config", "recover", "--scope", "global", "--harness", "opencode")
         self.assertEqual(3, recovery.returncode, recovery.stdout + recovery.stderr)
-        for harness in ("codex", "all"):
-            with self.subTest(recovery_harness=harness):
-                before = self.snapshot()
-                result = self.invoke_cli("config", "recover", "--scope", "global", "--harness", harness)
-                self.assertEqual(3, result.returncode, result.stdout + result.stderr)
-                self.assertIn("global_harness_unsupported", result.stderr)
-                self.assertEqual(before, self.snapshot())
+        self.assertEqual(before, self.snapshot())
+        self.assertFalse((Path(self.env["OPENCODE_CONFIG_DIR"]) / ".olympus-cli-edit.lock").exists())
 
     def test_slice_c8_global_apply_noop_updates_and_preserves_unowned_bytes(self):
-        self.create_global_managed_install(("opencode",))
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         before_noop = self.snapshot()
         noop = self.invoke_cli("config", "apply", "--scope", "global", "--harness", "opencode", "--execute", "--json")
@@ -1842,7 +1693,7 @@ class SliceA(unittest.TestCase):
         self.assertFalse((root / ".olympus-cli-config-apply").exists())
 
     def test_slice_c8_global_transaction_rejects_receipted_config_rewrite(self):
-        self.create_global_managed_install(("opencode",), default_agent=True)
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         manifest = root / "olympus/orchestrator-install.json"
         old = manifest.read_bytes()
@@ -1869,22 +1720,12 @@ class SliceA(unittest.TestCase):
         agent.write_bytes(crlf)
         expected = global_readonly._expected(self.source, self.renderer, ("opencode",))["opencode"]
         self.assertEqual(crlf, expected["agents/veyra.md"])
-        self.create_global_managed_install(("opencode",), default_agent=True)
+        self.create_global_managed_install()
         preview = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
         self.assertEqual([], preview["data"]["changes"])
 
-    def test_slice_c8_global_apply_rejects_codex_all_drift_conflict_and_unsafe_guard(self):
+    def test_slice_c8_global_apply_rejects_drift_inventory_and_unsafe_guard(self):
         self.create_global_managed_install()
-        for harness in ("codex", "all"):
-            with self.subTest(harness=harness):
-                before = self.snapshot()
-                result = self.invoke_cli("config", "apply", "--scope", "global", "--harness", harness,
-                                         "--execute", "--json")
-                self.assertEqual(3, result.returncode, result.stdout + result.stderr)
-                response = json.loads(result.stdout)
-                self.assertEqual("global_harness_unsupported", response["issues"][0]["code"])
-                self.assertEqual(before, self.snapshot())
-                self.assertFalse((Path(self.env["OPENCODE_CONFIG_DIR"]) / ".olympus-cli-edit.lock").exists())
 
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         managed = root / "agents/kael.md"
@@ -1897,11 +1738,9 @@ class SliceA(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
         self.assertFalse((root / ".olympus-cli-edit.lock").exists())
 
-        for variable in ("OPENCODE_CONFIG_DIR", "CODEX_HOME"):
-            path = Path(self.env[variable])
-            shutil.rmtree(path)
-            path.mkdir()
-        self.create_global_managed_install(("opencode",))
+        shutil.rmtree(root)
+        root.mkdir()
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         manifest_path = root / "olympus/orchestrator-install.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1914,14 +1753,12 @@ class SliceA(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
         self.assertFalse((root / ".olympus-cli-edit.lock").exists())
 
-        for variable in ("OPENCODE_CONFIG_DIR", "CODEX_HOME"):
-            path = Path(self.env[variable])
-            shutil.rmtree(path)
-            path.mkdir()
-        self.create_global_managed_install(("opencode",))
-        self.make_legacy_global_opencode()
+        shutil.rmtree(root)
+        root.mkdir()
+        self.create_global_managed_install()
+        self.make_global_user_config_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
-        (root / "opencode.json").write_bytes(b"unowned competing config")
+        (root / "opencode.jsonc").write_bytes(b"unowned competing config")
         before = self.snapshot()
         conflict = self.invoke_cli("config", "apply", "--scope", "global", "--harness", "opencode", "--execute", "--json")
         self.assertEqual(3, conflict.returncode, conflict.stdout + conflict.stderr)
@@ -1929,15 +1766,12 @@ class SliceA(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
         self.assertFalse((root / ".olympus-cli-edit.lock").exists())
 
-        for variable in ("OPENCODE_CONFIG_DIR", "CODEX_HOME"):
-            path = Path(self.env[variable])
-            shutil.rmtree(path)
-            path.mkdir()
-        self.create_global_managed_install(("opencode",))
-        self.make_legacy_global_opencode()
-        root = Path(self.env["OPENCODE_CONFIG_DIR"])
-        (root / "opencode.jsonc").write_text(
-            '{"permissions":[{"action":"external_directory","resource":"*","effect":"allow"}]}',
+        shutil.rmtree(root)
+        root.mkdir()
+        self.create_global_managed_install()
+        self.make_global_user_config_install()
+        (root / "opencode.json").write_text(
+            '{"default_agent":"kael","permissions":[{"action":"external_directory","resource":"*","effect":"allow"}]}',
             encoding="utf-8",
         )
         before = self.snapshot()
@@ -1947,27 +1781,27 @@ class SliceA(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
         self.assertFalse((root / ".olympus-cli-edit.lock").exists())
 
-    def test_slice_c8_global_apply_preserves_safe_legacy_user_config_without_adoption(self):
-        self.create_global_managed_install(("opencode",))
+    def test_slice_c8_global_apply_preserves_safe_current_user_config_without_adoption(self):
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
-        self.make_legacy_global_opencode()
-        user_config = b'{"permissions":[{"action":"external_directory","resource":"*","effect":"deny"}]}\n'
-        (root / "opencode.jsonc").write_bytes(user_config)
+        self.make_global_user_config_install()
+        user_config = b'{"default_agent":"kael","permissions":[{"action":"external_directory","resource":"*","effect":"deny"}]}\n'
+        (root / "opencode.json").write_bytes(user_config)
         prompt = self.source / "olympus/harnesses/opencode/agent-prompts/veyra.md"
-        prompt.write_text(prompt.read_text(encoding="utf-8") + "\nPreserve legacy user guard.\n", encoding="utf-8")
+        prompt.write_text(prompt.read_text(encoding="utf-8") + "\nPreserve current user guard.\n", encoding="utf-8")
         self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
         expected = (self.source / ".opencode/agents/veyra.md").read_bytes()
 
         applied = self.invoke_cli("config", "apply", "--scope", "global", "--harness", "opencode", "--execute", "--json")
         self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
         self.assertEqual(expected, (root / "agents/veyra.md").read_bytes())
-        self.assertEqual(user_config, (root / "opencode.jsonc").read_bytes())
+        self.assertEqual(user_config, (root / "opencode.json").read_bytes())
         manifest = json.loads((root / "olympus/orchestrator-install.json").read_text(encoding="utf-8"))
         self.assertEqual(13, len(manifest["managed_files"]))
-        self.assertNotIn("opencode.jsonc", {item["path"] for item in manifest["managed_files"]})
+        self.assertNotIn("opencode.json", {item["path"] for item in manifest["managed_files"]})
 
     def test_slice_c8_global_apply_blocks_a_pending_journal_before_lock_or_writes(self):
-        self.create_global_managed_install(("opencode",))
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         journal = root / ".olympus-cli-config-apply"
         journal.mkdir()
@@ -1982,7 +1816,7 @@ class SliceA(unittest.TestCase):
         self.assertFalse((root / ".olympus-cli-edit.lock").exists())
 
     def test_slice_c8_global_apply_revalidates_resolved_root_under_lock(self):
-        self.create_global_managed_install(("opencode",))
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         alternate = self.sandbox / "alternate_opencode_root"
         shutil.copytree(root, alternate)
@@ -2007,7 +1841,7 @@ class SliceA(unittest.TestCase):
         self.assertFalse((alternate / ".olympus-cli-edit.lock").exists())
 
     def test_slice_c8_global_recovery_can_resume_an_interrupted_rollback(self):
-        self.create_global_managed_install(("opencode",), default_agent=True)
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         managed = root / "agents/veyra.md"
         manifest = root / "olympus/orchestrator-install.json"
@@ -2068,7 +1902,7 @@ class SliceA(unittest.TestCase):
         self.assertEqual(config, (root / "opencode.jsonc").read_bytes())
 
     def test_slice_c8_global_recovery_cleans_a_committed_journal(self):
-        self.create_global_managed_install(("opencode",), default_agent=True)
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         managed = root / "agents/veyra.md"
         config = (root / "opencode.jsonc").read_bytes()
@@ -2108,32 +1942,40 @@ class SliceA(unittest.TestCase):
         self.assertFalse(journal.exists())
         self.assertEqual(config, (root / "opencode.jsonc").read_bytes())
 
-    def test_slice_c8_global_apply_legacy_guard_recovery_is_explicit_and_repeatable(self):
-        self.create_global_managed_install(("opencode",))
+    def test_slice_c8_global_apply_recovery_preserves_current_user_config(self):
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
-        manifest_path, _, legacy_manifest = self.make_legacy_global_opencode()
+        manifest_path = self.make_global_user_config_install()
+        old_manifest = manifest_path.read_bytes()
+        user_config = (root / "opencode.json").read_bytes()
         user_bytes = b"unowned and preserved\x00\xff"
         (root / "custom-user-file.bin").write_bytes(user_bytes)
-        original = config_apply_transaction._create_global_file
+        managed = root / "agents/veyra.md"
+        old_managed = managed.read_bytes()
+        prompt = self.source / "olympus/harnesses/opencode/agent-prompts/veyra.md"
+        prompt.write_text(prompt.read_text(encoding="utf-8") + "\nCurrent receipt recovery fixture.\n",
+                          encoding="utf-8")
+        self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
+        original = os.replace
 
-        def interrupt_after_create(*args, **kwargs):
-            original(*args, **kwargs)
-            raise KeyboardInterrupt
+        def interrupt_after_replace(source, destination):
+            result = original(source, destination)
+            if Path(destination) == managed:
+                raise KeyboardInterrupt
+            return result
 
         with mock.patch.dict(os.environ, self.env, clear=True), \
-             mock.patch("olympus.config_apply_transaction._create_global_file", side_effect=interrupt_after_create):
+             mock.patch("olympus.config_apply_transaction.os.replace", side_effect=interrupt_after_replace):
             code, output, errors = self.call_main("config", "apply", "--scope", "global", "--harness", "opencode", "--execute")
         self.assertEqual(4, code, output + errors)
         self.assertIn("config recover --scope global --harness opencode", output + errors)
-        self.assertIn("preview_only: false", output)
         self.assertIn('execution: "unconfirmed"', output)
-        guard = root / "opencode.jsonc"
-        self.assertTrue(guard.is_file())
         journal = root / ".olympus-cli-config-apply"
         record = json.loads((journal / "record.json").read_text(encoding="utf-8"))
         self.assertEqual((2, "global", "PREPARED"),
                          (record["schema_version"], record["scope"], record["state"]))
-        self.assertEqual(legacy_manifest, manifest_path.read_bytes())
+        self.assertNotEqual(old_managed, managed.read_bytes())
+        self.assertEqual(old_manifest, manifest_path.read_bytes())
 
         with mock.patch.dict(os.environ, self.env, clear=True):
             recovered, output, recovery_error = self.call_main("config", "recover", "--scope", "global", "--harness", "opencode")
@@ -2142,39 +1984,48 @@ class SliceA(unittest.TestCase):
         self.assertIn("rolled_back", output)
         self.assertEqual(0, repeated, repeat_output)
         self.assertIn("no_changes", repeat_output)
-        self.assertFalse(guard.exists())
-        self.assertEqual(legacy_manifest, manifest_path.read_bytes())
+        self.assertEqual(old_managed, managed.read_bytes())
+        self.assertEqual(old_manifest, manifest_path.read_bytes())
+        self.assertEqual(user_config, (root / "opencode.json").read_bytes())
         self.assertEqual(user_bytes, (root / "custom-user-file.bin").read_bytes())
         self.assertFalse(journal.exists())
 
-    def test_slice_c8_global_recovery_preserves_unknown_guard_bytes(self):
-        self.create_global_managed_install(("opencode",))
+    def test_slice_c8_global_recovery_preserves_changed_user_config_bytes(self):
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
-        manifest_path, _, legacy_manifest = self.make_legacy_global_opencode()
-        original = config_apply_transaction._create_global_file
+        manifest_path = self.make_global_user_config_install()
+        original_manifest = manifest_path.read_bytes()
+        managed = root / "agents/veyra.md"
+        prompt = self.source / "olympus/harnesses/opencode/agent-prompts/veyra.md"
+        prompt.write_text(prompt.read_text(encoding="utf-8") + "\nChanged user config recovery fixture.\n",
+                          encoding="utf-8")
+        self.assertEqual(0, self.renderer.run(self.source, "render", "opencode"))
+        original = os.replace
 
-        def interrupt_after_create(*args, **kwargs):
-            original(*args, **kwargs)
-            raise KeyboardInterrupt
+        def interrupt_after_replace(source, destination):
+            result = original(source, destination)
+            if Path(destination) == managed:
+                raise KeyboardInterrupt
+            return result
 
         with mock.patch.dict(os.environ, self.env, clear=True), \
-             mock.patch("olympus.config_apply_transaction._create_global_file", side_effect=interrupt_after_create):
+             mock.patch("olympus.config_apply_transaction.os.replace", side_effect=interrupt_after_replace):
             code, _, _ = self.call_main("config", "apply", "--scope", "global", "--harness", "opencode", "--execute")
         self.assertEqual(4, code)
-        foreign = b"foreign bytes after interrupted guard creation"
-        guard = root / "opencode.jsonc"
-        guard.write_bytes(foreign)
+        foreign = b"foreign bytes in user-owned OpenCode config"
+        user_config = root / "opencode.json"
+        user_config.write_bytes(foreign)
         with mock.patch.dict(os.environ, self.env, clear=True):
             recovered, output, recovery_error = self.call_main("config", "recover", "--scope", "global", "--harness", "opencode")
-        self.assertEqual(4, recovered, output + recovery_error)
-        self.assertIn("foreign third state", output + recovery_error)
-        self.assertEqual(foreign, guard.read_bytes())
-        self.assertEqual(legacy_manifest, manifest_path.read_bytes())
-        self.assertTrue((root / ".olympus-cli-config-apply/record.json").is_file())
+        self.assertEqual(0, recovered, output + recovery_error)
+        self.assertIn("rolled_back", output)
+        self.assertEqual(foreign, user_config.read_bytes())
+        self.assertEqual(original_manifest, manifest_path.read_bytes())
+        self.assertFalse((root / ".olympus-cli-config-apply").exists())
 
     @unittest.skipUnless(os.name == "nt" and shutil.which("pwsh"), "Cross-runtime target lock requires Windows PowerShell 7")
     def test_slice_c8_global_apply_and_installer_share_python_powershell_lock(self):
-        self.create_global_managed_install(("opencode",))
+        self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         manifest = root / "olympus/orchestrator-install.json"
         manifest_before = manifest.read_bytes()
@@ -2221,55 +2072,16 @@ class SliceA(unittest.TestCase):
             process.communicate(timeout=15)
 
     def test_slice_c7_global_doctor_native_gate_is_explicit(self):
-        self.create_global_managed_install(default_agent=True)
-        response = self.json_query("doctor", "--scope", "global", "--harness", "all", code=3 if os.name != "nt" else 0)
+        self.create_global_managed_install()
+        response = self.json_query("doctor", "--scope", "global", "--harness", "opencode",
+                                   code=3 if os.name != "nt" else 0)
         if os.name == "nt":
             self.assertEqual("ok", response["result"])
-            for harness in ("opencode", "codex"):
-                self.assertEqual("verified", response["data"]["harnesses"][harness]["state"])
+            self.assertEqual("verified", response["data"]["harnesses"]["opencode"]["state"])
         else:
             self.assertEqual("blocked", response["result"])
-            self.assertEqual(["native_verify_unavailable"] * 2, [issue["code"] for issue in response["issues"]])
-            for harness in ("opencode", "codex"):
-                self.assertEqual("unavailable", response["data"]["harnesses"][harness]["state"])
-
-    def test_slice_c7_global_mixed_absence_has_contracted_result(self):
-        self.create_global_managed_install(("opencode",))
-        status = self.json_query("status", "--scope", "global", "--harness", "all")
-        self.assertEqual("absent", status["result"])
-        self.assertEqual("partial", status["data"]["selection_state"])
-        self.assertEqual("reported", status["data"]["harnesses"]["opencode"]["state"])
-        self.assertEqual("absent", status["data"]["harnesses"]["codex"]["state"])
-        self.assertEqual("harness_absent", status["issues"][0]["code"])
-        preview = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--dry-run")
-        self.assertEqual("absent", preview["result"])
-        self.assertEqual("partial", preview["data"]["selection_state"])
-        self.assertEqual("unknown", preview["data"]["assignments"]["status"])
-        self.assertFalse(preview["data"]["apply_available"])
-        # A drifted installed harness must still fail even when its peer is absent.
-        (Path(self.env["OPENCODE_CONFIG_DIR"]) / "agents/kael.md").write_text("drift", encoding="utf-8")
-        mixed_failure = self.json_query("config", "apply", "--scope", "global", "--harness", "all", "--dry-run", code=1)
-        self.assertEqual("failed", mixed_failure["result"])
-        self.assertEqual("partial", mixed_failure["data"]["selection_state"])
-        self.assertEqual("drift", mixed_failure["data"]["harnesses"]["opencode"]["state"])
-        self.assertEqual({"global_managed_file_drift", "harness_absent"},
-                         {issue["code"] for issue in mixed_failure["issues"]})
-
-    def test_slice_c7_global_codex_override_and_unknown_version_block_preview(self):
-        manifests = self.create_global_managed_install(("codex",))
-        root = Path(self.env["CODEX_HOME"])
-        override = root / "AGENTS.override.md"
-        override.write_text("User-owned higher-priority instructions", encoding="utf-8")
-        blocked = self.json_query("config", "apply", "--scope", "global", "--harness", "codex", "--dry-run", code=3)
-        self.assertEqual("blocked", blocked["result"])
-        self.assertEqual("global_install_conflict", blocked["issues"][0]["code"])
-        self.assertEqual("unknown", blocked["data"]["assignments"]["status"])
-        override.unlink()
-        manifest = json.loads(manifests["codex"].read_text(encoding="utf-8"))
-        manifest["installed_version"] = "unknown-release"
-        manifests["codex"].write_text(json.dumps(manifest) + "\n", encoding="utf-8")
-        invalid = self.json_query("config", "apply", "--scope", "global", "--harness", "codex", "--dry-run", code=3)
-        self.assertEqual("unsupported_global_version", invalid["issues"][0]["code"])
+            self.assertEqual(["native_verify_unavailable"], [issue["code"] for issue in response["issues"]])
+            self.assertEqual("unavailable", response["data"]["harnesses"]["opencode"]["state"])
 
     def test_slice_c7_global_native_failure_reason_mapping(self):
         cases = {
@@ -2280,10 +2092,10 @@ class SliceA(unittest.TestCase):
         }
         for reason, expected in cases.items():
             with self.subTest(reason=reason):
-                line = f"GLOBAL_HARNESS_FAILED: codex {reason}: synthetic detail"
-                self.assertEqual(expected, global_readonly._native_failure_reason(line, "codex"))
+                line = f"GLOBAL_HARNESS_FAILED: opencode {reason}: synthetic detail"
+                self.assertEqual(expected, global_readonly._native_failure_reason(line, "opencode"))
         self.assertEqual(("unavailable", "native_verify_unavailable", 3),
-                         global_readonly._native_failure_reason("no trustworthy marker", "codex"))
+                         global_readonly._native_failure_reason("no trustworthy marker", "opencode"))
 
     def test_slice_c7_global_path_discovery_and_unsafe_symlinks(self):
         expected = self.sandbox / "discovered_config"
@@ -2295,21 +2107,32 @@ class SliceA(unittest.TestCase):
                  args=["opencode", "debug", "paths"], returncode=0, stdout=output, stderr="")):
             os.environ.pop("OPENCODE_CONFIG_DIR")
             self.assertEqual(expected, global_readonly._opencode_root())
-        if os.name == "posix":
-            link = self.sandbox / "linked_codex_root"
-            link.symlink_to(self.sandbox / "codex_home", target_is_directory=True)
-            self.env["CODEX_HOME"] = str(link)
-            blocked = self.json_query("status", "--scope", "global", "--harness", "codex", code=3)
-            self.assertEqual("unsafe_global_root", blocked["issues"][0]["code"])
+        link = self.sandbox / "linked_opencode_root"
+        link_target = self.sandbox / "opencode_root"
+        try:
+            link.symlink_to(link_target, target_is_directory=True)
+        except (OSError, NotImplementedError) as error:
+            self.skipTest(f"Host cannot create dangling symlink safety fixture: {error}")
+        self.assertTrue(link.is_symlink())
+        self.assertFalse(link_target.exists())
+        self.env["OPENCODE_CONFIG_DIR"] = str(link)
+        before = self.snapshot()
+        link_entry = link.relative_to(self.sandbox).as_posix()
+        self.assertEqual(os.readlink(link), before[0][link_entry][2])
+        blocked = self.json_query("status", "--scope", "global", "--harness", "opencode", code=3)
+        self.assertEqual("unsafe_global_root", blocked["issues"][0]["code"])
+        self.assertEqual(before, self.snapshot(), "Unsafe global-root refusal must preserve the dangling link")
+        self.assertTrue(link.is_symlink())
+        self.assertFalse(link_target.exists())
 
     def test_slice_c7_global_doctor_version_mismatch_is_explicit(self):
-        self.create_global_managed_install(("codex",), version="v0.0.1")
-        response = self.json_query("doctor", "--scope", "global", "--harness", "codex", code=3)
+        self.create_global_managed_install(version="v0.0.1")
+        response = self.json_query("doctor", "--scope", "global", "--harness", "opencode", code=3)
         if os.name == "nt":
-            self.assertEqual("version_mismatch", response["data"]["harnesses"]["codex"]["state"])
+            self.assertEqual("version_mismatch", response["data"]["harnesses"]["opencode"]["state"])
             self.assertEqual("version_mismatch", response["issues"][0]["code"])
         else:
-            self.assertEqual("unavailable", response["data"]["harnesses"]["codex"]["state"])
+            self.assertEqual("unavailable", response["data"]["harnesses"]["opencode"]["state"])
             self.assertEqual("native_verify_unavailable", response["issues"][0]["code"])
 
 
@@ -2601,7 +2424,10 @@ class SliceBModelEdit(unittest.TestCase):
         scripts.mkdir()
         shutil.copy2(ROOT / "scripts/render_harnesses.py", scripts / "render_harnesses.py")
         self.renderer = load_file("slice_b_fixture_renderer", scripts / "render_harnesses.py")
-        initial_outputs = self.renderer.outputs_for(self.source, "all")
+        initial_outputs = self.renderer.outputs_for(self.source, "opencode")
+        initial_outputs[self.source / "docs/HARNESS-CAPABILITIES.md"] = self.renderer.capability_doc(
+            self.renderer.checked_sources(self.source)[2],
+        )
         for path, content in initial_outputs.items():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content.encode("utf-8"))
@@ -2628,7 +2454,6 @@ class SliceBModelEdit(unittest.TestCase):
         models, policies, capabilities, identities, roles = self.renderer.checked_sources(self.source)
         candidate_models = tomllib.loads(model_file.new_bytes.decode("utf-8"))
         outputs = self.renderer.opencode_outputs(self.source, candidate_models, policies, identities, roles)
-        outputs.update(self.renderer.codex_outputs(self.source, candidate_models, policies, identities, roles))
         outputs[self.source / "docs/HARNESS-CAPABILITIES.md"] = self.renderer.capability_doc(capabilities)
         return outputs
 
@@ -2665,7 +2490,7 @@ class SliceBModelEdit(unittest.TestCase):
         from unittest.mock import patch
         with patch.object(model_edit.importlib, "import_module", side_effect=ImportError("fixture absent")):
             with self.assertRaisesRegex(model_edit.ModelEditError, "tomlkit==0.13.3"):
-                model_edit._build_set_family_candidate(self.source, "sol", "new-sol", "new-codex")
+                model_edit._build_set_family_candidate(self.source, "sol", "new-sol")
         self.assertEqual(before, self.snapshot(), "Missing optional dependency must not mutate the fixture")
         self.assertFalse((self.source / ".olympus-cli-edit.lock").exists())
         self.assertFalse((self.source / ".olympus-cli-edit").exists())
@@ -2701,8 +2526,7 @@ class SliceBModelEdit(unittest.TestCase):
         raw = (
             b"# unrelated target text: families.sol.opencode = 'fake-id'\n"
             b"families.\"sol\".opencode = 'old-opencode' # preserve comment\n"
-            b"families.sol.codex = \"\"\"old-codex\"\"\"\n"
-            b"families.luna = { opencode = 'openai/luna', codex = \"gpt-luna\" }\n"
+            b"families.luna = { opencode = 'openai/luna' }\n"
             b"note = \"opencode = 'not-a-target'\"\n"
             b"[roles.\"kael\"]\n"
             b"family = 'sol'\n"
@@ -2713,15 +2537,13 @@ class SliceBModelEdit(unittest.TestCase):
         )
         candidate = model_edit._prepare_toml_candidate(raw, {
             ("families", "sol", "opencode"): "new-opencode",
-            ("families", "sol", "codex"): "new-codex",
             ("families", "luna", "opencode"): "openai/new-luna",
             ("roles", "kael", "effort"): "max",
         })
         self.assertEqual(b"families.\"sol\".opencode = 'new-opencode' # preserve comment\n",
                          next(line for line in candidate.new_bytes.splitlines(keepends=True)
                               if line.startswith(b'families."sol".opencode')))
-        self.assertIn(b'families.sol.codex = """new-codex"""\n', candidate.new_bytes)
-        self.assertIn(b"families.luna = { opencode = 'openai/new-luna', codex = \"gpt-luna\" }\n",
+        self.assertIn(b"families.luna = { opencode = 'openai/new-luna' }\n",
                       candidate.new_bytes)
         self.assertIn(b"note = \"opencode = 'not-a-target'\"\n", candidate.new_bytes)
         self.assertIn(b'effort = """max"""\n', candidate.new_bytes)
@@ -2769,7 +2591,7 @@ class SliceBModelEdit(unittest.TestCase):
         model_edit = self.model_edit()
         before = self.snapshot()
         candidate = model_edit._build_set_family_candidate(
-            self.source, "sol", "openai/sol-next", "codex-sol-next"
+            self.source, "sol", "openai/sol-next"
         )
         self.assertEqual(before, self.snapshot(), "Preview must be completely in memory")
         self.assertEqual(["argus", "atlas", "helios", "kael", "talos", "thales"],
@@ -2777,10 +2599,10 @@ class SliceBModelEdit(unittest.TestCase):
         self.assertEqual("openai/gpt-6.1-sol", candidate.preview["data"]["roles"][0]
                          ["models"]["opencode"]["old"])
         rows = {row["role"]: row for row in candidate.preview["data"]["roles"]}
-        self.assertEqual("root", rows["kael"]["representation"]["codex"])
+        self.assertEqual({"opencode": "agent"}, rows["kael"]["representation"])
         self.assertNotIn("aegis", rows)
         self.assertEqual("openai/sol-next", rows["kael"]["models"]["opencode"]["new"])
-        self.assertEqual("codex-sol-next", rows["kael"]["models"]["codex"]["new"])
+        self.assertEqual({"opencode"}, set(rows["kael"]["models"]))
         self.assertEqual(1, candidate.preview["schema_version"])
         self.assertEqual(candidate.preview, json.loads(json.dumps(candidate.preview, ensure_ascii=False)))
         human = model_edit._format_preview_human(candidate.preview)
@@ -2788,9 +2610,8 @@ class SliceBModelEdit(unittest.TestCase):
             for field in ("family", "effort"):
                 self.assertIn(row[field]["old"], human)
                 self.assertIn(row[field]["new"], human)
-            for runtime in ("opencode", "codex"):
-                self.assertIn(row["models"][runtime]["old"], human)
-                self.assertIn(row["models"][runtime]["new"], human)
+            self.assertIn(row["models"]["opencode"]["old"], human)
+            self.assertIn(row["models"]["opencode"]["new"], human)
         self.assert_preview_matches_renderer(candidate)
         self.assertFalse((self.source / ".olympus-cli-edit.lock").exists())
         self.assertFalse((self.source / ".olympus-cli-edit").exists())
@@ -2808,7 +2629,7 @@ class SliceBModelEdit(unittest.TestCase):
         self.assertEqual("high", new["roles"]["veyra"]["effort"])
         for role in set(old["roles"]) - {"veyra"}:
             self.assertEqual(old["roles"][role], new["roles"][role])
-        self.assertEqual({"olympus/core/models.toml", ".opencode/agents/veyra.md", ".codex/agents/veyra.toml"},
+        self.assertEqual({"olympus/core/models.toml", ".opencode/agents/veyra.md"},
                          set(candidate.preview["data"]["write_set"]))
         self.assert_preview_matches_renderer(candidate)
 
@@ -2819,15 +2640,13 @@ class SliceBModelEdit(unittest.TestCase):
         row = candidate.preview["data"]["roles"][0]
         self.assertEqual({"old": "xhigh", "new": "high"}, row["effort"])
         self.assertEqual(row["models"]["opencode"]["old"], row["models"]["opencode"]["new"])
-        self.assertEqual(row["models"]["codex"]["old"], row["models"]["codex"]["new"])
         self.assert_preview_matches_renderer(candidate)
 
     def test_slice_b_kael_root_and_retired_aegis_role_is_rejected(self):
         model_edit = self.model_edit()
         kael = model_edit._build_set_role_candidate(self.source, "kael", family="luna", effort="max")
         kael_row = kael.preview["data"]["roles"][0]
-        self.assertEqual("root", kael_row["representation"]["codex"])
-        self.assertNotIn(".codex/agents/kael.toml", kael.preview["data"]["write_set"])
+        self.assertEqual({"opencode": "agent"}, kael_row["representation"])
         self.assertNotIn("CODEX.md", kael.preview["data"]["write_set"])
         self.assert_preview_matches_renderer(kael)
 
@@ -2837,7 +2656,11 @@ class SliceBModelEdit(unittest.TestCase):
     def test_slice_b_noop_has_no_files_lock_scratch_or_source_mutations(self):
         model_edit = self.model_edit()
         before = self.snapshot()
-        family = model_edit._build_set_family_candidate(self.source, "sol", "openai/gpt-6.1-sol", "gpt-6.1-sol")
+        family = model_edit._build_set_family_candidate(
+            self.source, "sol",
+            tomllib.loads((self.source / "olympus/core/models.toml").read_text(encoding="utf-8"))
+            ["families"]["sol"]["opencode"],
+        )
         role = model_edit._build_set_role_candidate(self.source, "veyra", family="luna", effort="max")
         self.assertTrue(family.preview["data"]["no_op"])
         self.assertEqual("no_changes", family.preview["result"])
@@ -2851,25 +2674,25 @@ class SliceBModelEdit(unittest.TestCase):
 
     def test_slice_b_candidate_rejects_drift_missing_and_mixed_newline_outputs(self):
         model_edit = self.model_edit()
-        drift = self.source / ".codex/agents/veyra.toml"
+        drift = self.source / ".opencode/agents/veyra.md"
         original = drift.read_bytes()
         drift.write_bytes(original + b"# drift\n")
         with self.assertRaisesRegex(model_edit.ModelEditError, "drift"):
-            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol", "new-codex")
+            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol")
         drift.write_bytes(original)
 
         drift.unlink()
         with self.assertRaisesRegex(model_edit.ModelEditError, "Missing renderer resource"):
-            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol", "new-codex")
+            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol")
         drift.write_bytes(original)
 
         drift.write_bytes(original.replace(b"\n", b"\r\n", 1))
         with self.assertRaisesRegex(model_edit.ModelEditError, "Mixed LF/CRLF"):
-            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol", "new-codex")
+            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol")
 
     def test_slice_b_candidate_rejects_linked_outputs(self):
         model_edit = self.model_edit()
-        output = self.source / ".codex/agents/veyra.toml"
+        output = self.source / ".opencode/agents/veyra.md"
         link_target = self.sandbox / "linked-output-target"
         link_target.write_bytes(output.read_bytes())
         output.unlink()
@@ -2879,11 +2702,11 @@ class SliceBModelEdit(unittest.TestCase):
             output.write_bytes(link_target.read_bytes())
             self.skipTest(f"Host cannot create a hard-link safety fixture: {error}")
         with self.assertRaisesRegex(model_edit.ModelEditError, "Hard-linked"):
-            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol", "new-codex")
+            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol")
 
     def test_slice_b_candidate_rejects_symlinked_outputs(self):
         model_edit = self.model_edit()
-        output = self.source / ".codex/agents/veyra.toml"
+        output = self.source / ".opencode/agents/veyra.md"
         link_target = self.sandbox / "symlink-output-target"
         link_target.write_bytes(output.read_bytes())
         output.unlink()
@@ -2893,7 +2716,7 @@ class SliceBModelEdit(unittest.TestCase):
             output.write_bytes(link_target.read_bytes())
             self.skipTest(f"Host cannot create a symlink safety fixture: {error}")
         with self.assertRaisesRegex(model_edit.ModelEditError, "Linked/reparse"):
-            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol", "new-codex")
+            model_edit._build_set_family_candidate(self.source, "sol", "openai/new-sol")
 
     def _snapshot_without_batch_control(self):
         inventory, contents = self.snapshot()
@@ -2937,7 +2760,7 @@ class SliceBModelEdit(unittest.TestCase):
     def test_slice_b_batch_persists_prepared_record_backups_and_staging_only(self):
         model_edit = self.model_edit()
         candidate = model_edit._build_set_family_candidate(
-            self.source, "sol", "openai/sol-batch", "codex-sol-batch"
+            self.source, "sol", "openai/sol-batch"
         )
         before = self._snapshot_without_batch_control()
         original_targets = {
@@ -2985,6 +2808,7 @@ class SliceBModelEdit(unittest.TestCase):
 
         read_records = {entry["path"]: entry for entry in prepared.record["read_set"]}
         self.assertEqual(set(candidate.read_set), set(read_records))
+        self.assertIn("docs/HARNESS-CAPABILITIES.md", read_records)
         for relative, signature in candidate.read_set.items():
             entry = read_records[relative]
             self.assertEqual(signature[0], entry["kind"])
@@ -2998,7 +2822,9 @@ class SliceBModelEdit(unittest.TestCase):
     def test_slice_b_batch_noop_creates_no_lock_or_scratch(self):
         model_edit = self.model_edit()
         candidate = model_edit._build_set_family_candidate(
-            self.source, "sol", "openai/gpt-6.1-sol", "gpt-6.1-sol"
+            self.source, "sol",
+            tomllib.loads((self.source / "olympus/core/models.toml").read_text(encoding="utf-8"))
+            ["families"]["sol"]["opencode"],
         )
         before = self.snapshot()
 
@@ -3011,19 +2837,23 @@ class SliceBModelEdit(unittest.TestCase):
 
     def test_slice_b_batch_rejects_readset_drift_before_creating_control_files(self):
         model_edit = self.model_edit()
-        candidate = model_edit._build_set_role_candidate(
-            self.source, "veyra", family="sol", effort="high"
-        )
-        unrelated_input = self.source / "olympus/policies/orchestration.toml"
-        unrelated_input.write_bytes(unrelated_input.read_bytes() + b"\n# fixture drift\n")
-        before = self.snapshot()
+        for relative in ("olympus/policies/orchestration.toml", "docs/HARNESS-CAPABILITIES.md"):
+            with self.subTest(relative=relative):
+                candidate = model_edit._build_set_role_candidate(
+                    self.source, "veyra", family="sol", effort="high"
+                )
+                unrelated_input = self.source / relative
+                original = unrelated_input.read_bytes()
+                unrelated_input.write_bytes(original + b"\n# fixture drift\n")
+                before = self.snapshot()
 
-        with self.assertRaises(source_edit.BatchConflict):
-            source_edit._prepare_batch(candidate)
+                with self.assertRaises(source_edit.BatchConflict):
+                    source_edit._prepare_batch(candidate)
 
-        self.assertEqual(before, self.snapshot())
-        self.assertFalse((self.source / ".olympus-cli-edit.lock").exists())
-        self.assertFalse((self.source / ".olympus-cli-edit").exists())
+                self.assertEqual(before, self.snapshot())
+                self.assertFalse((self.source / ".olympus-cli-edit.lock").exists())
+                self.assertFalse((self.source / ".olympus-cli-edit").exists())
+                unrelated_input.write_bytes(original)
 
     def test_slice_b_batch_rejects_mode_drift_before_creating_control_files(self):
         model_edit = self.model_edit()
@@ -3069,7 +2899,7 @@ class SliceBModelEdit(unittest.TestCase):
         candidate = model_edit._build_set_role_candidate(
             self.source, "veyra", family="sol", effort="high"
         )
-        target = self.source / ".codex/agents/veyra.toml"
+        target = self.source / ".opencode/agents/veyra.md"
         link_target = self.sandbox / "unsafe-output-target"
         link_target.write_bytes(target.read_bytes())
         target.unlink()
@@ -3094,7 +2924,7 @@ class SliceBModelEdit(unittest.TestCase):
         candidate = model_edit._build_set_role_candidate(
             self.source, "veyra", family="sol", effort="high"
         )
-        target = self.source / ".codex/agents/veyra.toml"
+        target = self.source / ".opencode/agents/veyra.md"
         external_alias = self.sandbox / "external-hardlink-target"
         original = target.read_bytes()
         external_alias.write_bytes(original)
@@ -3159,7 +2989,7 @@ class SliceBModelEdit(unittest.TestCase):
 
     def _family_candidate(self):
         return self.model_edit()._build_set_family_candidate(
-            self.source, "sol", "openai/sol-t016", "codex/sol-t016"
+            self.source, "sol", "openai/sol-t016"
         )
 
     def _prepared_family(self):
@@ -3263,7 +3093,7 @@ source_edit._recover_batch(Path(sys.argv[1]))
         self.assertEqual("PASS", self.renderer_check())
 
     def renderer_check(self):
-        for path, expected in self.renderer.outputs_for(self.source, "all").items():
+        for path, expected in self.renderer.outputs_for(self.source, "opencode").items():
             if path.read_bytes() != expected.encode("utf-8"):
                 return "FAIL"
         return "PASS"
@@ -3438,18 +3268,23 @@ source_edit._recover_batch(Path(sys.argv[1]))
 
         # An unrelated canonical input is part of the read-set; do not restore
         # any new target when its recorded content has drifted.
-        shutil.rmtree(self.source)
-        self._reset_source_fixture()
-        candidate, prepared = self._prepared_family()
-        changed = candidate.files[0]
-        self._replace_prepared_targets(prepared, [changed.relative_path])
-        unrelated = self.source / "olympus/policies/orchestration.toml"
-        unrelated.write_bytes(unrelated.read_bytes() + b"\n# external fixture drift\n")
-        current_target = changed.path.read_bytes()
-        with self.assertRaises(source_edit.BatchConflict):
-            source_edit._recover_batch(self.source)
-        self.assertEqual(current_target, changed.path.read_bytes())
-        self.assertTrue(prepared.record_path.is_file())
+        for relative in ("olympus/policies/orchestration.toml", "docs/HARNESS-CAPABILITIES.md"):
+            with self.subTest(relative=relative):
+                shutil.rmtree(self.source)
+                self._reset_source_fixture()
+                candidate, prepared = self._prepared_family()
+                changed = candidate.files[0]
+                self._replace_prepared_targets(prepared, [changed.relative_path])
+                unrelated = self.source / relative
+                unrelated.write_bytes(unrelated.read_bytes() + b"\n# external fixture drift\n")
+                current_target = changed.path.read_bytes()
+                with self.assertRaises(source_edit.BatchConflict):
+                    source_edit._recover_batch(self.source)
+                self.assertEqual(current_target, changed.path.read_bytes())
+                self.assertTrue(prepared.record_path.is_file())
+                for entry in prepared.record["files"]:
+                    backup = prepared.scratch_path / entry["backup"]
+                    self.assertEqual(entry["old_sha256"], hashlib.sha256(backup.read_bytes()).hexdigest())
 
     def _reset_source_fixture(self):
         shutil.copytree(ROOT / "olympus", self.source / "olympus",
@@ -3458,7 +3293,11 @@ source_edit._recover_batch(Path(sys.argv[1]))
         scripts.mkdir()
         shutil.copy2(ROOT / "scripts/render_harnesses.py", scripts / "render_harnesses.py")
         self.renderer = load_file("slice_b_fixture_renderer_reset", scripts / "render_harnesses.py")
-        for path, content in self.renderer.outputs_for(self.source, "all").items():
+        outputs = self.renderer.outputs_for(self.source, "opencode")
+        outputs[self.source / "docs/HARNESS-CAPABILITIES.md"] = self.renderer.capability_doc(
+            self.renderer.checked_sources(self.source)[2],
+        )
+        for path, content in outputs.items():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content.encode("utf-8"))
 
@@ -3731,7 +3570,7 @@ source_edit._recover_batch(Path(sys.argv[1]))
 
         self._t017_seed_sentinels()
         candidate = self._family_candidate()
-        self.assertEqual(14, len(candidate.files), "T017 must use the maximum baseline write-set")
+        self.assertEqual(8, len(candidate.files), "T017 must use the current OpenCode write-set")
         before_targets = {
             item.relative_path: (item.old_bytes, item.mode, item.path.stat().st_mtime_ns)
             for item in candidate.files
@@ -3766,16 +3605,17 @@ source_edit._recover_batch(Path(sys.argv[1]))
         self.assertEqual(before_outside, self._snapshot_outside_targets(candidate))
         self.assertEqual(before_external, self._t017_external_snapshot())
 
-    def test_slice_b_t017_crash_at_all_15_maximum_write_set_boundaries_recovers_old(self):
-        for boundary in range(15):
+    def test_slice_b_t017_crash_at_all_current_write_set_boundaries_recovers_old(self):
+        expected_targets = 8
+        for boundary in range(expected_targets + 1):
             with self.subTest(replacement_boundary=boundary):
                 if boundary:
                     self._t017_reset_fixture()
                 else:
                     self._t017_seed_sentinels()
                 candidate, prepared = self._prepared_family()
-                self.assertEqual(14, len(candidate.files), "baseline family edit must have 14 targets")
-                self.assertEqual(14, len(prepared.write_set))
+                self.assertEqual(expected_targets, len(candidate.files), "current family edit must have 8 targets")
+                self.assertEqual(expected_targets, len(prepared.write_set))
                 before_outside = self._snapshot_outside_targets(candidate)
                 before_external = self._t017_external_snapshot()
 
@@ -4134,7 +3974,11 @@ class SliceBCLIIntegration(unittest.TestCase):
         shutil.copy2(ROOT / "scripts/render_harnesses.py", scripts / "render_harnesses.py")
         shutil.copy2(ROOT / "install.ps1", source / "install.ps1")
         self.renderer = load_file("slice_b_t018_fixture_renderer", scripts / "render_harnesses.py")
-        for path, content in self.renderer.outputs_for(source, "all").items():
+        outputs = self.renderer.outputs_for(source, "opencode")
+        outputs[source / "docs/HARNESS-CAPABILITIES.md"] = self.renderer.capability_doc(
+            self.renderer.checked_sources(source)[2],
+        )
+        for path, content in outputs.items():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content.encode("utf-8"))
         sentinel = source / ".opencode" / "unmanaged-fixture.sentinel"
@@ -4212,7 +4056,7 @@ raise SystemExit(main(sys.argv[1:]))
         return snapshot
 
     def _assert_renderer_coherent(self):
-        for path, content in self.renderer.outputs_for(self.source, "all").items():
+        for path, content in self.renderer.outputs_for(self.source, "opencode").items():
             self.assertEqual(content.encode("utf-8"), path.read_bytes(), path.relative_to(self.source))
 
     def test_slice_b_t018_parser_rejects_invalid_surface_before_artifacts(self):
@@ -4225,11 +4069,11 @@ raise SystemExit(main(sys.argv[1:]))
             self.assertIn(command, help_result.stdout)
         self.assertEqual(before, self._file_snapshot())
         cases = (
-            ("models", "set-family", "sol", "--opencode", "valid-id"),
+            ("models", "set-family", "sol"),
             ("models", "set-family", "sol", "--opencode", "valid-id", "--codex", "valid-codex",
-             "--json"),
-            ("models", "set-family", "sol", "--opencode", "valid-id", "--codex", "valid-codex",
-             "--scope", "project", "--target", str(self.sandbox)),
+              "--json"),
+            ("models", "set-family", "sol", "--opencode", "valid-id",
+              "--scope", "project", "--target", str(self.sandbox)),
             ("agents", "set-model", "veyra"),
         )
         for arguments in cases:
@@ -4242,7 +4086,7 @@ raise SystemExit(main(sys.argv[1:]))
                 self.assertEqual(before, self._file_snapshot())
 
         invalid_json = self._run(
-            "models", "set-family", "sol", "--opencode", "valid-id", "--codex", "valid-codex", "--json",
+            "models", "set-family", "sol", "--opencode", "valid-id", "--json",
         )
         self.assertEqual(2, invalid_json.returncode)
         error_doc = json.loads(invalid_json.stdout)
@@ -4254,7 +4098,7 @@ raise SystemExit(main(sys.argv[1:]))
     def test_slice_b_t018_preview_human_json_and_retired_role_rejection_are_read_only(self):
         before = self._file_snapshot()
         family = self._run(
-            "models", "set-family", "sol", "--opencode", "openai/t018-sol", "--codex", "codex/t018-sol",
+            "models", "set-family", "sol", "--opencode", "openai/t018-sol",
             "--dry-run", "--json",
         )
         self.assertEqual(0, family.returncode, family.stderr)
@@ -4263,9 +4107,8 @@ raise SystemExit(main(sys.argv[1:]))
         self.assertEqual(1, preview["schema_version"])
         self.assertEqual("models set-family", preview["operation"])
         self.assertEqual("ok", preview["result"])
-        self.assertEqual(14, len(preview["data"]["write_set"]))
+        self.assertEqual(8, len(preview["data"]["write_set"]))
         self.assertEqual("openai/t018-sol", preview["data"]["request"]["models"]["opencode"])
-        self.assertEqual("codex/t018-sol", preview["data"]["request"]["models"]["codex"])
 
         human = self._run("agents", "set-model", "veyra", "--effort", "high", "--dry-run")
         self.assertEqual(0, human.returncode, human.stderr)
@@ -4278,7 +4121,7 @@ raise SystemExit(main(sys.argv[1:]))
                          "--dry-run", "--json")
         self.assertEqual(0, kael.returncode, kael.stderr)
         kael_row = json.loads(kael.stdout)["data"]["roles"][0]
-        self.assertEqual("root", kael_row["representation"]["codex"])
+        self.assertEqual({"opencode": "agent"}, kael_row["representation"])
         self.assertNotIn(".codex/agents/kael.toml", json.loads(kael.stdout)["data"]["write_set"])
         aegis = self._run("agents", "set-model", "aegis", "--family", "sol", "--effort", "high",
                           "--dry-run", "--json")
@@ -4290,19 +4133,19 @@ raise SystemExit(main(sys.argv[1:]))
     def test_slice_b_t018_invalid_identifiers_and_drift_do_not_create_write_artifacts(self):
         before = self._file_snapshot()
         invalid = self._run(
-            "models", "set-family", "sol", "--opencode", "bad id", "--codex", "valid-codex",
+            "models", "set-family", "sol", "--opencode", "bad id",
         )
         self.assertEqual(2, invalid.returncode, (invalid.stdout, invalid.stderr))
         self.assertEqual(before, self._file_snapshot())
         self.assertFalse((self.source / ".olympus-cli-edit.lock").exists())
         self.assertFalse((self.source / ".olympus-cli-edit").exists())
 
-        drift = self.source / ".codex/agents/veyra.toml"
+        drift = self.source / ".opencode/agents/veyra.md"
         original = drift.read_bytes()
         drift.write_bytes(original + b"# fixture drift\n")
         before_drift_command = self._file_snapshot()
         result = self._run(
-            "models", "set-family", "sol", "--opencode", "openai/new-sol", "--codex", "codex-new",
+            "models", "set-family", "sol", "--opencode", "openai/new-sol",
         )
         self.assertEqual(3, result.returncode, (result.stdout, result.stderr))
         self.assertIn("drift", (result.stdout + result.stderr).lower())
@@ -4313,7 +4156,7 @@ raise SystemExit(main(sys.argv[1:]))
     def test_slice_b_t018_explicit_commit_noop_and_unmanaged_file_preservation(self):
         initial_noop_before = self._file_snapshot()
         initial_noop = self._run(
-            "models", "set-family", "sol", "--opencode", "openai/gpt-6.1-sol", "--codex", "gpt-6.1-sol",
+            "models", "set-family", "sol", "--opencode", "openai/gpt-6.1-sol",
         )
         self.assertEqual(0, initial_noop.returncode, (initial_noop.stdout, initial_noop.stderr))
         self.assertIn("execution: no_changes", initial_noop.stdout)
@@ -4322,7 +4165,7 @@ raise SystemExit(main(sys.argv[1:]))
         self.assertFalse((self.source / ".olympus-cli-edit").exists())
 
         preview_result = self._run(
-            "models", "set-family", "sol", "--opencode", "openai/applied-sol", "--codex", "codex-applied-sol",
+            "models", "set-family", "sol", "--opencode", "openai/applied-sol",
             "--dry-run", "--json",
         )
         self.assertEqual(0, preview_result.returncode, preview_result.stderr)
@@ -4331,12 +4174,12 @@ raise SystemExit(main(sys.argv[1:]))
         before = self._file_snapshot()
 
         applied = self._run(
-            "models", "set-family", "sol", "--opencode", "openai/applied-sol", "--codex", "codex-applied-sol",
+            "models", "set-family", "sol", "--opencode", "openai/applied-sol",
         )
         self.assertEqual(0, applied.returncode, (applied.stdout, applied.stderr))
         self.assertIn("Execution preview (not yet applied):", applied.stdout)
         self.assertIn("execution: committed", applied.stdout)
-        self.assertEqual(14, len(changed))
+        self.assertEqual(8, len(changed))
         self._assert_renderer_coherent()
         self.assertTrue((self.source / ".olympus-cli-edit.lock").is_file())
         self.assertEqual(0, (self.source / ".olympus-cli-edit.lock").stat().st_size)
@@ -4353,7 +4196,7 @@ raise SystemExit(main(sys.argv[1:]))
         )
         self.assertEqual(0, role_preview_result.returncode, role_preview_result.stderr)
         role_write_set = set(json.loads(role_preview_result.stdout)["data"]["write_set"])
-        self.assertEqual({"olympus/core/models.toml", ".opencode/agents/veyra.md", ".codex/agents/veyra.toml"},
+        self.assertEqual({"olympus/core/models.toml", ".opencode/agents/veyra.md"},
                          role_write_set)
         role_apply = self._run("agents", "set-model", "veyra", "--family", "sol", "--effort", "high")
         self.assertEqual(0, role_apply.returncode, (role_apply.stdout, role_apply.stderr))
@@ -4395,7 +4238,7 @@ raise SystemExit(main(sys.argv[1:]))
         from olympus import source_edit
 
         candidate = self._model_edit()._build_set_family_candidate(
-            self.source, "sol", "openai/recovery-sol", "codex/recovery-sol",
+            self.source, "sol", "openai/recovery-sol",
         )
         prepared = source_edit._prepare_batch(candidate)
         self.assertIsNotNone(prepared)
@@ -4423,7 +4266,7 @@ raise SystemExit(main(sys.argv[1:]))
         # through the public recovery command; the operation is confirmed only
         # after every managed output is already in the new renderer state.
         committed_candidate = self._model_edit()._build_set_family_candidate(
-            self.source, "luna", "openai/committed-luna", "codex/committed-luna",
+            self.source, "luna", "openai/committed-luna",
         )
         committed_prepared = source_edit._prepare_batch(committed_candidate)
         original_cleanup = source_edit._cleanup_batch
@@ -4468,7 +4311,7 @@ raise SystemExit(main(sys.argv[1:]))
         from olympus import source_edit
 
         candidate = self._model_edit()._build_set_family_candidate(
-            self.source, "sol", "openai/contended-sol", "codex/contended-sol",
+            self.source, "sol", "openai/contended-sol",
         )
         prepared = source_edit._prepare_batch(candidate)
         self.assertIsNotNone(prepared)
@@ -4529,7 +4372,7 @@ source_edit._release_lock(lock)
                     shutil.rmtree(self.source)
                     self._make_source_fixture(self.source)
                 candidate = self._model_edit()._build_set_family_candidate(
-                    self.source, "sol", "openai/exit-sol", "codex/exit-sol",
+                    self.source, "sol", "openai/exit-sol",
                 )
                 fail_target = candidate.files[2].path
                 original_replace = os.replace
@@ -4551,7 +4394,7 @@ source_edit._release_lock(lock)
                 before_targets = {item.relative_path: item.old_bytes for item in candidate.files}
                 with patch.object(source_edit.os, "replace", side_effect=inject_commit_failure):
                     code, stdout, stderr = self._call_main(
-                        "models", "set-family", "sol", "--opencode", "openai/exit-sol", "--codex", "codex/exit-sol",
+                        "models", "set-family", "sol", "--opencode", "openai/exit-sol",
                     )
 
                 self.assertTrue(failed_initial)
@@ -4594,14 +4437,11 @@ raise SystemExit(main(sys.argv[1:]))
 
     def test_slice_b_t019_public_preview_write_sets_match_fixture_mutations(self):
         cases = (
-            ("sol", ("models", "set-family", "sol", "--opencode", "openai/t019-sol",
-                      "--codex", "codex/t019-sol"), 14),
-            ("luna", ("models", "set-family", "luna", "--opencode", "openai/t019-luna",
-                       "--codex", "codex/t019-luna"), 11),
-            ("specialist", ("agents", "set-model", "veyra", "--family", "sol", "--effort", "high"), 3),
-            ("kael", ("agents", "set-model", "kael", "--family", "luna", "--effort", "max"), {3, 4}),
-            ("no-op", ("models", "set-family", "sol", "--opencode", "openai/gpt-6.1-sol",
-                        "--codex", "gpt-6.1-sol"), 0),
+            ("sol", ("models", "set-family", "sol", "--opencode", "openai/t019-sol"), 8),
+            ("luna", ("models", "set-family", "luna", "--opencode", "openai/t019-luna"), 6),
+            ("specialist", ("agents", "set-model", "veyra", "--family", "sol", "--effort", "high"), 2),
+            ("kael", ("agents", "set-model", "kael", "--family", "luna", "--effort", "max"), 3),
+            ("no-op", ("models", "set-family", "sol", "--opencode", "openai/gpt-6.1-sol"), 0),
         )
         for label, command, expected_count in cases:
             with self.subTest(case=label):
@@ -4646,7 +4486,7 @@ raise SystemExit(main(sys.argv[1:]))
                     self.assertIn("execution: no_changes", applied.stdout)
                     self.assertFalse((source / ".olympus-cli-edit.lock").exists())
                 self.assertFalse((source / ".olympus-cli-edit").exists())
-                for path, content in self.renderer.outputs_for(source, "all").items():
+                for path, content in self.renderer.outputs_for(source, "opencode").items():
                     self.assertEqual(content.encode("utf-8"), path.read_bytes(), path.relative_to(source))
 
     def test_slice_b_t019_slice_a_entrypoints_are_read_only_without_editor(self):
@@ -4693,10 +4533,8 @@ raise SystemExit(main(sys.argv[1:]))
     def test_slice_b_t019_missing_editor_blocks_edits_and_recovery_is_stdlib_only(self):
         before_missing_dependency = self._file_snapshot()
         for arguments in (
-            ("models", "set-family", "sol", "--opencode", "openai/missing-sol",
-             "--codex", "codex/missing-sol", "--dry-run", "--json"),
-            ("models", "set-family", "sol", "--opencode", "openai/missing-sol",
-             "--codex", "codex/missing-sol"),
+            ("models", "set-family", "sol", "--opencode", "openai/missing-sol", "--dry-run", "--json"),
+            ("models", "set-family", "sol", "--opencode", "openai/missing-sol"),
         ):
             with self.subTest(arguments=arguments):
                 result = self._run_with_optional_imports_blocked(
@@ -4710,7 +4548,7 @@ raise SystemExit(main(sys.argv[1:]))
 
         from olympus import source_edit
         candidate = self._model_edit()._build_set_family_candidate(
-            self.source, "sol", "openai/recovery-sol", "codex/recovery-sol",
+            self.source, "sol", "openai/recovery-sol",
         )
         prepared = source_edit._prepare_batch(candidate)
         self.assertIsNotNone(prepared)

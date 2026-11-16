@@ -1,5 +1,9 @@
 # OlympusAgents v0.4.9
 
+> Historical release record: statements below describe v0.4.9 only, not current
+> support or routes. Olympus currently supports OpenCode only; public
+> install/update/uninstall is global/OpenCode-only.
+
 ## Highlights
 
 - Make the unified interactive and direct PowerShell installer and uninstaller the primary interface (PR #63).

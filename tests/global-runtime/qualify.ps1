@@ -606,7 +606,7 @@ function Invoke-Control([pscustomobject]$Context, [string[]]$ExpectedAgentIds) {
     Save-Evidence
     Check "GLOBAL_RUNTIME_$($Name)_CLEAN_PROJECT_FIXTURE" ([bool]$control.fixture_no_project_config)
 
-    $installArguments = @('-NoLogo','-NoProfile','-File',$installer,'-SourceRoot',$source,'-Target',$fixture,
+    $installArguments = @('-NoLogo','-NoProfile','-File',$installer,'-SourceRoot',$source,
         '-Scope','global','-Harness','opencode')
     $install = Invoke-CapturedProcess $script:evidence.pwsh $installArguments $fixture $IsolationRoot $configRoot $Name
     $control.installer_exit_code = $install.ExitCode
@@ -633,7 +633,7 @@ function Invoke-Control([pscustomobject]$Context, [string[]]$ExpectedAgentIds) {
 
     $globalSnapshotBeforeVerify = Get-TreeSnapshot $expectedConfigRoot
     $fixtureSnapshotBeforeVerify = Get-TreeSnapshot $fixture
-    $verifyArguments = @('-NoLogo','-NoProfile','-File',$installer,'-SourceRoot',$source,'-Target',$fixture,
+    $verifyArguments = @('-NoLogo','-NoProfile','-File',$installer,'-SourceRoot',$source,
         '-Scope','global','-Harness','opencode','-VerifyOnly')
     $verify = Invoke-CapturedProcess $script:evidence.pwsh $verifyArguments $fixture $IsolationRoot $configRoot $Name
     $control.verifyonly_exit_code = $verify.ExitCode

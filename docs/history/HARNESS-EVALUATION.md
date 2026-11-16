@@ -174,7 +174,7 @@ Olympus agents plus 2/2 controls, and configuration-level Kael selection.
 No model-backed prompt, interactive key use, or support for other versions or
 operating systems is established by that acceptance. **Codex SUPPORTED** remains
 based on user-provided PASS evidence, accepted without a repeat smoke. See
-[HARNESSES](../HARNESSES.md#global-installation-foundation-introduced-in-tagged-v040)
+[HARNESSES](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/docs/HARNESSES.md#global-installation-foundation-introduced-in-tagged-v040)
 for the per-harness evidence.
 
 ## Future real-task collection template

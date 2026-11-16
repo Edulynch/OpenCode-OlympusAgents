@@ -2,6 +2,10 @@
 
 **Pre-publication record; not proof of a GitHub Release.** This document tracks the bounded CLI/release-readiness evidence for [issue #64](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/64). Publishing a tag and GitHub Release remains a separate maintainer decision.
 
+> Historical candidate record: statements below describe the v0.5.0 candidate
+> only, not current support or routes. Olympus currently supports OpenCode only;
+> public install/update/uninstall is global/OpenCode-only.
+
 The checkout's installer default and release marker declare `v0.5.0`; the twelve legacy wrapper sources reference the same tag. This identifies a candidate source tree, not a published artifact or a universal CLI package.
 
 ## What the candidate delivers

@@ -90,7 +90,7 @@ jobs:
       - name: OA77 worktree activation (deterministic Windows)
         shell: pwsh
         run: |
-          # Exercise the legacy upgrade and worktree conflict gates in temporary Git fixtures.
+          # Exercise current local-source worktree provisioning and safety gates in temporary Git fixtures.
           pwsh -NoProfile -File ./tests/worktree-activation/qualify.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -214,8 +214,8 @@ jobs:
           $testOutput | Out-Host
           if ($testExitCode -ne 0) { exit $testExitCode }
           $transcript = $testOutput -join "`n"
-          if ($transcript -notmatch '(?m)^Ran 14 tests in ') {
-            throw 'C2.3/C3 writer-lock qualification did not execute all 14 required tests.'
+          if ($transcript -notmatch '(?m)^Ran 15 tests in ') {
+            throw 'C2.3/C3 writer-lock qualification did not execute all 15 required tests.'
           }
           if ($env:RUNNER_OS -eq 'Windows') {
             if ($transcript -match 'skipped' -and
@@ -283,7 +283,7 @@ jobs:
           $testOutput | Out-Host
           if ($testExitCode -ne 0) { exit $testExitCode }
           $transcript = $testOutput -join "`n"
-          if ($transcript -notmatch '(?m)^Ran 19 tests in ' -or
+          if ($transcript -notmatch '(?m)^Ran 16 tests in ' -or
               $transcript -notmatch '(?m)^OK$' -or $transcript -match 'skipped') {
             throw 'Slice C7 Windows global read-only tests must all pass without skips.'
           }

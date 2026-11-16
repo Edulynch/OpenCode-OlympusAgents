@@ -4,11 +4,11 @@
 
 ### I. Olympus Core Is Canonical
 
-Olympus Core defines the canonical roles, identities, models, policies, and capabilities. OpenCode and Codex are adapters to that shared core; their features, controls, and supported workflows may differ. Preserve the eleven-role roster and each role's ownership as defined by Core. Do not infer adapter parity from shared names or prompts. See [Olympus Core](../../olympus/README.md), [roles](../../olympus/roles/), [identities](../../olympus/core/identities.toml), [models](../../olympus/core/models.toml), and [capabilities](../../olympus/harnesses/capabilities.toml).
+Olympus Core defines the canonical roles, identities, models, policies, and capabilities. OpenCode is the only currently supported runtime adapter. Preserve the eleven-role roster and each role's ownership as defined by Core. Do not infer runtime guarantees from shared names or prompts. See [Olympus Core](../../olympus/README.md), [roles](../../olympus/roles/), [identities](../../olympus/core/identities.toml), [models](../../olympus/core/models.toml), and [capabilities](../../olympus/harnesses/capabilities.toml).
 
 ### II. Authority Follows the Runtime
 
-Kael owns task routing, scope reconciliation, and final completion, including consumption of required child results. The same Kael workflow handles external projects and OlympusAgents development; there is no separate maintenance role, command, or authorization plane. Identify repository ownership before dependent writes, and preserve each task's exact scope, native permissions, and user constraints. ALLOW permits only the exact authorized operation within the task and writable scope. ASK means a native approval may be available for an eligible operation; approval does not expand authority. DENY cannot be elevated by an ordinary approval, grant, or prompt. These labels define policy authority; runtime enforcement is a separate claim and requires runtime evidence. Report missing controls as gaps and preserve the policy. Codex's contextual Olympus maintenance and DENY capability gaps remain limitations; prompt text does not close them. Follow [routing](../../olympus/policies/routing.md), [authority](../../olympus/policies/authority.md), [contextual maintenance](../../olympus/policies/maintenance-context.md), [result lifecycle](../../olympus/policies/result-lifecycle.md), and [Codex compatibility notes](../../docs/CODEX-COMPATIBILITY.md).
+Kael owns task routing, scope reconciliation, and final completion, including consumption of required child results. The same Kael workflow handles external projects and OlympusAgents development; there is no separate maintenance role, command, or authorization plane. Identify repository ownership before dependent writes, and preserve each task's exact scope, native permissions, and user constraints. ALLOW permits only the exact authorized operation within the task and writable scope. ASK means a native approval may be available for an eligible operation; approval does not expand authority. DENY cannot be elevated by an ordinary approval, grant, or prompt. These labels define policy authority; runtime enforcement is a separate claim and requires runtime evidence. Report missing controls as gaps and preserve the policy. Follow [routing](../../olympus/policies/routing.md), [authority](../../olympus/policies/authority.md), [contextual maintenance](../../olympus/policies/maintenance-context.md), [result lifecycle](../../olympus/policies/result-lifecycle.md), and the [current OpenCode capability contract](../../docs/HARNESS-CAPABILITIES.md). Historical Codex evidence is not current support.
 
 ### III. Prefer Simple Changes Backed by Evidence
 
@@ -16,11 +16,11 @@ Choose the simplest maintainable design that satisfies the authorized need. Add 
 
 ### IV. Validate Proportionally to Risk
 
-Apply the project's TFR approach: after capability preflight and bounded discovery, select the smallest checks sufficient for the observable behavior, its boundaries, and its risks. Preserve applicable user, project, CI, release, and migration gates; do not add duplicate harnesses or gates. Identify checks as deterministic, simulated, or real-runtime and report PASS, FAIL, NOT RUN, BLOCKED, or unknown accurately. A static fixture does not prove native runtime behavior. See [harness guidance](../../docs/HARNESSES.md), [development guidance](../../docs/DEVELOPMENT.md), and the [Codex compatibility notes](../../docs/CODEX-COMPATIBILITY.md).
+Apply the project's TFR approach: after capability preflight and bounded discovery, select the smallest checks sufficient for the observable behavior, its boundaries, and its risks. Preserve applicable user, project, CI, release, and migration gates; do not add duplicate harnesses or gates. Identify checks as deterministic, simulated, or real-runtime and report PASS, FAIL, NOT RUN, BLOCKED, or unknown accurately. A static fixture does not prove native runtime behavior. See [harness guidance](../../docs/HARNESSES.md) and [development guidance](../../docs/DEVELOPMENT.md).
 
-### V. Preserve Compatibility and Installation Integrity
+### V. Preserve Current Contracts and Installation Integrity
 
-Changes must respect the current architecture, centralized model management, role ownership, manifests, installer and uninstaller behavior, user configuration, drift protection, and installation integrity. Treat generated or Olympus Core-owned files as protected sources; update canonical source through Kael's normal scoped workflow when the task targets OlympusAgents itself. Check compatibility against the documented [release baseline](../../docs/RELEASE-v0.4.9.md) and [contribution guidance](../../CONTRIBUTING.md). Do not restructure the framework to fit a documentation workflow.
+Changes must respect the current architecture, centralized model management, role ownership, supported manifest formats, installer and uninstaller behavior, user configuration, drift protection, and installation integrity. Unsupported or incomplete formats fail closed; do not promise or implement automatic conversion, adoption, or deletion. Treat generated or Olympus Core-owned files as protected sources; update canonical source through Kael's normal scoped workflow when the task targets OlympusAgents itself. Consult the documented [release baseline](../../docs/RELEASE-v0.4.9.md) for historical context and [contribution guidance](../../CONTRIBUTING.md) for current practice. Do not restructure the framework to fit a documentation workflow.
 
 ### VI. Keep Specification, Design, Implementation, and Verification Distinct
 
@@ -30,7 +30,7 @@ Specifications state scope and observable behavior; plans record design and depe
 
 Honor explicit user constraints and the authorized change boundary. Do not infer implementation authorization or scope expansion from a specification; execution requires the applicable user authorization. Use only the Spec Kit artifacts needed for the task; a trivial or documentation-only change does not require a full feature workflow. The templates guide documentation and do not create approval, commit, deployment, or release authority.
 
-## Compatibility and Installation Integrity
+## Current Interfaces and Installation Integrity
 
 Project-specific architecture, role definitions, model sources, security and governance rules, adapter capabilities, installation behavior, and release procedures remain documented in their canonical sources linked above. This constitution states governing principles and does not duplicate those manuals. Where an adapter lacks a documented capability or technical control, record that limitation and preserve the applicable policy.
 
@@ -42,9 +42,10 @@ Use existing behavior as the baseline for retrospective documentation. For new o
 
 This constitution governs Spec Kit documentation and project decisions within the user's authorized scope. It does not override user constraints, grant protected-file authority, or supersede Olympus Core policy and runtime controls. Amendments follow the existing project review process and record their impact; this adds no approval gate. Use semantic versions: MAJOR for redefining or removing a principle, MINOR for adding a principle or normative obligation, and PATCH for clarification that does not change normative meaning. Keep an amendment history below; this is the first ratified adoption, so no earlier constitutional history is implied.
 
-**Version**: 2.0.0 | **Ratified**: 2026-10-14 | **Last Amended**: 2026-11-07
+**Version**: 3.0.0 | **Ratified**: 2026-10-14 | **Last Amended**: 2026-11-16
 
 ### Amendment History
 
 - **1.0.0 (2026-10-14)**: First ratified OlympusAgents constitution, aligned to the v0.4.9 functional baseline.
 - **2.0.0 (2026-11-07)**: Align Core roster and authority principles with Issue #28's approved clean break: contextual OlympusAgents work remains in Kael's normal workflow; no separate Aegis role or `/maintain` command exists. Codex contextual maintenance remains a declared gap.
+- **3.0.0 (2026-11-16)**: Make OpenCode the only currently supported Olympus runtime. Prior Codex behavior remains historical evidence, not a compatibility promise or current product requirement.

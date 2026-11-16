@@ -50,7 +50,7 @@ not independently inspected rollout content.
 ## Trial 1 — `TRIVIAL_EDIT`
 
 Both executions reported the actual route `Kael → Kovan`, one direct child,
-and only `tests/phase11-integrated-routing/fixtures/simple/message.txt`
+and only the [retired Phase 11 trial fixture](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/fixtures/simple/message.txt)
 changed to the single line `Hello Phase 12 cross-harness`. Both report no
 out-of-scope changes; functional acceptance, delivery/consumption, and
 completion passed. External/user interventions: 0.

@@ -2,11 +2,10 @@
 
 Thanks for helping keep the framework reliable and approachable. Small, focused pull requests are preferred over new infrastructure.
 
-## Runtime support policy (2026-10-16)
+## Runtime support policy
 
-- **OpenCode V2 — ACTIVE DEVELOPMENT.** Prioritize it for new features, agents, commands, architecture, and runtime capabilities. New OpenCode-only capabilities do not require Codex equivalents.
-- **Codex — FROZEN COMPATIBILITY.** Preserve existing Codex components, installers, manifests, and uninstall protections. Do not add integrations or pursue parity-only gap closure. Only evidenced critical Codex fixes or regressions introduced by shared-code changes are in scope.
-- Keep existing shared-integrity and compatibility tests; do not create Codex gates for OpenCode-only work. Codex gaps in authority, contextual Olympus maintenance, hard `DENY`, and observability remain frozen. Do not claim newer Codex versions verified without evidence.
+- **OpenCode V2 — ACTIVE DEVELOPMENT and the only supported Olympus runtime.** Prioritize it for features, agents, commands, architecture, and runtime capabilities. Do not add Codex support or compatibility fallbacks.
+- Keep OpenCode ownership, permission, integrity, installer, and recovery safeguards.
 
 ## Before you start
 
@@ -19,8 +18,8 @@ Thanks for helping keep the framework reliable and approachable. Small, focused 
 
 - Keep each PR to one concern. Do not change models, permissions, routing, installer ownership or runtime contracts to resolve an unrelated test failure.
 - Prefer updating existing deterministic checks rather than creating a test suite for every change.
-- When editing canonical Olympus Core or adapter definitions, regenerate the relevant managed output using the existing renderer; **do not hand-edit generated `.opencode/` or `.codex/` files alone**.
-- Explain compatibility or capability limits; do not report static qualifications as live runtime evidence. Do not treat Codex parity as an acceptance criterion for new OpenCode capabilities.
+- When editing canonical Olympus Core or OpenCode adapter definitions, regenerate the relevant managed output using the existing renderer; **do not hand-edit generated `.opencode/` files alone**.
+- Explain capability limits; do not report static qualifications as live runtime evidence.
 - Git hooks and model-backed agents are **not required** to contribute.
 
 ## Run proportionate checks
@@ -31,8 +30,8 @@ Thanks for helping keep the framework reliable and approachable. Small, focused 
 | Security-sensitive repository content | Run `python -B -m unittest discover -s tests/security -p 'test_secret_gate.py' -v`, then `python -B scripts/secret_gate.py --base origin/master` (or select another reachable base explicitly) |
 | Localized defect | A focused regression in its existing suite |
 | Shared Olympus contract or policy | Focused checks plus `FAST` |
-| Significant installer/release/compatibility work | Relevant installer fixtures and `FULL` before integration |
-| Runtime behavior | Prioritize focused OpenCode V2 evidence; Codex runtime evidence only for an in-scope critical fix or materially relevant shared-code regression |
+| Significant installer/release work | Relevant installer fixtures and `FULL` before integration |
+| Runtime behavior | Prioritize focused OpenCode V2 evidence |
 
 Run FAST from the repository root:
 

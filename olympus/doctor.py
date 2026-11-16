@@ -94,7 +94,7 @@ def diagnose(source: Path, args, response: dict, *, source_version: str,
     from . import config_apply
 
     source = source.resolve()
-    selected = ("opencode", "codex") if args.harness == "all" else (args.harness,)
+    selected = ("opencode",)
     data = {
         "installation_state": "unknown",
         "integrity": "unverified",
@@ -169,7 +169,7 @@ def diagnose(source: Path, args, response: dict, *, source_version: str,
         _set_issue(response, "harness_absent", "The selected harness is not recorded in the project manifest.")
         return 0
 
-    verify_harness = present[0] if len(present) == 1 else "all"
+    verify_harness = "opencode"
     source_data, source_issues = source_query(source, "config check", verify_harness)
     if source_issues or not source_data.get("coherent"):
         data["source_coherent"] = False

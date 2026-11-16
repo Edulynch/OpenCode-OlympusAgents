@@ -35,7 +35,7 @@ function Mark-NotRun([string]$Name, [string]$Reason) {
     Add-Result $Name 'NOT RUN' $Reason
 }
 
-function Invoke-Check([string]$Name, [string]$Executable, [string[]]$Arguments, [switch]$AllowExplicitNotRun) {
+function Invoke-Check([string]$Name, [string]$Executable, [string[]]$Arguments) {
     Write-Output "`n=== $Name ==="
     $code = 1
     $output = @()
@@ -53,15 +53,6 @@ function Invoke-Check([string]$Name, [string]$Executable, [string[]]$Arguments, 
     if ($code -eq 0) {
         Write-Output "[$Name] PASS (exit 0)"
         Add-Result $Name 'PASS' '' $stopwatch.Elapsed.TotalMilliseconds
-    } elseif ($code -eq 2) {
-        $text = ($output | Out-String)
-        if ($AllowExplicitNotRun -and $text -match '(?m)^CODEX_MODEL_CATALOG: NOT RUN \(Codex CLI unavailable\)\s*$') {
-            Write-Output "[$Name] NOT RUN (exit 2; explicit Codex CLI prerequisite unavailable)"
-            Add-Result $Name 'NOT RUN' 'Codex CLI unavailable; bundled catalog was not checked.' $stopwatch.Elapsed.TotalMilliseconds
-        } else {
-            Write-Output "[$Name] FAIL (unexpected exit 2 without an allowed explicit NOT RUN reason)"
-            Add-Result $Name 'FAIL' 'exit 2 without a designated missing-prerequisite result' $stopwatch.Elapsed.TotalMilliseconds
-        }
     } else {
         Write-Output "[$Name] FAIL (exit $code)"
         Add-Result $Name 'FAIL' "exit $code" $stopwatch.Elapsed.TotalMilliseconds
@@ -73,22 +64,20 @@ function Invoke-PwshCheck([string]$Name, [string]$RelativePath, [string[]]$Extra
     Invoke-Check $Name $script:PowerShell $arguments
 }
 
-function Invoke-PythonCheck([string]$Name, [string]$RelativePath, [string[]]$ExtraArguments = @(), [switch]$AllowExplicitNotRun) {
+function Invoke-PythonCheck([string]$Name, [string]$RelativePath, [string[]]$ExtraArguments = @()) {
     $arguments = @('-B',(Join-Path $script:RepoRoot $RelativePath)) + $ExtraArguments
-    Invoke-Check $Name $script:Python $arguments -AllowExplicitNotRun:$AllowExplicitNotRun
+    Invoke-Check $Name $script:Python $arguments
 }
 
 function Invoke-FastSlice {
     Write-Output "`n######## FAST — offline-only qualification ########"
     Invoke-Check 'Local pre-push gate' $script:Python @('-B','-m','unittest','discover','-s','tests/pre-push','-p','test_pre_push.py','-v')
-    Invoke-PythonCheck 'Harness Core (safe root read-only)' 'tests/harness-core/qualify.py' @('--safe-root-read-only')
-    Invoke-PythonCheck 'Codex static profile (no CLI/catalog probe)' 'tests/codex/validate_profile.py' @('--mode','static')
+    Invoke-PythonCheck 'Harness Core (read-only root)' 'tests/harness-core/qualify.py'
 
     $offlineSuites = @(
         'tests/bootstrap-source-validation/qualify.ps1',
         'tests/adaptive-concurrency/qualify.ps1',
         'tests/completion-gates/qualify.ps1',
-        'tests/model-migration/qualify.ps1',
         'tests/preflight/qualify.ps1',
         'tests/question-barrier/qualify.ps1',
         'tests/result-reconciliation/qualify.ps1',
@@ -108,8 +97,7 @@ function Invoke-FullAdditions {
     Invoke-PwshCheck 'Global installer qualification' 'tests/global-installer/qualify.ps1'
     Invoke-PwshCheck 'Release qualification (MockOpenCode)' 'tests/release/qualify.ps1' @('-MockOpenCode')
     Invoke-PwshCheck 'Release installer compatibility' 'tests/release/installer-compatibility.ps1'
-    Invoke-PwshCheck 'Dual-harness installer' 'tests/release/dual-harness-installer.ps1'
-    Invoke-PwshCheck 'Codex instructions precedence' 'tests/codex-instructions-precedence/qualify.ps1'
+    Invoke-PwshCheck 'OpenCode-only project installer' 'tests/release/dual-harness-installer.ps1'
     # The dirty-worktree installer fixture checks the local CLI version preflight;
     # use the established deterministic stub, never the user's real runtime.
     $dirtyMockRoot = Join-Path (Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode') ('issue11-dirty-worktree-opencode-' + [guid]::NewGuid().ToString('N'))
@@ -127,8 +115,6 @@ function Invoke-FullAdditions {
             Remove-Item -LiteralPath $dirtyMockRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
-
-    Write-Output 'PHASE11_HISTORICAL_ONLY: old routing traces are retained as evidence and are not run as current contract tests.'
 
     $offlineSlices = @(
         @('Authority grants','tests/authority/qualify.ps1'),
@@ -148,13 +134,6 @@ function Invoke-FullAdditions {
 
 function Invoke-RuntimeSlice {
     Write-Output "`n######## RUNTIME — runtime boundaries only; no FULL slice ########"
-    $codex = Get-Command codex -ErrorAction SilentlyContinue
-    if ($codex) {
-        Invoke-PythonCheck 'Codex bundled model catalog only' 'tests/codex/validate_profile.py' @('--mode','catalog') -AllowExplicitNotRun
-    } else {
-        Mark-NotRun 'Codex bundled model catalog' 'Codex CLI unavailable; catalog is not reported as PASS.'
-    }
-
     Invoke-PwshCheck 'External-work ownership disposable processes only' 'tests/external-work-ownership/qualify.ps1' @('-ProcessesOnly')
 
     if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {

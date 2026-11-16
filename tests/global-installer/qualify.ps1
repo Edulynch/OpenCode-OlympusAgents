@@ -15,7 +15,6 @@ $candidateVersion = $candidateVersionMatch.Groups[1].Value
 $run = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) ('opencode\olympus-global-installer-' + [guid]::NewGuid().ToString('N'))
 $originalPath = $env:PATH
 $originalOpenCodeRoot = $env:OPENCODE_CONFIG_DIR
-$originalCodexHome = $env:CODEX_HOME
 $originalFixtureOpenCodeRoot = $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT
 $originalOlympusConfigFile = $env:OLYMPUS_CONFIG_FILE
 $cliInstallRoot = Join-Path $run 'cli-install'
@@ -70,24 +69,27 @@ function Run-Installer([string]$Target, [string[]]$Arguments) {
             '-SourceVersion', $candidateVersion, '-ProjectTarget', $Target) + $remaining
     }
     $previousOpenCodeRoot = $env:OPENCODE_CONFIG_DIR
-    $previousCodexHome = $env:CODEX_HOME
     if ($scope -eq 'global') {
         $env:OPENCODE_CONFIG_DIR = [string]$env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT
-        if ($env:CODEX_HOME) { $env:CODEX_HOME = [IO.Path]::GetFullPath($env:CODEX_HOME) }
     }
     $previousErrorActionPreference = $ErrorActionPreference
+    $locationPushed = $false
     try {
+        Push-Location -LiteralPath $Target
+        $locationPushed = $true
         # Windows PowerShell 5.1 turns native stderr into a terminating error
         # under Stop; preserve expected installer failures as captured evidence.
         $ErrorActionPreference = 'Continue'
-        $output = (& pwsh @engineArgs 2>&1 | Out-String)
-        $code = $LASTEXITCODE
+        Push-Location -LiteralPath $Target
+        try {
+            $output = (& pwsh @engineArgs 2>&1 | Out-String)
+            $code = $LASTEXITCODE
+        } finally { Pop-Location }
     } finally {
+        if ($locationPushed) { Pop-Location }
         $ErrorActionPreference = $previousErrorActionPreference
         if ($null -eq $previousOpenCodeRoot) { Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue }
         else { $env:OPENCODE_CONFIG_DIR = $previousOpenCodeRoot }
-        if ($null -eq $previousCodexHome) { Remove-Item Env:CODEX_HOME -ErrorAction SilentlyContinue }
-        else { $env:CODEX_HOME = $previousCodexHome }
     }
     return [pscustomobject]@{ Text=$output; Code=$code }
 }
@@ -147,11 +149,9 @@ try {
     if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'PLATFORM_UNQUALIFIED: global install qualification is Windows-only.' }
     [IO.Directory]::CreateDirectory($run) | Out-Null
     $openCodeRoot = Join-Path $run 'OpenCode Global Config'
-    $codexHome = Join-Path $run 'Codex Global Home'
     $env:OLYMPUS_CONFIG_FILE = Join-Path $run 'Olympus User Config/config.json'
     [IO.Directory]::CreateDirectory($openCodeRoot) | Out-Null
-    [IO.Directory]::CreateDirectory($codexHome) | Out-Null
-    $project = New-Target 'migration-project'
+    $project = New-Target 'opencode-project'
     $mockBin = Join-Path $run 'mock-bin'
     [IO.Directory]::CreateDirectory($mockBin) | Out-Null
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../release/fixtures/opencode.ps1') -Destination (Join-Path $mockBin 'opencode.ps1')
@@ -160,48 +160,38 @@ try {
     $env:PATH = $mockBin + [IO.Path]::PathSeparator + $env:PATH
     $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeRoot
     Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue
-    $env:CODEX_HOME = $codexHome
 
     $openUserConfig = Join-Path $openCodeRoot 'opencode.json'
-    $codexUserConfig = Join-Path $codexHome 'config.toml'
     # A user-owned V2 config with an ASK fallback and a later narrow DENY is
     # safe to preserve byte-for-byte; no manifest should claim ownership.
     $safeUserConfig = '{"user_owned":true,"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"C:/fixture/prohibited/*","effect":"deny"}]}' + "`n"
     [IO.File]::WriteAllText($openUserConfig, $safeUserConfig, $utf8)
-    [IO.File]::WriteAllText($codexUserConfig, "model = 'user-choice'`n", $utf8)
     $expectedOpenUserConfig = $safeUserConfig.Insert(1, '"default_agent":"kael",')
-    $codexUserHash = (Get-FileHash -LiteralPath $codexUserConfig -Algorithm SHA256).Hash
 
     # The existing project-local default stays project-scoped and records scope.
-    $localInstall = Run-Installer $project @('-Harness','all')
+    $localInstall = Run-Installer $project @('-Harness','opencode')
     $localManifestPath = Join-Path $project '.opencode/orchestrator-install.json'
     $localManifest = Get-Content -LiteralPath $localManifestPath -Raw | ConvertFrom-Json
-    Check 'PROJECT_SCOPE_ALL_INSTALL' ($localInstall.Code -eq 0 -and $localManifest.scope -eq 'project' -and
-        $localManifest.installed_version -eq $candidateVersion -and $localManifest.installed_harnesses.Count -eq 2 -and
-        $localManifest.installed_harnesses[0] -eq 'opencode' -and $localManifest.installed_harnesses[1] -eq 'codex') `
+    Check 'PROJECT_SCOPE_OPENCODE_INSTALL' ($localInstall.Code -eq 0 -and $localManifest.scope -eq 'project' -and
+        $localManifest.installed_version -eq $candidateVersion -and $localManifest.installed_harnesses.Count -eq 1 -and
+        $localManifest.installed_harnesses[0] -eq 'opencode') `
         ("exit=$($localInstall.Code)`n$($localInstall.Text)")
     $projectBeforeVerify = Snapshot $project
-    $projectVerify = Run-Installer $project @('-Harness','all','-VerifyOnly')
-    Check 'PROJECT_VERIFYONLY_ALL_UNAFFECTED' ($projectVerify.Code -eq 0 -and (Snapshot $project) -ceq $projectBeforeVerify)
+    $projectVerify = Run-Installer $project @('-Harness','opencode','-VerifyOnly')
+    Check 'PROJECT_VERIFYONLY_UNAFFECTED' ($projectVerify.Code -eq 0 -and (Snapshot $project) -ceq $projectBeforeVerify)
 
-    $projectBeforeMigration = Snapshot $project
-    $globalInstall = Global-Install $project 'all'
-    Check 'GLOBAL_OPENCODE_AND_CODEX_INSTALL' ($globalInstall.Code -eq 0 -and
-        $globalInstall.Text -match 'OLYMPUS_GLOBAL_INSTALL: OPENCODE .* READY' -and
-        $globalInstall.Text -match 'OLYMPUS_GLOBAL_INSTALL: CODEX .* READY') ("exit=$($globalInstall.Code)`n$($globalInstall.Text)")
-    Check 'GLOBAL_BOTH_PROJECT_OVERRIDES_RETAINED' ($globalInstall.Text -match 'GLOBAL_INSTALLED PROJECT_LOCAL_REMAINS_AS_OVERRIDE' -and
-        $globalInstall.Text -match 'PROJECT_LOCAL_OVERRIDE: opencode' -and $globalInstall.Text -match 'PROJECT_LOCAL_OVERRIDE: codex' -and
-        (Snapshot $project) -ceq $projectBeforeMigration) ("exit=$($globalInstall.Code)`n$($globalInstall.Text)`nPROJECT_SNAPSHOT_UNCHANGED=$((Snapshot $project) -ceq $projectBeforeMigration)")
+    $projectBeforeGlobalInstall = Snapshot $project
+    $globalInstall = Global-Install $project 'opencode'
+    Check 'GLOBAL_OPENCODE_INSTALL' ($globalInstall.Code -eq 0 -and
+        $globalInstall.Text -match 'OLYMPUS_GLOBAL_INSTALL: OPENCODE .* READY') ("exit=$($globalInstall.Code)`n$($globalInstall.Text)")
+    Check 'GLOBAL_PROJECT_OVERRIDE_RETAINED' ($globalInstall.Text -match 'GLOBAL_INSTALLED PROJECT_LOCAL_REMAINS_AS_OVERRIDE' -and
+        $globalInstall.Text -match 'PROJECT_LOCAL_OVERRIDE: opencode' -and
+        (Snapshot $project) -ceq $projectBeforeGlobalInstall) ("exit=$($globalInstall.Code)`n$($globalInstall.Text)`nPROJECT_SNAPSHOT_UNCHANGED=$((Snapshot $project) -ceq $projectBeforeGlobalInstall)")
     Check 'GLOBAL_OPENCODE_CONTEXTUAL_KAEL_ROSTER' ((Test-Path (Join-Path $openCodeRoot 'agents/kael.md')) -and
         (Test-Path (Join-Path $openCodeRoot 'plugins/olympus-activity/activity.ts')) -and
         -not (Test-Path (Join-Path $openCodeRoot 'agents/aegis.md')) -and
         -not (Test-Path (Join-Path $openCodeRoot 'commands/maintain.md')))
-    Check 'GLOBAL_CODEX_PROFILE_AND_AGENTS' ((Test-Path (Join-Path $codexHome 'agents/veyra.toml')) -and
-        (Test-Path (Join-Path $codexHome 'olympus.config.toml')) -and
-        (Test-Path (Join-Path $codexHome 'AGENTS.md')) -and
-        (Get-Content (Join-Path $codexHome 'olympus.config.toml') -Raw).Contains('model = "gpt-6.1-sol"'))
     Check 'GLOBAL_USER_CONFIG_PROTECTED' ([IO.File]::ReadAllText($openUserConfig) -ceq $expectedOpenUserConfig -and
-        (Get-FileHash -LiteralPath $codexUserConfig -Algorithm SHA256).Hash -eq $codexUserHash -and
         -not (Test-Path (Join-Path $openCodeRoot 'opencode.jsonc')))
     Check 'GLOBAL_USER_SPECIFIC_DENY_REMAINS_LAST' ((Get-ExternalFallback $openUserConfig) -eq 'ask' -and
         (Resolve-SyntheticExternalDecision $openUserConfig 'C:/fixture/prohibited/sentinel.txt') -eq 'deny' -and
@@ -265,55 +255,53 @@ try {
     $denyManifest = if ($denyInstall.Code -eq 0) { Get-Content (Join-Path $userDenyRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json } else { $null }
     Check 'GLOBAL_USER_JSONC_DENY_PRESERVED' (
         $denyInstall.Code -eq 0 -and
-        $null -ne $denyManifest -and $denyManifest.managed_files.Count -eq 13 -and
+        $null -ne $denyManifest -and $denyManifest.schema_version -eq 1 -and $denyManifest.scope -ceq 'global' -and
+        @($denyManifest.installed_harnesses).Count -eq 1 -and $denyManifest.installed_harnesses[0] -ceq 'opencode' -and
+        -not [string]::IsNullOrWhiteSpace([string]$denyManifest.installed_version) -and
+        -not [string]::IsNullOrWhiteSpace([string]$denyManifest.installed_from_commit) -and
+        $denyManifest.managed_files.Count -eq 13 -and
+        @($denyManifest.managed_files | Where-Object { [string]$_.sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0 -and
+        $denyManifest.default_agent_receipt.state -ceq 'committed' -and
         @($denyManifest.managed_files | Where-Object { $_.path -eq 'opencode.jsonc' }).Count -eq 0 -and
         [IO.File]::ReadAllText($userDenyPath) -ceq $userDenyText.Insert($userDenyText.IndexOf('"permissions"'), '"default_agent":"kael",')
     ) ("exit=$($denyInstall.Code)`n$($denyInstall.Text)")
-    # Reproduce an older 13-file global install with no config. Upgrading it
-    # must establish the missing guard without disturbing its owned agents.
+    # A 13-resource current install is valid only with its user-config receipt.
+    $userDenyManifestPath = Join-Path $userDenyRoot 'olympus/orchestrator-install.json'
+    $userDenyManifestBytes = [IO.File]::ReadAllBytes($userDenyManifestPath)
     [void]$denyManifest.PSObject.Properties.Remove('default_agent_receipt')
-    [IO.File]::WriteAllText((Join-Path $userDenyRoot 'olympus/orchestrator-install.json'), ($denyManifest | ConvertTo-Json -Depth 20), $utf8)
-    [IO.File]::Delete($userDenyPath)
-    $legacyNoConfigUpgrade = Global-Install $project 'opencode'
-    $legacyUpgradedManifest = Get-Content (Join-Path $userDenyRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
-    Check 'GLOBAL_13_FILE_UPGRADE_ADDS_MANAGED_ASK' (
-        $legacyNoConfigUpgrade.Code -eq 0 -and
-        $legacyUpgradedManifest.managed_files.Count -eq 14 -and
-        (Get-ExternalFallback $userDenyPath) -eq 'ask'
-    ) ("exit=$($legacyNoConfigUpgrade.Code)`n$($legacyNoConfigUpgrade.Text)")
+    [IO.File]::WriteAllText($userDenyManifestPath, ($denyManifest | ConvertTo-Json -Depth 20), $utf8)
+    $missingReceiptBefore = Snapshot $userDenyRoot
+    $missingReceiptInstall = Global-Install $project 'opencode'
+    Check 'GLOBAL_13_RESOURCE_MANIFEST_REQUIRES_RECEIPT_READONLY' (
+        $missingReceiptInstall.Code -ne 0 -and
+        $missingReceiptInstall.Text -match 'GLOBAL_DEFAULT_AGENT_RECEIPT_MISSING' -and
+        (Snapshot $userDenyRoot) -ceq $missingReceiptBefore
+    ) ("exit=$($missingReceiptInstall.Code)`n$($missingReceiptInstall.Text)")
+    [IO.File]::WriteAllBytes($userDenyManifestPath, $userDenyManifestBytes)
+
+    foreach ($selector in @('codex','all')) {
+        $unsupportedBefore = Snapshot $userDenyRoot
+        $unsupported = Global-Install $project $selector
+        Check ('GLOBAL_UNSUPPORTED_SELECTOR_' + $selector.ToUpperInvariant() + '_NO_WRITES') (
+            $unsupported.Code -ne 0 -and (Snapshot $userDenyRoot) -ceq $unsupportedBefore
+        ) ("exit=$($unsupported.Code)`n$($unsupported.Text)")
+    }
     $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeRoot
 
-    $conflictCodexHome = Join-Path $run 'Codex User Instructions Conflict'
-    [IO.Directory]::CreateDirectory($conflictCodexHome) | Out-Null
-    $conflictInstructions = Join-Path $conflictCodexHome 'AGENTS.md'
-    [IO.File]::WriteAllText($conflictInstructions, "user global instructions`n", $utf8)
-    $conflictInstructionsHash = (Get-FileHash -LiteralPath $conflictInstructions -Algorithm SHA256).Hash
-    $env:CODEX_HOME = $conflictCodexHome
-    $codexConflict = Run-Installer $project @('-Scope','global','-Harness','codex')
-    Check 'GLOBAL_USER_OWNED_CODEX_INSTRUCTIONS_CONFLICT' ($codexConflict.Code -ne 0 -and
-        $codexConflict.Text -match 'GLOBAL_INSTALL_CONFLICT' -and
-        (Get-FileHash -LiteralPath $conflictInstructions -Algorithm SHA256).Hash -eq $conflictInstructionsHash -and
-        -not (Test-Path (Join-Path $conflictCodexHome 'agents/veyra.toml')))
-    $overrideCodexHome = Join-Path $run 'Codex Global Override Instructions'
-    [IO.Directory]::CreateDirectory($overrideCodexHome) | Out-Null
-    [IO.File]::WriteAllText((Join-Path $overrideCodexHome 'AGENTS.override.md'), "user override instructions`n", $utf8)
-    $env:CODEX_HOME = $overrideCodexHome
-    $codexOverrideConflict = Run-Installer $project @('-Scope','global','-Harness','codex')
-    Check 'GLOBAL_CODEX_OVERRIDE_PRECEDENCE_CONFLICT' ($codexOverrideConflict.Code -ne 0 -and
-        $codexOverrideConflict.Text -match 'GLOBAL_INSTALL_CONFLICT' -and
-        -not (Test-Path (Join-Path $overrideCodexHome 'AGENTS.md')) -and
-        -not (Test-Path (Join-Path $overrideCodexHome 'agents/veyra.toml')))
-    $env:CODEX_HOME = $codexHome
-
-    # Qualify the successful per-harness global selectors independently of -all.
+    # Qualify the sole current OpenCode global selector.
     $openCodeOnlyRoot = Join-Path $run 'OpenCode Only Global Config'
     [IO.Directory]::CreateDirectory($openCodeOnlyRoot) | Out-Null
     $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeOnlyRoot
     $openCodeOnly = Run-Installer $project @('-Scope','global','-Harness','opencode')
     $openCodeOnlyManifest = Get-Content (Join-Path $openCodeOnlyRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
-    Check 'GLOBAL_OPENCODE_ONLY_SELECTOR' ($openCodeOnly.Code -eq 0 -and $openCodeOnlyManifest.scope -eq 'global' -and
-        $openCodeOnlyManifest.installed_harnesses.Count -eq 1 -and $openCodeOnlyManifest.installed_harnesses[0] -eq 'opencode' -and
-        $openCodeOnlyManifest.managed_files.Count -eq 14)
+    Check 'GLOBAL_OPENCODE_ONLY_SELECTOR' ($openCodeOnly.Code -eq 0 -and $openCodeOnlyManifest.schema_version -eq 1 -and
+        $openCodeOnlyManifest.scope -ceq 'global' -and $openCodeOnlyManifest.installed_harnesses.Count -eq 1 -and
+        $openCodeOnlyManifest.installed_harnesses[0] -ceq 'opencode' -and
+        -not [string]::IsNullOrWhiteSpace([string]$openCodeOnlyManifest.installed_version) -and
+        -not [string]::IsNullOrWhiteSpace([string]$openCodeOnlyManifest.installed_from_commit) -and
+        $openCodeOnlyManifest.managed_files.Count -eq 14 -and
+        @($openCodeOnlyManifest.managed_files | Where-Object { [string]$_.sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0 -and
+        $openCodeOnlyManifest.default_agent_receipt.state -ceq 'committed')
     $ownedGuardPath = Join-Path $openCodeOnlyRoot 'opencode.jsonc'
     Check 'GLOBAL_ONLY_EXTERNAL_ASK_MANAGED' (
         (Get-ExternalFallback $ownedGuardPath) -eq 'ask' -and
@@ -365,46 +353,6 @@ try {
         -not (Test-Path -LiteralPath $recoverIntentPath) -and
         (Global-Verify $project 'opencode').Code -eq 0
     ) ("exit=$($recoverInstall.Code)`n$($recoverInstall.Text)")
-
-    # A legacy 13-file upgrade can be interrupted after an old managed agent
-    # was replaced with the canonical bytes but before manifest publication.
-    # Unrecognized edits are never adopted, even with a valid guard intent.
-    $upgradeRoot = Join-Path $run 'OpenCode Interrupted Managed Upgrade'
-    [IO.Directory]::CreateDirectory($upgradeRoot) | Out-Null
-    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $upgradeRoot
-    $upgradeSeed = Global-Install $project 'opencode'
-    if ($upgradeSeed.Code -ne 0) { throw "Interrupted upgrade fixture install failed: $($upgradeSeed.Text)" }
-    $upgradeManifestPath = Join-Path $upgradeRoot 'olympus/orchestrator-install.json'
-    $upgradeManifest = Get-Content -LiteralPath $upgradeManifestPath -Raw | ConvertFrom-Json
-    $upgradeAgent = Join-Path $upgradeRoot 'agents/kael.md'
-    $currentAgentText = [IO.File]::ReadAllText($upgradeAgent)
-    $priorAgentText = $currentAgentText + "`n# prior managed version`n"
-    [IO.File]::WriteAllText($upgradeAgent, $priorAgentText, $utf8)
-    $upgradeAgentEntry = @($upgradeManifest.managed_files | Where-Object { $_.path -eq 'agents/kael.md' })[0]
-    $upgradeAgentEntry.sha256 = (Get-FileHash -LiteralPath $upgradeAgent -Algorithm SHA256).Hash.ToLowerInvariant()
-    $upgradeManifest.managed_files = @($upgradeManifest.managed_files | Where-Object { $_.path -ne 'opencode.jsonc' })
-    [void]$upgradeManifest.PSObject.Properties.Remove('default_agent_receipt')
-    $upgradeManifest.installed_version = 'historical-13-file-version'
-    [IO.File]::WriteAllText($upgradeManifestPath, (($upgradeManifest | ConvertTo-Json -Depth 20) + "`n"), $utf8)
-    [IO.File]::Delete((Join-Path $upgradeRoot 'opencode.jsonc'))
-    [IO.File]::WriteAllText((Join-Path $upgradeRoot 'olympus/opencode-guard-pending.json'), $recoverIntent, $utf8)
-    [IO.File]::WriteAllText((Join-Path $upgradeRoot 'opencode.jsonc'), $guardSourceText, $utf8)
-    [IO.File]::WriteAllText($upgradeAgent, 'unrecognized user edit', $utf8)
-    $unknownUpgradeBefore = Snapshot $upgradeRoot
-    $unknownUpgrade = Global-Install $project 'opencode'
-    Check 'GLOBAL_PENDING_UPGRADE_UNKNOWN_DRIFT_FAILS_CLOSED' (
-        $unknownUpgrade.Code -ne 0 -and $unknownUpgrade.Text -match 'GLOBAL_MANAGED_FILE_DRIFT' -and
-        (Snapshot $upgradeRoot) -ceq $unknownUpgradeBefore
-    ) ("exit=$($unknownUpgrade.Code)`n$($unknownUpgrade.Text)")
-    [IO.File]::WriteAllText($upgradeAgent, $currentAgentText, $utf8)
-    $upgradeRecovered = Global-Install $project 'opencode'
-    $upgradeRecoveredManifest = if ($upgradeRecovered.Code -eq 0) { Get-Content -LiteralPath $upgradeManifestPath -Raw | ConvertFrom-Json } else { $null }
-    Check 'GLOBAL_PENDING_13_TO_14_MANAGED_AGENT_ROLLFORWARD' (
-        $upgradeRecovered.Code -eq 0 -and $null -ne $upgradeRecoveredManifest -and
-        $upgradeRecoveredManifest.managed_files.Count -eq 14 -and
-        -not (Test-Path (Join-Path $upgradeRoot 'olympus/opencode-guard-pending.json')) -and
-        (Global-Verify $project 'opencode').Code -eq 0
-    ) ("exit=$($upgradeRecovered.Code)`n$($upgradeRecovered.Text)")
 
     # Exercise the exact production writer in isolation. The concurrent-file
     # case is modeled at the final create syscall, where CreateNew must fail
@@ -557,29 +505,38 @@ try {
     )
     [IO.File]::WriteAllText($ownedGuardPath, $ownedGuardOriginal, $utf8)
 
-    # A clean-break update retires the previous Aegis/command only when the old
-    # global manifest still owns their exact bytes.
-    $openCodeOnlyManifestPath = Join-Path $openCodeOnlyRoot 'olympus/orchestrator-install.json'
-    $legacyPaths = @('agents/aegis.md','commands/maintain.md')
-    $legacyText = @('historical generated agent','historical generated command')
-    $retiredManifest = Get-Content -LiteralPath $openCodeOnlyManifestPath -Raw | ConvertFrom-Json
-    for ($i = 0; $i -lt $legacyPaths.Count; $i++) {
-        $legacyFile = Join-Path $openCodeOnlyRoot $legacyPaths[$i]
-        [IO.Directory]::CreateDirectory((Split-Path -Parent $legacyFile)) | Out-Null
-        [IO.File]::WriteAllText($legacyFile, $legacyText[$i] + "`n", $utf8)
-        $retiredManifest.managed_files += [pscustomobject]@{
-            path=$legacyPaths[$i]
-            sha256=(Get-FileHash -LiteralPath $legacyFile -Algorithm SHA256).Hash.ToLowerInvariant()
+    # An old expanded inventory is rejected as a whole; obsolete files are not
+    # automatically adopted, converted, or deleted.
+    $obsoleteRoot = Join-Path $run 'OpenCode Obsolete Inventory Refused'
+    [IO.Directory]::CreateDirectory($obsoleteRoot) | Out-Null
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $obsoleteRoot
+    $obsoleteSeed = Global-Install $project 'opencode'
+    if ($obsoleteSeed.Code -ne 0) { throw "Obsolete inventory fixture install failed: $($obsoleteSeed.Text)" }
+    $obsoleteManifestPath = Join-Path $obsoleteRoot 'olympus/orchestrator-install.json'
+    $obsoleteManifest = Get-Content -LiteralPath $obsoleteManifestPath -Raw | ConvertFrom-Json
+    foreach ($entry in @(
+        @{ path='agents/aegis.md'; text="historical generated agent`n" },
+        @{ path='commands/maintain.md'; text="historical generated command`n" }
+    )) {
+        $obsoleteFile = Join-Path $obsoleteRoot $entry.path
+        [IO.Directory]::CreateDirectory((Split-Path -Parent $obsoleteFile)) | Out-Null
+        [IO.File]::WriteAllText($obsoleteFile, $entry.text, $utf8)
+        $obsoleteManifest.managed_files += [pscustomobject]@{
+            path=$entry.path
+            sha256=(Get-FileHash -LiteralPath $obsoleteFile -Algorithm SHA256).Hash.ToLowerInvariant()
         }
     }
-    [IO.File]::WriteAllText($openCodeOnlyManifestPath, (($retiredManifest | ConvertTo-Json -Depth 20) + "`n"), $utf8)
-    $globalMigration = Run-Installer $project @('-Scope','global','-Harness','opencode')
-    $migratedGlobalManifest = Get-Content -LiteralPath $openCodeOnlyManifestPath -Raw | ConvertFrom-Json
-    Check 'GLOBAL_RETIRED_RESOURCES_HASH_VERIFIED_REMOVAL' ($globalMigration.Code -eq 0 -and
-        -not (Test-Path (Join-Path $openCodeOnlyRoot 'agents/aegis.md')) -and
-        -not (Test-Path (Join-Path $openCodeOnlyRoot 'commands/maintain.md')) -and
-        $migratedGlobalManifest.managed_files.Count -eq 14)
+    [IO.File]::WriteAllText($obsoleteManifestPath, (($obsoleteManifest | ConvertTo-Json -Depth 20) + "`n"), $utf8)
+    $obsoleteBefore = Snapshot $obsoleteRoot
+    $obsoleteUpdate = Global-Install $project 'opencode'
+    Check 'GLOBAL_OLD_INVENTORY_REFUSED_WITHOUT_CLEANUP' ($obsoleteUpdate.Code -ne 0 -and
+        $obsoleteUpdate.Text -match 'GLOBAL_MANIFEST_INVALID' -and
+        (Snapshot $obsoleteRoot) -ceq $obsoleteBefore -and
+        (Test-Path (Join-Path $obsoleteRoot 'agents/aegis.md')) -and
+        (Test-Path (Join-Path $obsoleteRoot 'commands/maintain.md')))
 
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeOnlyRoot
+    $openCodeOnlyManifestPath = Join-Path $openCodeOnlyRoot 'olympus/orchestrator-install.json'
     $ownedGuardUninstall = Run-Installer $project @('-Scope','global','-Harness','opencode','-Uninstall')
     Check 'GLOBAL_OWNED_ONLY_GUARD_REMOVED_ON_UNINSTALL' (
         $ownedGuardUninstall.Code -eq 0 -and
@@ -587,93 +544,42 @@ try {
         -not (Test-Path $openCodeOnlyManifestPath)
     )
 
-    $openCodeDriftRoot = Join-Path $run 'OpenCode Global Retired Drift'
-    [IO.Directory]::CreateDirectory($openCodeDriftRoot) | Out-Null
-    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeDriftRoot
-    $driftInstall = Run-Installer $project @('-Scope','global','-Harness','opencode')
-    if ($driftInstall.Code -ne 0) { throw "Global drift fixture install failed: $($driftInstall.Text)" }
-    $driftManifestPath = Join-Path $openCodeDriftRoot 'olympus/orchestrator-install.json'
-    $driftManifest = Get-Content -LiteralPath $driftManifestPath -Raw | ConvertFrom-Json
-    $driftLegacy = Join-Path $openCodeDriftRoot 'agents/aegis.md'
-    [IO.File]::WriteAllText($driftLegacy, "historical generated agent`n", $utf8)
-    $driftManifest.managed_files += [pscustomobject]@{
-        path='agents/aegis.md'
-        sha256=(Get-FileHash -LiteralPath $driftLegacy -Algorithm SHA256).Hash.ToLowerInvariant()
-    }
-    $driftCommand = Join-Path $openCodeDriftRoot 'commands/maintain.md'
-    [IO.Directory]::CreateDirectory((Split-Path -Parent $driftCommand)) | Out-Null
-    [IO.File]::WriteAllText($driftCommand, "historical generated command`n", $utf8)
-    $driftManifest.managed_files += [pscustomobject]@{
-        path='commands/maintain.md'
-        sha256=(Get-FileHash -LiteralPath $driftCommand -Algorithm SHA256).Hash.ToLowerInvariant()
-    }
-    [IO.File]::WriteAllText($driftManifestPath, (($driftManifest | ConvertTo-Json -Depth 20) + "`n"), $utf8)
-    [IO.File]::AppendAllText($driftLegacy, "user edit`n", $utf8)
-    $driftBefore = Snapshot $openCodeDriftRoot
-    $driftUpdate = Run-Installer $project @('-Scope','global','-Harness','opencode')
-    Check 'GLOBAL_MODIFIED_RETIRED_RESOURCE_PRESERVED' ($driftUpdate.Code -ne 0 -and
-        $driftUpdate.Text -match 'GLOBAL_MANAGED_FILE_DRIFT' -and
-        (Snapshot $openCodeDriftRoot) -ceq $driftBefore)
-
-    $codexOnlyHome = Join-Path $run 'Codex Only Global Home'
-    [IO.Directory]::CreateDirectory($codexOnlyHome) | Out-Null
-    $env:CODEX_HOME = $codexOnlyHome
-    $codexOnly = Run-Installer $project @('-Scope','global','-Harness','codex')
-    $codexOnlyManifest = Get-Content (Join-Path $codexOnlyHome 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
-    Check 'GLOBAL_CODEX_ONLY_SELECTOR' ($codexOnly.Code -eq 0 -and $codexOnlyManifest.scope -eq 'global' -and
-        $codexOnlyManifest.installed_harnesses.Count -eq 1 -and $codexOnlyManifest.installed_harnesses[0] -eq 'codex' -and
-        $codexOnlyManifest.managed_files.Count -eq 12)
-    $env:CODEX_HOME = $codexHome
     $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeRoot
-
     $openManifestPath = Join-Path $openCodeRoot 'olympus/orchestrator-install.json'
-    $codexManifestPath = Join-Path $codexHome 'olympus/orchestrator-install.json'
     $openManifestText = [IO.File]::ReadAllText($openManifestPath)
-    $codexManifestText = [IO.File]::ReadAllText($codexManifestPath)
     $openManifest = $openManifestText | ConvertFrom-Json
-    $codexManifest = $codexManifestText | ConvertFrom-Json
-    Check 'GLOBAL_MANIFEST_SCOPE_AND_RESOURCES' ($openManifest.scope -eq 'global' -and $codexManifest.scope -eq 'global' -and
-        $openManifest.installed_harnesses[0] -eq 'opencode' -and $codexManifest.installed_harnesses[0] -eq 'codex' -and
-        $openManifest.managed_files.Count -eq 13 -and $codexManifest.managed_files.Count -eq 12)
+    Check 'GLOBAL_USER_CONFIG_MANIFEST_CURRENT_13_RESOURCE_FORM' (
+        $openManifest.schema_version -eq 1 -and $openManifest.scope -ceq 'global' -and
+        @($openManifest.installed_harnesses).Count -eq 1 -and $openManifest.installed_harnesses[0] -ceq 'opencode' -and
+        -not [string]::IsNullOrWhiteSpace([string]$openManifest.installed_version) -and
+        -not [string]::IsNullOrWhiteSpace([string]$openManifest.installed_from_commit) -and
+        $openManifest.managed_files.Count -eq 13 -and
+        @($openManifest.managed_files | Where-Object { [string]$_.sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0 -and
+        $openManifest.default_agent_receipt.state -ceq 'committed' -and
+        (Test-Path -LiteralPath $openUserConfig) -and
+        -not (Test-Path -LiteralPath (Join-Path $openCodeRoot 'opencode.jsonc'))
+    )
 
     $openBeforeVerify = Snapshot $openCodeRoot
-    $codexBeforeVerify = Snapshot $codexHome
-    $verifyAll = Global-Verify $project 'all'
-    Check 'GLOBAL_VERIFYONLY_ALL_READONLY' ($verifyAll.Code -eq 0 -and $verifyAll.Text -match 'OLYMPUS_GLOBAL_VERIFY: opencode' -and
-        $verifyAll.Text -match 'OLYMPUS_GLOBAL_VERIFY: codex' -and (Snapshot $openCodeRoot) -ceq $openBeforeVerify -and
-        (Snapshot $codexHome) -ceq $codexBeforeVerify)
-
-    # Issue #46: exact generated files without the ownership manifest are not
-    # a verified global installation. Exercise each harness in fixture-owned
-    # roots and restore the original manifest bytes for later qualification.
-    foreach ($fixture in @(
-        @{ Harness='opencode'; Root=$openCodeRoot; Manifest=$openManifestPath },
-        @{ Harness='codex'; Root=$codexHome; Manifest=$codexManifestPath }
-    )) {
-        $harness = [string]$fixture.Harness
-        $manifestPath = [string]$fixture.Manifest
-        $manifestBytes = [IO.File]::ReadAllBytes($manifestPath)
-        try {
-            [IO.File]::Delete($manifestPath)
-            $beforeMissing = Snapshot $fixture.Root
-            $missing = Global-Verify $project $harness
-            $afterMissing = Snapshot $fixture.Root
-            $checkPrefix = 'GLOBAL_VERIFYONLY_' + $harness.ToUpperInvariant()
-            Check ($checkPrefix + '_MISSING_MANIFEST_REJECTED') ($missing.Code -ne 0 -and
-                $missing.Text -match 'GLOBAL_MANIFEST_MISSING' -and
-                $missing.Text -notmatch ('OLYMPUS_GLOBAL_VERIFY: ' + $harness + ' .* PASS')) (
-                "exit=$($missing.Code)`n$($missing.Text)")
-            Check ($checkPrefix + '_MISSING_MANIFEST_READONLY') ($beforeMissing -ceq $afterMissing)
-        } finally {
-            [IO.File]::WriteAllBytes($manifestPath, $manifestBytes)
-        }
+    $verify = Global-Verify $project 'opencode'
+    Check 'GLOBAL_VERIFYONLY_OPENCODE_READONLY' ($verify.Code -eq 0 -and
+        $verify.Text -match 'OLYMPUS_GLOBAL_VERIFY: opencode' -and (Snapshot $openCodeRoot) -ceq $openBeforeVerify)
+    foreach ($selector in @('codex','all')) {
+        $unsupported = Global-Verify $project $selector
+        Check ('GLOBAL_VERIFYONLY_REJECTS_' + $selector.ToUpperInvariant()) (
+            $unsupported.Code -ne 0 -and (Snapshot $openCodeRoot) -ceq $openBeforeVerify
+        ) ("exit=$($unsupported.Code)`n$($unsupported.Text)")
     }
-    $restoredVerify = Global-Verify $project 'all'
-    Check 'GLOBAL_VERIFYONLY_ALL_RESTORED_PASS' ($restoredVerify.Code -eq 0 -and
-        (Snapshot $openCodeRoot) -ceq $openBeforeVerify -and
-        (Snapshot $codexHome) -ceq $codexBeforeVerify)
+    $openManifestBytes = [IO.File]::ReadAllBytes($openManifestPath)
+    [IO.File]::Delete($openManifestPath)
+    $missingManifestBefore = Snapshot $openCodeRoot
+    $missingManifestVerify = Global-Verify $project 'opencode'
+    Check 'GLOBAL_VERIFYONLY_MISSING_MANIFEST_REJECTED_READONLY' ($missingManifestVerify.Code -ne 0 -and
+        $missingManifestVerify.Text -match 'GLOBAL_MANIFEST_MISSING' -and
+        (Snapshot $openCodeRoot) -ceq $missingManifestBefore)
+    [IO.File]::WriteAllBytes($openManifestPath, $openManifestBytes)
 
-    # Global update remains hash-owned and preserves both local overrides and user config.
+    # Global update remains hash-owned and preserves the project override and user config.
     $openManifest.installed_version = 'v0.3.0-beta.4'
     [IO.File]::WriteAllText($openManifestPath, (($openManifest | ConvertTo-Json -Depth 20) + "`n"), $utf8)
     $versionDrift = Run-Installer $project @('-Scope','global','-Harness','opencode','-VerifyOnly')
@@ -686,31 +592,18 @@ try {
     $openAgentBefore = [IO.File]::ReadAllText($openAgentPath)
     [IO.File]::AppendAllText($openAgentPath, "`n# qualification drift`n", $utf8)
     $openDrift = Run-Installer $project @('-Scope','global','-Harness','opencode','-VerifyOnly')
-    $codexSubset = Global-Verify $project 'codex'
     Check 'GLOBAL_MANAGED_DRIFT_DETECTED' ($openDrift.Code -ne 0 -and $openDrift.Text -match 'GLOBAL_MANAGED_FILE_DRIFT')
-    Check 'GLOBAL_SUBSET_VERIFY_IGNORES_OTHER_HARNESS' ($codexSubset.Code -eq 0)
     [IO.File]::WriteAllText($openAgentPath, $openAgentBefore, $utf8)
-
-    $codexProfilePath = Join-Path $codexHome 'olympus.config.toml'
-    $codexProfileBefore = [IO.File]::ReadAllText($codexProfilePath)
-    [IO.File]::AppendAllText($codexProfilePath, "`n# qualification drift`n", $utf8)
-    $codexDrift = Run-Installer $project @('-Scope','global','-Harness','codex','-VerifyOnly')
-    $openSubset = Global-Verify $project 'opencode'
-    Check 'GLOBAL_CODEX_MANAGED_DRIFT_DETECTED' ($codexDrift.Code -ne 0 -and $codexDrift.Text -match 'GLOBAL_MANAGED_FILE_DRIFT')
-    Check 'GLOBAL_OPENCODE_SUBSET_VERIFY_IGNORES_CODEX_DRIFT' ($openSubset.Code -eq 0)
-    [IO.File]::WriteAllText($codexProfilePath, $codexProfileBefore, $utf8)
 
     # Uninstall removes only manifest-owned resources, keeping unrelated global state.
     [IO.File]::WriteAllText((Join-Path $openCodeRoot 'user-note.txt'), 'preserve', $utf8)
-    [IO.File]::WriteAllText((Join-Path $codexHome 'user-note.txt'), 'preserve', $utf8)
-    $uninstall = Run-Installer $project @('-Scope','global','-Harness','all','-Uninstall')
+    $uninstall = Run-Installer $project @('-Scope','global','-Harness','opencode','-Uninstall')
     Check 'GLOBAL_UNINSTALL_ONLY_OWNED_RESOURCES' ($uninstall.Code -eq 0 -and
         -not (Test-Path (Join-Path $openCodeRoot 'agents/kael.md')) -and
-        -not (Test-Path (Join-Path $codexHome 'agents/veyra.toml')) -and
-        -not (Test-Path $openManifestPath) -and -not (Test-Path $codexManifestPath) -and
-        (Test-Path $openUserConfig) -and (Test-Path $codexUserConfig) -and
-        (Test-Path (Join-Path $openCodeRoot 'user-note.txt')) -and (Test-Path (Join-Path $codexHome 'user-note.txt')) -and
-        (Snapshot $project) -ceq $projectBeforeMigration)
+        -not (Test-Path $openManifestPath) -and
+        (Test-Path $openUserConfig) -and
+        (Test-Path (Join-Path $openCodeRoot 'user-note.txt')) -and
+        (Snapshot $project) -ceq $projectBeforeGlobalInstall)
     Write-Output 'GLOBAL INSTALLER QUALIFICATION: PASS (isolated fixture roots; no real HOME writes or interactive harness session)'
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
@@ -721,8 +614,6 @@ try {
     $env:PATH = $originalPath
     if ($null -eq $originalOpenCodeRoot) { Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue }
     else { $env:OPENCODE_CONFIG_DIR = $originalOpenCodeRoot }
-    if ($null -eq $originalCodexHome) { Remove-Item Env:CODEX_HOME -ErrorAction SilentlyContinue }
-    else { $env:CODEX_HOME = $originalCodexHome }
     if ($null -eq $originalFixtureOpenCodeRoot) { Remove-Item Env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT -ErrorAction SilentlyContinue }
     else { $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $originalFixtureOpenCodeRoot }
     if ($null -eq $originalOlympusConfigFile) { Remove-Item Env:OLYMPUS_CONFIG_FILE -ErrorAction SilentlyContinue }

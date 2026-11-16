@@ -17,7 +17,7 @@ The public PowerShell entrypoints are executable code. They select an immutable 
 - Python 3.11+ is used internally by the global CLI; users invoke `olympus`, not `python -m olympus`.
 - OpenCode V2. This does not establish runtime discovery for every version.
 
-OpenCode V2 is in **ACTIVE DEVELOPMENT**. Codex adapters and internal project/configuration engines remain for **FROZEN COMPATIBILITY**, not public installation. See [harness capabilities](HARNESS-CAPABILITIES.md) and [Codex compatibility](CODEX-COMPATIBILITY.md).
+OpenCode is the only currently supported Olympus runtime. See the [OpenCode capability contract](HARNESS-CAPABILITIES.md).
 
 ## Public PowerShell entrypoints
 
@@ -38,11 +38,9 @@ Both source entrypoints, `install-olympus.ps1` and `uninstall-olympus.ps1`, are 
 
 The tagged `install.ps1` defaults to its embedded version and downloads the exact tag archive, so no extra `-Version` argument is needed. This bypasses `latest` selection. A versioned URL for `install-olympus.ps1` would not pin the installed version: that bootstrap still selects the latest release.
 
-### Removed installation selectors
+### Supported route and selector validation
 
-Project targets and Codex/dual installation are rejected before download or dispatch. CLI install/update/uninstall reject legacy `--scope`, `--harness`, `--target`, and `--version` selectors. The root tagged installer retains fixed `global`/`opencode` defaults and qualification-only source/version overrides, but rejects project/Codex modes.
-
-Ten of the twelve wrappers at `install/{project,global}/{opencode,codex,all}.ps1` and `uninstall/{project,global}/{opencode,codex,all}.ps1` fail clearly without downloading or dispatching. Only the two `global/opencode.ps1` wrappers remain fixed aliases.
+Public installation accepts only the global OpenCode route. Project targets and non-OpenCode installation requests are rejected before download or dispatch. CLI install/update/uninstall reject `--scope`, `--harness`, `--target`, and `--version` selectors. The root tagged installer is fixed to global OpenCode.
 
 ### Ownership of the global default agent
 
@@ -51,6 +49,27 @@ An existing `opencode.json` or `opencode.jsonc` remains user-owned. Olympus chan
 Uninstall restores another prior value only while the field is still `kael`. It removes a previously absent or already-`kael` field rather than restoring a reference to the deleted agent. Later user choices and deleted configs are preserved. A new minimal config may be wholly manifest-owned; the permissions template itself is unchanged.
 
 The receipt states `pending_set`, `committed`, and `pending_uninstall` are reconciled under the existing writer lock. Resume an interrupted set through install/update or an interrupted uninstall through uninstall; third-value conflicts fail closed. `VerifyOnly` never writes or approves a pending state. These guarantees cover this field lifecycle, not an all-resource transaction. Global defaults do not override project preferences or replace the agent already stored in an existing OpenCode session.
+
+### Current installation formats and project-scoped configuration
+
+Current project manifests use `schema_version=1`, explicit `scope=project`,
+`installed_harnesses=["opencode"]`, nonempty `installed_version` and
+`installed_from_commit`, and the current 15-path managed inventory with hashes.
+Global manifests use `schema_version=1`, `scope=global`, exactly OpenCode,
+`installed_version=local` or a release tag, a nonempty `installed_from_commit`,
+and a valid `default_agent_receipt`. When the existing global config is
+user-owned, 13 base resources are managed and the config remains unowned; if
+Olympus creates the config, 14 resources are managed. Both are valid current
+formats.
+
+Overrides use `schema_version=1` with an `overrides` map; a missing file means
+empty, and precedence is project override, global override, then Core defaults.
+These project-scoped CLI operations do not install project resources.
+
+An incomplete or unsupported format is rejected without automatic conversion,
+adoption, or deletion. A complete current-format installation remains valid
+regardless of which release created it. If an older unsupported installation
+needs removal, use the release that owns it.
 
 ## Release selection, identity, and executable source
 
@@ -103,12 +122,12 @@ below do not inherit that rule.
 | `olympus uninstall` | Fixed global OpenCode | `--dry-run` previews; otherwise removes unchanged manifest-owned resources, reverses the still-owned default field, and uninstalls the global CLI/PATH entry. |
 | `olympus <role> set-model <id>` / `set-effort <value>` | `<role>`: `kael`, `veyra`, `orin`, `atlas`, `kovan`, `argus`, `nox`, `vera`, `talos`, `thales`, or `helios`; auto-detects or accepts scope/target | Writes the user override immediately and updates a managed installed OpenCode agent when applicable. This is not a canonical source edit and has no dry-run flag. |
 | `olympus models list`, `olympus agents list` | Canonical source for models; agents list uses auto-detection or explicit scope/target | Read-only lists. `models list` is offline; `agents list` shows effective values and their sources. |
-| `olympus models set-family <family> --opencode <id> --codex <id>` / `olympus agents set-model <role> [--family <family>] [--effort <value>]` (at least one option required) | Canonical checkout selected by `--source`, or this CLI's bundled source | Edits canonical model intent. `--dry-run` previews; omitting it executes the source edit. JSON output for these edits requires `--dry-run`. |
-| `olympus config list` / `olympus config check` | List uses auto-detection or explicit scope/target; check reads the selected source and harness | Both are read-only. List shows effective values, precedence, and paths; check compares renderer output without writing. |
-| `olympus config apply --scope project\|global --harness opencode\|codex\|all` | Project requires an absolute existing worktree `--target`; global forbids `--target` | Exactly one of `--dry-run` or `--execute` is required. Preview does not write target resources; execution applies the selected managed configuration. Global execution currently supports OpenCode only. |
-| `olympus config recover` | No scope recovers a pending canonical source edit; project recovery requires `--scope project --target`; global recovery uses `--scope global --harness opencode` | Explicitly reconciles pending transaction state and may change files. Use only for the matching pending operation; global recovery is OpenCode-only. |
+| `olympus models set-family <family> --opencode <id>` / `olympus agents set-model <role> [--family <family>] [--effort <value>]` (at least one option required) | Canonical checkout selected by `--source`, or this CLI's bundled source | Edits canonical model intent. `--dry-run` previews; omitting it executes the source edit. JSON output for these edits requires `--dry-run`. |
+| `olympus config list` / `olympus config check` | List uses auto-detection or explicit scope/target; check reads the selected source and OpenCode harness | Both are read-only. List shows effective values, precedence, and paths; check compares renderer output without writing. |
+| `olympus config apply --scope project\|global --harness opencode` | Project requires an absolute existing worktree `--target`; global forbids `--target` | Exactly one of `--dry-run` or `--execute` is required. Preview does not write target resources; execution applies the selected managed OpenCode configuration. |
+| `olympus config recover` | No scope recovers a pending canonical source edit; project recovery requires `--scope project --target`; global recovery uses `--scope global --harness opencode` | Explicitly reconciles pending transaction state and may change files. Use only for the matching pending operation. |
 | `olympus status` | Defaults to project and requires `--target`; use `--scope global` without a target for global metadata | Read-only reported manifest/install metadata; it does not verify file integrity. |
-| `olympus doctor` | Auto-detects, or accepts explicit scope/target and `--harness`; project scope requires `--target` | Read-only configuration and managed-installation diagnostics. It does not apply repairs or check provider access. |
+| `olympus doctor` | Auto-detects or accepts explicit scope/target; project scope requires `--target`; `--harness opencode` is the supported harness | Read-only configuration and managed-installation diagnostics. It does not apply repairs or check provider access. |
 
 `olympus update` selects an immutable stable release, refuses downgrades, preserves the user override file, and reports the prior/new version. If managed agents have changed, it lists their names and asks once; `y` permits the update, while `n`, Enter, or non-interactive input preserve them and stop. No hashes or old-version recovery are required.
 
@@ -214,7 +233,7 @@ declaration with an inferred default.
 
 `olympus config list` shows effective model/effort values, precedence (**project override > global override > canonical defaults**), and absolute paths to each source. Scope-aware commands such as `agents list`, `config list`, and `doctor` select the managed OpenCode project at the current directory when one exists; otherwise they use global scope. Use `--scope project --target <absolute-worktree-root>` or `--scope global` to select explicitly. For example, `olympus doctor --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project'` checks that project. Doctor is read-only: it validates JSON and declared model/effort values and checks managed installation state, but never applies edits or checks provider access. For managed configuration changes, review `olympus config apply ... --dry-run` first, then use `--execute` only for the intended target; global execution is OpenCode-only. `olympus config recover` may change files and is only for reconciling the matching pending operation. See the [command scopes and effects](#command-scopes-and-effects) table before applying or recovering.
 
-Installation is no longer offered per project or for Codex. The retained internal project engines and configuration commands protect compatibility; they do not reopen public installation modes. Existing local overrides are not automatically cleaned.
+Public installation, update, and uninstall remain global/OpenCode-only. This does not remove project-scoped configuration: model overrides, `config list`/`check`/`apply`, matching `config recover`, `status`, and read-only `doctor` remain separate CLI operations for OpenCode. They do not install missing resources or turn project configuration into project installation. Existing local overrides are not automatically cleaned.
 
 `--dry-run` may use temporary acquisition/cache locations but does not write global resources. The official engine resolves the global root. The CLI and update are qualified on Windows with PowerShell 7.
 
@@ -229,7 +248,7 @@ Installation is no longer offered per project or for Codex. The retained interna
 ## Troubleshooting
 
 - **`OLYMPUS_REQUIRES_POWERSHELL_7`** — install PowerShell 7 and make `pwsh` available on `PATH`.
-- **Unknown selector / `PUBLIC_INSTALL_ROUTE_UNSUPPORTED`** — remove legacy project/harness arguments and use the global OpenCode route.
+- **Unknown selector / `PUBLIC_INSTALL_ROUTE_UNSUPPORTED`** — remove legacy selectors from install/update/uninstall and use the global OpenCode route.
 - **`LATEST_RELEASE_MUTABLE`, `LATEST_RELEASE_NOT_PUBLISHED`, or `LATEST_RELEASE_METADATA_*`** — stop. Do not switch to a branch URL or retry through a different installer.
 - **`LATEST_RELEASE_IDENTITY_MISMATCH` / `LAUNCHER_BOOTSTRAP_CONTRACT_MISSING`** — stop; downloaded tag contents did not satisfy the expected release contract.
 - **Managed-file drift errors** — review user changes. Do not delete or overwrite files to force installation.

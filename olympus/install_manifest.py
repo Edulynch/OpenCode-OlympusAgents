@@ -10,6 +10,7 @@ from typing import Any
 
 MANIFEST_PATHS = (
     ".opencode/orchestrator-install.json",
+    # Include this location so unsupported manifests here are detected and refused.
     ".codex/orchestrator-install.json",
 )
 
@@ -29,7 +30,6 @@ class ProjectManifest:
     installed_harnesses: tuple[str, ...]
     installed_version: str
     installed_from_commit: str
-    metadata_format: str
 
 
 def manifest_paths(target: Path) -> tuple[Path, Path]:
@@ -66,12 +66,11 @@ def parse_project_manifest(target: Path, path: Path, raw: bytes) -> ProjectManif
             or manifest["schema_version"] != 1
             or not isinstance(manifest.get("managed_files"), list)):
         raise ManifestError("invalid_schema", f"Unsupported manifest schema or managed_files at {path}")
-    if manifest.get("scope", "project") != "project":
+    if manifest.get("scope") != "project":
         raise ManifestError("invalid_scope", f"Contradictory project manifest scope at {path}", blocked=True)
 
     # Contract: optional object<string, object>, with per-harness contents opaque.
-    # Schema 1 remains backward compatible: absence means unknown provenance;
-    # provenance is descriptive only, never ownership, and no official origin is inferred.
+    # Optional descriptive metadata never establishes ownership or official origin.
     if "harness_provenance" in manifest:
         provenance = manifest["harness_provenance"]
         if (not isinstance(provenance, dict)
@@ -82,23 +81,41 @@ def parse_project_manifest(target: Path, path: Path, raw: bytes) -> ProjectManif
                 f"Invalid harness_provenance metadata at {path}; expected an object of per-harness objects",
             )
 
-    installed = manifest.get("installed_harnesses", ["opencode"])
-    if (not isinstance(installed, list) or not installed
-            or any(not isinstance(value, str) or value not in ("opencode", "codex") for value in installed)
-            or len(installed) != len(set(installed))):
+    installed = manifest.get("installed_harnesses")
+    if installed != ["opencode"]:
         raise ManifestError("invalid_harnesses", f"Invalid installed_harnesses metadata at {path}")
-    expected_location = MANIFEST_PATHS[0] if "opencode" in installed else MANIFEST_PATHS[1]
-    if relative != expected_location:
+    if relative != MANIFEST_PATHS[0]:
         raise ManifestError(
             "invalid_location",
             f"Manifest location contradicts its reported harness inventory: {path}",
             blocked=True,
         )
 
-    version = manifest.get("installed_version", "unknown")
-    commit = manifest.get("installed_from_commit", "unknown")
-    if not isinstance(version, str) or not version or not isinstance(commit, str):
+    version = manifest.get("installed_version")
+    commit = manifest.get("installed_from_commit")
+    if (not isinstance(version, str) or not version
+            or not isinstance(commit, str) or not commit):
         raise ManifestError("invalid_release_metadata", f"Invalid recorded release metadata at {path}")
+    entries = manifest["managed_files"]
+    seen: set[str] = set()
+    for entry in entries:
+        if (not isinstance(entry, dict) or set(entry) != {"path", "sha256"}
+                or not isinstance(entry["path"], str) or not entry["path"]
+                or "\\" in entry["path"] or entry["path"].startswith("/")
+                or any(part in ("", ".", "..") for part in entry["path"].split("/"))
+                or not isinstance(entry["sha256"], str)
+                or len(entry["sha256"]) != 64
+                or any(character not in "0123456789abcdefABCDEF" for character in entry["sha256"])):
+            raise ManifestError("invalid_inventory", f"Invalid managed_files entry at {path}")
+        managed_path = entry["path"]
+        folded = managed_path.casefold()
+        if folded in seen:
+            raise ManifestError("invalid_inventory", f"Duplicate managed_files path at {path}: {managed_path}")
+        if managed_path.startswith(".codex/") or managed_path == "CODEX.md":
+            raise ManifestError("invalid_inventory", f"Obsolete Codex inventory is unsupported at {path}: {managed_path}")
+        seen.add(folded)
+    if not entries:
+        raise ManifestError("invalid_inventory", f"Empty managed_files inventory at {path}")
     return ProjectManifest(
         path=path,
         relative_path=relative,
@@ -106,7 +123,6 @@ def parse_project_manifest(target: Path, path: Path, raw: bytes) -> ProjectManif
         installed_harnesses=tuple(installed),
         installed_version=version,
         installed_from_commit=commit,
-        metadata_format="legacy" if "installed_harnesses" not in manifest else "current",
     )
 
 

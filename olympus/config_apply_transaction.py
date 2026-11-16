@@ -187,7 +187,7 @@ def _validate_record(target: Path, record: Any, lock_identity: tuple[int, int]) 
     _ensure_scratch_identity(target, record)
 
     manifest_path = record["manifest_path"]
-    if manifest_path not in MANIFEST_PATHS:
+    if manifest_path != MANIFEST_PATHS[0]:
         raise TransactionError("Project-apply record names an unsupported manifest path", 4)
     files = record["files"]
     if not isinstance(files, list) or not files:
@@ -206,8 +206,7 @@ def _validate_record(target: Path, record: Any, lock_identity: tuple[int, int]) 
             raise TransactionError(f"Project-apply record has an unsafe target path: {relative!r}", 4) from error
         if (not isinstance(relative, str) or (index < len(files) - 1 and relative <= (previous or ""))
                 or (relative != manifest_path and not (
-                    relative == "CODEX.md" or relative == "opencode.jsonc"
-                    or relative.startswith(".opencode/") or relative.startswith(".codex/")
+                    relative == "opencode.jsonc" or relative.startswith(".opencode/")
                 ))):
             raise TransactionError("Project-apply file inventory is duplicated, unordered, or outside managed surfaces", 4)
         if index < len(files) - 1:
@@ -594,17 +593,13 @@ def _global_manifest_receipts(record: dict[str, Any], expected: dict[str, bytes]
         raise TransactionError("Global apply may change only managed-file hashes in the global manifest", 4)
     old_items = {item["path"]: item for item in old_manifest["managed_files"]}
     new_items = {item["path"]: item for item in new_manifest["managed_files"]}
-    if not set(old_items).issubset(new_items) or set(new_items) - set(old_items) not in (set(), {"opencode.jsonc"}):
-        raise TransactionError("Global apply manifest changes an unsupported ownership inventory", 4)
+    if set(old_items) != set(new_items):
+        raise TransactionError("Global apply cannot change the installed ownership inventory", 4)
     for path, old_item in old_items.items():
         expected_item = dict(old_item)
         expected_item["sha256"] = new_entries[path]
         if new_items[path] != expected_item:
             raise TransactionError(f"Global apply changed unrequested manifest metadata: {path}", 4)
-    if set(new_items) - set(old_items) and new_items["opencode.jsonc"] != {
-        "path": "opencode.jsonc", "sha256": hashlib.sha256(expected["opencode.jsonc"]).hexdigest(),
-    }:
-        raise TransactionError("New global guard ownership does not match the canonical guard", 4)
     changed = {path for path in set(old_entries) | set(new_entries)
                if old_entries.get(path) != new_entries.get(path)}
     if global_readonly._DEFAULT_AGENT_RECEIPT in old_manifest and "opencode.jsonc" in changed:
@@ -629,7 +624,7 @@ def _validate_global_candidates(changes: tuple[GlobalChange, ...], expected: dic
     for item in changes[:-1]:
         if (item.new is None or _hash(item.new) != new_entries.get(item.path)
                 or _hash(item.new) != _hash(expected[item.path])
-                or (item.old is None and (item.path != "opencode.jsonc" or item.path in old_entries))
+                or item.old is None
                 or (item.old is not None and _hash(item.old) != old_entries.get(item.path))):
             raise TransactionError(f"Global candidate bytes contradict the ownership receipt: {item.path}", 3)
 
@@ -683,14 +678,12 @@ def _validate_global_record(target: Path, record: Any, lock_identity: tuple[int,
         if index < len(files) - 1:
             previous = relative
         old_hash, new_hash, mode = entry["old_sha256"], entry["new_sha256"], entry["mode"]
-        if ((old_hash is not None and (not isinstance(old_hash, str) or _HASH.fullmatch(old_hash) is None))
+        if (not isinstance(old_hash, str) or _HASH.fullmatch(old_hash) is None
                 or not isinstance(new_hash, str) or _HASH.fullmatch(new_hash) is None
                 or old_hash == new_hash or type(mode) is not int or not 0 <= mode <= 0o7777
                 or entry["staged"] != f"staged/file-{index:04d}.new"
-                or entry["backup"] != (None if old_hash is None else f"backups/file-{index:04d}.old")):
+                or entry["backup"] != f"backups/file-{index:04d}.old"):
             raise TransactionError(f"Global-apply file metadata is invalid for {relative}", 4)
-        if old_hash is None and relative != "opencode.jsonc":
-            raise TransactionError("Only the legacy OpenCode guard may be created by global apply", 4)
         file_map[relative] = entry
     if files[-1]["path"] != _GLOBAL_MANIFEST:
         raise TransactionError("Global ownership manifest must be the final transaction target", 4)
@@ -762,7 +755,7 @@ def _global_artifacts(target: Path, record: dict, file_map: dict[str, dict], *,
         raise TransactionError(f"Cannot enumerate global-apply scratch: {error}", 4) from error
     if top - {_RECORD, ".record.json.tmp", "backups", "staged"} or _RECORD not in top:
         raise TransactionError("Global-apply scratch contains unenumerated resources", 4)
-    expected_backups = {entry["backup"].split("/", 1)[1] for entry in file_map.values() if entry["backup"]}
+    expected_backups = {entry["backup"].split("/", 1)[1] for entry in file_map.values()}
     expected_staged = {entry["staged"].split("/", 1)[1] for entry in file_map.values()}
     expected_rollback = {f"rollback-file-{index:04d}.old" for index in range(len(file_map))}
     for directory, allowed in (("backups", expected_backups), ("staged", expected_staged | expected_rollback)):
@@ -790,11 +783,11 @@ def _global_artifacts(target: Path, record: dict, file_map: dict[str, dict], *,
             raise TransactionError("Temporary global-apply record belongs to another operation", 4)
         artifacts[f"{_SCRATCH}/.record.json.tmp"] = (temporary, metadata)
     for index, (relative, entry) in enumerate(file_map.items()):
-        candidates = []
-        if entry["backup"]:
-            candidates.append((f"{_SCRATCH}/{entry['backup']}", entry["old_sha256"], relative in (required_backups or set())))
-        candidates.append((f"{_SCRATCH}/{entry['staged']}", entry["new_sha256"], relative in (required_staged or set())))
-        candidates.append((f"{_SCRATCH}/staged/rollback-file-{index:04d}.old", entry["old_sha256"], False))
+        candidates = [
+            (f"{_SCRATCH}/{entry['backup']}", entry["old_sha256"], relative in (required_backups or set())),
+            (f"{_SCRATCH}/{entry['staged']}", entry["new_sha256"], relative in (required_staged or set())),
+            (f"{_SCRATCH}/staged/rollback-file-{index:04d}.old", entry["old_sha256"], False),
+        ]
         for artifact_relative, digest, required in candidates:
             if digest is None:
                 continue
@@ -820,7 +813,7 @@ def _inspect_global(target: Path, source: Path, lock, record: dict, record_raw: 
     for relative, entry in file_map.items():
         current, metadata = _global_target(target, relative)
         if current is None:
-            state = "old" if entry["old_sha256"] is None else None
+            state = None
         else:
             digest = _hash(current)
             if digest == entry["old_sha256"]:
@@ -963,48 +956,35 @@ def _rollback_files(target: Path, source: Path, lock, kind: str, record: dict, r
         live = _inspect_cycle(target, source, lock, kind, record, record_raw, record_metadata,
                               expected, require_backups=required)
         prefix = "Global" if kind == "global" else "Project"
-        if entry["old_sha256"] is None:
-            if kind != "global":
-                raise TransactionError("Project transaction cannot roll back a created target", 4)
-            current, metadata = _cycle_target(target, relative, kind)
-            if current is None or _hash(current) != entry["new_sha256"] or metadata is None:
-                raise TransactionError(f"Created global guard no longer matches its transaction: {relative}", 4)
-            source_edit._lock_identity(lock, live["identity"])
+        backup = _artifact(target, f"{_SCRATCH}/{entry['backup']}", entry["old_sha256"], entry["mode"], required=True)
+        rollback_relative = f"{_SCRATCH}/staged/rollback-file-{index:04d}.old"
+        existing = _artifact(target, rollback_relative, entry["old_sha256"], entry["mode"], required=False)
+        if existing is None:
             try:
-                os.unlink(target / relative)
-            except OSError as error:
-                raise TransactionError(f"Cannot remove verified transaction-created global guard: {error}", 4) from error
-            source_edit._sync_directory((target / relative).parent)
-        else:
-            backup = _artifact(target, f"{_SCRATCH}/{entry['backup']}", entry["old_sha256"], entry["mode"], required=True)
-            rollback_relative = f"{_SCRATCH}/staged/rollback-file-{index:04d}.old"
-            existing = _artifact(target, rollback_relative, entry["old_sha256"], entry["mode"], required=False)
-            if existing is None:
-                try:
-                    source_edit._write_private_file(target / rollback_relative, target, rollback_relative,
-                                                    backup[0], entry["mode"], lock, live["identity"])
-                except source_edit.BatchError as error:
-                    raise TransactionError(f"Cannot stage {kind}-apply rollback for {relative}: {error}", 4) from error
-            live = _inspect_cycle(target, source, lock, kind, record, record_raw, record_metadata,
-                                  expected, require_backups=required)
-            current, metadata = _cycle_target(target, relative, kind)
-            if (live["states"][relative] != "new" or current is None or metadata is None
-                    or _hash(current) != entry["new_sha256"]
-                    or stat.S_IMODE(metadata.st_mode) != entry["mode"]):
-                raise TransactionError(f"{prefix.lower()} resource changed before rollback: {relative}", 4)
-            staged, staged_metadata = _read(target, rollback_relative)
-            if _hash(staged) != entry["old_sha256"] or stat.S_IMODE(staged_metadata.st_mode) != entry["mode"]:
-                raise TransactionError(f"{kind.capitalize()} rollback evidence changed: {relative}", 4)
-            source_edit._lock_identity(lock, live["identity"])
-            try:
-                os.replace(target / rollback_relative, target / relative)
-            except OSError as error:
-                raise TransactionError(f"Cannot restore {kind} resource {relative}: {error}", 4) from error
-            restored, restored_metadata = _cycle_target(target, relative, kind)
-            if (restored is None or _hash(restored) != entry["old_sha256"]
-                    or stat.S_IMODE(restored_metadata.st_mode) != entry["mode"]):
-                raise TransactionError(f"Restored {kind} resource failed verification: {relative}", 4)
-            source_edit._sync_directory((target / relative).parent)
+                source_edit._write_private_file(target / rollback_relative, target, rollback_relative,
+                                                backup[0], entry["mode"], lock, live["identity"])
+            except source_edit.BatchError as error:
+                raise TransactionError(f"Cannot stage {kind}-apply rollback for {relative}: {error}", 4) from error
+        live = _inspect_cycle(target, source, lock, kind, record, record_raw, record_metadata,
+                              expected, require_backups=required)
+        current, metadata = _cycle_target(target, relative, kind)
+        if (live["states"][relative] != "new" or current is None or metadata is None
+                or _hash(current) != entry["new_sha256"]
+                or stat.S_IMODE(metadata.st_mode) != entry["mode"]):
+            raise TransactionError(f"{prefix.lower()} resource changed before rollback: {relative}", 4)
+        staged, staged_metadata = _read(target, rollback_relative)
+        if _hash(staged) != entry["old_sha256"] or stat.S_IMODE(staged_metadata.st_mode) != entry["mode"]:
+            raise TransactionError(f"{kind.capitalize()} rollback evidence changed: {relative}", 4)
+        source_edit._lock_identity(lock, live["identity"])
+        try:
+            os.replace(target / rollback_relative, target / relative)
+        except OSError as error:
+            raise TransactionError(f"Cannot restore {kind} resource {relative}: {error}", 4) from error
+        restored, restored_metadata = _cycle_target(target, relative, kind)
+        if (restored is None or _hash(restored) != entry["old_sha256"]
+                or stat.S_IMODE(restored_metadata.st_mode) != entry["mode"]):
+            raise TransactionError(f"Restored {kind} resource failed verification: {relative}", 4)
+        source_edit._sync_directory((target / relative).parent)
         live = _inspect_cycle(target, source, lock, kind, record, record_raw, record_metadata, expected)
     if any(value != "old" for value in live["states"].values()):
         raise TransactionError(f"{kind.capitalize()} rollback did not restore every recorded old state", 4)
@@ -1066,23 +1046,18 @@ def _commit_cycle(target: Path, source: Path, lock, record: dict, record_raw: by
             if _hash(staged) != entry["new_sha256"] or stat.S_IMODE(staged_metadata.st_mode) != item.mode:
                 raise TransactionError(f"{prefix} staged output changed: {item.path}", 4)
             current, metadata = _cycle_target(target, item.path, kind)
-            if item.old is None:
-                if kind != "global":
-                    raise TransactionError("Project transaction cannot create a target", 4)
-                _create_global_file(target, item.path, staged, item.mode, lock, live["identity"])
-            else:
-                if current != item.old or metadata is None or stat.S_IMODE(metadata.st_mode) != item.mode:
-                    raise TransactionError(f"{prefix} target changed before replacement: {item.path}", 3)
-                source_edit._lock_identity(lock, live["identity"])
-                try:
-                    os.replace(target / staged_relative, target / item.path)
-                except OSError as error:
-                    raise TransactionError(f"Cannot replace {kind} resource {item.path}: {error}", 4) from error
-                replaced, replaced_metadata = _cycle_target(target, item.path, kind)
-                if (replaced != item.new or replaced_metadata is None
-                        or stat.S_IMODE(replaced_metadata.st_mode) != item.mode):
-                    raise TransactionError(f"Replaced {kind} output failed verification: {item.path}", 4)
-                source_edit._sync_directory((target / item.path).parent)
+            if item.old is None or current != item.old or metadata is None or stat.S_IMODE(metadata.st_mode) != item.mode:
+                raise TransactionError(f"{prefix} target changed before replacement: {item.path}", 3)
+            source_edit._lock_identity(lock, live["identity"])
+            try:
+                os.replace(target / staged_relative, target / item.path)
+            except OSError as error:
+                raise TransactionError(f"Cannot replace {kind} resource {item.path}: {error}", 4) from error
+            replaced, replaced_metadata = _cycle_target(target, item.path, kind)
+            if (replaced != item.new or replaced_metadata is None
+                    or stat.S_IMODE(replaced_metadata.st_mode) != item.mode):
+                raise TransactionError(f"Replaced {kind} output failed verification: {item.path}", 4)
+            source_edit._sync_directory((target / item.path).parent)
 
         live = _inspect_cycle(target, source, lock, kind, record, record_raw, record_metadata,
                               expected, expected_states={item.path: "new" for item in changes},
@@ -1155,44 +1130,6 @@ def _recover_cycle(target: Path, source: Path, lock, record: dict, record_raw: b
     return "rolled_back"
 
 
-def _create_global_file(target: Path, relative: str, payload: bytes, mode: int, lock, identity):
-    from .config_apply import _lstat_target_path
-
-    path, metadata, issue = _lstat_target_path(target, relative)
-    if issue or path is None or metadata is not None:
-        raise TransactionError(issue or f"Global destination appeared before exclusive creation: {relative}", 3)
-    source_edit._lock_identity(lock, identity)
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
-    flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags, mode)
-    except OSError as error:
-        raise TransactionError(f"Cannot exclusively create global resource {relative}: {error}", 3) from error
-    try:
-        view = memoryview(payload)
-        written = 0
-        while written < len(view):
-            count = os.write(descriptor, view[written:])
-            if count <= 0:
-                raise OSError("short write while creating global resource")
-            written += count
-        if hasattr(os, "fchmod"):
-            os.fchmod(descriptor, mode)
-        os.fsync(descriptor)
-        metadata = os.fstat(descriptor)
-        if metadata.st_size != len(payload) or stat.S_IMODE(metadata.st_mode) != stat.S_IMODE(mode):
-            raise TransactionError(f"Created global resource metadata failed verification: {relative}", 4)
-    except OSError as error:
-        raise TransactionError(f"Cannot finish global resource creation {relative}: {error}", 4) from error
-    finally:
-        os.close(descriptor)
-    current, current_metadata = _global_target(target, relative)
-    if (current != payload or current_metadata is None
-            or stat.S_IMODE(current_metadata.st_mode) != stat.S_IMODE(mode)):
-        raise TransactionError(f"Created global resource failed byte/mode verification: {relative}", 4)
-    source_edit._sync_directory(path.parent)
-
-
 def commit_global(target: Path, source: Path, changes: tuple[GlobalChange, ...], manifest_path: str,
                   revalidate, *, load_renderer) -> str:
     """Apply an OpenCode-only global write-set using schema-2 receipts and the shared lock."""
@@ -1231,10 +1168,8 @@ def commit_global(target: Path, source: Path, changes: tuple[GlobalChange, ...],
                 raise TransactionError("Global apply write-set is unordered or outside the fixed OpenCode inventory", 3)
             previous = item.path
             old, metadata = _global_target(target, item.path)
-            if item.old is None:
-                if item.path != "opencode.jsonc" or old is not None:
-                    raise TransactionError(f"Global create target is not safely absent: {item.path}", 3)
-            elif old != item.old or metadata is None or stat.S_IMODE(metadata.st_mode) != item.mode:
+            if (item.old is None or old != item.old or metadata is None
+                    or stat.S_IMODE(metadata.st_mode) != item.mode):
                 raise TransactionError(f"Global target changed before journal preparation: {item.path}", 3)
             if item.old == item.new or not 0 <= item.mode <= 0o7777:
                 raise TransactionError(f"Invalid global apply candidate: {item.path}", 3)
@@ -1243,9 +1178,9 @@ def commit_global(target: Path, source: Path, changes: tuple[GlobalChange, ...],
         if (old_manifest != manifest_change.old or manifest_metadata is None
                 or stat.S_IMODE(manifest_metadata.st_mode) != manifest_change.mode):
             raise TransactionError("Global manifest changed before journal preparation", 3)
-        files = [{"path": item.path, "old_sha256": None if item.old is None else _hash(item.old),
+        files = [{"path": item.path, "old_sha256": _hash(item.old),
                   "new_sha256": _hash(item.new), "mode": item.mode,
-                  "backup": None if item.old is None else f"backups/file-{index:04d}.old",
+                  "backup": f"backups/file-{index:04d}.old",
                   "staged": f"staged/file-{index:04d}.new"}
                  for index, item in enumerate(changes)]
         record = {

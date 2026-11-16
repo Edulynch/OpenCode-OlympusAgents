@@ -12,8 +12,6 @@ $pwsh = Join-Path $PSHOME 'pwsh.exe'
 $run = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) ('opencode\olympus-worktree-activation-' + [guid]::NewGuid().ToString('N'))
 $main = Join-Path $run 'main'
 $treeRoot = Join-Path $run 'trees'
-$baselineSource = Join-Path $run 'v0.4.4-source'
-$baselineArchive = Join-Path $run 'v0.4.4.zip'
 $first = Join-Path $treeRoot 'checkout-b'
 $second = Join-Path $treeRoot 'checkout-c'
 $negative = Join-Path $treeRoot 'checkout-negative'
@@ -72,6 +70,9 @@ function Assert-InstalledManifest([string]$Directory) {
     $manifestPath = Join-Path $Directory '.opencode/orchestrator-install.json'
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return $false }
     $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -Depth 100
+    if ($manifest.schema_version -ne 1 -or $manifest.scope -cne 'project' -or
+        @($manifest.installed_harnesses).Count -ne 1 -or $manifest.installed_harnesses[0] -cne 'opencode' -or
+        @($manifest.managed_files).Count -ne 15) { return $false }
     foreach ($entry in @($manifest.managed_files)) {
         $path = Join-Path $Directory ([string]$entry.path -replace '/', [IO.Path]::DirectorySeparatorChar)
         if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
@@ -118,56 +119,31 @@ try {
     [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), $wrapper, [Text.Encoding]::ASCII)
     $env:PATH = $mockBin + [IO.Path]::PathSeparator + $originalPath
 
-    [IO.Directory]::CreateDirectory($baselineSource) | Out-Null
-    Run-Git $root @('archive','--format=zip','--output',$baselineArchive,'v0.4.4') | Out-Null
-    Expand-Archive -LiteralPath $baselineArchive -DestinationPath $baselineSource -Force
-    $baselineInstall = Run-Script (Join-Path $baselineSource 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$baselineSource)
-    Check 'V044_MAIN_PROJECT_INSTALL' ($baselineInstall.Code -eq 0 -and $baselineInstall.Text -match 'OLYMPUS_INSTALL: v0.4.4') $baselineInstall.Text
+    $baseInstall = Run-Script (Join-Path $root 'scripts/bootstrap.ps1') @(
+        '-Target',$main,'-Harness','opencode','-SourceVersion',$candidateVersion
+    )
+    Check 'CURRENT_MAIN_PROJECT_INSTALL' ($baseInstall.Code -eq 0 -and $baseInstall.Text -match '(?m)^READY\s*$') $baseInstall.Text
     $sourceManifestPath = Join-Path $main '.opencode/orchestrator-install.json'
-    Check 'V044_MANIFEST_OWNS_PROJECT_FILES' ((Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json).managed_files.Count -gt 0 -and
-        (Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json).managed_files.path -notcontains '.opencode/scripts/worktree-setup.ps1')
+    $sourceManifest = Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json
+    Check 'CURRENT_MANIFEST_OWNS_EXACT_15_RESOURCES' ($sourceManifest.schema_version -eq 1 -and
+        $sourceManifest.scope -ceq 'project' -and @($sourceManifest.installed_harnesses).Count -eq 1 -and
+        $sourceManifest.installed_harnesses[0] -ceq 'opencode' -and $sourceManifest.managed_files.Count -eq 15 -and
+        -not [string]::IsNullOrWhiteSpace([string]$sourceManifest.installed_version) -and
+        -not [string]::IsNullOrWhiteSpace([string]$sourceManifest.installed_from_commit) -and
+        $sourceManifest.managed_files.path -contains '.opencode/scripts/worktree-setup.ps1')
 
     Run-Git $main @('worktree','add','--quiet','-b','worktree-activation-b',$first,'HEAD') | Out-Null
     Run-Git $main @('worktree','add','--quiet','-b','worktree-activation-c',$second,'HEAD') | Out-Null
     Check 'LINKED_WORKTREE_GIT_FILE' ((Get-Item -LiteralPath (Join-Path $first '.git') -Force).PSIsContainer -eq $false -and
         (Get-Item -LiteralPath (Join-Path $second '.git') -Force).PSIsContainer -eq $false)
 
-    Check 'V044_REPRODUCES_MISSING_WORKTREE_INSTALL' (-not (Test-Path (Join-Path $first 'opencode.jsonc')) -and
+    Check 'CURRENT_WORKTREE_STARTS_WITHOUT_PROJECT_RESOURCES' (-not (Test-Path (Join-Path $first 'opencode.jsonc')) -and
         -not (Test-Path (Join-Path $first '.opencode/agents/kael.md')) -and
         -not (Test-Path (Join-Path $first '.opencode/orchestrator-install.json')) -and
         -not (Test-Path (Join-Path $second 'opencode.jsonc')) -and
         -not (Test-Path (Join-Path $second '.opencode/agents/kael.md')) -and
         -not (Test-Path (Join-Path $second '.opencode/orchestrator-install.json')))
     Check 'MISSING_RESOURCES_MEAN_NO_KAEL_DISCOVERY' (@(Get-Effective-Agent-Ids $first).Count -eq 0)
-
-    # A modified v0.4.4-owned agent must block an upgrade before target writes.
-    # Restore the original fixture bytes even if the negative gate fails.
-    $legacyAgent = Join-Path $main '.opencode/agents/aegis.md'
-    $originalLegacyBytes = [IO.File]::ReadAllBytes($legacyAgent)
-    try {
-        [IO.File]::AppendAllText($legacyAgent, "`n# intentional v0.4.4 drift probe`n", $utf8)
-        $legacySnapshot = Get-Worktree-Snapshot $main
-        $rejectedUpgrade = Run-Script (Join-Path $root 'scripts/bootstrap.ps1') @('-Target',$main,'-Harness','opencode','-SourceVersion',$candidateVersion)
-        Check 'V044_MANAGED_DRIFT_BLOCKS_UPGRADE_WITHOUT_WRITES' (
-            $rejectedUpgrade.Code -ne 0 -and
-            $rejectedUpgrade.Text -match 'MANAGED_FILE_DRIFT' -and
-            (Get-Worktree-Snapshot $main) -ceq $legacySnapshot) $rejectedUpgrade.Text
-    } finally {
-        [IO.File]::WriteAllBytes($legacyAgent, $originalLegacyBytes)
-    }
-
-    # Upgrade the project checkout from the immutable stable baseline to the
-    # internal project engine before using its opted-in native startup hook.
-    $candidateUpgrade = Run-Script (Join-Path $root 'scripts/bootstrap.ps1') @('-Target',$main,'-Harness','opencode','-SourceVersion',$candidateVersion)
-    Check 'V044_TO_CANDIDATE_UPGRADE' ($candidateUpgrade.Code -eq 0 -and
-        (Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json).managed_files.path -contains '.opencode/scripts/worktree-setup.ps1') $candidateUpgrade.Text
-    # A successful upgrade must retire legacy maintenance resources only when owned.
-    $upgradedManifest = Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json
-    Check 'V044_OWNED_MAINTENANCE_RETIRED' (
-        '.opencode/agents/aegis.md' -notin @($upgradedManifest.managed_files.path) -and
-        '.opencode/commands/maintain.md' -notin @($upgradedManifest.managed_files.path) -and
-        -not (Test-Path -LiteralPath (Join-Path $main '.opencode/agents/aegis.md')) -and
-        -not (Test-Path -LiteralPath (Join-Path $main '.opencode/commands/maintain.md')))
 
     $userOwnedFile = Join-Path $first '.opencode/user-owned.md'
     [IO.Directory]::CreateDirectory((Split-Path -Parent $userOwnedFile)) | Out-Null
@@ -220,6 +196,31 @@ try {
     $negativeMarkerHash = Sha-File $negativeMarker
     $originalManifestBytes = [IO.File]::ReadAllBytes($sourceManifestPath)
     $unexpectedSource = Join-Path $main '.opencode/agents/unexpected.md'
+
+    $targetCodexManifest = Join-Path $negative '.codex/orchestrator-install.json'
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $targetCodexManifest)) | Out-Null
+    [IO.File]::WriteAllText($targetCodexManifest, '{"scope":"project","installed_harnesses":["codex"]}', $utf8)
+    $targetCodexBefore = Get-Worktree-Snapshot $negative
+    $targetCodexResult = Invoke-Worktree-Setup $negative
+    Check 'TARGET_CODEX_MANIFEST_REJECTED_WITHOUT_WRITES' ($targetCodexResult.Code -ne 0 -and
+        $targetCodexResult.Text -match 'WORKTREE_SETUP_MANIFEST_INVALID' -and
+        (Get-Worktree-Snapshot $negative) -ceq $targetCodexBefore) $targetCodexResult.Text
+    [IO.File]::Delete($targetCodexManifest)
+    [IO.Directory]::Delete((Split-Path -Parent $targetCodexManifest))
+
+    $sourceCodexManifest = Join-Path $main '.codex/orchestrator-install.json'
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $sourceCodexManifest)) | Out-Null
+    [IO.File]::WriteAllText($sourceCodexManifest, '{"scope":"project","installed_harnesses":["codex"]}', $utf8)
+    $sourceCodexBefore = Get-Worktree-Snapshot $main
+    $sourceCodexTargetBefore = Get-Worktree-Snapshot $negative
+    $sourceCodexResult = Invoke-Worktree-Setup $negative
+    Check 'SOURCE_CODEX_MANIFEST_REJECTED_WITHOUT_WRITES' ($sourceCodexResult.Code -ne 0 -and
+        $sourceCodexResult.Text -match 'WORKTREE_SETUP_MANIFEST_INVALID' -and
+        (Get-Worktree-Snapshot $main) -ceq $sourceCodexBefore -and
+        (Get-Worktree-Snapshot $negative) -ceq $sourceCodexTargetBefore) $sourceCodexResult.Text
+    [IO.File]::Delete($sourceCodexManifest)
+    [IO.Directory]::Delete((Split-Path -Parent $sourceCodexManifest))
+
     try {
         # A missing managed agent must fail despite every supplied hash being valid.
         $missingManifest = [Text.Encoding]::UTF8.GetString($originalManifestBytes) | ConvertFrom-Json -Depth 100

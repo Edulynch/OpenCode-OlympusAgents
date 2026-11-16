@@ -80,12 +80,57 @@ try {
         self.ps_lock_script = self.sandbox / "lock fixture.ps1"
         self.ps_lock_script.write_text(self._POWERSHELL_LOCK_SCRIPT, encoding="utf-8")
 
-    def run_ps(self, script, *arguments, timeout=60):
+    def run_ps(self, script, *arguments, timeout=60, env=None):
         if not self.pwsh:
             self.skipTest("PowerShell 7 is unavailable")
         return subprocess.run([self.pwsh, "-NoProfile", "-File", str(script), *map(str, arguments)],
-                              cwd=ROOT, env=self.environment, capture_output=True, text=True,
+                              cwd=ROOT, env=self.environment if env is None else env, capture_output=True, text=True,
                               encoding="utf-8", timeout=timeout, check=False)
+
+    def mock_opencode_environment(self):
+        mock_bin = self.sandbox / "mock-opencode"
+        mock_bin.mkdir(exist_ok=True)
+        generated = []
+        for file in sorted((self.target / ".opencode/agents").glob("*.md")):
+            text = file.read_text(encoding="utf-8")
+            model = __import__("re").search(r'(?m)^model:\s*"?([^"\s#]+)#([^"\s]+)"?\s*$', text)
+            mode = __import__("re").search(r"(?m)^mode:\s*(primary|subagent)\s*$", text)
+            if model is None or mode is None:
+                continue
+            provider, model_id = model.group(1).split("/", 1)
+            generated.append({"id": file.stem, "model": {"providerID": provider, "id": model_id,
+                                                           "variant": model.group(2)},
+                              "mode": mode.group(1)})
+        agents = self.sandbox / "mock-agents.json"
+        agents.write_text(json.dumps(generated), encoding="utf-8")
+        if os.name == "nt":
+            (mock_bin / "opencode.cmd").write_text(
+                "@echo off\r\n"
+                "if \"%~1\"==\"--version\" goto version\r\n"
+                "if \"%~1\"==\"debug\" if \"%~2\"==\"config\" exit /b 0\r\n"
+                "if \"%~1\"==\"debug\" if \"%~2\"==\"agents\" goto agents\r\n"
+                "exit /b 1\r\n"
+                ":version\r\n"
+                "echo opencode 1.0.0\r\nexit /b 0\r\n"
+                ":agents\r\n"
+                "type \"%OLYMPUS_TEST_AGENTS%\"\r\nexit /b 0\r\n",
+                encoding="ascii",
+            )
+        else:
+            mock_cli = mock_bin / "opencode"
+            mock_cli.write_text(
+                "#!/bin/sh\n"
+                'if [ "$1" = "--version" ]; then echo "opencode 1.0.0"; exit 0; fi\n'
+                'if [ "$1" = "debug" ] && [ "$2" = "config" ]; then exit 0; fi\n'
+                'if [ "$1" = "debug" ] && [ "$2" = "agents" ]; then cat "$OLYMPUS_TEST_AGENTS"; exit $?; fi\n'
+                "exit 1\n",
+                encoding="utf-8",
+            )
+            mock_cli.chmod(0o755)
+        environment = self.environment.copy()
+        environment["PATH"] = str(mock_bin) + os.pathsep + environment.get("PATH", "")
+        environment["OLYMPUS_TEST_AGENTS"] = str(agents)
+        return environment
 
     @staticmethod
     def windows_short_path_alias(path):
@@ -111,20 +156,8 @@ try {
         return candidate
 
     def assert_manifest_provenance_via_target(self, target, provenance):
-        manifest_path = self.target / MANIFEST_PATHS[0]
-        manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        manifest = {
-            "schema_version": 1,
-            "scope": "project",
-            "installed_harnesses": ["opencode"],
-            "installed_version": "local",
-            "installed_from_commit": "fixture-commit",
-            "managed_files": [],
-            "harness_provenance": provenance,
-        }
-        payload = json.dumps(manifest).encode("utf-8")
-        manifest_path.write_bytes(payload)
-
+        manifest_path = self.create_managed_install(provenance=provenance)
+        payload = manifest_path.read_bytes()
         alias_manifest = target / MANIFEST_PATHS[0]
         parsed = parse_project_manifest(target, alias_manifest, payload)
         self.assertEqual(provenance, parsed.data["harness_provenance"])
@@ -144,37 +177,34 @@ try {
                 snapshot[relative] = ("directory", metadata.st_mtime_ns)
         return snapshot
 
-    def create_managed_install(self, harnesses=("opencode", "codex"), provenance=None):
+    def create_managed_install(self, provenance=None):
         # Rendered outputs and manifests exist only in this disposable Git fixture.
         renderer_path = ROOT / "scripts/render_harnesses.py"
         namespace = {"__file__": str(renderer_path)}
         exec(compile(renderer_path.read_bytes(), str(renderer_path), "exec"), namespace)
         entries = []
-        for harness in harnesses:
-            outputs = namespace["outputs_for"](ROOT, harness)
-            for path, content in outputs.items():
-                relative = path.relative_to(ROOT).as_posix()
-                if not (relative.startswith(f".{harness}/") or relative in ("opencode.jsonc", "CODEX.md")):
-                    continue
-                # Bootstrap's verifier hashes the generated checkout bytes,
-                # including its existing newline style; reuse those bytes.
-                raw = (ROOT / relative).read_bytes()
-                destination = self.target / Path(relative)
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(raw)
-                entries.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest()})
+        outputs = namespace["outputs_for"](ROOT, "opencode")
+        for path in outputs:
+            relative = path.relative_to(ROOT).as_posix()
+            if not (relative.startswith(".opencode/") or relative == "opencode.jsonc"):
+                continue
+            # Bootstrap hashes checkout bytes, including their existing newline style.
+            raw = (ROOT / relative).read_bytes()
+            destination = self.target / Path(relative)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(raw)
+            entries.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest()})
         manifest = {
             "schema_version": 1,
             "scope": "project",
             "installed_version": "local",
             "installed_from_commit": "fixture-commit",
-            "installed_harnesses": list(harnesses),
+            "installed_harnesses": ["opencode"],
             "managed_files": sorted(entries, key=lambda item: item["path"]),
         }
         if provenance is not None:
             manifest["harness_provenance"] = provenance
-        manifest_path = (self.target / (".opencode" if "opencode" in harnesses else ".codex") /
-                         "orchestrator-install.json")
+        manifest_path = self.target / MANIFEST_PATHS[0]
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
         return manifest_path
@@ -234,19 +264,14 @@ try {
             raise AssertionError(f"Lock owner failed: {stdout!r} {stderr!r}")
 
     def test_slice_c2_3_manifest_schema_1_provenance_is_optional_opaque_metadata(self):
-        manifest_path = self.target / ".opencode/orchestrator-install.json"
-        manifest_path.parent.mkdir(parents=True)
-        base = {
-            "schema_version": 1,
-            "scope": "project",
-            "installed_harnesses": ["opencode"],
-            "installed_version": "local",
-            "installed_from_commit": "fixture-commit",
-            "managed_files": [],
-        }
-        legacy = parse_project_manifest(self.target, manifest_path, json.dumps(base).encode("utf-8"))
-        self.assertEqual(1, legacy.data["schema_version"])
-        self.assertNotIn("harness_provenance", legacy.data)
+        manifest_path = self.create_managed_install()
+        base = json.loads(manifest_path.read_text(encoding="utf-8"))
+        parsed_without_provenance = parse_project_manifest(
+            self.target, manifest_path, json.dumps(base).encode("utf-8"),
+        )
+        self.assertEqual(1, parsed_without_provenance.data["schema_version"])
+        self.assertNotIn("metadata_format", parsed_without_provenance.data)
+        self.assertNotIn("harness_provenance", parsed_without_provenance.data)
 
         provenance = {
             "opencode": {"kind": "custom", "source_digest": "a" * 64},
@@ -301,6 +326,26 @@ try {
                         "Canonical alias must resolve to the original target")
         provenance = {"opencode": {"kind": "custom", "source_digest": "a" * 64}}
         self.assert_manifest_provenance_via_target(alias_target, provenance)
+
+    def test_slice_c2_3_project_manifest_rejects_codex_and_missing_current_metadata_read_only(self):
+        manifest_path = self.create_managed_install()
+        original = json.loads(manifest_path.read_text(encoding="utf-8"))
+        before = self.snapshot_target()
+        for invalid in (
+            {**original, "installed_harnesses": ["codex"]},
+            {key: value for key, value in original.items() if key != "installed_harnesses"},
+            {key: value for key, value in original.items() if key != "installed_version"},
+            {key: value for key, value in original.items() if key != "installed_from_commit"},
+            {**original, "managed_files": [
+                *original["managed_files"],
+                {"path": ".codex/agents/veyra.toml", "sha256": "0" * 64},
+            ]},
+        ):
+            with self.subTest(invalid=invalid.get("installed_harnesses", "missing-current-field")):
+                payload = json.dumps(invalid).encode("utf-8")
+                with self.assertRaises(ManifestError):
+                    parse_project_manifest(self.target, manifest_path, payload)
+                self.assertEqual(before, self.snapshot_target())
 
     def test_slice_c2_3_manifest_rejects_symlink_escape(self):
         manifest_path = self.target / MANIFEST_PATHS[0]
@@ -407,68 +452,39 @@ try {
             source_edit._release_lock(python_after_powershell_crash)
 
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
-    def test_slice_c2_3_bootstrap_preserves_unselected_provenance_and_verify_only_is_read_only(self):
+    def test_slice_c2_3_bootstrap_verify_only_is_read_only_with_opaque_provenance(self):
         provenance = {
             "opencode": {"kind": "custom", "source_digest": "b" * 64},
-            "codex": {"kind": "custom", "source_digest": "c" * 64},
-            "futureHarness": {"opaque": "preserve"},
-            "FutureHarness": {"opaque": "preserve-distinct-case"},
-            "OpenCode": {"opaque": "preserve-distinct-harness-key"},
+            "codex": {"historical": True},
+            "futureHarness": {"opaque": ["preserve", 1]},
         }
         manifest_path = self.create_managed_install(provenance=provenance)
         self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
-        before_verify = self.snapshot_target()
+        before = self.snapshot_target()
         verify = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
-                             "-Harness", "codex", "-VerifyOnly")
+                             "-Harness", "opencode", "-VerifyOnly")
         self.assertEqual(0, verify.returncode, verify.stdout + verify.stderr)
         self.assertIn("OLYMPUS_VERIFY: local PASS", verify.stdout)
         self.assertFalse((self.target / ".olympus-cli-edit.lock").exists(),
                          "VerifyOnly must not create a target writer lock")
-        self.assertEqual(before_verify, self.snapshot_target())
-        self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
+        self.assertEqual(before, self.snapshot_target())
+        self.assertEqual(provenance, json.loads(manifest_path.read_text(encoding="utf-8"))["harness_provenance"])
 
-        install = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
-                              "-Harness", "codex")
-        self.assertEqual(0, install.returncode, install.stdout + install.stderr)
-        updated = json.loads(manifest_path.read_text(encoding="utf-8"))
-        self.assertEqual(1, updated["schema_version"])
-        self.assertEqual({"opencode": provenance["opencode"],
-                          "futureHarness": provenance["futureHarness"],
-                          "FutureHarness": provenance["FutureHarness"],
-                          "OpenCode": provenance["OpenCode"]},
-                         updated["harness_provenance"])
-        self.assertNotIn("codex", updated["harness_provenance"],
-                         "Bootstrap must not assert official provenance for rewritten output")
-        lock_path = self.target / ".olympus-cli-edit.lock"
-        self.assertTrue(lock_path.is_file())
-        self.assertEqual(0, lock_path.stat().st_size)
-
-    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
-    def test_slice_c2_3_verify_only_rejects_malformed_provenance_without_writes(self):
-        manifest_path = self.create_managed_install(("codex",))
+    def test_slice_c2_3_manifest_rejects_malformed_provenance_without_writes(self):
+        manifest_path = self.create_managed_install()
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest["harness_provenance"] = {"codex": "not-an-object"}
+        manifest["harness_provenance"] = {"historical": "not-an-object"}
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
         before = self.snapshot_target()
 
-        verify = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
-                             "-Harness", "codex", "-VerifyOnly")
-
-        self.assertNotEqual(0, verify.returncode)
-        self.assertIn("INSTALL_MANIFEST_INCOMPATIBLE", verify.stdout + verify.stderr)
+        with self.assertRaises(ManifestError):
+            read_project_manifest(self.target)
         self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
         self.assertEqual(before, self.snapshot_target())
 
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
-    def test_slice_c2_3_uninstall_removes_only_selected_harness_provenance(self):
-        provenance = {
-            "opencode": {"kind": "custom", "source_digest": "d" * 64},
-            "codex": {"kind": "custom", "source_digest": "e" * 64},
-            "futureHarness": {"opaque": "preserve"},
-            "FutureHarness": {"opaque": "preserve-distinct-case"},
-            "OpenCode": {"opaque": "preserve-distinct-harness-key"},
-        }
-        old_manifest = self.create_managed_install(provenance=provenance)
+    def test_slice_c2_3_uninstall_removes_only_managed_resources(self):
+        old_manifest = self.create_managed_install()
         sentinel = self.target / "unmanaged.txt"
         sentinel.write_text("user-owned\n", encoding="utf-8")
         nested = self.target / "nested-project-path"
@@ -483,17 +499,6 @@ try {
         result = self.run_ps(ROOT / "scripts/project-uninstall.ps1", "-Target", self.target,
                              "-Harness", "opencode")
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-
-        remaining_manifest = self.target / ".codex/orchestrator-install.json"
-        self.assertTrue(remaining_manifest.is_file())
-        updated = json.loads(remaining_manifest.read_text(encoding="utf-8"))
-        self.assertEqual(1, updated["schema_version"])
-        self.assertEqual(["codex"], updated["installed_harnesses"])
-        self.assertEqual({"codex": provenance["codex"],
-                          "futureHarness": provenance["futureHarness"],
-                          "FutureHarness": provenance["FutureHarness"],
-                          "OpenCode": provenance["OpenCode"]},
-                         updated["harness_provenance"])
         self.assertEqual("user-owned\n", sentinel.read_text(encoding="utf-8"))
         self.assertFalse(old_manifest.exists())
         self.assertTrue((self.target / ".olympus-cli-edit.lock").is_file())
@@ -501,24 +506,25 @@ try {
 
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
     def test_slice_c2_3_existing_project_writers_block_before_target_writes(self):
-        self.create_managed_install(("codex",))
+        self.create_managed_install()
+        mock_environment = self.mock_opencode_environment()
         owner = self.start_python_owner()
         try:
             before = self.snapshot_target(omit_lock=True)
             bootstrap = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
-                                    "-Harness", "codex")
+                                    "-Harness", "opencode", "-Update", env=mock_environment)
             self.assertNotEqual(0, bootstrap.returncode)
-            self.assertIn("OLYMPUS_TARGET_LOCK_BUSY", bootstrap.stderr)
+            self.assertIn("OLYMPUS_TARGET_LOCK_BUSY", bootstrap.stderr + bootstrap.stdout)
             uninstall = self.run_ps(ROOT / "scripts/project-uninstall.ps1", "-Target", self.target,
-                                    "-Harness", "codex")
+                                    "-Harness", "opencode", env=mock_environment)
             self.assertNotEqual(0, uninstall.returncode)
-            self.assertIn("OLYMPUS_TARGET_LOCK_BUSY", uninstall.stderr)
+            self.assertIn("OLYMPUS_TARGET_LOCK_BUSY", uninstall.stderr + uninstall.stdout)
             self.assertEqual(before, self.snapshot_target(omit_lock=True))
         finally:
             self.stop_owner(owner)
 
     def test_slice_c3_project_apply_uses_existing_target_writer_lock(self):
-        self.create_managed_install(("opencode",))
+        self.create_managed_install({"opencode": {"kind": "custom"}})
         owner = self.start_python_owner()
         try:
             before = self.snapshot_target(omit_lock=True)
@@ -537,13 +543,13 @@ try {
 
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
     def test_slice_c2_3_rejected_bootstrap_is_target_read_only_and_does_not_create_lock(self):
-        self.create_managed_install(("codex",))
-        managed = self.target / "CODEX.md"
+        self.create_managed_install()
+        managed = self.target / ".opencode/agents/veyra.md"
         managed.write_text("user-modified content\n", encoding="utf-8")
         before = self.snapshot_target()
 
         result = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
-                             "-Harness", "codex")
+                             "-Harness", "opencode", env=self.mock_opencode_environment())
 
         self.assertNotEqual(0, result.returncode)
         self.assertIn("MANAGED_FILE_DRIFT", result.stdout + result.stderr)
@@ -552,22 +558,29 @@ try {
 
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
     def test_slice_c2_3_rejected_uninstall_is_target_read_only_and_does_not_create_lock(self):
-        self.create_managed_install(("codex",))
+        obsolete = self.target / ".codex/orchestrator-install.json"
+        obsolete.parent.mkdir(parents=True, exist_ok=True)
+        obsolete.write_text(json.dumps({
+            "schema_version": 1, "scope": "project", "installed_harnesses": ["codex"],
+            "installed_version": "v0.7.0", "installed_from_commit": "old-commit",
+            "managed_files": [],
+        }) + "\n", encoding="utf-8")
         before = self.snapshot_target()
 
         result = self.run_ps(ROOT / "scripts/project-uninstall.ps1", "-Target", self.target,
                              "-Harness", "opencode")
 
         self.assertNotEqual(0, result.returncode)
-        self.assertIn("HARNESS_NOT_INSTALLED", result.stdout + result.stderr)
+        self.assertIn("PROJECT_MANIFEST_INVALID", result.stdout + result.stderr)
         self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
         self.assertEqual(before, self.snapshot_target())
 
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
     def test_slice_c2_3_bootstrap_noop_does_not_modify_target(self):
-        self.create_managed_install(("codex",))
+        self.create_managed_install()
+        mock_environment = self.mock_opencode_environment()
         first = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
-                            "-Harness", "codex")
+                            "-Harness", "opencode", env=mock_environment)
         self.assertEqual(0, first.returncode, first.stdout + first.stderr)
         lock_path = self.target / ".olympus-cli-edit.lock"
         self.assertTrue(lock_path.is_file())
@@ -577,7 +590,7 @@ try {
         before = self.snapshot_target()
 
         second = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
-                             "-Harness", "codex")
+                             "-Harness", "opencode", env=mock_environment)
 
         self.assertEqual(0, second.returncode, second.stdout + second.stderr)
         self.assertIn("NO_CHANGES", second.stdout)

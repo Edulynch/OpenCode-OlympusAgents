@@ -1,12 +1,10 @@
-# Canonical model intent. Harness identifiers are adapter translations.
+# Canonical OpenCode model intent.
 
 [families.sol]
 opencode = "openai/gpt-6.1-sol"
-codex = "gpt-6.1-sol"
 
 [families.luna]
 opencode = "openai/gpt-6-luna"
-codex = "gpt-6-luna"
 
 [roles.kael]
 family = "sol"

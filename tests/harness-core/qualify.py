@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import importlib.util
 import os
@@ -48,10 +47,8 @@ def run_renderer(
     action: str,
     harness: str,
     root: Path = ROOT,
-    *,
-    safe_root_read_only: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    if safe_root_read_only and action == "render" and root.resolve() == ROOT:
+    if action == "render" and root.resolve() == ROOT:
         raise AssertionError("SAFE_ROOT_RENDER_FORBIDDEN")
     return subprocess.run(
         [sys.executable, str(RENDERER), action, "--harness", harness, "--root", str(root)],
@@ -157,15 +154,7 @@ def kael_compact_contract_checks(prompt_text: str) -> dict[str, bool]:
     }
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--safe-root-read-only",
-        action="store_true",
-        help="check root-generated adapters without rendering the real repository; fixture renders remain enabled",
-    )
-    args = parser.parse_args(argv)
-    safe_root_read_only = args.safe_root_read_only
+def main() -> int:
     check("PYTHON_311_PLUS", sys.version_info >= (3, 11))
     with (ROOT / "olympus" / "core" / "models.toml").open("rb") as stream:
         models = tomllib.load(stream)
@@ -193,8 +182,9 @@ def main(argv: list[str] | None = None) -> int:
         and "[ValidateSet('global')]" in installer_text,
     )
     check(
-        "INTERNAL_BOOTSTRAP_RETAINS_TWO_ADAPTERS",
-        "[ValidateSet('opencode', 'codex', 'all')]" in bootstrap_text,
+        "INTERNAL_BOOTSTRAP_OPENCODE_ONLY",
+        "[ValidateSet('opencode')]" in bootstrap_text
+        and "Get-HarnessSelection" in bootstrap_text,
     )
     check(
         "INSTALLER_DERIVES_INVENTORY_FROM_GENERATED_OUTPUTS",
@@ -203,25 +193,35 @@ def main(argv: list[str] | None = None) -> int:
         and re.search(r"(?m)^\$Managed\s*=\s*@\(\s*['\"]", bootstrap_text) is None,
     )
     check(
-        "INSTALLER_MANIFEST_TRACKS_INSTALLED_HARNESSES",
+        "INSTALLER_MANIFEST_REQUIRES_CURRENT_SCOPE_AND_HARNESS",
         "installed_harnesses = @($InstalledHarnesses)" in bootstrap_text
         and "scope = 'project'" in bootstrap_text
+        and "installed_from_commit = $commit" in bootstrap_text
+        and 'must be exactly ["opencode"]' in bootstrap_text
         and "-VerifyOnly" in installer_text
         and "Assert-InstalledHarness" in bootstrap_text,
     )
+    check(
+        "INSTALLER_DERIVES_MODELS_FROM_GENERATED_ROLES",
+        "function Get-Expected-Agents" in bootstrap_text
+        and "Get-Expected-Agents $ManagedContent" in bootstrap_text
+        and r"^\.opencode/agents/[^/]+\.md$" in bootstrap_text
+        and re.search(r"\[regex\]::Match\(\$text,\s*'\(\?m\)\^model:", bootstrap_text) is not None,
+    )
+    check(
+        "INSTALLER_HAS_NO_HARDCODED_ROLE_MODEL_MAP",
+        re.search(
+            r'(?m)^\s*"(?:kael|thales|atlas|argus|talos|helios|veyra|orin|kovan|nox|vera)"=@\(',
+            bootstrap_text,
+        ) is None,
+    )
 
     opencode_files = {path.stem: path for path in (ROOT / ".opencode/agents").glob("*.md")}
-    codex_files = {path.stem: path for path in (ROOT / ".codex/agents").glob("*.toml")}
     check("OPENCODE_EXPECTED_ROSTER", set(opencode_files) == canonical_roles)
-    check("CODEX_EXPECTED_SUPPORTED_ROSTER", set(codex_files) == canonical_roles - {"kael"})
     check("OPENCODE_FULL_DISPLAY_IDENTITY_DERIVED_FROM_CORE", all(
         identities[role] in opencode_files[role].read_text(encoding="utf-8")
         and identities[role] + ". " in opencode_files[role].read_text(encoding="utf-8")
         for role in canonical_roles))
-    check("CODEX_FULL_DISPLAY_IDENTITY_DERIVED_FROM_CORE", all(
-        identities[role] + ". " in codex_files[role].read_text(encoding="utf-8")
-        for role in codex_files))
-    check("CODEX_ROOT_DISPLAY_IDENTITY_DERIVED_FROM_CORE", (ROOT / "CODEX.md").read_text(encoding="utf-8").startswith(f"# {identities['kael']}\n"))
     check("OPENCODE_ACTIVITY_HUD_DERIVES_ALL_DISPLAY_IDENTITIES", all(
         f'{role}: "{identity}"' in (ROOT / ".opencode/plugins/olympus-activity/activity.ts").read_text(encoding="utf-8")
         for role, identity in identities.items()))
@@ -255,21 +255,12 @@ def main(argv: list[str] | None = None) -> int:
         opencode_text = opencode_files[role].read_text(encoding="utf-8")
         opencode_model = f"{family['opencode']}#{intent['effort']}"
         check(f"OPENCODE_MODEL_{role.upper()}", f"model: \"{opencode_model}\"" in opencode_text or f"model: {opencode_model}" in opencode_text)
-        if role == "kael":
-            continue
-        with codex_files[role].open("rb") as stream:
-            codex_agent = tomllib.load(stream)
-        check(f"CODEX_MODEL_{role.upper()}", codex_agent["model"] == family["codex"])
-        check(f"CODEX_EFFORT_{role.upper()}", codex_agent["model_reasoning_effort"] == intent["effort"])
-        check(f"ROLE_FILENAME_MAPPING_{role.upper()}", codex_agent["name"] == role == codex_files[role].stem)
 
     kael_intent = models["roles"]["kael"]
-    kael_family = models["families"][kael_intent["family"]]
-    codex_config = tomllib.loads((ROOT / ".codex/config.toml").read_text(encoding="utf-8"))
-    check("CODEX_ROOT_MODEL_INTENT", codex_config["model"] == kael_family["codex"] and codex_config["model_reasoning_effort"] == kael_intent["effort"])
-    check("SOL_TRANSLATION_BOTH_ADAPTERS", models["families"]["sol"]["opencode"] == "openai/gpt-6.1-sol" and models["families"]["sol"]["codex"] == "gpt-6.1-sol")
-    check("LUNA_REMAINS_LUNA", models["families"]["luna"]["opencode"].endswith("gpt-6-luna") and models["families"]["luna"]["codex"] == "gpt-6-luna" and all(models["roles"][r]["family"] == "luna" for r in ("veyra", "orin", "kovan", "nox", "vera")))
-    check("NO_STALE_GPT_6_SOL_OUTPUT", all("gpt-6-sol" not in path.read_text(encoding="utf-8") for path in [*opencode_files.values(), *codex_files.values(), ROOT / "CODEX.md", ROOT / ".codex/config.toml", ROOT / "opencode.jsonc"]))
+    check("MODEL_FAMILIES_OPENCODE_ONLY", all(set(family) == {"opencode"} for family in models["families"].values()))
+    check("SOL_OPENCODE_MODEL", models["families"]["sol"]["opencode"] == "openai/gpt-6.1-sol")
+    check("LUNA_REMAINS_LUNA", models["families"]["luna"]["opencode"].endswith("gpt-6-luna") and all(models["roles"][r]["family"] == "luna" for r in ("veyra", "orin", "kovan", "nox", "vera")))
+    check("NO_STALE_GPT_6_SOL_OUTPUT", all("gpt-6-sol" not in path.read_text(encoding="utf-8") for path in [*opencode_files.values(), ROOT / "opencode.jsonc"]))
     check("EFFORTS_CANONICAL", models["roles"]["thales"]["effort"] == "xhigh" and models["roles"]["kovan"]["effort"] == "max" and all(models["roles"][r]["effort"] == "high" for r in ("kael", "atlas", "argus", "talos", "helios")))
 
     check("MAX_CHILDREN_CANONICAL_FOUR", orchestration["max_children"] == 4)
@@ -286,16 +277,11 @@ def main(argv: list[str] | None = None) -> int:
     check("AUTHORITY_SEMANTICS_CANONICAL", all(authority.count(f"**{term}**") == 1 for term in ("ALLOW", "ASK", "DENY")))
 
     check("OPENCODE_DENY_SUPPORTED", capabilities["opencode"]["DENY"] == "SUPPORTED")
-    check("CODEX_DENY_GAP", capabilities["codex"]["DENY"] == "GAP")
     check("OPENCODE_CONTEXTUAL_MAINTENANCE_SUPPORTED", capabilities["opencode"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "SUPPORTED")
-    check("CODEX_CONTEXTUAL_MAINTENANCE_GAP", capabilities["codex"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "GAP")
-    check("CODEX_RESULT_DELIVERY_SUPPORTED", capabilities["codex"]["RESULT_DELIVERY"] == "SUPPORTED")
-    check("CAPABILITY_CONTRACT_COMPLETE", set(capabilities) == {"opencode", "codex"} and all(set(value) == EXPECTED_CAPABILITIES for value in capabilities.values()) and all(state in {"SUPPORTED", "ADAPTABLE", "PARTIAL", "GAP", "NOT_NEEDED"} for value in capabilities.values() for state in value.values()))
-    check("CODEX_ACTIVITY_IS_BASIC_PARTIAL", capabilities["codex"]["ACTIVITY_VISIBILITY"] == "PARTIAL")
-    check("GLOBAL_RUNTIME_DISCOVERY_EVIDENCE_STATES",
-        capabilities["opencode"]["GLOBAL_RUNTIME_DISCOVERY"] == "SUPPORTED" and
-        capabilities["codex"]["GLOBAL_RUNTIME_DISCOVERY"] == "SUPPORTED")
-    check("CODEX_ASK_ADAPTABLE", capabilities["codex"]["ASK"] == "ADAPTABLE")
+    check("CAPABILITY_CONTRACT_COMPLETE", set(capabilities) == {"opencode"} and
+          set(capabilities["opencode"]) == EXPECTED_CAPABILITIES and
+          all(state in {"SUPPORTED", "ADAPTABLE", "PARTIAL", "GAP", "NOT_NEEDED"} for state in capabilities["opencode"].values()))
+    check("GLOBAL_RUNTIME_DISCOVERY_EVIDENCE_STATES", capabilities["opencode"]["GLOBAL_RUNTIME_DISCOVERY"] == "SUPPORTED")
 
     protected_paths = ("olympus/**", ".codex/**", "CODEX.md", "scripts/render_harnesses.py")
     protected = True
@@ -305,15 +291,25 @@ def main(argv: list[str] | None = None) -> int:
             if role in {"kael", "kovan"} and resource in {"olympus/**", "scripts/render_harnesses.py"}:
                 continue
             protected = protected and f'resource: "{resource}"\n    effect: deny' in header
-    check("OPENCODE_RUNTIME_AND_CODEX_HARD_DENY", protected)
-    check("CODEX_CORE_SOURCE_READ_ONLY_POLICY", all(codex_config["permissions"][profile]["filesystem"][":workspace_roots"].get(path) == "read" for profile in ("olympus-project", "olympus-readonly") for path in ("olympus", "scripts/render_harnesses.py")))
+    check("OPENCODE_RUNTIME_AND_LEGACY_ENGINE_HARD_DENY", protected)
 
     spec = importlib.util.spec_from_file_location("olympus_renderer", RENDERER)
     if spec is None or spec.loader is None:
         raise AssertionError("renderer could not be imported")
     renderer = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(renderer)
-    # Verify canonical testing guidance reaches both root adapters, not just their templates.
+    root_config = (ROOT / "opencode.jsonc").read_text(encoding="utf-8")
+    root_agent = re.search(r'(?m)^\s*"default_agent"\s*:\s*"([^"]+)"', root_config)
+    root_model = re.search(r'(?m)^\s*"model"\s*:\s*"([^"]+)"', root_config)
+    kael_model = renderer.role_model(models, "kael")[0]
+    check(
+        "ROOT_DEFAULT_MODEL_MATCHES_KAEL_CORE",
+        root_agent is not None
+        and root_agent.group(1) == "kael"
+        and root_model is not None
+        and root_model.group(1) == kael_model,
+    )
+    # Verify canonical testing guidance reaches the OpenCode root adapter, not just its template.
     tfr_section = renderer.focused_testing_policy(ROOT)
     check("TFR_CANONICAL_POLICY_ONCE", routing.count("## TFR — risk-based focused testing") == 1)
     check("TFR_CONTRACT_AND_EVIDENCE_GATES", all(term in tfr_section for term in (
@@ -360,65 +356,40 @@ def main(argv: list[str] | None = None) -> int:
         "defects in OlympusAgents' own integration remain product defects",
     )))
     check("TFR_ROOT_TEMPLATES_SINGLE_TOKEN",
-          (ROOT / "olympus/harnesses/opencode/agent-prompts/kael.md").read_text(encoding="utf-8").count("{{tfr_policy}}") == 1
-          and (ROOT / "olympus/harnesses/codex/root.md").read_text(encoding="utf-8").count("{{tfr_policy}}") == 1)
-    outputs = renderer.outputs_for(ROOT, "all")
-    check("TFR_BOTH_ADAPTERS_FROM_SAME_CORE",
-          tfr_section in outputs[ROOT / ".opencode/agents/kael.md"]
-          and tfr_section in outputs[ROOT / "CODEX.md"]
-          and kael_prompt.count(tfr_section) == 1
-          and (ROOT / "CODEX.md").read_text(encoding="utf-8").count(tfr_section) == 1)
+          (ROOT / "olympus/harnesses/opencode/agent-prompts/kael.md").read_text(encoding="utf-8").count("{{tfr_policy}}") == 1)
+    outputs = renderer.outputs_for(ROOT, "opencode")
+    check("TFR_OPENCODE_ADAPTER_FROM_CORE",
+          tfr_section in outputs[ROOT / ".opencode/agents/kael.md"] and
+          kael_prompt.count(tfr_section) == 1)
+    check("CAPABILITY_DOC_MATCHES_RENDERER",
+          renderer.capability_doc(capabilities) ==
+          (ROOT / "docs/HARNESS-CAPABILITIES.md").read_text(encoding="utf-8"))
     managed = set(outputs)
     before = snapshot_outputs(managed)
-    if safe_root_read_only:
-        shared_capabilities = ROOT / "docs" / "HARNESS-CAPABILITIES.md"
-        worktree_setup = ROOT / ".opencode" / "scripts" / "worktree-setup.ps1"
-        print(f"ROOT_MANAGED_OUTPUT_COUNT {len(managed)}")
-        report_output_snapshot("ROOT_MANAGED_OUTPUT_BEFORE", before)
-        check(
-            "SAFE_ROOT_ALL_OUTPUT_COVERAGE",
-            len(managed) == 28
-            and shared_capabilities in managed
-            and worktree_setup in managed,
-        )
-        root_render_blocked = False
-        try:
-            run_renderer("render", "all", ROOT, safe_root_read_only=True)
-        except AssertionError as error:
-            root_render_blocked = str(error) == "SAFE_ROOT_RENDER_FORBIDDEN"
-        check("SAFE_ROOT_RENDER_GUARD", root_render_blocked)
+    print(f"ROOT_MANAGED_OUTPUT_COUNT {len(managed)}")
+    report_output_snapshot("ROOT_MANAGED_OUTPUT_BEFORE", before)
+    check(
+        "SAFE_ROOT_OPENCODE_OUTPUT_COVERAGE",
+        len(managed) == 15
+        and ROOT / ".opencode/scripts/worktree-setup.ps1" in managed,
+    )
+    root_render_blocked = False
+    try:
+        run_renderer("render", "opencode", ROOT)
+    except AssertionError as error:
+        root_render_blocked = str(error) == "SAFE_ROOT_RENDER_FORBIDDEN"
+    check("SAFE_ROOT_RENDER_GUARD", root_render_blocked)
 
-        opencode_check = run_renderer("check", "opencode", ROOT, safe_root_read_only=True)
-        if opencode_check.stdout:
-            print(opencode_check.stdout, end="" if opencode_check.stdout.endswith("\n") else "\n")
-        codex_check = run_renderer("check", "codex", ROOT, safe_root_read_only=True)
-        if codex_check.stdout:
-            print(codex_check.stdout, end="" if codex_check.stdout.endswith("\n") else "\n")
-        all_check = run_renderer("check", "all", ROOT, safe_root_read_only=True)
-        if all_check.stdout:
-            print(all_check.stdout, end="" if all_check.stdout.endswith("\n") else "\n")
-        after = snapshot_outputs(managed)
-        print(f"ROOT_MANAGED_OUTPUT_COUNT_AFTER {len(after)}")
-        report_output_snapshot("ROOT_MANAGED_OUTPUT_AFTER", after)
-        checks_succeeded = all(result.returncode == 0 for result in (opencode_check, codex_check, all_check))
-        checks_read_only = all(
-            "read-only" in result.stdout for result in (opencode_check, codex_check, all_check)
-        )
-        check("RENDER_OPENCODE_COMMAND", opencode_check.returncode == 0)
-        check("RENDER_CODEX_COMMAND", codex_check.returncode == 0)
-        check("RENDER_ALL_COMMAND", all_check.returncode == 0)
-        check("SAFE_ROOT_HASH_MTIME_UNCHANGED", before == after)
-        check("CHECK_MODE_READ_ONLY", checks_succeeded and checks_read_only and before == after)
-    else:
-        first = run_renderer("render", "all")
-        check("RENDER_ALL_DETERMINISTIC", first.returncode == 0 and "wrote 0 changed output(s)" in first.stdout)
-        second = run_renderer("render", "all")
-        check("SECOND_RENDER_ZERO_DIFF", second.returncode == 0 and "wrote 0 changed output(s)" in second.stdout)
-        check("RENDER_OPENCODE_COMMAND", run_renderer("check", "opencode").returncode == 0)
-        check("RENDER_CODEX_COMMAND", run_renderer("check", "codex").returncode == 0)
-        readonly = run_renderer("check", "all")
-        after = snapshot_outputs(managed)
-        check("CHECK_MODE_READ_ONLY", readonly.returncode == 0 and before == after and "read-only" in readonly.stdout)
+    opencode_check = run_renderer("check", "opencode", ROOT)
+    if opencode_check.stdout:
+        print(opencode_check.stdout, end="" if opencode_check.stdout.endswith("\n") else "\n")
+    after = snapshot_outputs(managed)
+    print(f"ROOT_MANAGED_OUTPUT_COUNT_AFTER {len(after)}")
+    report_output_snapshot("ROOT_MANAGED_OUTPUT_AFTER", after)
+    check("RENDER_OPENCODE_COMMAND", opencode_check.returncode == 0)
+    check("SAFE_ROOT_HASH_MTIME_UNCHANGED", before == after)
+    check("CHECK_MODE_READ_ONLY", opencode_check.returncode == 0 and
+          "read-only" in opencode_check.stdout and before == after)
 
     temp_base = Path.home() / "AppData" / "Local" / "Temp" / "opencode"
     if not temp_base.is_dir():
@@ -428,36 +399,87 @@ def main(argv: list[str] | None = None) -> int:
         shutil.copytree(ROOT / "olympus", fixture / "olympus")
         (fixture / "scripts").mkdir()
         shutil.copy2(RENDERER, fixture / "scripts" / RENDERER.name)
-        rendered = run_renderer("render", "all", fixture, safe_root_read_only=safe_root_read_only)
+        fixture_models = fixture / "olympus/core/models.toml"
+        original_models = fixture_models.read_text(encoding="utf-8")
+        fixture_models.write_text(
+            original_models.replace(
+                'opencode = "openai/gpt-6.1-sol"',
+                'opencode = "openai/gpt-6.1-sol"\ncodex = "openai/gpt-6.1-sol"',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        try:
+            renderer.checked_sources(fixture)
+            codex_model_rejected = False
+        except renderer.RenderError as error:
+            codex_model_rejected = "Codex model mapping is unsupported" in str(error)
+        check("CODEX_MODEL_SOURCE_REJECTED_CLEARLY", codex_model_rejected)
+        fixture_models.write_text(original_models, encoding="utf-8")
+
+        fixture_capabilities = fixture / "olympus/harnesses/capabilities.toml"
+        original_capabilities = fixture_capabilities.read_text(encoding="utf-8")
+        fixture_capabilities.write_text(original_capabilities + '\n[codex]\nDENY = "GAP"\n', encoding="utf-8")
+        try:
+            renderer.checked_sources(fixture)
+            codex_capabilities_rejected = False
+        except renderer.RenderError as error:
+            codex_capabilities_rejected = "Codex capability table is unsupported" in str(error)
+        check("CODEX_CAPABILITY_SOURCE_REJECTED_CLEARLY", codex_capabilities_rejected)
+        fixture_capabilities.write_text(original_capabilities, encoding="utf-8")
+
+        unsupported_selectors_rejected = True
+        for selector in ("codex", "all"):
+            try:
+                renderer.outputs_for(fixture, selector)
+            except renderer.RenderError as error:
+                unsupported_selectors_rejected = unsupported_selectors_rejected and (
+                    "unsupported harness selector" in str(error)
+                )
+            else:
+                unsupported_selectors_rejected = False
+        check("LEGACY_SELECTORS_REJECTED_CLEARLY", unsupported_selectors_rejected)
+        rendered = run_renderer("render", "opencode", fixture)
         check("FIXTURE_RENDER", rendered.returncode == 0)
-        fixture_second_render = run_renderer("render", "all", fixture, safe_root_read_only=safe_root_read_only)
+        fixture_second_render = run_renderer("render", "opencode", fixture)
         check(
             "FIXTURE_SECOND_RENDER_ZERO_DIFF",
             fixture_second_render.returncode == 0 and "wrote 0 changed output(s)" in fixture_second_render.stdout,
         )
-        # A change to Core must invalidate both adapters until they are re-rendered.
+        fixture_doc = fixture / "docs" / "HARNESS-CAPABILITIES.md"
+        expected_doc = renderer.capability_doc(capabilities)
+        check("FIXTURE_CAPABILITY_DOC_RENDERED", fixture_doc.read_text(encoding="utf-8") == expected_doc)
+        fixture_doc.write_text(expected_doc + "\nmanual drift\n", encoding="utf-8")
+        doc_check = run_renderer("check", "opencode", fixture)
+        check("CAPABILITY_DOC_DRIFT_DETECTED", doc_check.returncode == 1 and
+              "DRIFT drift: docs/HARNESS-CAPABILITIES.md" in doc_check.stdout and
+              fixture_doc.read_text(encoding="utf-8") == expected_doc + "\nmanual drift\n")
+        doc_restore = run_renderer("render", "opencode", fixture)
+        check("CAPABILITY_DOC_RENDER_RESTORES_OUTPUT", doc_restore.returncode == 0 and
+              fixture_doc.read_text(encoding="utf-8") == expected_doc)
+        # A Core change must invalidate generated OpenCode output until re-rendered.
         fixture_routing = fixture / "olympus" / "policies" / "routing.md"
         original_routing = fixture_routing.read_text(encoding="utf-8")
         fixture_routing.write_text(original_routing.replace("## TFR — risk-based focused testing", "## TFR — risk-based focused testing\n\nTFR_FIXTURE_POLICY_CHANGE", 1), encoding="utf-8")
-        tfr_opencode_check = run_renderer("check", "opencode", fixture, safe_root_read_only=safe_root_read_only)
-        tfr_codex_check = run_renderer("check", "codex", fixture, safe_root_read_only=safe_root_read_only)
-        check("TFR_CORE_DRIFT_INVALIDATES_BOTH_ROOT_OUTPUTS",
+        tfr_opencode_check = run_renderer("check", "opencode", fixture)
+        check("TFR_CORE_DRIFT_INVALIDATES_OPENCODE_ROOT_OUTPUT",
               tfr_opencode_check.returncode == 1
-              and "DRIFT drift: .opencode/agents/kael.md" in tfr_opencode_check.stdout
-              and tfr_codex_check.returncode == 1
-              and "DRIFT drift: CODEX.md" in tfr_codex_check.stdout)
+              and "DRIFT drift: .opencode/agents/kael.md" in tfr_opencode_check.stdout)
         fixture_routing.write_text(original_routing, encoding="utf-8")
 
         drifted = fixture / ".opencode" / "agents" / "kael.md"
         drifted.write_text(drifted.read_text(encoding="utf-8") + "\nmanual drift\n", encoding="utf-8")
-        drift_check = run_renderer("check", "opencode", fixture, safe_root_read_only=safe_root_read_only)
+        drift_check = run_renderer("check", "opencode", fixture)
         check("MANUAL_DRIFT_DETECTED", drift_check.returncode == 1 and "DRIFT drift: .opencode/agents/kael.md" in drift_check.stdout)
-        restored = run_renderer("render", "opencode", fixture, safe_root_read_only=safe_root_read_only)
+        restored = run_renderer("render", "opencode", fixture)
         check("DRIFT_RENDER_RESTORES_OUTPUT", restored.returncode == 0)
-        missing = fixture / "CODEX.md"
+        missing = fixture / ".opencode" / "scripts" / "worktree-setup.ps1"
         missing.unlink()
-        missing_check = run_renderer("check", "codex", fixture, safe_root_read_only=safe_root_read_only)
-        check("MISSING_GENERATED_OUTPUT_DETECTED", missing_check.returncode == 1 and "DRIFT missing: CODEX.md" in missing_check.stdout)
+        missing_check = run_renderer("check", "opencode", fixture)
+        check("MISSING_GENERATED_OUTPUT_DETECTED", missing_check.returncode == 1 and
+              "DRIFT missing: .opencode/scripts/worktree-setup.ps1" in missing_check.stdout)
+        check("MISSING_GENERATED_OUTPUT_RESTORED",
+              run_renderer("render", "opencode", fixture).returncode == 0)
 
         retired_agent = fixture / ".opencode" / "agents" / "aegis.md"
         retired_command = fixture / ".opencode" / "commands" / "maintain.md"
@@ -465,12 +487,10 @@ def main(argv: list[str] | None = None) -> int:
         retired_command.parent.mkdir(parents=True, exist_ok=True)
         retired_command.write_text(f"<!-- {GENERATED_MARKER} -->\n", encoding="utf-8")
         retired_snapshot = snapshot_outputs((retired_agent, retired_command))
-        retired_check = run_renderer("check", "opencode", fixture, safe_root_read_only=safe_root_read_only)
-        retired_render = run_renderer("render", "opencode", fixture, safe_root_read_only=safe_root_read_only)
-        check("RETIRED_OUTPUTS_FAIL_CLOSED", retired_check.returncode == 1 and
-              "DRIFT retired output: .opencode/agents/aegis.md" in retired_check.stdout and
-              "DRIFT retired output: .opencode/commands/maintain.md" in retired_check.stdout and
-              retired_render.returncode == 2 and snapshot_outputs((retired_agent, retired_command)) == retired_snapshot)
+        retired_check = run_renderer("check", "opencode", fixture)
+        retired_render = run_renderer("render", "opencode", fixture)
+        check("RETIRED_OUTPUTS_NOT_AUTOMATICALLY_REMOVED", retired_check.returncode == 0 and
+              retired_render.returncode == 0 and snapshot_outputs((retired_agent, retired_command)) == retired_snapshot)
 
     print("OLYMPUS_HARNESS_CORE_QUALIFICATION: PASS")
     return 0

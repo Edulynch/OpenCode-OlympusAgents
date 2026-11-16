@@ -9,7 +9,7 @@ Start with the icon-first [README](../README.md) for quick commands and task exa
 | First install and removal | [README](../README.md) and [installation guide](INSTALLATION.md) | The README has the two first-run commands; the guide explains supported platforms, parameters, safeguards, and troubleshooting. |
 | Using the agents, task modes, and prompt examples | [Workflow guide](WORKFLOWS.md) | The README shows the first task; this guide owns the operator-facing NORMAL/FAST and experimental modifier explanations. Canonical behavior stays in Core. |
 | Olympus roles, routing, authority, and policies | [Olympus Core](../olympus/README.md) | Edit the canonical Core or adapter source when behavior changes. Generated harness files are outputs. |
-| Harness capabilities and support status | [Capability source](../olympus/harnesses/capabilities.toml), [capability matrix](HARNESS-CAPABILITIES.md), and [Codex compatibility policy](CODEX-COMPATIBILITY.md) | The TOML file owns capability data; the rendered matrix is a read-only view. Codex remains at its documented frozen baseline. |
+| Harness capabilities and support status | [Capability source](../olympus/harnesses/capabilities.toml) and [OpenCode capability contract](HARNESS-CAPABILITIES.md) | OpenCode is the only currently supported Olympus runtime. |
 | Feature requirements and evidence | [`specs/`](../specs/README.md) | Keep implemented and retrospective contracts there. `specs/future/` is a proposal register, not implementation authority. |
 | Spec Kit setup and local customizations | [Spec Kit audit](../.specify/README.md), [constitution](../.specify/memory/constitution.md), and [template overrides](../.specify/templates/overrides/) | Spec Kit stays the specification workflow. The local audit records its version and update decision. |
 | Release history | [Changelog](../CHANGELOG.md) and the dated release records below | Release documents preserve what shipped and the evidence known at that time; they do not describe a newer release. |
@@ -19,11 +19,10 @@ Issue #91 keeps documentation versioned in this repository. Enabling or publishi
 
 ## Current guidance and release records
 
-The files below include the 10 documents from the prior governance inventory (nine historical top-level entries plus the operational issue ledger), the v0.5.0 qualification record, the v0.6.0 and v0.6.1 release notes, the v0.7.0 release record, and the operator workflow guide. No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
+This index covers current guidance, dated release records, and the operator workflow guide. No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
 
 | Document | Purpose and audience | State, relationship, and incoming references | Proposed owner |
 | --- | --- | --- | --- |
-| [CODEX-COMPATIBILITY.md](CODEX-COMPATIBILITY.md) | Frozen Codex support contract and evidence limits for contributors | **Vigente.** Canonical Codex compatibility policy; linked by README, constitution, and contributor guidance. Historical experiments are indexed below. | Repository maintainers |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Architecture, contribution, installation details, qualification, and release process | **Vigente.** Canonical contributor and development guide; links the Issue #8 historical evidence. | Repository maintainers |
 | [HARNESS-CAPABILITIES.md](HARNESS-CAPABILITIES.md) | Operator-facing capability matrix | **Vigente, generated.** Rendered from `olympus/harnesses/capabilities.toml`; edit the source and use the existing renderer. | Core maintainers (source); renderer-owned output |
 | [HARNESSES.md](HARNESSES.md) | Harness map and installation/output reference | **Vigente.** Maintainer and contributor reference; Core and the renderer define behavior. Historical evaluations link to this page. | Repository maintainers |
@@ -45,15 +44,15 @@ These 7 pages moved from `docs/` to `docs/history/`. Their decisions, status sta
 
 | Move mapping: `docs/<name>` → `docs/history/<name>` | Purpose, state, and relationship | Incoming references | Proposed owner |
 | --- | --- | --- | --- |
-| [CODEX-EXPERIMENT.md](history/CODEX-EXPERIMENT.md) | **Histórico.** Original harness-comparison notes; current support policy lives in CODEX-COMPATIBILITY and DEVELOPMENT. | Evidence acquisition snapshot | Repository maintainers |
-| [CODEX-EXPERIMENT-STATUS.md](history/CODEX-EXPERIMENT-STATUS.md) | **Histórico.** Experiment status snapshot; its current Codex status is superseded by CODEX-COMPATIBILITY and DEVELOPMENT. | Evidence acquisition snapshot | Repository maintainers |
+| [CODEX-EXPERIMENT.md](history/CODEX-EXPERIMENT.md) | **Histórico.** Original harness-comparison notes and the evidence recorded at that time. | Evidence acquisition snapshot | Repository maintainers |
+| [CODEX-EXPERIMENT-STATUS.md](history/CODEX-EXPERIMENT-STATUS.md) | **Histórico.** Experiment status snapshot, preserved as recorded. | Evidence acquisition snapshot | Repository maintainers |
 | [HARNESS-EVALUATION.md](history/HARNESS-EVALUATION.md) | **Histórico.** Earlier evidence ledger, retained with its original qualifications; it is not the completed Phase 12 results ledger. | Evidence acquisition snapshot | Repository maintainers |
-| [DEFECT-PHASE11-CASE-E-ROUTING.md](history/DEFECT-PHASE11-CASE-E-ROUTING.md) | **Histórico, cerrado.** Bounded Case E diagnosis and correction; the fixture instructions retain a link to this record. | Phase 11 RUNME; evidence acquisition snapshot | Repository maintainers |
+| [DEFECT-PHASE11-CASE-E-ROUTING.md](history/DEFECT-PHASE11-CASE-E-ROUTING.md) | **Histórico, cerrado.** Bounded Case E diagnosis and correction; original fixture instructions remain at the immutable baseline. | Immutable Phase 11 baseline; evidence acquisition snapshot | Repository maintainers |
 | [ISSUE-8-CHECKPOINT-RESUME.md](history/ISSUE-8-CHECKPOINT-RESUME.md) | **Histórico.** Evidence for the exact same-session continuation; it does not resolve the later open compaction report. | DEVELOPMENT; evidence acquisition snapshot | Repository maintainers |
 | [PHASE12-CROSS-HARNESS-PLAN.md](history/PHASE12-CROSS-HARNESS-PLAN.md) | **Histórico, cerrado.** Frozen plan and constraints; the results ledger supersedes its earlier no-trial status. | Phase 12 results ledger | Repository maintainers |
 | [PHASE12-CROSS-HARNESS-RESULTS.md](history/PHASE12-CROSS-HARNESS-RESULTS.md) | **Histórico, cerrado.** Six-execution Phase 12 results and limits; authoritative for that evaluation. | Changelog, roadmap, Phase 12 plan | Repository maintainers |
 
-No exact duplicate documents were removed. The experiment and evaluation records overlap with current compatibility guidance, but retain distinct historical evidence. The roadmap remains a status summary; it does not replace specifications or release records.
+The experiment and evaluation records retain distinct historical evidence. The roadmap remains a status summary; it does not replace specifications or release records.
 
 ## Related repository documentation
 
@@ -66,6 +65,6 @@ No exact duplicate documents were removed. The experiment and evaluation records
 
 When an accepted change alters installation, runtime behavior, authority, harness support, or release procedure, update the existing canonical guide or contract for that subject. Record a release in the existing changelog and dated release record when one is made. Preserve completed decisions in `docs/history/` and link any replacement to the earlier rationale. Small code changes do not need a new page, ADR framework, or Wiki copy.
 
-Run `python -B scripts/check_docs.py` after editing Markdown. It checks local links, heading anchors, and index coverage in tracked and non-ignored untracked Markdown at the repository root and under `docs/`, `specs/`, `tests/`, `olympus/`, and `.specify/`. It skips generated harness adapter copies and the synthetic fixture trees `tests/codex/fixtures/` and `tests/phase11-integrated-routing/fixtures/`. It does not fetch external URLs; verify those when their target matters. GitHub Actions runs the same local check.
+Run `python -B scripts/check_docs.py` after editing Markdown. It checks local links, heading anchors, and index coverage in tracked and non-ignored untracked Markdown at the repository root and under `docs/`, `specs/`, `tests/`, `olympus/`, and `.specify/`, including fixture Markdown. It does not fetch external URLs; verify those when their target matters. GitHub Actions runs the same local check.
 
 The index gate emits a fixed **NOTICE for 6 unversioned historical attachment links** in the v0.4.9 evidence report. Those temporary logs and cleanup artifacts are not part of the Git baseline, so those exact links are not validated; some files may remain in a local checkout. All other missing document targets fail the gate, including a new broken link in that same report. The notice does not exclude the evidence report or any Gitleaks scan scope.

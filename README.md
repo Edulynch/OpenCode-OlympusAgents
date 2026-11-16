@@ -36,8 +36,6 @@ After installation, open OpenCode in your project and try a prompt:
 
 The installer is **global and OpenCode-only**, regardless of the current directory. There are no project or harness menus. It selects a published, immutable stable release, then runs the installer and archive from that exact tag. GitHub's immutability flag is not independent cryptographic signature verification. Installation sets Kael as the global default, installs the per-user `olympus` command, and adds only its `bin` folder to the user PATH.
 
-v0.8.0 makes public installation global/OpenCode-only and selects Kael through a reversible default-agent receipt. Configuration previews and recovery preserve that config and later user choices.
-
 ```powershell
 & ([scriptblock]::Create((irm 'https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1')))
 ```
@@ -102,11 +100,11 @@ olympus uninstall
 | ⚡ **Install / remove** | [Scopes, direct parameters and troubleshooting](docs/INSTALLATION.md) |
 | 🎯 **Use Olympus** | [Team, NORMAL/FAST, prompt examples and task modifiers](docs/WORKFLOWS.md) |
 | 🛠️ **CLI** | [Commands, model configuration, and diagnostics](docs/INSTALLATION.md#olympus-cli) |
-| 🧩 **Compatibility** | [Harness capabilities](docs/HARNESS-CAPABILITIES.md) · [Codex limitations](docs/CODEX-COMPATIBILITY.md) |
+| 🧩 **OpenCode support** | [Current capability contract](docs/HARNESS-CAPABILITIES.md) · [Installation and safety](docs/INSTALLATION.md) |
 | 🧑‍💻 **Contribute** | [Development](docs/DEVELOPMENT.md) · [Roadmap](docs/ROADMAP.md) · [Worktrees](docs/WORKTREES.md) |
 | 📦 **Releases** | [Latest stable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) · [All releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Changelog](CHANGELOG.md) |
 | 📖 **All docs** | [Documentation index](docs/README.md) · [License](LICENSE) |
 
-**🚦 Support:** OpenCode V2 is in **ACTIVE DEVELOPMENT**; Codex is in **FROZEN COMPATIBILITY**. Windows is the qualified installer platform; other native installers and complete runtime parity are not claimed. [Details →](docs/HARNESSES.md)
+**🚦 Support:** Olympus currently supports OpenCode only. The public installer is global/OpenCode-only; Windows is the qualified installer platform. Static checks do not establish every native runtime behavior. [Details →](docs/HARNESSES.md)
 
 <sub>Olympus is an independent orchestration system, not a fork. The specialized-team idea was informed in part by [codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).</sub>

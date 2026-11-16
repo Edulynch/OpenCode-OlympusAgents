@@ -1,6 +1,6 @@
 # Phase 12 Cross-Harness Plan
 
-**Authority and status.** This remains the authoritative reduced Phase 12 plan; its frozen design is preserved. It supersedes the historical six-workload scope recorded on `qualify/overnight-evidence-20261003-eff88d7f`, which is not restored or copied wholesale. The no-trials status records the point when this plan was frozen, not current phase status. Phase 12 is now **CLOSED**; see the [results ledger](PHASE12-CROSS-HARNESS-RESULTS.md).
+**Authority and status.** This remains the authoritative reduced Phase 12 plan; its frozen design is preserved. The retired Phase 11 trial fixture referenced below remains at the [immutable baseline path](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/fixtures/simple/message.txt). This plan supersedes the historical six-workload scope recorded on `qualify/overnight-evidence-20261003-eff88d7f`, which is not restored or copied wholesale. The no-trials status records the point when this plan was frozen, not current phase status. Phase 12 is now **CLOSED**; see the [results ledger](PHASE12-CROSS-HARNESS-RESULTS.md).
 
 ## 1. Purpose and comparison limits
 

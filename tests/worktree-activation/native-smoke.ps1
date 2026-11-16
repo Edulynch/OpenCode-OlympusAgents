@@ -93,7 +93,7 @@ try {
     $wrapper = "@echo off`r`n`"$pwsh`" -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n"
     [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), $wrapper, [Text.Encoding]::ASCII)
     $env:PATH = $mockBin + [IO.Path]::PathSeparator + $originalPath
-    $install = Run-Script (Join-Path $source 'install.ps1') @('-Target',$main,'-Harness','opencode','-SourceRoot',$source)
+    $install = Run-Script (Join-Path $source 'scripts/bootstrap.ps1') @('-Target',$main,'-Harness','opencode')
     Check 'NATIVE_FIXTURE_PROJECT_INSTALL' ($install.Code -eq 0) $install.Text
     $env:PATH = $originalPath
 

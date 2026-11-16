@@ -1,5 +1,14 @@
 # CLI portátil Olympus — quickstart (v0.5.0 candidate)
 
+> **Guía histórica; no usar como instrucciones actuales.** Este candidato describe CLI
+> y rutas de instalación anteriores al clean break. Olympus actualmente admite
+> OpenCode solamente; la instalación/update/uninstall pública es global/OpenCode-only,
+> sin selectores de proyecto, harness o versión. Los ejemplos `codex`, `all` y de
+> instalación pública project que siguen son evidencia histórica, no comandos
+> soportados. Project-scoped OpenCode overrides, `config list/check/apply/recover`,
+> `status` y read-only `doctor` siguen siendo operaciones distintas; consulta el
+> [contrato vigente de CLI](contracts/cli.md) y la [guía actual de instalación](../../docs/INSTALLATION.md).
+
 **Alcance del candidato**: Slice A (consulta) y B (edición canónica) aceptadas en Windows/Linux; C1–C6 para instalaciones **project** con preview de asignaciones también antes de `--execute`, doctor y routing de install/uninstall sólo donde estén cualificados; C7 para lectura global y C8 (#122) para apply/recovery explícito de **OpenCode global**. C8 está implementado en esta rama, pero pendiente de review/CI hosted y cualificación independiente; las pruebas locales usan raíces sintéticas en Windows y no acreditan perfiles reales, Linux/macOS ni runtime. macOS **NOT VERIFIED**. No se declara cualificación genérica de instaladores ni runtime fuera de la matriz de [v0.5.0](../../docs/RELEASE-v0.5.0.md). [Evidencia histórica de A/B/C4](tasks.md).
 
 ## Requisitos y contexto

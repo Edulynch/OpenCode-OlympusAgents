@@ -242,40 +242,39 @@ def _write_atomic(path: Path, content: bytes) -> None:
 def _prepare_installed_update(source: Path, role: str, model: str, effort: str,
                               scope: str, target: Path | None):
     from . import config_apply, global_readonly
+    from .cli import load_renderer
 
     try:
+        renderer = load_renderer(source)
         if scope == "project":
             if target is None:
                 raise UserConfigError("Project override requires a managed project target.")
-            root, manifest_relative = target, ".opencode/orchestrator-install.json"
-            raw_manifest, issue = config_apply._read_target_file(root, manifest_relative)
-            if issue or raw_manifest is None:
+            root = target
+            record, raw_manifest, blockers = config_apply._manifest_record(root)
+            if blockers or record is None or raw_manifest is None:
                 raise UserConfigError("The project Olympus ownership manifest is unavailable; no configuration was changed.")
+            if record.relative_path != ".opencode/orchestrator-install.json":
+                raise UserConfigError("The project Olympus ownership manifest is unsupported; no configuration was changed.")
+            manifest = record.data
+            manifest_relative = record.relative_path
+            expected = config_apply._render_managed_outputs(source, renderer, ("opencode",))["opencode"]
+            _, inventory_issues = config_apply._manifest_entries(record, set(expected))
+            if inventory_issues:
+                raise UserConfigError("The project Olympus inventory is unsupported; no configuration was changed.")
         else:
             root = global_readonly.resolve_roots(("opencode",))["opencode"]
             manifest_relative = _MANIFEST
             raw_manifest = global_readonly._read(root, manifest_relative)
             if raw_manifest is None:
                 return None
+            expected = global_readonly._expected(source, renderer, ("opencode",))["opencode"]
+            manifest, _ = global_readonly._parse_manifest_bytes(raw_manifest, "opencode", expected)
     except global_readonly.GlobalFault as error:
         if error.reason == "global_path_unavailable" and scope == "global":
             return None
         raise UserConfigError(str(error)) from error
-
-    try:
-        manifest = json.loads(raw_manifest.decode("utf-8"), object_pairs_hook=_unique_object)
     except (ValueError, UnicodeError) as error:
         raise UserConfigError("The installed OpenCode ownership manifest is invalid; no files were changed.") from error
-    expected_scope = "project" if scope == "project" else "global"
-    if not isinstance(manifest, dict):
-        raise UserConfigError("The installed OpenCode ownership manifest is unsupported; no files were changed.")
-    harnesses = manifest.get("installed_harnesses", ["opencode"] if scope == "project" else None)
-    if (manifest.get("schema_version") != 1
-            or (manifest.get("scope") != "global" if scope == "global" else manifest.get("scope", "project") != "project")
-            or not isinstance(harnesses, list) or "opencode" not in harnesses
-            or (scope == "global" and harnesses != ["opencode"])
-            or not isinstance(manifest.get("managed_files"), list)):
-        raise UserConfigError("The installed OpenCode ownership manifest is unsupported; no files were changed.")
 
     relative = f"agents/{role}.md"
     owned_relative = f".opencode/{relative}" if scope == "project" else relative
@@ -362,6 +361,12 @@ def set_override(source: Path, role: str, field: str, value: str,
             record, _, blockers = config_apply._manifest_record(target)
             if blockers or record is None or "opencode" not in record.installed_harnesses:
                 raise UserConfigError("The selected target is not a managed OpenCode project.")
+            from .cli import load_renderer
+
+            expected = config_apply._render_managed_outputs(source, load_renderer(source), ("opencode",))["opencode"]
+            _, inventory_issues = config_apply._manifest_entries(record, set(expected))
+            if inventory_issues:
+                raise UserConfigError("The project Olympus inventory is incomplete or unsupported; no configuration was changed.")
             lock = source_edit._acquire_lock(target, create=True)
         except (source_edit.LockError, OSError) as error:
             raise UserConfigError(f"Cannot safely lock the managed project; no configuration was changed: {error}") from error

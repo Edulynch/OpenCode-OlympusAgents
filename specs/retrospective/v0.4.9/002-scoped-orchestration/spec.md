@@ -100,7 +100,7 @@ Las fuentes y traces referenciadas están en E002. No se ejecutó routing intera
 | Behavior / boundary | Evidence or focused check | Class | Status (if executed) |
 |---|---|---|---|
 | Scope, límites y gates de routing | Core policy, adapter config/prompt | Deterministic | NOT RUN |
-| Escenarios A–L y casos sintéticos | `tests/phase11-integrated-routing/qualify.py`, RUNME | Simulated | NOT RUN |
+| Escenarios A–L y casos sintéticos | [qualify.py](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/qualify.py), [RUNME](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/RUNME.md) | Simulated | NOT RUN |
 | Casos archivados OpenCode | Proyecciones B3/C/E2/H/K; ver metadata en EVIDENCE | Real runtime | Observación archivada; no re-ejecutada; no raw export afirmado |
 | Resultado Codex/interactividad/scheduler | Sin traza nativa comparable en Phase 11; otras notas atribuidas | Real runtime | NOT RUN / desconocido |
 

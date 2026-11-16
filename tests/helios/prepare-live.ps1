@@ -35,7 +35,7 @@ foreach ($entry in $facts.GetEnumerator()) {
 & git -C $Target add -- artifact config observations
 & git -C $Target -c user.name=Qualification -c user.email=qualify@example.invalid commit --quiet -m 'fixture: measured oversized report'
 if ($LASTEXITCODE -ne 0) { throw 'fixture commit failed' }
-$output=(& pwsh -NoProfile -File (Join-Path $source 'install.ps1') -SourceRoot $source -Target $Target 2>&1 | Out-String)
+$output=(& pwsh -NoProfile -File (Join-Path $source 'scripts/bootstrap.ps1') -Target $Target 2>&1 | Out-String)
 if ($LASTEXITCODE -ne 0) { throw "fixture installer failed: $output" }
 Write-Output "LIVE_FIXTURE: $Target"
 Write-Output "MEASURED_BASELINE_BYTES: $size"

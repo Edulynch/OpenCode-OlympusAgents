@@ -56,8 +56,6 @@ try {
     $kael = Text '.opencode/agents/kael.md'
     $kovan = Text '.opencode/agents/kovan.md'
     $lifecycle = Text 'olympus/policies/result-lifecycle.md'
-    $codexRoot = Text 'CODEX.md'
-    $codexKovan = Text '.codex/agents/kovan.toml'
     $docs = Text 'docs/DEVELOPMENT.md'
     $gates = Text 'tests/completion-gates/qualify.ps1'
     Check 'RR1_MISSING_NOT_FAILURE' ($kael -match 'MISSING PARENT TOOL OUTPUT != CHILD FAILURE' -and
@@ -113,10 +111,8 @@ try {
         $kael -match 'Eligibility is\s+not an automatic retry')
     Check 'RR22_LEGITIMATE_SMALL_SHELL_BATCH' ($kovan -match 'PowerShell, multiline commands, here-strings, and small coherent batches remain\s+allowed when technically justified' -and
         $kovan -match 'Do not apply a blanket command-length limit\s+or ban shell-based writes')
-    Check 'RR23_CODEX_PARTIAL_MUTATION_SEMANTICS' ($codexRoot -match 'For\s+an interrupted or indeterminate compound mutation, distinguish already-applied\s+from unapplied effects and continue only missing bounded work' -and
-        $codexRoot -match 'never replay the\s+full mutation blindly' -and
-        $codexKovan -match 'prefer native editing where available or small coherent shell batches' -and
-        $codexKovan -match 'reconcile actual file effects and continue only missing bounded work, never blindly replay the full mutation')
+    Check 'RR23_OPENCODE_PARTIAL_MUTATION_SEMANTICS' ($kovan -match 'Treat an interrupted, cancelled, missing-result, or otherwise indeterminate\s+compound write as potentially partially executed\.\s+Reconcile actual\s+repository/file state before continuing; distinguish already-applied targets\s+from unapplied targets, never replay the compound mutation blindly, and\s+continue only the missing bounded work\.' -and
+        $kovan -match 'PowerShell, multiline commands, here-strings, and small coherent batches remain\s+allowed when technically justified')
     Check 'RR24_LIFECYCLE_TWO_RECOVERY_PATHS' ($lifecycle -match 'Reissue the original operation only with positive evidence that it did not execute' -and
         $lifecycle -match 'bounded corrective retry only after the original has a terminal result whose output/effects are reconciled and whose result has been consumed once' -and
         $lifecycle -match 'material acceptance gate has failed' -and

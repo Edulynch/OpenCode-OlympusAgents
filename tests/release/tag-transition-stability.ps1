@@ -6,15 +6,11 @@ $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $genericUrl = 'https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1'
 $installCommand = "& ([scriptblock]::Create((irm '$genericUrl')))"
+$latestReleaseUrl = 'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest'
 
 function Read-ReleaseDocs {
     $paths = @('install.ps1','README.md','CHANGELOG.md','docs/INSTALLATION.md','docs/DEVELOPMENT.md',
-        'docs/ROADMAP.md','docs/WORKFLOWS.md','docs/HARNESS-CAPABILITIES.md','olympus/harnesses/capabilities.toml')
-    foreach ($action in @('install','uninstall')) {
-        foreach ($scope in @('project','global')) {
-            foreach ($harness in @('opencode','codex','all')) { $paths += "$action/$scope/$harness.ps1" }
-        }
-    }
+        'docs/HARNESSES.md','docs/HARNESS-CAPABILITIES.md','olympus/harnesses/capabilities.toml')
     $docs = @{}
     foreach ($path in $paths) { $docs[$path] = [IO.File]::ReadAllText((Join-Path $source $path)) }
     return $docs
@@ -73,6 +69,10 @@ function Get-ChangelogSection([string]$Text, [string]$Version) {
     return $(if ($next.Success) { $tail.Substring(0, $next.Index) } else { $tail })
 }
 
+function Normalize-Documentation([string]$Text) {
+    return [regex]::Replace($Text, '\s+', ' ').Trim()
+}
+
 function Get-DocumentationErrors([hashtable]$Docs, [string]$Version) {
     $issues = [Collections.Generic.List[string]]::new()
     $installer = $Docs['install.ps1']
@@ -94,7 +94,14 @@ function Get-DocumentationErrors([hashtable]$Docs, [string]$Version) {
     if ($section -match '(?i)is not tagged|is already tagged|is already published|do not publish|old v0\.3\.0-beta\.5') {
         $issues.Add('DOC_EPHEMERAL_RELEASE_STATE')
     }
-    if (-not (Test-ReadmeCommands $Docs['README.md'] $Version)) { $issues.Add('DOC_README_IMMUTABLE_ENTRYPOINT_INVALID') }
+    $readme = $Docs['README.md']
+    if (-not (Test-ReadmeCommands $readme $Version) -or
+        -not $readme.Contains('published, immutable') -or
+        $readme -notmatch '(?i)global and OpenCode-only' -or
+        $readme.Contains("/$Version/install-olympus.ps1") -or
+        $readme.Contains("/$Version/uninstall-olympus.ps1")) {
+        $issues.Add('DOC_README_IMMUTABLE_ENTRYPOINT_INVALID')
+    }
     foreach ($token in @('**draft**', '**before publishing**', 'verify its bytes match the tag', 'immutability enabled')) {
         if (-not $Docs['docs/DEVELOPMENT.md'].Contains($token)) {
             $issues.Add('DOC_ASSET_PUBLICATION_PREREQUISITE_MISSING')
@@ -111,70 +118,76 @@ function Get-DocumentationErrors([hashtable]$Docs, [string]$Version) {
         'pending_set','committed','pending_uninstall','default_agent_receipt','VerifyOnly')) {
         if (-not $Docs['docs/INSTALLATION.md'].Contains($token)) { $issues.Add('DOC_INSTALLATION_SAFETY_INCOMPLETE') }
     }
-    foreach ($action in @('install','uninstall')) {
-        foreach ($scope in @('project','global')) {
-            foreach ($harness in @('opencode','codex','all')) {
-                $wrapper = $Docs["$action/$scope/$harness.ps1"]
-                if ($scope -eq 'global' -and $harness -eq 'opencode') {
-                    $valid = if ($action -eq 'install') { $wrapper.Contains($genericUrl) }
-                        else { $wrapper.Contains('uninstall --execute') }
-                    if (-not $valid -or $wrapper -match '-Target|Get-Location|/master/') {
-                        $issues.Add('DOC_WRAPPER_IMMUTABLE_SOURCE_INVALID')
-                    }
-                } else {
-                    $tokens = $null
-                    $errors = $null
-                    $ast = [Management.Automation.Language.Parser]::ParseInput($wrapper, [ref]$tokens, [ref]$errors)
-                    if ($errors.Count -or $ast.EndBlock.Statements.Count -ne 1 -or
-                        $ast.EndBlock.Statements[0] -isnot [Management.Automation.Language.ThrowStatementAst] -or
-                        $wrapper -notmatch 'PUBLIC_(?:UN)?INSTALL_ROUTE_UNSUPPORTED') {
-                        $issues.Add('DOC_WRAPPER_IMMUTABLE_SOURCE_INVALID')
-                    }
-                }
-            }
+    $installationGuide = $Docs['docs/INSTALLATION.md']
+    $pinnedCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$Version/install.ps1')))"
+    if (-not $installationGuide.Contains($installCommand) -or
+        -not $installationGuide.Contains('olympus uninstall') -or
+        -not $installationGuide.Contains($Version) -or
+        -not $installationGuide.Contains($latestReleaseUrl) -or
+        -not $installationGuide.Contains($pinnedCommand) -or
+        $installationGuide.Contains("/$Version/install-olympus.ps1") -or
+        $installationGuide.Contains("/$Version/uninstall-olympus.ps1")) {
+        $issues.Add('DOC_INSTALLATION_ENTRYPOINT_CONTRACT_INCOMPLETE')
+    }
+    $installationContract = Normalize-Documentation ($Docs['docs/INSTALLATION.md'] + ' ' + $Docs['docs/HARNESSES.md'])
+    foreach ($phrase in @(
+        '`schema_version=1`',
+        '`scope=project`',
+        '`installed_harnesses=["opencode"]`',
+        'nonempty `installed_version` and `installed_from_commit`',
+        'current 15-path managed inventory',
+        '`scope=global`, exactly OpenCode',
+        '`installed_version=local` or a release tag',
+        'nonempty `installed_from_commit`',
+        '`default_agent_receipt`',
+        '13 base resources',
+        'manages 14 resources',
+        'Both counts are current formats, not legacy inventories.',
+        'fail closed without conversion, adoption, or deletion',
+        'Use the matching release to remove an unsupported older installation'
+    )) {
+        if ($installationContract.IndexOf($phrase, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            $issues.Add('DOC_INSTALLATION_FORMAT_CONTRACT_INCOMPLETE')
         }
     }
-    # Keep the existing shared capability and frozen-gap gates.
+    foreach ($phrase in @(
+        'The receipt states `pending_set`, `committed`, and `pending_uninstall`',
+        '`VerifyOnly` never writes or approves a pending state',
+        'A missing file means empty',
+        'precedence is project override, global override, then Core defaults'
+    )) {
+        if ($installationContract.IndexOf($phrase, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            $issues.Add('DOC_INSTALLATION_RECOVERY_CONTRACT_INCOMPLETE')
+        }
+    }
+    $capabilitySections = @([regex]::Matches($Docs['olympus/harnesses/capabilities.toml'], '(?m)^\[(?<name>[^\]]+)\][ \t]*\r?$'))
     $states = @{}
-    foreach ($harness in @('opencode','codex')) {
-        $body = [regex]::Match($Docs['olympus/harnesses/capabilities.toml'],
-            '(?ms)^\[' + $harness + '\]\s*\r?\n(?<body>.*?)(?=^\[|\z)').Groups['body'].Value
-        $states[$harness] = @{}
-        foreach ($match in [regex]::Matches($body, '(?m)^\s*(?<name>[A-Z0-9_]+)\s*=\s*"(?<value>SUPPORTED|ADAPTABLE|PARTIAL|GAP|NOT_NEEDED)"')) {
-            $states[$harness][$match.Groups['name'].Value] = $match.Groups['value'].Value
-        }
+    if ($capabilitySections.Count -ne 1) {
+        $issues.Add('DOC_OPENCODE_CAPABILITY_CONTRACT_MISMATCH')
+    } elseif ($capabilitySections[0].Groups['name'].Value -cne 'opencode') {
+        $issues.Add('DOC_OPENCODE_CAPABILITY_CONTRACT_MISMATCH')
     }
-    $rows = @([regex]::Matches($Docs['docs/HARNESS-CAPABILITIES.md'], '(?m)^\| `(?<name>[A-Z0-9_]+)` \| (?<oc>[A-Z_]+) \| (?<cx>[A-Z_]+) \|'))
-    if ($states.opencode.Count -eq 0 -or $rows.Count -ne $states.opencode.Count -or
-        $states.codex.Count -ne $states.opencode.Count) { $issues.Add('DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH') }
-    foreach ($name in $states.opencode.Keys) {
+    foreach ($match in [regex]::Matches($Docs['olympus/harnesses/capabilities.toml'],
+        '(?m)^\s*(?<name>[A-Z0-9_]+)\s*=\s*"(?<value>SUPPORTED|ADAPTABLE|PARTIAL|GAP|NOT_NEEDED)"[ \t]*\r?$')) {
+        $name = $match.Groups['name'].Value
+        if ($states.ContainsKey($name)) { $issues.Add('DOC_OPENCODE_CAPABILITY_CONTRACT_MISMATCH') }
+        $states[$name] = $match.Groups['value'].Value
+    }
+    $capabilityDoc = $Docs['docs/HARNESS-CAPABILITIES.md']
+    $rows = @([regex]::Matches($capabilityDoc, '(?m)^\| `(?<name>[A-Z0-9_]+)` \| (?<state>[A-Z_]+) \|[ \t]*\r?$'))
+    if ($states.Count -eq 0 -or $rows.Count -ne $states.Count -or
+        [regex]::Matches($capabilityDoc, '(?m)^\| Capability \| OpenCode \|[ \t]*\r?$').Count -ne 1) {
+        $issues.Add('DOC_OPENCODE_CAPABILITY_CONTRACT_MISMATCH')
+    }
+    foreach ($name in $states.Keys) {
         $row = @($rows | Where-Object { $_.Groups['name'].Value -ceq $name })
-        if ($row.Count -ne 1 -or $row[0].Groups['oc'].Value -cne $states.opencode[$name] -or
-            $row[0].Groups['cx'].Value -cne $states.codex[$name]) { $issues.Add('DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH') }
-    }
-    foreach ($claim in @('issue #1 remains OPEN',
-        '[#10](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/10) are CLOSED',
-        'Codex DENY and contextual Olympus maintenance remain explicit frozen GAPs')) {
-        if (-not $Docs['docs/ROADMAP.md'].Contains($claim)) { $issues.Add('DOC_KNOWN_CAPABILITY_GAP_MISSING') }
-    }
-    $roadmap = $Docs['docs/ROADMAP.md']
-    if ($roadmap -notmatch '(?i)corrective.{0,120}v0\.4\.2' -or
-        $roadmap -notmatch '(?i)v0\.4\.0.{0,500}(?:no\s+GitHub\s+Release|no\s+release\s+was\s+created)' -or
-        $roadmap -notmatch '(?i)v0\.4\.1.{0,500}(?:no\s+GitHub\s+Release|no\s+release\s+was\s+created)') {
-        $issues.Add('DOC_ROADMAP_RELEASE_HISTORY')
-    }
-    if ($roadmap -notmatch '(?i)\b(?:global[ \t]+discovery|issue)[ \t]+#7\b') { $issues.Add('DOC_KNOWN_CAPABILITY_GAP_MISSING') }
-    $openCodeClaim = '(?i)OpenCode V2[^\r\n]*GLOBAL_RUNTIME_DISCOVERY\s*=\s*`?' +
-        [regex]::Escape([string]$states.opencode['GLOBAL_RUNTIME_DISCOVERY']) + '`?'
-    $codexClaim = '(?i)Codex remains\s+`?' +
-        [regex]::Escape([string]$states.codex['GLOBAL_RUNTIME_DISCOVERY']) + '`?\s+on separately supplied evidence'
-    $workflow = $Docs['docs/WORKFLOWS.md']
-    if ($roadmap -notmatch $openCodeClaim -or $roadmap -notmatch $codexClaim -or
-        ($workflow -match '(?i)OpenCode supports the current contextual maintenance workflow') -ne
-            ($states.opencode['CONTEXTUAL_OLYMPUS_MAINTENANCE'] -eq 'SUPPORTED') -or
-        ($workflow -match '(?i)Codex currently declares it a capability gap') -ne
-            ($states.codex['CONTEXTUAL_OLYMPUS_MAINTENANCE'] -eq 'GAP')) {
-        $issues.Add('DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH')
+        if ($row.Count -ne 1) {
+            $issues.Add('DOC_OPENCODE_CAPABILITY_CONTRACT_MISMATCH')
+            continue
+        }
+        if ($row[0].Groups['state'].Value -cne $states[$name]) {
+            $issues.Add('DOC_OPENCODE_CAPABILITY_CONTRACT_MISMATCH')
+        }
     }
     return @($issues | Sort-Object -Unique)
 }
@@ -197,7 +210,7 @@ foreach ($replacement in @(
     "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/master/install-olympus.ps1')))",
     "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/install-olympus.ps1')))",
     "irm $genericUrl | iex",
-    "$installCommand -Harness codex",
+    "$installCommand -Harness opencode",
     "$installCommand`n$installCommand"
 )) {
     $bad = $docs.Clone()
@@ -205,7 +218,43 @@ foreach ($replacement in @(
     Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
 }
 $bad = $docs.Clone()
+$bad['README.md'] = $bad['README.md'].Replace(
+    $installCommand,
+    $installCommand + "`n" + 'pwsh -NoProfile -File .\install-olympus.ps1 -Project -Here -Harness all')
+Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
+$bad = $docs.Clone()
+$bad['README.md'] += "`n## Alternative setup`n`n" + '```powershell' + "`n" +
+    'pwsh -NoProfile -File .\install-olympus.ps1 -Project -Here -Harness all' + "`n" + '```' + "`n"
+Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
+$bad = $docs.Clone()
+$bad['README.md'] += "`n## Alternative setup`n`n" + '```powershell' + "`n" +
+    "& ([scriptblock]::Create((irm '$genericUrl'))) -Global -Harness all" + "`n" + '```' + "`n"
+Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
+$bad = $docs.Clone()
+$bad['README.md'] = $bad['README.md'].Replace(
+    $installCommand,
+    "& ([scriptblock]::Create((irm 'https://example.invalid/install-olympus.ps1')))")
+Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
+$readmeWithLf = $docs.Clone()
+$readmeWithLf['README.md'] = $readmeWithLf['README.md'].Replace("`r`n", "`n")
+$readmeWithCrLf = $docs.Clone()
+$readmeWithCrLf['README.md'] = $readmeWithLf['README.md'].Replace("`n", "`r`n")
+foreach ($candidate in @($readmeWithLf, $readmeWithCrLf)) {
+    $issues = @(Get-DocumentationErrors $candidate $version)
+    if ($issues.Count) { throw "REGRESSION_README_LINE_ENDINGS_REJECTED: $($issues -join ',')" }
+}
+Write-Output 'REGRESSION_README_ACCEPTS_LF_AND_CRLF PASS'
+$readmeWithProseAndComments = $docs.Clone()
+$readmeWithProseAndComments['README.md'] += "`n## Command references`n`nThe example ``irm $genericUrl | iex`` is descriptive only; see [installer reference](https://example.invalid/install-olympus.ps1).`n`n## Commented example`n`n" +
+    '```powershell' + "`n# irm https://example.invalid/install-olympus.ps1 | iex`n" + '```' + "`n"
+$issues = @(Get-DocumentationErrors $readmeWithProseAndComments $version)
+if ($issues.Count) { throw "REGRESSION_README_PROSE_LINKS_OR_COMMENTS_REJECTED: $($issues -join ',')" }
+Write-Output 'REGRESSION_README_IGNORES_PROSE_LINKS_AND_COMMENTS PASS'
+$bad = $docs.Clone()
 $bad['README.md'] += "`n## Fast Extra`n"
+Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
+$bad = $docs.Clone()
+$bad['README.md'] += "`r`n## Fast Extra`r`n"
 Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
 $bad = $docs.Clone()
 $bad['README.md'] += "`n## Alternative`n" + '```powershell' + "`n$installCommand`n" + '```'
@@ -227,11 +276,11 @@ $bad = $docs.Clone()
 $bad['CHANGELOG.md'] = $bad['CHANGELOG.md'].Replace("## $version", "## $version`n$version is not tagged; do not publish.")
 Assert-Rejected $bad $version 'DOC_EPHEMERAL_RELEASE_STATE'
 $bad = $docs.Clone()
-$bad['install/project/codex.ps1'] += "`nInvoke-WebRequest 'https://example.invalid/unsafe.ps1'"
-Assert-Rejected $bad $version 'DOC_WRAPPER_IMMUTABLE_SOURCE_INVALID'
-$bad = $docs.Clone()
 $bad['docs/INSTALLATION.md'] = $bad['docs/INSTALLATION.md'].Replace('pending_uninstall','omitted')
 Assert-Rejected $bad $version 'DOC_INSTALLATION_SAFETY_INCOMPLETE'
+$bad = $docs.Clone()
+$bad['docs/INSTALLATION.md'] = $bad['docs/INSTALLATION.md'].Replace($latestReleaseUrl, 'https://example.invalid/releases/latest')
+Assert-Rejected $bad $version 'DOC_INSTALLATION_ENTRYPOINT_CONTRACT_INCOMPLETE'
 $bad = $docs.Clone()
 $bad['docs/DEVELOPMENT.md'] = $bad['docs/DEVELOPMENT.md'].Replace('**before publishing**', 'after publishing')
 Assert-Rejected $bad $version 'DOC_ASSET_PUBLICATION_PREREQUISITE_MISSING'
@@ -239,8 +288,13 @@ $bad = $docs.Clone()
 $bad['README.md'] += "`nPrepared for a future release.`n"
 Assert-Rejected $bad $version 'DOC_STALE_PUBLICATION_WARNING'
 $bad = $docs.Clone()
+$bad['docs/HARNESSES.md'] = $bad['docs/HARNESSES.md'].Replace(
+    'Both counts are current formats, not legacy inventories.',
+    'Both counts are legacy inventories.')
+Assert-Rejected $bad $version 'DOC_INSTALLATION_FORMAT_CONTRACT_INCOMPLETE'
+$bad = $docs.Clone()
 $bad['docs/HARNESS-CAPABILITIES.md'] = $bad['docs/HARNESS-CAPABILITIES.md'].Replace(
-    '| `CONTEXTUAL_OLYMPUS_MAINTENANCE` | SUPPORTED | GAP |',
-    '| `CONTEXTUAL_OLYMPUS_MAINTENANCE` | GAP | GAP |')
-Assert-Rejected $bad $version 'DOC_GLOBAL_DISCOVERY_CONTRACT_MISMATCH'
+    '| `CONTEXTUAL_OLYMPUS_MAINTENANCE` | SUPPORTED |',
+    '| `CONTEXTUAL_OLYMPUS_MAINTENANCE` | GAP |')
+Assert-Rejected $bad $version 'DOC_OPENCODE_CAPABILITY_CONTRACT_MISMATCH'
 Write-Output 'TAG-TRANSITION-STABILITY QUALIFICATION: PASS (static source/docs only; no release or endpoint availability claim)'

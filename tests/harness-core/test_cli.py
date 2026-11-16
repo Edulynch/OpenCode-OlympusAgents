@@ -82,8 +82,19 @@ class SliceA(unittest.TestCase):
 
     def snapshot(self):
         paths = set(self.sandbox.rglob("*"))
-        return ({path.relative_to(self.sandbox).as_posix(): ("file" if path.is_file() else "directory", path.stat().st_mode)
-                 for path in paths}, helpers.snapshot_outputs({path for path in paths if path.is_file()}))
+        inventory = {}
+        files = set()
+        for path in paths:
+            relative = path.relative_to(self.sandbox).as_posix()
+            metadata = path.lstat()
+            if path.is_symlink():
+                inventory[relative] = ("symlink", metadata.st_mode, os.readlink(path), metadata.st_mtime_ns)
+            elif path.is_file():
+                inventory[relative] = ("file", metadata.st_mode)
+                files.add(path)
+            else:
+                inventory[relative] = ("directory", metadata.st_mode)
+        return inventory, helpers.snapshot_outputs(files)
 
     def query(self, *arguments: str, entry="module"):
         environment = self.env.copy()
@@ -2096,12 +2107,23 @@ class SliceA(unittest.TestCase):
                  args=["opencode", "debug", "paths"], returncode=0, stdout=output, stderr="")):
             os.environ.pop("OPENCODE_CONFIG_DIR")
             self.assertEqual(expected, global_readonly._opencode_root())
-        if os.name == "posix":
-            link = self.sandbox / "linked_opencode_root"
-            link.symlink_to(self.sandbox / "opencode_root", target_is_directory=True)
-            self.env["OPENCODE_CONFIG_DIR"] = str(link)
-            blocked = self.json_query("status", "--scope", "global", "--harness", "opencode", code=3)
-            self.assertEqual("unsafe_global_root", blocked["issues"][0]["code"])
+        link = self.sandbox / "linked_opencode_root"
+        link_target = self.sandbox / "opencode_root"
+        try:
+            link.symlink_to(link_target, target_is_directory=True)
+        except (OSError, NotImplementedError) as error:
+            self.skipTest(f"Host cannot create dangling symlink safety fixture: {error}")
+        self.assertTrue(link.is_symlink())
+        self.assertFalse(link_target.exists())
+        self.env["OPENCODE_CONFIG_DIR"] = str(link)
+        before = self.snapshot()
+        link_entry = link.relative_to(self.sandbox).as_posix()
+        self.assertEqual(os.readlink(link), before[0][link_entry][2])
+        blocked = self.json_query("status", "--scope", "global", "--harness", "opencode", code=3)
+        self.assertEqual("unsafe_global_root", blocked["issues"][0]["code"])
+        self.assertEqual(before, self.snapshot(), "Unsafe global-root refusal must preserve the dangling link")
+        self.assertTrue(link.is_symlink())
+        self.assertFalse(link_target.exists())
 
     def test_slice_c7_global_doctor_version_mismatch_is_explicit(self):
         self.create_global_managed_install(version="v0.0.1")

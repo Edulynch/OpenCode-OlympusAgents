@@ -209,7 +209,7 @@ try {
     }
     $env:OLYMPUS_CONFIG_FILE = $userConfig
 
-    $userOpenCodeConfig = [IO.File]::ReadAllText((Join-Path $source 'olympus/harnesses/opencode/global-permissions.jsonc'))
+    $userOpenCodeConfig = '{"user_owned":true,"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"C:/fixture/prohibited/*","effect":"deny"}]}' + "`n"
     [IO.File]::WriteAllText($opencodeConfig, $userOpenCodeConfig, $Utf8NoBom)
     $savedOpenCodeConfig = [IO.File]::ReadAllBytes($opencodeConfig)
 

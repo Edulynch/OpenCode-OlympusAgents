@@ -103,18 +103,30 @@ try {
                               "mode": mode.group(1)})
         agents = self.sandbox / "mock-agents.json"
         agents.write_text(json.dumps(generated), encoding="utf-8")
-        (mock_bin / "opencode.cmd").write_text(
-            "@echo off\r\n"
-            "if \"%~1\"==\"--version\" goto version\r\n"
-            "if \"%~1\"==\"debug\" if \"%~2\"==\"config\" exit /b 0\r\n"
-            "if \"%~1\"==\"debug\" if \"%~2\"==\"agents\" goto agents\r\n"
-            "exit /b 1\r\n"
-            ":version\r\n"
-            "echo opencode 1.0.0\r\nexit /b 0\r\n"
-            ":agents\r\n"
-            "type \"%OLYMPUS_TEST_AGENTS%\"\r\nexit /b 0\r\n",
-            encoding="ascii",
-        )
+        if os.name == "nt":
+            (mock_bin / "opencode.cmd").write_text(
+                "@echo off\r\n"
+                "if \"%~1\"==\"--version\" goto version\r\n"
+                "if \"%~1\"==\"debug\" if \"%~2\"==\"config\" exit /b 0\r\n"
+                "if \"%~1\"==\"debug\" if \"%~2\"==\"agents\" goto agents\r\n"
+                "exit /b 1\r\n"
+                ":version\r\n"
+                "echo opencode 1.0.0\r\nexit /b 0\r\n"
+                ":agents\r\n"
+                "type \"%OLYMPUS_TEST_AGENTS%\"\r\nexit /b 0\r\n",
+                encoding="ascii",
+            )
+        else:
+            mock_cli = mock_bin / "opencode"
+            mock_cli.write_text(
+                "#!/bin/sh\n"
+                'if [ "$1" = "--version" ]; then echo "opencode 1.0.0"; exit 0; fi\n'
+                'if [ "$1" = "debug" ] && [ "$2" = "config" ]; then exit 0; fi\n'
+                'if [ "$1" = "debug" ] && [ "$2" = "agents" ]; then cat "$OLYMPUS_TEST_AGENTS"; exit $?; fi\n'
+                "exit 1\n",
+                encoding="utf-8",
+            )
+            mock_cli.chmod(0o755)
         environment = self.environment.copy()
         environment["PATH"] = str(mock_bin) + os.pathsep + environment.get("PATH", "")
         environment["OLYMPUS_TEST_AGENTS"] = str(agents)
@@ -495,15 +507,16 @@ try {
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
     def test_slice_c2_3_existing_project_writers_block_before_target_writes(self):
         self.create_managed_install()
+        mock_environment = self.mock_opencode_environment()
         owner = self.start_python_owner()
         try:
             before = self.snapshot_target(omit_lock=True)
             bootstrap = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
-                                    "-Harness", "opencode", "-Update")
+                                    "-Harness", "opencode", "-Update", env=mock_environment)
             self.assertNotEqual(0, bootstrap.returncode)
             self.assertIn("OLYMPUS_TARGET_LOCK_BUSY", bootstrap.stderr + bootstrap.stdout)
             uninstall = self.run_ps(ROOT / "scripts/project-uninstall.ps1", "-Target", self.target,
-                                    "-Harness", "opencode")
+                                    "-Harness", "opencode", env=mock_environment)
             self.assertNotEqual(0, uninstall.returncode)
             self.assertIn("OLYMPUS_TARGET_LOCK_BUSY", uninstall.stderr + uninstall.stdout)
             self.assertEqual(before, self.snapshot_target(omit_lock=True))
@@ -536,7 +549,7 @@ try {
         before = self.snapshot_target()
 
         result = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
-                             "-Harness", "opencode")
+                             "-Harness", "opencode", env=self.mock_opencode_environment())
 
         self.assertNotEqual(0, result.returncode)
         self.assertIn("MANAGED_FILE_DRIFT", result.stdout + result.stderr)
@@ -565,8 +578,9 @@ try {
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
     def test_slice_c2_3_bootstrap_noop_does_not_modify_target(self):
         self.create_managed_install()
+        mock_environment = self.mock_opencode_environment()
         first = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
-                            "-Harness", "opencode")
+                            "-Harness", "opencode", env=mock_environment)
         self.assertEqual(0, first.returncode, first.stdout + first.stderr)
         lock_path = self.target / ".olympus-cli-edit.lock"
         self.assertTrue(lock_path.is_file())
@@ -576,7 +590,7 @@ try {
         before = self.snapshot_target()
 
         second = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
-                             "-Harness", "opencode")
+                             "-Harness", "opencode", env=mock_environment)
 
         self.assertEqual(0, second.returncode, second.stdout + second.stderr)
         self.assertIn("NO_CHANGES", second.stdout)

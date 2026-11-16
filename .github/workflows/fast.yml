@@ -214,8 +214,8 @@ jobs:
           $testOutput | Out-Host
           if ($testExitCode -ne 0) { exit $testExitCode }
           $transcript = $testOutput -join "`n"
-          if ($transcript -notmatch '(?m)^Ran 14 tests in ') {
-            throw 'C2.3/C3 writer-lock qualification did not execute all 14 required tests.'
+          if ($transcript -notmatch '(?m)^Ran 15 tests in ') {
+            throw 'C2.3/C3 writer-lock qualification did not execute all 15 required tests.'
           }
           if ($env:RUNNER_OS -eq 'Windows') {
             if ($transcript -match 'skipped' -and

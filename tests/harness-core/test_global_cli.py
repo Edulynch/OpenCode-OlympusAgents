@@ -60,7 +60,15 @@ class GlobalCli(unittest.TestCase):
             "OPENCODE_CONFIG_DIR": str(self.root), "APPDATA": str(self.appdata),
             "LOCALAPPDATA": str(self.localappdata), "USERPROFILE": str(self.profile),
             "PYTHONDONTWRITEBYTECODE": "1", "OLYMPUS_TEST_ROOT": str(self.test_root),
+            "HOME": str(self.profile), "XDG_CONFIG_HOME": str(self.sandbox / "xdg"),
+            "CODEX_HOME": str(self.sandbox / "codex"),
+            "OLYMPUS_CONFIG_FILE": str(self.appdata / "Olympus" / "config.json"),
+            "OLYMPUS_CLI_ROOT": str(self.sandbox / "cli"),
+            "OLYMPUS_CLI_PATH_STORE": str(self.sandbox / "cli" / "path-store.txt"),
         })
+        environment = mock.patch.dict(os.environ, self.env)
+        environment.start()
+        self.addCleanup(environment.stop)
         self.script = ROOT / "scripts/global-install.ps1"
         initial = self._engine(update=False)
         self.assertEqual(0, initial.returncode, initial.stdout + initial.stderr)

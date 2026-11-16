@@ -1,71 +1,9 @@
-# Unified interactive and direct Olympus uninstallation entrypoint.
-[CmdletBinding(DefaultParameterSetName = 'Interactive')]
-param(
-    [Parameter(ParameterSetName = 'ProjectHere')]
-    [switch]$Project,
-    [Parameter(ParameterSetName = 'ProjectHere')]
-    [switch]$Here,
-    [Parameter(ParameterSetName = 'ProjectPath')]
-    [string]$ProjectPath,
-    [Parameter(ParameterSetName = 'Global')]
-    [switch]$Global,
-    [string]$Harness
-)
+[CmdletBinding()]
+param()
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ownedLauncher = $null
-
-function Read-UninstallScope {
-    while ($true) {
-        Write-Host 'Uninstall scope:'
-        Write-Host '  [1] Current project'
-        Write-Host '  [2] Another project path'
-        Write-Host '  [3] Global'
-        $choice = (Read-Host 'Choose 1, 2, or 3').Trim()
-        switch ($choice) {
-            '1' { return [pscustomobject]@{ Scope = 'project'; Target = (Get-Location).Path } }
-            '2' {
-                $path = (Read-Host 'Project path').Trim()
-                if ($path) { return [pscustomobject]@{ Scope = 'project'; Target = $path } }
-                Write-Host 'A project path is required.'
-            }
-            '3' { return [pscustomobject]@{ Scope = 'global'; Target = (Get-Location).Path } }
-            default { Write-Host 'Choose 1, 2, or 3.' }
-        }
-    }
-}
-
-function Read-UninstallHarness {
-    while ($true) {
-        Write-Host 'Harness:'
-        Write-Host '  [1] OpenCode'
-        Write-Host '  [2] Codex'
-        Write-Host '  [3] Both'
-        $choice = (Read-Host 'Choose 1, 2, or 3').Trim()
-        switch ($choice) {
-            '1' { return 'opencode' }
-            '2' { return 'codex' }
-            '3' { return 'all' }
-            default { Write-Host 'Choose 1, 2, or 3.' }
-        }
-    }
-}
-
-function Assert-InteractiveInput {
-    # A host-supplied Read-Host function can provide input without console stdin.
-    $readHostProvider = Get-Command Read-Host -ErrorAction SilentlyContinue
-    $hasPromptProvider = $null -ne $readHostProvider -and $readHostProvider.CommandType -eq 'Function'
-    # -NonInteractive disables prompts even when stdin is attached to a real terminal.
-    # Inspect the pwsh process switches because Console.IsInputRedirected cannot detect that host mode.
-    $nonInteractiveHost = @([Environment]::GetCommandLineArgs() | Where-Object {
-        $_ -match '^(?i:-NonInteractive|-noni)$'
-    }).Count -gt 0
-    if (-not [Environment]::UserInteractive -or
-        (($nonInteractiveHost -or [Console]::IsInputRedirected) -and -not $hasPromptProvider)) {
-        throw 'ARGUMENTS_REQUIRED: Selection is incomplete and interactive input is unavailable. Supply -Project -Here, -ProjectPath <path>, or -Global together with -Harness.'
-    }
-}
 
 function Get-BootstrapReleaseField([object]$Metadata, [string]$Name) {
     if ($null -eq $Metadata) { throw 'LATEST_RELEASE_METADATA_INVALID: GitHub returned no release metadata.' }
@@ -126,105 +64,50 @@ function ConvertTo-ReleasePublishedTimestamp([object]$Value) {
 }
 
 try {
-    $scope = $null
-    $target = $null
-    $needsScope = $true
-    if ($PSBoundParameters.ContainsKey('ProjectPath')) {
-        if ([string]::IsNullOrEmpty($ProjectPath)) {
-            throw 'ARGUMENTS_INVALID: -ProjectPath must not be empty.'
-        }
-        $scope = 'project'
-        $target = $ProjectPath
-        $needsScope = $false
-    } elseif ($PSBoundParameters.ContainsKey('Global')) {
-        if (-not $Global) {
-            throw 'ARGUMENTS_INVALID: Select global scope with -Global.'
-        }
-        $scope = 'global'
-        $target = (Get-Location).Path
-        $needsScope = $false
-    } elseif ($PSBoundParameters.ContainsKey('Project') -or $PSBoundParameters.ContainsKey('Here')) {
-        if (-not $Project -or -not $Here) {
-            throw 'ARGUMENTS_INVALID: Select the current project with both -Project and -Here.'
-        }
-        $scope = 'project'
-        $target = (Get-Location).Path
-        $needsScope = $false
-    }
-
-    $needsHarness = -not $PSBoundParameters.ContainsKey('Harness')
-    if (-not $needsHarness -and $Harness -notin @('opencode', 'codex', 'all')) {
-        throw 'ARGUMENTS_INVALID: -Harness must be opencode, codex, or all.'
-    }
-    if ($needsScope -or $needsHarness) { Assert-InteractiveInput }
-
-    if ($needsScope) {
-        $selection = Read-UninstallScope
-        $scope = $selection.Scope
-        $target = $selection.Target
-    }
-    if ($needsHarness) { $selectedHarness = Read-UninstallHarness }
-    else { $selectedHarness = $Harness.ToLowerInvariant() }
-
     $pwsh = @(Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue)
     if ($pwsh.Count -eq 0) {
         throw 'OLYMPUS_REQUIRES_POWERSHELL_7: PowerShell 7 (pwsh) is required.'
     }
 
-    $launcher = $null
-    if ($PSCommandPath) {
-        $localLauncher = Join-Path (Split-Path -Parent $PSCommandPath) 'scripts/launch-latest.ps1'
-        if (Test-Path -LiteralPath $localLauncher -PathType Leaf) { $launcher = $localLauncher }
+    $tempBase = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode'
+    [IO.Directory]::CreateDirectory($tempBase) | Out-Null
+    $ownedLauncher = Join-Path $tempBase ('olympus-uninstall-entry-' + [guid]::NewGuid().ToString('N') + '.ps1')
+    $headers = @{ 'User-Agent' = 'OlympusAgents-Installer' }
+    $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest' -Headers $headers -ErrorAction Stop
+    Assert-BootstrapReleaseBoolean $release 'immutable' $true
+    Assert-BootstrapReleaseBoolean $release 'draft' $false
+    Assert-BootstrapReleaseBoolean $release 'prerelease' $false
+    $tag = [string](Get-BootstrapReleaseField $release 'tag_name')
+    if ($tag -notmatch '\Av(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?\z') {
+        throw "LATEST_RELEASE_INVALID: GitHub latest release returned malformed tag '$tag'."
     }
-    if (-not $launcher) {
-        $tempBase = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode'
-        [IO.Directory]::CreateDirectory($tempBase) | Out-Null
-        $ownedLauncher = Join-Path $tempBase ('olympus-uninstall-entry-' + [guid]::NewGuid().ToString('N') + '.ps1')
-        $headers = @{ 'User-Agent' = 'OlympusAgents-Installer' }
-        $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest' -Headers $headers -ErrorAction Stop
-        Assert-BootstrapReleaseBoolean $release 'immutable' $true
-        Assert-BootstrapReleaseBoolean $release 'draft' $false
-        Assert-BootstrapReleaseBoolean $release 'prerelease' $false
-        $tag = [string](Get-BootstrapReleaseField $release 'tag_name')
-        if ($tag -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') {
-            throw "LATEST_RELEASE_INVALID: GitHub latest release returned malformed tag '$tag'."
-        }
-        $publishedAt = Get-BootstrapReleaseField $release 'published_at'
-        if ($null -eq $publishedAt -or ($publishedAt -is [string] -and [string]::IsNullOrWhiteSpace($publishedAt))) {
-            throw 'LATEST_RELEASE_NOT_PUBLISHED: GitHub release has no published_at timestamp.'
-        }
-        try {
-            $publishedTimestamp = ConvertTo-ReleasePublishedTimestamp $publishedAt
-        } catch {
-            throw "LATEST_RELEASE_METADATA_INVALID: published_at '$publishedAt' is not a valid time-zone-aware timestamp."
-        }
-        if ($publishedTimestamp -gt [DateTimeOffset]::UtcNow.AddMinutes(5)) {
-            throw "LATEST_RELEASE_METADATA_INVALID: published_at '$publishedAt' is in the future."
-        }
-        if ($tag -match '-(?:alpha|beta|rc)\.' -and -not [bool](Get-BootstrapReleaseField $release 'prerelease')) {
-            throw "LATEST_RELEASE_METADATA_INCONSISTENT: tag '$tag' is prerelease but GitHub reports prerelease=false."
-        }
-
-        $launcherUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/scripts/launch-latest.ps1"
-        Write-Output "OLYMPUS_BOOTSTRAP_SELECTED: tag=$tag immutable=true source=$launcherUrl"
-        Invoke-WebRequest -Uri $launcherUrl -OutFile $ownedLauncher -Headers $headers -ErrorAction Stop
-        $launcherText = [IO.File]::ReadAllText($ownedLauncher)
-        $requiredLauncherMarkers = @('Assert-ReleaseBoolean', 'LATEST_RELEASE_MUTABLE',
-            'LATEST_RELEASE_NOT_PUBLISHED', 'LATEST_RELEASE_IDENTITY_MISMATCH', 'published_at')
-        $missingLauncherMarkers = @($requiredLauncherMarkers | Where-Object { -not $launcherText.Contains($_) })
-        if ($missingLauncherMarkers.Count -gt 0) {
-            throw "LAUNCHER_BOOTSTRAP_CONTRACT_MISSING: Release '$tag' launcher lacks immutable-release checks ($($missingLauncherMarkers -join ', ')); no older launcher fallback is attempted."
-        }
-        $launcher = $ownedLauncher
+    $publishedAt = Get-BootstrapReleaseField $release 'published_at'
+    if ($null -eq $publishedAt -or ($publishedAt -is [string] -and [string]::IsNullOrWhiteSpace($publishedAt))) {
+        throw 'LATEST_RELEASE_NOT_PUBLISHED: GitHub release has no published_at timestamp.'
+    }
+    try {
+        $publishedTimestamp = ConvertTo-ReleasePublishedTimestamp $publishedAt
+    } catch {
+        throw "LATEST_RELEASE_METADATA_INVALID: published_at '$publishedAt' is not a valid time-zone-aware timestamp."
+    }
+    if ($publishedTimestamp -gt [DateTimeOffset]::UtcNow.AddMinutes(5)) {
+        throw "LATEST_RELEASE_METADATA_INVALID: published_at '$publishedAt' is in the future."
+    }
+    if ($tag -match '-(?:alpha|beta|rc)\.' -and -not [bool](Get-BootstrapReleaseField $release 'prerelease')) {
+        throw "LATEST_RELEASE_METADATA_INCONSISTENT: tag '$tag' is prerelease but GitHub reports prerelease=false."
     }
 
-    $launcherArgs = @(
-        '-NoProfile', '-File', $launcher,
-        '-Action', 'uninstall',
-        '-Scope', $scope,
-        '-Harness', $selectedHarness,
-        '-Target', [IO.Path]::GetFullPath($target)
-    )
+    $launcherUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/scripts/launch-latest.ps1"
+    Invoke-WebRequest -Uri $launcherUrl -OutFile $ownedLauncher -Headers $headers -ErrorAction Stop
+    $launcherText = [IO.File]::ReadAllText($ownedLauncher)
+    $requiredLauncherMarkers = @('Assert-ReleaseBoolean', 'LATEST_RELEASE_MUTABLE',
+        'LATEST_RELEASE_NOT_PUBLISHED', 'LATEST_RELEASE_IDENTITY_MISMATCH', "'global'", "'opencode'", 'published_at')
+    $missingLauncherMarkers = @($requiredLauncherMarkers | Where-Object { -not $launcherText.Contains($_) })
+    if ($missingLauncherMarkers.Count -gt 0) {
+        throw "LAUNCHER_BOOTSTRAP_CONTRACT_MISSING: Release '$tag' launcher lacks immutable global/OpenCode checks ($($missingLauncherMarkers -join ', ')); no older launcher fallback is attempted."
+    }
+
+    $launcherArgs = @('-NoProfile', '-File', $ownedLauncher, '-Action', 'uninstall')
     & $pwsh[0].Source @launcherArgs
     if ($LASTEXITCODE -ne 0) {
         throw "OLYMPUS_ENTRYPOINT_FAILED: launcher returned exit code $LASTEXITCODE."

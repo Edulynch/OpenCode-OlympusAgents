@@ -6,11 +6,15 @@ $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $installer = Join-Path $source 'install.ps1'
 $run = Join-Path (Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode') ('olympus-installer-compat-' + [guid]::NewGuid().ToString('N'))
 $originalPath = $env:PATH
+. (Join-Path $PSScriptRoot '../installer-test-environment.ps1')
+$isolatedEnvironment = $null
+$projectInstaller = Join-Path $source 'scripts/bootstrap.ps1'
 function Check([string]$id, [bool]$valid) {
     if (-not $valid) { throw "$id FAIL" }
     Write-Output "$id PASS"
 }
 try {
+    $isolatedEnvironment = Enter-OlympusInstallerTestEnvironment $run
     $text = [IO.File]::ReadAllText($installer)
     $defaultVersion = [regex]::Match($text, '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''')
     $releaseVersion = [regex]::Match($text, '(?m)^\s*\$ReleaseVersion\s*=\s*''([^'']+)''')
@@ -56,6 +60,13 @@ try {
         '.opencode/scripts/worktree-setup.ps1'
     ) | Sort-Object
     foreach ($hostEntry in $hosts) {
+        $publicDry = (& $hostEntry.Path -NoProfile -File $installer -SourceRoot $source -DryRun `
+            -CliInstallRoot $env:OLYMPUS_CLI_ROOT -CliPathStorePath $env:OLYMPUS_CLI_PATH_STORE 2>&1 | Out-String)
+        Check ($hostEntry.Id + '_PUBLIC_GLOBAL_HANDOFF') ($LASTEXITCODE -eq 0 -and
+            $publicDry -match 'GLOBAL_INSTALL_DRY_RUN: opencode' -and
+            -not (Test-Path (Join-Path $env:OPENCODE_CONFIG_DIR 'olympus/orchestrator-install.json')))
+        # The public entrypoint hands off to PS7; retained internal engines are PS7-only.
+        $engineHost = $pwsh
         $target = Join-Path $run $hostEntry.Id
         [IO.Directory]::CreateDirectory($target) | Out-Null
         & git -C $target init --quiet
@@ -66,15 +77,15 @@ try {
         [IO.File]::WriteAllText((Join-Path $target $toolFiles[0]), "# local tool`n")
         [IO.File]::WriteAllText((Join-Path $target $toolFiles[1]), "project: local`n")
         $toolHashes = @($toolFiles | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $target $_) -Algorithm SHA256).Hash })
-        $dry = (& $hostEntry.Path -NoProfile -File $installer -SourceRoot $source -Target $target -DryRun 2>&1 | Out-String)
+        $dry = (& $engineHost -NoProfile -File $projectInstaller -SourceVersion $script:CandidateVersion -Target $target -DryRun 2>&1 | Out-String)
         Check ($hostEntry.Id + '_DRY_RUN') ($LASTEXITCODE -eq 0 -and
-            $dry -match "OLYMPUS_INSTALL: $candidatePattern DRY_RUN_READY" -and
+            $dry -match '(?m)^DRY_RUN_READY\s*$' -and
             -not (Test-Path -LiteralPath (Join-Path $target '.opencode/orchestrator-install.json')))
-        $output = (& $hostEntry.Path -NoProfile -File $installer -SourceRoot $source -Target $target 2>&1 | Out-String)
+        $output = (& $engineHost -NoProfile -File $projectInstaller -SourceVersion $script:CandidateVersion -Target $target 2>&1 | Out-String)
         $code = $LASTEXITCODE
         $manifestPath = Join-Path $target '.opencode/orchestrator-install.json'
         Check $hostEntry.Id ($code -eq 0 -and $output -match '(?m)^READY\s*$' -and
-            $output -match "OLYMPUS_INSTALL: $candidatePattern READY_OR_NO_CHANGES" -and
+            $output -match '(?m)^READY\s*$' -and
             (Test-Path -LiteralPath $manifestPath -PathType Leaf))
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
         $installedAssets = @($manifest.managed_files | ForEach-Object { ([string]$_.path).Replace('\','/') } | Sort-Object)
@@ -91,7 +102,7 @@ try {
         [IO.Directory]::CreateDirectory($codexTarget) | Out-Null
         & git -C $codexTarget init --quiet
         Check ($hostEntry.Id + '_CODEX_GIT_FIXTURE') ($LASTEXITCODE -eq 0)
-        $codexInstall = (& $hostEntry.Path -NoProfile -File $installer -SourceRoot $source -Target $codexTarget -Harness CODEX 2>&1 | Out-String)
+        $codexInstall = (& $engineHost -NoProfile -File $projectInstaller -SourceVersion $script:CandidateVersion -Target $codexTarget -Harness CODEX 2>&1 | Out-String)
         $codexExit = $LASTEXITCODE
         $codexManifestPath = Join-Path $codexTarget '.codex/orchestrator-install.json'
         $codexManifest = if (Test-Path -LiteralPath $codexManifestPath) { Get-Content -LiteralPath $codexManifestPath -Raw | ConvertFrom-Json } else { $null }
@@ -100,7 +111,7 @@ try {
             (Test-Path -LiteralPath (Join-Path $codexTarget 'CODEX.md') -PathType Leaf) -and
             -not (Test-Path -LiteralPath (Join-Path $codexTarget '.opencode')) -and
             -not (Test-Path -LiteralPath (Join-Path $codexTarget 'opencode.jsonc')))
-        $codexVerify = (& $hostEntry.Path -NoProfile -File $installer -SourceRoot $source -Target $codexTarget -Harness codex -VerifyOnly 2>&1 | Out-String)
+        $codexVerify = (& $engineHost -NoProfile -File $projectInstaller -SourceVersion $script:CandidateVersion -Target $codexTarget -Harness codex -VerifyOnly 2>&1 | Out-String)
         Check ($hostEntry.Id + '_CODEX_VERIFYONLY') ($LASTEXITCODE -eq 0 -and $codexVerify -match '(?m)^OLYMPUS_VERIFY: .* PASS\s*$')
         $results += $target
     }
@@ -120,7 +131,7 @@ try {
     [IO.File]::WriteAllText($missingFixture, @'
 param([string]$Installer, [string]$SourceRoot, [string]$Target, [string]$EmptyPath)
 $env:PATH = $EmptyPath
-& $Installer -SourceRoot $SourceRoot -Target $Target
+& $Installer -SourceRoot $SourceRoot
 '@)
     foreach ($hostEntry in $hosts) {
         $output = (& $hostEntry.Path -NoProfile -File $missingFixture -Installer $installer -SourceRoot $missingSource -Target $missingTarget -EmptyPath $run 2>&1 | Out-String)
@@ -136,6 +147,7 @@ $env:PATH = $EmptyPath
     Write-Output 'INSTALLER COMPATIBILITY: FAIL'
     exit 1
 } finally {
+    if ($null -ne $isolatedEnvironment) { Exit-OlympusInstallerTestEnvironment $isolatedEnvironment }
     $env:PATH = $originalPath
     if ($run -and (Test-Path -LiteralPath $run)) {
         for ($attempt = 1; $attempt -le 10; $attempt++) {

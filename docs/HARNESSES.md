@@ -54,11 +54,13 @@ outputs**.
 | Codex | `CODEX.md`, `.codex/config.toml`, `.codex/agents/*.toml` |
 | Shared contract presentation | `docs/HARNESS-CAPABILITIES.md` |
 
-The installer accepts `-Scope project` (the default and project-scope behavior
-remains compatible with beta.5) or the tagged global-install foundation `-Scope global`; either scope accepts
-`-Harness opencode`, `-Harness codex`, or
-`-Harness all`; the default remains `opencode` for the existing one-line install
-experience. It discovers generated adapter outputs under `.opencode/**` and
+Public install/update/uninstall now supports **global OpenCode only**, without
+project/harness menus or CWD target selection. Kael is selected through a
+reversible root `default_agent` receipt. The generic installer asset requires a
+future release; it is absent from immutable `v0.7.0`. See [installation](INSTALLATION.md).
+
+The retained internal project/configuration engines still support both adapters
+for compatibility, not as public installation alternatives. They discover generated adapter outputs under `.opencode/**` and
 `.codex/**` and the generated root file for each harness, so role rosters and
 policies are not copied into a second installer inventory. Additions are
 non-destructive: choosing one harness never removes the other.
@@ -78,6 +80,10 @@ ownership, and hashes only; it does not launch OpenCode runtime discovery or any
 optional external tooling in the project target.
 
 ## Global installation foundation (introduced in tagged v0.4.0)
+
+The following is historical foundation evidence, not a statement that Codex/project
+installation remains public or that the current installer leaves `default_agent` unchanged.
+Current config-field ownership and recovery are described in [installation](INSTALLATION.md#ownership-of-the-global-default-agent).
 
 Path evidence gathered for this foundation:
 

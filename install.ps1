@@ -2,11 +2,10 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$')]
-    [string]$Version = 'v0.7.0',
-    [string]$Target = (Get-Location).Path,
-    [ValidateSet('project', 'global')]
-    [string]$Scope = 'project',
-    [ValidateSet('opencode', 'codex', 'all')]
+    [string]$Version = 'v0.8.0',
+    [ValidateSet('global')]
+    [string]$Scope = 'global',
+    [ValidateSet('opencode')]
     [string]$Harness = 'opencode',
     [switch]$DryRun,
     [switch]$VerifyOnly,
@@ -22,7 +21,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$ReleaseVersion = 'v0.7.0' # Must equal this installer's default and the release target tag.
+$ReleaseVersion = 'v0.8.0' # Must equal this installer's default and the release target tag.
 $owned = $null
 
 function Get-DeclaredReleaseVersion([string]$Source) {
@@ -220,74 +219,22 @@ try {
     }
     Write-Output "OLYMPUS_SOURCE: requested=$Version resolved=$resolvedVersion origin=$origin"
 
-    if ($VerifyOnly -and $Scope -eq 'project') {
-        if ($bootstrapSupportsHarness -and $bootstrapSupportsVerify) {
-            $verifyArgs = @('-NoProfile', '-File', $bootstrap, '-Target', $Target, '-Harness', $Harness, '-VerifyOnly')
-            if ($bootstrapText -match '(?m)^\s*\[string\]\$SourceVersion\s*=') { $verifyArgs += @('-SourceVersion', $resolvedVersion) }
-            $verifyOutput = & $pwsh.Source @verifyArgs 2>&1
-            $verifyExitCode = $LASTEXITCODE
-            foreach ($line in $verifyOutput) { Write-Output $line }
-            if ($verifyExitCode -ne 0) { exit $verifyExitCode }
-        } elseif ($Harness.ToLowerInvariant() -eq 'opencode') {
-            Assert-LegacyOpenCodeInstall $source $resolvedVersion $Target $bootstrap
-            Write-Output "OLYMPUS_VERIFY: $resolvedVersion PASS"
-        } else {
-            throw "HARNESS_UNSUPPORTED_RELEASE: Release '$resolvedVersion' cannot verify harness '$Harness'."
-        }
-        exit 0
-    }
-
     if ($Uninstall -and $DryRun) { throw 'UNINSTALL_MODE_INVALID: -Uninstall and -DryRun cannot be combined.' }
-    if ($Uninstall -and $Scope -eq 'project') {
-        $projectUninstallScript = Join-Path $source 'scripts/project-uninstall.ps1'
-        if (-not (Test-Path -LiteralPath $projectUninstallScript -PathType Leaf)) {
-            throw 'SOURCE_INVALID: Project uninstaller is missing.'
-        }
-        $projectUninstallArgs = @(
-            '-NoProfile',
-            '-File', $projectUninstallScript,
-            '-Target', $Target,
-            '-Harness', $Harness
-        )
-        & $pwsh.Source @projectUninstallArgs
-        if ($LASTEXITCODE -ne 0) { throw "PROJECT_UNINSTALL_FAILED: project uninstaller exited $LASTEXITCODE." }
-        exit 0
-    }
-    if ($Scope -eq 'global') {
-        $globalScript = Join-Path $source 'scripts/global-install.ps1'
-        if (-not (Test-Path -LiteralPath $globalScript -PathType Leaf)) { throw 'SOURCE_INVALID: Global installer is missing.' }
-        $globalArgs = @('-NoProfile', '-File', $globalScript, '-Harness', $Harness, '-SourceVersion', $resolvedVersion)
-        if ($Target) { $globalArgs += @('-ProjectTarget', $Target) }
-        if ($VerifyOnly) { $globalArgs += '-VerifyOnly' }
-        if ($DryRun) { $globalArgs += '-DryRun' }
-        if ($Uninstall) { $globalArgs += '-Uninstall' }
-        if ($Update) { $globalArgs += '-Update' }
-        & $pwsh.Source @globalArgs
-        if ($LASTEXITCODE -ne 0) { throw "GLOBAL_BOOTSTRAP_FAILED: global installer exited $LASTEXITCODE." }
-        if (-not $DryRun -and -not $VerifyOnly) {
-            $cliAction = if ($Uninstall) { 'uninstall' } else { 'install' }
-            Set-UpGlobalCli -Source $source -Version $resolvedVersion -Action $cliAction `
-                -InstallRoot $CliInstallRoot -PathStorePath $CliPathStorePath
-        }
-        exit 0
-    }
-
-    # Keep bootstrap's own process semantics, drift checks, containment and effective-agent validation.
-    $args = @('-NoProfile', '-File', $bootstrap, '-Target', $Target)
-    if ($bootstrapSupportsHarness) { $args += @('-Harness', $Harness) }
-    if ($bootstrapText -match '(?m)^\s*\[string\]\$SourceVersion\s*=') {
-        $args += @('-SourceVersion', $resolvedVersion)
-    }
-    if ($DryRun) { $args += '-DryRun' }
-    if ($Update) { $args += '-Update' }
-    & $pwsh.Source @args
-    if ($LASTEXITCODE -ne 0) { throw "BOOTSTRAP_FAILED: bootstrap exited $LASTEXITCODE; no installer cleanup touches the target." }
-    if (-not $DryRun) {
-        Set-UpGlobalCli -Source $source -Version $resolvedVersion -Action 'install' `
+    $globalScript = Join-Path $source 'scripts/global-install.ps1'
+    if (-not (Test-Path -LiteralPath $globalScript -PathType Leaf)) { throw 'SOURCE_INVALID: Global installer is missing.' }
+    $globalArgs = @('-NoProfile', '-File', $globalScript, '-Harness', 'opencode', '-SourceVersion', $resolvedVersion)
+    if ($VerifyOnly) { $globalArgs += '-VerifyOnly' }
+    if ($DryRun) { $globalArgs += '-DryRun' }
+    if ($Uninstall) { $globalArgs += '-Uninstall' }
+    if ($Update) { $globalArgs += '-Update' }
+    & $pwsh.Source @globalArgs
+    if ($LASTEXITCODE -ne 0) { throw "GLOBAL_BOOTSTRAP_FAILED: global installer exited $LASTEXITCODE." }
+    if (-not $DryRun -and -not $VerifyOnly) {
+        $cliAction = if ($Uninstall) { 'uninstall' } else { 'install' }
+        Set-UpGlobalCli -Source $source -Version $resolvedVersion -Action $cliAction `
             -InstallRoot $CliInstallRoot -PathStorePath $CliPathStorePath
     }
-    if ($DryRun) { Write-Output "OLYMPUS_INSTALL: $resolvedVersion DRY_RUN_READY" }
-    else { Write-Output "OLYMPUS_INSTALL: $resolvedVersion READY_OR_NO_CHANGES" }
+    exit 0
 } catch {
     if ($VerifyOnly) {
         $message = $_.Exception.Message

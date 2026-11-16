@@ -2,6 +2,23 @@
 
 For Olympus maintainers, contributors, installation debugging, qualification, and release engineering. For first-time setup, start with the [README](../README.md).
 
+## Publishing the generic installer asset
+
+The intended public URL is:
+`https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1`.
+It is **not available from the immutable v0.7.0 release**, which has no assets.
+Local implementation or mocked acquisition tests do not prove that endpoint works.
+
+For a separately authorized future release:
+
+1. Complete focused installer/default-agent tests, configuration review, and all required release/CI gates. Test helpers must use disposable profiles, explicit global roots, CLI roots, and a file-backed PATH store. Never install an incomplete checkout over a real user installation.
+2. Select a new product version and tag only under separate authorization; keep installer defaults/release markers/archive identity consistent. Do not move or recreate `v0.7.0`.
+3. Create the new release as a **draft** for the exact reviewed tag. Attach `install-olympus.ps1` from that tag as an asset **before publishing**; verify its bytes match the tag. The asset must not point execution to a mutable branch.
+4. Publish the stable release with immutability enabled, then verify `immutable=true`, `draft=false`, `prerelease=false`, the exact tag, zoned publication timestamp, and the installer asset. Published immutable assets cannot be added or replaced later.
+5. Verify the generic URL against the published asset and run an isolated public-endpoint install/VerifyOnly/uninstall. Only then announce availability. GitHub's metadata assertions are not independent cryptographic signature verification by the installer.
+
+This procedure is documentation, not authorization to change a version, tag, release, PATH, or real installation.
+
 ## Optional local Gitleaks and pre-push hooks
 
 The repository provides an **opt-in** `.pre-commit-config.yaml`. Its Gitleaks hook remains pinned to the official `v8.30.1` upstream commit and scans **staged changes** before a local commit. The pre-push hook runs the documentation checker for every changed push and runs the existing offline **FAST** profile whenever any changed path is not documentation-only. Root Markdown (except product-owned `CODEX.md`) and Markdown/images under `docs/` or `specs/` are documentation-only; Core/prompts, tests, code, configuration, and unknown paths select FAST. It validates the tracked/index state visible to the hook, checks a supplied `PRE_COMMIT_TO_REF` against `HEAD`, and checks `PRE_COMMIT_LOCAL_BRANCH` against `HEAD` on the all-files fallback. When a manual all-files invocation supplies no branch, the helper does not invent a target ref. The gate itself never stashes or resets user work, but pre-commit may temporarily stash and restore unstaged changes before invoking hooks; unstaged edits hidden in that manager snapshot cannot be rejected by this helper. It does not run Gitleaks, FULL, RUNTIME, or runtime/API checks during push. The gate is locally qualified on Windows with Python 3.11+ and PowerShell 7; no Linux/macOS hook support is claimed. CI and its independent secret/history gates remain mandatory.
@@ -52,7 +69,7 @@ Olympus Core defines canonical role responsibilities, model intent, routing, aut
 ### Support and adapter contract — 2026-10-16
 
 - **OpenCode V2 — ACTIVE DEVELOPMENT.** Design new features, agents, commands, architectural improvements, and runtime capabilities for OpenCode first. OpenCode-only capabilities do not need Codex equivalents.
-- **Codex — FROZEN COMPATIBILITY.** Do not remove existing Codex components, installers, manifests, or uninstall protections; do not add integrations or close gaps solely for parity. Only evidenced critical Codex fixes or regressions introduced by shared-code changes are in scope, with a concrete bounded target.
+- **Codex — FROZEN COMPATIBILITY.** Retain internal adapters, project/configuration engines, manifests, and uninstall protections. Public installation/update/uninstall now supports only global OpenCode; ten legacy project/Codex/all wrappers reject before effects. Do not add integrations or close gaps solely for parity.
 - Retain existing tests protecting shared integrity and compatibility. Do not create Codex gates for OpenCode-only capabilities. Existing Codex static/integrity and shared installer checks remain what they are; their presence is not a mandate to qualify Codex parity for new work.
 - The frozen Codex gaps include contextual OlympusAgents maintenance, authority differences, hard `DENY`, and observability. Do not claim verification of newer Codex versions without specific evidence.
 

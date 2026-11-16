@@ -26,7 +26,7 @@ def parser() -> Parser:
         "Model IDs use the exact provider/model-id form listed at https://models.dev. "
         "Olympus validates declared catalog capabilities but never verifies model access, credentials, or subscriptions. "
         "Use 'olympus config list' for absolute configuration paths and precedence. "
-        "Apply manual edits with 'olympus install' (global) or 'olympus update' (project); "
+        "Use 'olympus install' or 'olympus update' for the global OpenCode installation; "
         "then run 'olympus doctor', which only verifies configuration."
     )
     root = Parser(
@@ -52,11 +52,9 @@ def parser() -> Parser:
                 "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --execute\n"
                 "  olympus config apply --scope global --harness opencode --execute\n"
                 "  olympus config recover --scope global --harness opencode\n"
-                "  olympus install --scope project --target <absolute-worktree-root> --harness opencode --version <release-tag> --dry-run\n"
-                "  olympus uninstall --scope project --target <absolute-worktree-root> --harness opencode --execute\n"
-                "  olympus doctor --scope project --target <absolute-worktree-root> --harness all [--json]\n"
-                "  olympus doctor --scope global --harness opencode [--json]\n"
-                "  olympus config apply --scope global --harness codex --dry-run --json\n"
+                 "  olympus doctor --scope project --target <absolute-worktree-root> --harness all [--json]\n"
+                 "  olympus doctor --scope global --harness opencode [--json]\n"
+                 "  olympus config apply --scope global --harness codex --dry-run --json\n"
                  "  olympus status --scope project --target <absolute-worktree-root>\n"
                  "Source-edit and project-apply commands are advanced checkout operations.\n"
                  "Config apply writes only with --execute; global execution currently supports OpenCode only.\n"
@@ -69,9 +67,7 @@ def parser() -> Parser:
     commands = root.add_subparsers(dest="command", parser_class=Parser)
     commands.add_parser("help", help="show Olympus commands and model configuration guidance", allow_abbrev=False)
     commands.add_parser("version", help="show the installed Olympus product version", allow_abbrev=False)
-    update = commands.add_parser("update", aliases=["upgrade"], help="update the managed current project or global installation", allow_abbrev=False)
-    update.add_argument("--scope", choices=("project", "global"), help="select a managed project or global installation (default: effective scope)")
-    update.add_argument("--target", type=Path, help="absolute managed project worktree root; project scope only")
+    commands.add_parser("update", aliases=["upgrade"], help="update the global OpenCode installation", allow_abbrev=False)
     models = commands.add_parser("models", help="query or explicitly edit canonical model assignments", allow_abbrev=False)
     model_commands = models.add_subparsers(dest="action", required=True, parser_class=Parser)
     listing = model_commands.add_parser("list", help="list all eleven roles and both adapters", allow_abbrev=False)
@@ -127,19 +123,12 @@ def parser() -> Parser:
     mode.add_argument("--dry-run", action="store_true", help="read-only preview; no target writes")
     mode.add_argument("--execute", action="store_true", help="explicitly apply project or OpenCode global configuration")
     apply.add_argument("--json", action="store_true", help="emit a single JSON result")
-    install = commands.add_parser("install", help="install an immutable official release through the existing installer", allow_abbrev=False)
-    install.add_argument("--scope", choices=("project", "global"), default="global")
-    install.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
-    install.add_argument("--harness", choices=("opencode", "codex", "all"), default="opencode")
-    install.add_argument("--version", dest="release_version", help="optional exact immutable release tag (default: latest stable)")
+    install = commands.add_parser("install", help="install the latest global OpenCode release", allow_abbrev=False)
     install_mode = install.add_mutually_exclusive_group()
     install_mode.add_argument("--dry-run", action="store_true", help="preview through the official installer")
     install_mode.add_argument("--execute", action="store_true", help="execute the official installer")
     install.add_argument("--json", action="store_true", help="emit one JSON result with captured native output")
-    uninstall = commands.add_parser("uninstall", help="remove only manifest-owned resources through the existing engine", allow_abbrev=False)
-    uninstall.add_argument("--scope", choices=("project", "global"), default="global")
-    uninstall.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
-    uninstall.add_argument("--harness", choices=("opencode", "codex", "all"), default="opencode")
+    uninstall = commands.add_parser("uninstall", help="remove the global OpenCode installation", allow_abbrev=False)
     uninstall_mode = uninstall.add_mutually_exclusive_group()
     uninstall_mode.add_argument("--dry-run", action="store_true", help="preview when the native engine supports it")
     uninstall_mode.add_argument("--execute", action="store_true", help="execute the existing uninstall engine")
@@ -608,7 +597,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command in ("update", "upgrade"):
             from . import system_cli
 
-            return system_cli.update(source, args.scope, args.target)
+            return system_cli.update(source)
         if args.command == "agents" and args.action == "list":
             from . import user_config
 

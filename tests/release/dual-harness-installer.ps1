@@ -4,12 +4,16 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$installer = Join-Path $source 'install.ps1'
+$installer = Join-Path $source 'scripts/bootstrap.ps1'
+$candidateVersion = ([regex]::Match([IO.File]::ReadAllText((Join-Path $source 'install.ps1')),
+    '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''')).Groups[1].Value
+. (Join-Path $PSScriptRoot '../installer-test-environment.ps1')
 $run = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) ('opencode\olympus-dual-installer-' + [guid]::NewGuid().ToString('N'))
 $originalPath = $env:PATH
 $originalVerifyProbe = $env:OLYMPUS_VERIFYONLY_PROBE
 $originalVerifyCallLog = $env:OLYMPUS_VERIFYONLY_CALL_LOG
 $utf8 = [Text.UTF8Encoding]::new($false)
+$isolatedEnvironment = $null
 
 function Check([string]$id, [bool]$condition) {
     if (-not $condition) { throw "$id FAIL" }
@@ -25,7 +29,7 @@ function New-Target([string]$name) {
 }
 
 function Run-Installer([string]$target, [string[]]$arguments) {
-    $args = @('-NoProfile', '-File', $installer, '-SourceRoot', $source, '-Target', $target) + $arguments
+    $args = @('-NoProfile', '-File', $installer, '-SourceVersion', $candidateVersion, '-Target', $target) + $arguments
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         # Windows PowerShell 5.1 turns native stderr into a terminating error
@@ -94,6 +98,7 @@ function Has-GeneratedSurface([string]$target, [string]$harness) {
 }
 
 try {
+    $isolatedEnvironment = Enter-OlympusInstallerTestEnvironment $run
     [IO.Directory]::CreateDirectory($run) | Out-Null
     $mockBin = Join-Path $run 'mock-bin'
     [IO.Directory]::CreateDirectory($mockBin) | Out-Null
@@ -253,9 +258,7 @@ try {
     Remove-Item Env:OLYMPUS_VERIFYONLY_CALL_LOG -ErrorAction SilentlyContinue
 
     $installerText = [IO.File]::ReadAllText($installer)
-    Check 'M_HARNESS_API_AND_DEFAULT' ($installerText -match "\[string\]\`$Harness\s*=\s*'opencode'" -and
-        $installerText -match "\[string\]\`$Scope\s*=\s*'project'" -and
-        $installerText -match "\[ValidateSet\('project', 'global'\)\]" -and
+    Check 'M_INTERNAL_HARNESS_API_AND_DEFAULT' ($installerText -match "\[string\]\`$Harness\s*=\s*'opencode'" -and
         $installerText -match "\[ValidateSet\('opencode', 'codex', 'all'\)\]")
     $tag = 'v9.9.9'
     $docsUrl = "https://github.com/Edulynch/OpenCode-OlympusAgents/blob/$tag/docs/INSTALLATION.md"
@@ -272,6 +275,7 @@ try {
     Write-Output 'DUAL-HARNESS INSTALLER QUALIFICATION: FAIL'
     exit 1
 } finally {
+    if ($null -ne $isolatedEnvironment) { Exit-OlympusInstallerTestEnvironment $isolatedEnvironment }
     $env:PATH = $originalPath
     if ($null -eq $originalVerifyProbe) { Remove-Item Env:OLYMPUS_VERIFYONLY_PROBE -ErrorAction SilentlyContinue }
     else { $env:OLYMPUS_VERIFYONLY_PROBE = $originalVerifyProbe }

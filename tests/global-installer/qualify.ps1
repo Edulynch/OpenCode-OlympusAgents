@@ -5,6 +5,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $installer = Join-Path $source 'install.ps1'
+$globalInstaller = Join-Path $source 'scripts/global-install.ps1'
+$projectInstaller = Join-Path $source 'scripts/bootstrap.ps1'
+$projectUninstaller = Join-Path $source 'scripts/project-uninstall.ps1'
 $installerText = [IO.File]::ReadAllText($installer)
 $candidateVersionMatch = [regex]::Match($installerText, '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''')
 if (-not $candidateVersionMatch.Success) { throw 'RELEASE_IDENTITY_INVALID: Installer default version is unavailable.' }
@@ -18,6 +21,8 @@ $originalOlympusConfigFile = $env:OLYMPUS_CONFIG_FILE
 $cliInstallRoot = Join-Path $run 'cli-install'
 $cliPathStorePath = Join-Path $cliInstallRoot 'path-store.txt'
 $utf8 = [Text.UTF8Encoding]::new($false)
+. (Join-Path $PSScriptRoot '../installer-test-environment.ps1')
+$isolatedEnvironment = $null
 
 function Check([string]$Id, [bool]$Condition, [string]$Evidence = '') {
     if (-not $Condition) {
@@ -36,24 +41,62 @@ function New-Target([string]$Name) {
 }
 
 function Run-Installer([string]$Target, [string[]]$Arguments) {
-    $args = @('-NoProfile', '-File', $installer, '-SourceRoot', $source, '-Target', $Target,
-        '-CliInstallRoot', $cliInstallRoot, '-CliPathStorePath', $cliPathStorePath) + $Arguments
+    $scope = 'project'
+    $harness = 'opencode'
+    $remaining = [System.Collections.Generic.List[string]]::new()
+    for ($index = 0; $index -lt $Arguments.Count; $index++) {
+        if ($Arguments[$index] -eq '-Scope' -and $index + 1 -lt $Arguments.Count) {
+            $scope = $Arguments[++$index]
+        } elseif ($Arguments[$index] -eq '-Harness' -and $index + 1 -lt $Arguments.Count) {
+            $harness = $Arguments[++$index]
+        } elseif ($Arguments[$index] -eq '-Target' -and $index + 1 -lt $Arguments.Count) {
+            $index++
+        } elseif ($Arguments[$index] -eq '-Uninstall' -and $scope -eq 'project') {
+            continue
+        } else { $remaining.Add($Arguments[$index]) }
+    }
+    $isUninstall = '-Uninstall' -in $Arguments
+    if ($scope -eq 'project') {
+        $engine = if ($isUninstall) { $projectUninstaller } else { $projectInstaller }
+        $engineArgs = @('-NoProfile', '-File', $engine, '-Target', $Target, '-Harness', $harness)
+        if (-not $isUninstall) { $engineArgs += @('-SourceVersion', $candidateVersion) }
+        $engineArgs += $remaining
+    } elseif ($harness -eq 'opencode') {
+        $engineArgs = @('-NoProfile', '-File', $installer, '-SourceRoot', $source,
+            '-Version', $candidateVersion, '-Scope', 'global', '-Harness', 'opencode',
+            '-CliInstallRoot', $cliInstallRoot, '-CliPathStorePath', $cliPathStorePath) + $remaining
+    } else {
+        $engineArgs = @('-NoProfile', '-File', $globalInstaller, '-Harness', $harness,
+            '-SourceVersion', $candidateVersion, '-ProjectTarget', $Target) + $remaining
+    }
+    $previousOpenCodeRoot = $env:OPENCODE_CONFIG_DIR
+    $previousCodexHome = $env:CODEX_HOME
+    if ($scope -eq 'global') {
+        $env:OPENCODE_CONFIG_DIR = [string]$env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT
+        if ($env:CODEX_HOME) { $env:CODEX_HOME = [IO.Path]::GetFullPath($env:CODEX_HOME) }
+    }
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         # Windows PowerShell 5.1 turns native stderr into a terminating error
         # under Stop; preserve expected installer failures as captured evidence.
         $ErrorActionPreference = 'Continue'
-        $output = (& pwsh @args 2>&1 | Out-String)
+        $output = (& pwsh @engineArgs 2>&1 | Out-String)
         $code = $LASTEXITCODE
-    } finally { $ErrorActionPreference = $previousErrorActionPreference }
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+        if ($null -eq $previousOpenCodeRoot) { Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue }
+        else { $env:OPENCODE_CONFIG_DIR = $previousOpenCodeRoot }
+        if ($null -eq $previousCodexHome) { Remove-Item Env:CODEX_HOME -ErrorAction SilentlyContinue }
+        else { $env:CODEX_HOME = $previousCodexHome }
+    }
     return [pscustomobject]@{ Text=$output; Code=$code }
 }
 
-function Global-Install([string]$Target, [string]$Harness = 'all') {
+function Global-Install([string]$Target, [string]$Harness = 'opencode') {
     Run-Installer $Target @('-Scope','global','-Harness',$Harness)
 }
 
-function Global-Verify([string]$Target, [string]$Harness = 'all') {
+function Global-Verify([string]$Target, [string]$Harness = 'opencode') {
     Run-Installer $Target @('-Scope','global','-Harness',$Harness,'-VerifyOnly')
 }
 
@@ -98,6 +141,9 @@ function Resolve-SyntheticExternalDecision([string]$ConfigPath, [string]$Externa
 }
 
 try {
+    $isolatedEnvironment = Enter-OlympusInstallerTestEnvironment $run
+    $env:OLYMPUS_CLI_ROOT = $cliInstallRoot
+    $env:OLYMPUS_CLI_PATH_STORE = $cliPathStorePath
     if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'PLATFORM_UNQUALIFIED: global install qualification is Windows-only.' }
     [IO.Directory]::CreateDirectory($run) | Out-Null
     $openCodeRoot = Join-Path $run 'OpenCode Global Config'
@@ -123,7 +169,7 @@ try {
     $safeUserConfig = '{"user_owned":true,"permissions":[{"action":"external_directory","resource":"*","effect":"ask"},{"action":"external_directory","resource":"C:/fixture/prohibited/*","effect":"deny"}]}' + "`n"
     [IO.File]::WriteAllText($openUserConfig, $safeUserConfig, $utf8)
     [IO.File]::WriteAllText($codexUserConfig, "model = 'user-choice'`n", $utf8)
-    $openUserHash = (Get-FileHash -LiteralPath $openUserConfig -Algorithm SHA256).Hash
+    $expectedOpenUserConfig = $safeUserConfig.Insert(1, '"default_agent":"kael",')
     $codexUserHash = (Get-FileHash -LiteralPath $codexUserConfig -Algorithm SHA256).Hash
 
     # The existing project-local default stays project-scoped and records scope.
@@ -154,7 +200,7 @@ try {
         (Test-Path (Join-Path $codexHome 'olympus.config.toml')) -and
         (Test-Path (Join-Path $codexHome 'AGENTS.md')) -and
         (Get-Content (Join-Path $codexHome 'olympus.config.toml') -Raw).Contains('model = "gpt-6.1-sol"'))
-    Check 'GLOBAL_USER_CONFIG_PROTECTED' ((Get-FileHash -LiteralPath $openUserConfig -Algorithm SHA256).Hash -eq $openUserHash -and
+    Check 'GLOBAL_USER_CONFIG_PROTECTED' ([IO.File]::ReadAllText($openUserConfig) -ceq $expectedOpenUserConfig -and
         (Get-FileHash -LiteralPath $codexUserConfig -Algorithm SHA256).Hash -eq $codexUserHash -and
         -not (Test-Path (Join-Path $openCodeRoot 'opencode.jsonc')))
     Check 'GLOBAL_USER_SPECIFIC_DENY_REMAINS_LAST' ((Get-ExternalFallback $openUserConfig) -eq 'ask' -and
@@ -203,7 +249,7 @@ try {
     $safeBroadInstall = Global-Install $project 'opencode'
     Check 'GLOBAL_LATER_ASK_AND_NARROW_DENY_PRESERVED' (
         $safeBroadInstall.Code -eq 0 -and
-        [IO.File]::ReadAllText($safeBroadFile) -ceq $safeBroadText -and
+        [IO.File]::ReadAllText($safeBroadFile) -ceq $safeBroadText.Insert(1, '"default_agent":"kael",') -and
         (Resolve-SyntheticExternalDecision $safeBroadFile 'C:/fixture/prohibited/sentinel.txt') -eq 'deny'
     ) ("exit=$($safeBroadInstall.Code)`n$($safeBroadInstall.Text)")
 
@@ -221,10 +267,12 @@ try {
         $denyInstall.Code -eq 0 -and
         $null -ne $denyManifest -and $denyManifest.managed_files.Count -eq 13 -and
         @($denyManifest.managed_files | Where-Object { $_.path -eq 'opencode.jsonc' }).Count -eq 0 -and
-        [IO.File]::ReadAllText($userDenyPath) -ceq $userDenyText
+        [IO.File]::ReadAllText($userDenyPath) -ceq $userDenyText.Insert($userDenyText.IndexOf('"permissions"'), '"default_agent":"kael",')
     ) ("exit=$($denyInstall.Code)`n$($denyInstall.Text)")
     # Reproduce an older 13-file global install with no config. Upgrading it
     # must establish the missing guard without disturbing its owned agents.
+    [void]$denyManifest.PSObject.Properties.Remove('default_agent_receipt')
+    [IO.File]::WriteAllText((Join-Path $userDenyRoot 'olympus/orchestrator-install.json'), ($denyManifest | ConvertTo-Json -Depth 20), $utf8)
     [IO.File]::Delete($userDenyPath)
     $legacyNoConfigUpgrade = Global-Install $project 'opencode'
     $legacyUpgradedManifest = Get-Content (Join-Path $userDenyRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
@@ -293,6 +341,7 @@ try {
     $guardSourcePath = Join-Path $source 'olympus/harnesses/opencode/global-permissions.jsonc'
     $guardSourceText = [IO.File]::ReadAllText($guardSourcePath)
     $guardSourceHash = (Get-FileHash -LiteralPath $guardSourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $defaultGuardText = $guardSourceText.Insert($guardSourceText.IndexOf('{') + 1, "`n  `"default_agent`": `"kael`",")
     $recoverIntentPath = Join-Path $recoverRoot 'olympus/opencode-guard-pending.json'
     $recoverIntent = ([ordered]@{
         schema_version = 1
@@ -312,7 +361,7 @@ try {
         $recoverInstall.Code -eq 0 -and $null -ne $recoverManifest -and
         $recoverManifest.managed_files.Count -eq 14 -and
         @($recoverManifest.managed_files | Where-Object { $_.path -eq 'opencode.jsonc' }).Count -eq 1 -and
-        (Get-FileHash -LiteralPath $recoverGuardPath -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $guardSourceHash -and
+        [IO.File]::ReadAllText($recoverGuardPath) -ceq $defaultGuardText -and
         -not (Test-Path -LiteralPath $recoverIntentPath) -and
         (Global-Verify $project 'opencode').Code -eq 0
     ) ("exit=$($recoverInstall.Code)`n$($recoverInstall.Text)")
@@ -334,6 +383,7 @@ try {
     $upgradeAgentEntry = @($upgradeManifest.managed_files | Where-Object { $_.path -eq 'agents/kael.md' })[0]
     $upgradeAgentEntry.sha256 = (Get-FileHash -LiteralPath $upgradeAgent -Algorithm SHA256).Hash.ToLowerInvariant()
     $upgradeManifest.managed_files = @($upgradeManifest.managed_files | Where-Object { $_.path -ne 'opencode.jsonc' })
+    [void]$upgradeManifest.PSObject.Properties.Remove('default_agent_receipt')
     $upgradeManifest.installed_version = 'historical-13-file-version'
     [IO.File]::WriteAllText($upgradeManifestPath, (($upgradeManifest | ConvertTo-Json -Depth 20) + "`n"), $utf8)
     [IO.File]::Delete((Join-Path $upgradeRoot 'opencode.jsonc'))
@@ -462,7 +512,7 @@ try {
     Check 'GLOBAL_INTERRUPTED_BEFORE_GUARD_WRITE_RECOVERED' (
         $intentOnlyInstall.Code -eq 0 -and
         -not (Test-Path -LiteralPath $intentOnlyMarker) -and
-        (Get-FileHash -LiteralPath (Join-Path $intentOnlyRoot 'opencode.jsonc') -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $guardSourceHash
+        [IO.File]::ReadAllText((Join-Path $intentOnlyRoot 'opencode.jsonc')) -ceq $defaultGuardText
     ) ("exit=$($intentOnlyInstall.Code)`n$($intentOnlyInstall.Text)")
 
     # An altered guard with the same pending marker cannot be adopted. A
@@ -667,6 +717,7 @@ try {
     Write-Output 'GLOBAL INSTALLER QUALIFICATION: FAIL'
     exit 1
 } finally {
+    if ($null -ne $isolatedEnvironment) { Exit-OlympusInstallerTestEnvironment $isolatedEnvironment }
     $env:PATH = $originalPath
     if ($null -eq $originalOpenCodeRoot) { Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue }
     else { $env:OPENCODE_CONFIG_DIR = $originalOpenCodeRoot }

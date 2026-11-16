@@ -70,9 +70,13 @@ jobs:
 
       - name: Issue128 global CLI (focused Windows gate)
         shell: pwsh
+        env:
+          OLYMPUS_TEST_ROOT: ${{ runner.temp }}/opencode
         run: |
           $ErrorActionPreference = 'Stop'
           python -B -m unittest discover -s tests/harness-core -p test_global_cli.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -B -m unittest discover -s tests/harness-core -p test_default_agent.py -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pwsh -NoProfile -File ./tests/global-cli/smoke.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -263,7 +267,7 @@ jobs:
           $testOutput | Out-Host
           if ($testExitCode -ne 0) { exit $testExitCode }
           $transcript = $testOutput -join "`n"
-          if ($transcript -notmatch '(?m)^Ran 8 tests in ' -or
+          if ($transcript -notmatch '(?m)^Ran 9 tests in ' -or
               $transcript -notmatch '(?m)^OK$') {
             throw 'Slice C5 Windows install/uninstall routing tests did not all pass without skips.'
           }

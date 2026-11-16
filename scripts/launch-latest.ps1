@@ -4,14 +4,6 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('install', 'uninstall')]
     [string]$Action,
-    [Parameter(Mandatory = $true)]
-    [ValidateSet('project', 'global')]
-    [string]$Scope,
-    [Parameter(Mandatory = $true)]
-    [ValidateSet('opencode', 'codex', 'all')]
-    [string]$Harness,
-    [string]$Target = (Get-Location).Path,
-    [string]$Version,
     [switch]$DryRun,
     [switch]$Update
 )
@@ -98,55 +90,28 @@ function Compare-ReleaseTag([string]$Left, [string]$Right) {
     return ([long]$a.Groups['sequence'].Value).CompareTo([long]$b.Groups['sequence'].Value)
 }
 
-function Get-InstalledGlobalVersion([string]$SelectedHarness) {
+function Get-InstalledGlobalVersion {
     $root = $null
-    if ($SelectedHarness -eq 'opencode') {
-        if ($env:OPENCODE_CONFIG_DIR) { $root = [IO.Path]::GetFullPath($env:OPENCODE_CONFIG_DIR) }
-        else {
-            $commands = @(Get-Command opencode -CommandType Application -ErrorAction SilentlyContinue)
-            if ($commands.Count -eq 0) { return $null }
-            $paths = @(& $commands[0].Source debug paths 2>$null | ForEach-Object {
-                if ($_ -match '^\s*config\s{2,}(.+?)\s*$') { $Matches[1].Trim() }
-            })
-            if ($LASTEXITCODE -ne 0 -or $paths.Count -ne 1 -or -not [IO.Path]::IsPathFullyQualified($paths[0])) { return $null }
-            $root = $paths[0]
-        }
-    } else {
-        $root = if ($env:CODEX_HOME) { [IO.Path]::GetFullPath($env:CODEX_HOME) } else { Join-Path $HOME '.codex' }
+    if ($env:OPENCODE_CONFIG_DIR) { $root = [IO.Path]::GetFullPath($env:OPENCODE_CONFIG_DIR) }
+    else {
+        $commands = @(Get-Command opencode -CommandType Application -ErrorAction SilentlyContinue)
+        if ($commands.Count -eq 0) { return $null }
+        $paths = @(& $commands[0].Source debug paths 2>$null | ForEach-Object {
+            if ($_ -match '^\s*config\s{2,}(.+?)\s*$') { $Matches[1].Trim() }
+        })
+        if ($LASTEXITCODE -ne 0 -or $paths.Count -ne 1 -or -not [IO.Path]::IsPathFullyQualified($paths[0])) { return $null }
+        $root = $paths[0]
     }
     $manifestPath = Join-Path $root 'olympus/orchestrator-install.json'
     if (-not (Test-Path -LiteralPath $manifestPath)) { return $null }
     try { $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -Depth 30 -ErrorAction Stop }
     catch { throw 'UPDATE_MANIFEST_INVALID: The installed Olympus version record is unreadable; no update was started.' }
     if ($manifest.scope -cne 'global' -or @($manifest.installed_harnesses).Count -ne 1 -or
-        [string]$manifest.installed_harnesses[0] -cne $SelectedHarness) {
+        [string]$manifest.installed_harnesses[0] -cne 'opencode') {
         throw 'UPDATE_MANIFEST_INVALID: The installed Olympus version record is not a supported global installation.'
     }
     $installed = [string]$manifest.installed_version
     if ($installed -ceq 'local' -or $installed -ceq 'unknown' -or $installed -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') { return $null }
-    return $installed
-}
-
-function Get-InstalledProjectVersion([string]$ProjectTarget) {
-    if (-not [IO.Path]::IsPathFullyQualified($ProjectTarget) -or
-        -not (Test-Path -LiteralPath $ProjectTarget -PathType Container)) {
-        throw 'UPDATE_TARGET_INVALID: Project update requires an absolute existing Git worktree root.'
-    }
-    $target = [IO.Path]::GetFullPath($ProjectTarget)
-    $manifestPaths = @('.opencode/orchestrator-install.json', '.codex/orchestrator-install.json' | ForEach-Object {
-        Join-Path $target ($_ -replace '/', [IO.Path]::DirectorySeparatorChar)
-    }) | Where-Object { Test-Path -LiteralPath $_ }
-    if ($manifestPaths.Count -ne 1) { throw 'UPDATE_MANIFEST_INVALID: No unique managed project installation was found.' }
-    try { $manifest = [IO.File]::ReadAllText($manifestPaths[0]) | ConvertFrom-Json -Depth 100 -ErrorAction Stop }
-    catch { throw 'UPDATE_MANIFEST_INVALID: The project ownership manifest is unreadable.' }
-    if ($manifest.schema_version -ne 1 -or $manifest.scope -notin @($null, 'project') -or
-        $null -eq $manifest.managed_files) {
-        throw 'UPDATE_MANIFEST_INVALID: The project ownership manifest is unsupported.'
-    }
-    $installed = [string]$manifest.installed_version
-    if ($installed -in @('local', 'unknown') -or $installed -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') {
-        return 'unknown'
-    }
     return $installed
 }
 
@@ -157,13 +122,6 @@ try {
     if ($Update -and ($Action -ne 'install' -or $DryRun)) {
         throw 'UPDATE_MODE_INVALID: -Update is available only for a normal install.'
     }
-    if ($Version -and -not [regex]::IsMatch(
-        $Version,
-        '\Av(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?\z'
-    )) {
-        throw "LATEST_RELEASE_INVALID: Requested version '$Version' is not an exact Olympus release tag."
-    }
-
     $pwsh = @(Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue)
     if ($pwsh.Count -eq 0) {
         throw 'OLYMPUS_REQUIRES_POWERSHELL_7: PowerShell 7 (pwsh) is required.'
@@ -173,11 +131,7 @@ try {
     # GitHub's HTTPS metadata and raw source are the acquisition channel. The
     # immutable flag is GitHub's assertion; this does not independently verify
     # a signature or cryptographic provenance for the downloaded bytes.
-    $releaseUri = if ($Version) {
-        "https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/tags/$Version"
-    } else {
-        'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest'
-    }
+    $releaseUri = 'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest'
     $release = Invoke-RestMethod -Uri $releaseUri -Headers $headers -ErrorAction Stop
     Assert-ReleaseBoolean $release 'immutable' $true
     Assert-ReleaseBoolean $release 'draft' $false
@@ -186,9 +140,6 @@ try {
     $tag = [string](Get-ReleaseField $release 'tag_name')
     if (-not [regex]::IsMatch($tag, '\Av(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?\z')) {
         throw "LATEST_RELEASE_INVALID: GitHub latest release returned malformed tag '$tag'."
-    }
-    if ($Version -and $tag -cne $Version) {
-        throw "LATEST_RELEASE_TAG_MISMATCH: Requested '$Version' but metadata returned '$tag'."
     }
     if ($tag -match '-(?:alpha|beta|rc)\.' -and -not [bool](Get-ReleaseField $release 'prerelease')) {
         throw "LATEST_RELEASE_METADATA_INCONSISTENT: tag '$tag' is prerelease but GitHub reports prerelease=false."
@@ -207,42 +158,13 @@ try {
         throw "LATEST_RELEASE_METADATA_INVALID: published_at '$publishedAt' is in the future."
     }
 
-    if ($Action -eq 'install' -and $Update -and $Scope -eq 'project') {
-        $installed = Get-InstalledProjectVersion $Target
-        if ($installed -ne 'unknown' -and (Compare-ReleaseTag $tag $installed) -lt 0) {
+    if ($Action -eq 'install' -and $Update) {
+        $installed = Get-InstalledGlobalVersion
+        if ($installed -and (Compare-ReleaseTag $tag $installed) -lt 0) {
             Write-Output "OLYMPUS_UPDATE: NO_DOWNGRADE current=$installed latest=$tag"
             exit 0
         }
-        Write-Output "OLYMPUS_UPDATE: current=$installed latest=$tag"
-    }
-    if ($Action -eq 'install' -and $Scope -eq 'global') {
-        $installedVersions = @()
-        foreach ($selectedHarness in $(if ($Harness -eq 'all') { @('opencode','codex') } else { @($Harness) })) {
-            $installed = Get-InstalledGlobalVersion $selectedHarness
-            if ($installed) { $installedVersions += [pscustomobject]@{ Harness=$selectedHarness; Version=$installed } }
-        }
-        if ($Update) {
-            $localInstaller = Join-Path (Split-Path -Parent $PSScriptRoot) 'install.ps1'
-            if (Test-Path -LiteralPath $localInstaller -PathType Leaf) {
-                $localVersion = [regex]::Match([IO.File]::ReadAllText($localInstaller), '(?m)^\s*\$ReleaseVersion\s*=\s*''([^'']+)''')
-                if ($localVersion.Success -and (Compare-ReleaseTag $tag $localVersion.Groups[1].Value) -lt 0) {
-                    Write-Output "OLYMPUS_UPDATE: NO_DOWNGRADE current=$($localVersion.Groups[1].Value) latest=$tag"
-                    exit 0
-                }
-            }
-        }
-        foreach ($installed in $installedVersions) {
-            if ((Compare-ReleaseTag $tag $installed.Version) -lt 0) {
-                Write-Output "OLYMPUS_UPDATE: NO_DOWNGRADE harness=$($installed.Harness) current=$($installed.Version) latest=$tag"
-                exit 0
-            }
-        }
-        if ($Update) {
-            $currentLabel = if ($installedVersions.Count) {
-                (@($installedVersions | ForEach-Object { "$($_.Harness)=$($_.Version)" }) -join ',')
-            } else { 'unknown' }
-            Write-Output "OLYMPUS_UPDATE: current=$currentLabel latest=$tag"
-        }
+        if ($installed) { Write-Output "OLYMPUS_UPDATE: current=$installed latest=$tag" }
     }
     Write-Output "OLYMPUS_RELEASE_SELECTED: tag=$tag immutable=true published_at=$($publishedTimestamp.ToUniversalTime().ToString('o'))"
 
@@ -264,11 +186,6 @@ try {
         throw "LATEST_RELEASE_IDENTITY_MISMATCH: Downloaded installer does not identify itself as $tag."
     }
 
-    if ($Action -eq 'uninstall' -and $Scope -eq 'project' -and
-        $installerText -notmatch [regex]::Escape('scripts/project-uninstall.ps1')) {
-        throw "PROJECT_UNINSTALL_UNAVAILABLE_IN_LATEST_RELEASE: $tag predates project uninstall support."
-    }
-
     $args = @(
         '-NoProfile'
     )
@@ -276,15 +193,14 @@ try {
     $args += @(
         '-File', $installer,
         '-Version', $tag,
-        '-Target', ([IO.Path]::GetFullPath($Target)),
-        '-Scope', $Scope,
-        '-Harness', $Harness
+        '-Scope', 'global',
+        '-Harness', 'opencode'
     )
     if ($Action -eq 'uninstall') { $args += '-Uninstall' }
     if ($Update) { $args += '-Update' }
     if ($DryRun) { $args += '-DryRun' }
 
-    Write-Output "OLYMPUS_ENTRYPOINT: action=$Action scope=$Scope harness=$Harness release=$tag"
+    Write-Output "OLYMPUS_ENTRYPOINT: action=$Action scope=global harness=opencode release=$tag"
     Write-Output "OLYMPUS_RELEASE_EXECUTING: tag=$tag installer=$installerUrl"
     & $pwsh[0].Source @args
     if ($LASTEXITCODE -ne 0) {

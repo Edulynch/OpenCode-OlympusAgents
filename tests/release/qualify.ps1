@@ -27,6 +27,8 @@ $receiptPath = Join-Path $tempOpencode ('olympus-release-qualification-' + $Reco
 $transcriptPath = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId + '.log')
 $cliInstallRoot = Join-Path $run 'cli-install'
 $cliPathStorePath = Join-Path $cliInstallRoot 'cli-path.json'
+. (Join-Path $PSScriptRoot '../installer-test-environment.ps1')
+$isolatedEnvironment = $null
 $utf8 = [Text.UTF8Encoding]::new($false)
 $script:QualificationReceipt = $null
 function Save-QualificationReceipt {
@@ -235,19 +237,66 @@ function Test-QualificationCliTargetsReject([string]$InstallRoot, [string]$PathS
 
 function Install([string]$target, [string]$archive, [string]$version = '') {
     Assert-QualificationCliTargets $cliInstallRoot $cliPathStorePath
-    $args = @('-NoProfile', '-File', $installer, '-Target', $target, '-SourceArchive', $archive,
-        '-CliInstallRoot', $cliInstallRoot, '-CliPathStorePath', $cliPathStorePath)
-    if ($version) { $args += @('-Version', $version) }
-    $output = (& pwsh @args 2>&1 | Out-String)
-    [pscustomobject]@{ Text=$output; Code=$LASTEXITCODE }
+    if (-not $version) { $version = $script:CandidateVersion }
+    try {
+        $fixture = Expand-ProjectQualificationSource $archive $version
+        $output = "OLYMPUS_SOURCE: requested=$version resolved=$version origin=LOCAL_ARCHIVE`n"
+        $output += (& pwsh -NoProfile -File (Join-Path $fixture 'scripts/bootstrap.ps1') `
+            -Target $target -SourceVersion $version 2>&1 | Out-String)
+        $code = $LASTEXITCODE
+        if ($code -eq 0) {
+            $output += "OLYMPUS_INSTALL: $version READY_OR_NO_CHANGES`n"
+            $output += (& pwsh -NoProfile -File (Join-Path $fixture 'scripts/install-cli.ps1') `
+                -Action install -SourceRoot $fixture -Version $version `
+                -InstallRoot $cliInstallRoot -PathStorePath $cliPathStorePath 2>&1 | Out-String)
+            $code = $LASTEXITCODE
+        }
+        return [pscustomobject]@{ Text=$output; Code=$code }
+    } catch { return [pscustomobject]@{ Text=$_.Exception.Message; Code=1 } }
 }
 
 function Verify([string]$target, [string]$archive, [string]$version) {
     Assert-QualificationCliTargets $cliInstallRoot $cliPathStorePath
-    $args = @('-NoProfile', '-File', $installer, '-Target', $target, '-SourceArchive', $archive,
-        '-Version', $version, '-VerifyOnly', '-CliInstallRoot', $cliInstallRoot, '-CliPathStorePath', $cliPathStorePath)
-    $output = (& pwsh @args 2>&1 | Out-String)
-    [pscustomobject]@{ Text=$output; Code=$LASTEXITCODE }
+    try {
+        $fixture = Expand-ProjectQualificationSource $archive $version
+        $bootstrap = Join-Path $fixture 'scripts/bootstrap.ps1'
+        if ([IO.File]::ReadAllText($bootstrap) -match '(?m)^\s*\[switch\]\$VerifyOnly') {
+            $output = (& pwsh -NoProfile -File $bootstrap -Target $target -SourceVersion $version -VerifyOnly 2>&1 | Out-String)
+            return [pscustomobject]@{ Text=$output; Code=$LASTEXITCODE }
+        }
+        Assert-LegacyOpenCodeInstall $fixture $version $target $bootstrap
+        return [pscustomobject]@{ Text="OLYMPUS_VERIFY: $version PASS"; Code=0 }
+    } catch {
+        $message = $_.Exception.Message
+        $reason = if ($message -match '^([A-Z_]+):') { $Matches[1] } else { 'VERIFY_FAILED' }
+        return [pscustomobject]@{ Text="OLYMPUS_VERIFY: $version FAIL`nOLYMPUS_VERIFY_REASON: $reason`n$message"; Code=1 }
+    }
+}
+
+# Keep legacy project qualification on internal engines. Reuse the real source
+# identity functions without executing the now-global public installer body.
+$tokens = $null; $parseErrors = $null
+$installerAst = [Management.Automation.Language.Parser]::ParseFile($installer, [ref]$tokens, [ref]$parseErrors)
+if ($parseErrors.Count) { throw 'QUALIFICATION_INSTALLER_PARSE_FAILED' }
+foreach ($name in @('Get-DeclaredReleaseVersion','Assert-ArchiveTag','Get-ContentHash','Get-LegacyManagedSourcePaths','Assert-LegacyOpenCodeInstall')) {
+    $definition = $installerAst.Find({ param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name
+    }.GetNewClosure(), $true)
+    if ($null -eq $definition) { throw "QUALIFICATION_SOURCE_GUARD_MISSING: $name" }
+    . ([scriptblock]::Create($definition.Extent.Text))
+}
+
+function Expand-ProjectQualificationSource([string]$Archive, [string]$Version) {
+    $expanded = Join-Path $run ('project-source-' + [guid]::NewGuid().ToString('N'))
+    Expand-Archive -LiteralPath $Archive -DestinationPath $expanded
+    $roots = @(Get-ChildItem -LiteralPath $expanded -Force)
+    if ($roots.Count -ne 1 -or -not $roots[0].PSIsContainer) { throw 'SOURCE_INVALID: No single archive root.' }
+    Assert-ArchiveTag $roots[0].Name $Version
+    $declared = Get-DeclaredReleaseVersion $roots[0].FullName
+    if ($declared -cne $Version) {
+        throw "SOURCE_VERSION_MISMATCH: requested '$Version' but resolved source reports '$declared'."
+    }
+    return $roots[0].FullName
 }
 
 function Get-ProjectSnapshot([string]$target) {
@@ -262,6 +311,9 @@ function Get-ProjectSnapshot([string]$target) {
 }
 
 try {
+    # Capture the caller's destination before replacing LOCALAPPDATA with the fixture.
+    $hostDefaultCliRoot = Join-Path $env:LOCALAPPDATA 'Programs/Olympus'
+    $isolatedEnvironment = Enter-OlympusInstallerTestEnvironment $run
     [IO.Directory]::CreateDirectory($run) | Out-Null
     Start-Transcript -LiteralPath $transcriptPath -Force | Out-Null
     $validCliTargets = $false
@@ -269,7 +321,6 @@ try {
         Assert-QualificationCliTargets $cliInstallRoot $cliPathStorePath
         $validCliTargets = $true
     } catch {}
-    $hostDefaultCliRoot = Join-Path $env:LOCALAPPDATA 'Programs/Olympus'
     $outsideFixtureCliRoot = Join-Path $tempOpencode ('outside-' + $RecoveryRunId)
     $cliTargetRejections = @(
         (Test-QualificationCliTargetsReject '' $cliPathStorePath),
@@ -317,7 +368,7 @@ try {
     $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1',$script:CandidateVersion,'v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
     if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
         Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
-        Check 'R0_TARGET_IDENTITY_V070' ($script:CandidateVersion -ceq 'v0.7.0')
+        Check 'R0_TARGET_IDENTITY_V080' ($script:CandidateVersion -ceq 'v0.8.0')
         Check 'R0_STABLE_CANDIDATE_VERSION' ($script:CandidateVersion -match '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$')
         Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
         Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
@@ -561,13 +612,16 @@ try {
     # Public wrappers (12 variants) must use tag-pinned executable sources.
     function Test-PublicWrapperSource([string]$Content, [string]$Tag,
         [string]$Action, [string]$Scope, [string]$Harness) {
-        $expectedLauncher = 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/' +
-            $Tag + '/scripts/launch-latest.ps1'
-        $urls = [regex]::Matches($Content,
-            'https://raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/[^\s]+?\.ps1')
-        return ($urls.Count -eq 1 -and $urls[0].Value -ceq $expectedLauncher -and
-            $Content.Contains("Invoke-WebRequest -Uri '$expectedLauncher' -OutFile " + '$launcher' + " -ErrorAction Stop") -and
-            $Content.Contains("-Action '$Action' -Scope '$Scope' -Harness '$Harness' -Target (Get-Location).Path"))
+        if ($Scope -ne 'global' -or $Harness -ne 'opencode') {
+            $tokens = $null; $errors = $null
+            $ast = [Management.Automation.Language.Parser]::ParseInput($Content, [ref]$tokens, [ref]$errors)
+            return ($errors.Count -eq 0 -and $ast.EndBlock.Statements.Count -eq 1 -and
+                $ast.EndBlock.Statements[0] -is [Management.Automation.Language.ThrowStatementAst])
+        }
+        $valid = if ($Action -eq 'install') {
+            $Content.Contains('https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1')
+        } else { $Content.Contains('uninstall --execute') }
+        return ($valid -and $Content -notmatch '-Harness|-Scope|-Target|/master/')
     }
 
     $wrapperIssues = @()
@@ -595,9 +649,8 @@ try {
             -not $Content.Contains('/v0.4.9/scripts/launch-latest.ps1') -and
             -not $Content.Contains('/master/scripts/launch-latest.ps1') -and
             $Content.Contains('Invoke-WebRequest -Uri $launcherUrl -OutFile $ownedLauncher -Headers $headers -ErrorAction Stop') -and
-            [regex]::IsMatch($Content, "(?m)^\s*'-Action',\s*'$([regex]::Escape($Action))',\s*$") -and
-            $Content.Contains("'-Harness', `$selectedHarness,") -and
-            $Content.Contains("'-Target', [IO.Path]::GetFullPath(`$target)"))
+            $Content.Contains("'-Action', '$Action'") -and
+            -not $Content.Contains('$selectedHarness') -and -not $Content.Contains("'-Target'"))
     }
     $unifiedEntrypointIssues = @()
     foreach ($entry in @(@('install-olympus.ps1','install'), @('uninstall-olympus.ps1','uninstall'))) {
@@ -611,22 +664,22 @@ try {
     $uninstallEntryText = [IO.File]::ReadAllText((Join-Path $source 'uninstall-olympus.ps1'))
     Check 'R25_UNIFIED_ENTRYPOINT_MUTATIONS_REJECTED' (
         -not (Test-UnifiedEntrypointSource ($installEntryText.Replace('/$tag/scripts/launch-latest.ps1', '/master/scripts/launch-latest.ps1')) 'install') -and
-        -not (Test-UnifiedEntrypointSource ($installEntryText.Replace("'-Action', 'install',", "'-Action', 'uninstall',")) 'install') -and
-        -not (Test-UnifiedEntrypointSource ($uninstallEntryText.Replace("'-Action', 'uninstall',", "'-Action', 'install',")) 'uninstall'))
+        -not (Test-UnifiedEntrypointSource ($installEntryText.Replace("'-Action', 'install'", "'-Action', 'uninstall'")) 'install') -and
+        -not (Test-UnifiedEntrypointSource ($uninstallEntryText.Replace("'-Action', 'uninstall'", "'-Action', 'install'")) 'uninstall'))
 
-    $sample = [IO.File]::ReadAllText((Join-Path $source 'install/project/codex.ps1'))
-    $badMutable = $sample.Replace('/' + $script:CandidateVersion + '/scripts/launch-latest.ps1',
+    $sample = [IO.File]::ReadAllText((Join-Path $source 'install/global/opencode.ps1'))
+    $badMutable = $sample.Replace('/releases/latest/download/install-olympus.ps1',
         '/master/scripts/launch-latest.ps1')
-    $badWrongHarness = $sample.Replace("-Harness 'codex'", "-Harness 'all'")
-    $badForeignSource = $sample.Replace('https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/',
+    $badWrongHarness = $sample + "`n# -Harness all"
+    $badForeignSource = $sample.Replace('https://github.com/Edulynch/OpenCode-OlympusAgents/',
         'https://example.invalid/')
-    $badOldTag = $sample.Replace('/' + $script:CandidateVersion + '/scripts/launch-latest.ps1',
+    $badOldTag = $sample.Replace('/releases/latest/download/install-olympus.ps1',
         '/v0.4.6/scripts/launch-latest.ps1')
     Check 'R25_PUBLIC_WRAPPER_MUTATIONS_REJECTED' (
-        -not (Test-PublicWrapperSource $badMutable $script:CandidateVersion 'install' 'project' 'codex') -and
-        -not (Test-PublicWrapperSource $badWrongHarness $script:CandidateVersion 'install' 'project' 'codex') -and
-        -not (Test-PublicWrapperSource $badForeignSource $script:CandidateVersion 'install' 'project' 'codex') -and
-        -not (Test-PublicWrapperSource $badOldTag $script:CandidateVersion 'install' 'project' 'codex'))
+        -not (Test-PublicWrapperSource $badMutable $script:CandidateVersion 'install' 'global' 'opencode') -and
+        -not (Test-PublicWrapperSource $badWrongHarness $script:CandidateVersion 'install' 'global' 'opencode') -and
+        -not (Test-PublicWrapperSource $badForeignSource $script:CandidateVersion 'install' 'global' 'opencode') -and
+        -not (Test-PublicWrapperSource $badOldTag $script:CandidateVersion 'install' 'global' 'opencode'))
 
     $changelog = [IO.File]::ReadAllText((Join-Path $source 'CHANGELOG.md'))
     $notesStart = $changelog.IndexOf($script:CandidateHeading, [StringComparison]::Ordinal)
@@ -648,8 +701,8 @@ try {
         $releaseNotes -match '(?i)read-only|VerifyOnly')
     Check 'R25_RELEASE_NOTES_KEEP_COMMANDS_IN_INSTALL_GUIDE' ($releaseNotes -notmatch '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/)[^\r\n]+?\.ps1' -and
         $releaseNotes -notmatch '(?i)\b(?:irm|iwr|Invoke-WebRequest)\b[^\r\n]*\.ps1')
-    $requiredHighlights = @('olympus config apply','--dry-run','--execute','OpenCode-only global apply/recovery',
-        'matching pending operation','olympus doctor','read-only','MCP servers optional','v0.6.1','selected immutable tag')
+    $requiredHighlights = @('global OpenCode','default_agent_receipt','pending_set','pending_uninstall',
+        'config apply --dry-run','--execute','read-only','immutable','selected tag')
     $missingHighlights = @($requiredHighlights | Where-Object { -not $releaseNotes.Contains($_) })
     Check 'R25_CURRENT_RELEASE_HIGHLIGHTS' ($missingHighlights.Count -eq 0)
     Check 'R25_CURRENT_CAPABILITY_GAPS_NOT_OVERCLAIMED' ($releaseNotes -match 'DENY\s*=\s*GAP' -and
@@ -665,9 +718,7 @@ try {
         $versionText -match 'archive/refs/tags/\$Version\.zip')
 
     $readme = [IO.File]::ReadAllText((Join-Path $source 'README.md'))
-    $publicBootstrapVersion = 'v0.6.1'
-    $fastInstallUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$publicBootstrapVersion/install-olympus.ps1"
-    $fastUninstallUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$publicBootstrapVersion/uninstall-olympus.ps1"
+    $fastInstallUrl = 'https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1'
     function Get-ReadmePowerShellCodeBlocks([string]$Markdown) {
         $blocks = [System.Collections.Generic.List[string]]::new()
         foreach ($block in [regex]::Matches($Markdown, '(?ims)^```(?:powershell|pwsh|ps1)[ \t]*\r?\n(?<body>.*?)^```[ \t]*\r?$')) {
@@ -743,7 +794,7 @@ try {
             }
             if ($hasRemoteCommand) { $remoteStatements.Add($statement) }
         }
-        if ($directInstallerFound -or $remoteStatements.Count -ne 2) { return $false }
+        if ($directInstallerFound -or $remoteStatements.Count -ne 1) { return $false }
         $installCount = 0
         $uninstallCount = 0
         foreach ($statement in $remoteStatements) {
@@ -751,20 +802,20 @@ try {
             elseif (Test-ReadmeExpectedBootstrapStatement $statement $UninstallCommand) { $uninstallCount++ }
             else { return $false }
         }
-        return ($installCount -eq 1 -and $uninstallCount -eq 1)
+        return ($installCount -eq 1 -and $uninstallCount -eq 0)
     }
     $fastInstallCommand = "& ([scriptblock]::Create((irm '$fastInstallUrl')))"
-    $fastUninstallCommand = "& ([scriptblock]::Create((irm '$fastUninstallUrl')))"
+    $fastUninstallCommand = 'olympus uninstall'
     $readmeWithLf = $readme.Replace("`r`n", "`n")
     $readmeWithCrLf = $readmeWithLf.Replace("`n", "`r`n")
     Check 'R25_README_FAST_CONTRACT_ACCEPTS_LF_AND_CRLF' (
         (Test-ReadmeFastCommandContract $readmeWithLf $fastInstallCommand $fastUninstallCommand) -and
         (Test-ReadmeFastCommandContract $readmeWithCrLf $fastInstallCommand $fastUninstallCommand) -and
-        $readme.Contains('/' + $publicBootstrapVersion + '/install-olympus.ps1') -and
-        $readme.Contains('/' + $publicBootstrapVersion + '/uninstall-olympus.ps1') -and
+        $readme.Contains($fastInstallUrl) -and
+        $readme.Contains('olympus uninstall') -and
         $readme.Contains('published, immutable') -and
-        $readme -match '(?i)bootstrap pin is not the installed product version' -and
-        $readme -match '(?i)metadata checks fail closed' -and
+        $readme -match '(?i)future release' -and
+        $readme -match '(?i)global and OpenCode-only' -and
         -not $readme.Contains('/' + $script:CandidateVersion + '/install-olympus.ps1') -and
         -not $readme.Contains('/' + $script:CandidateVersion + '/uninstall-olympus.ps1'))
     $readmeWithExtraFastHeadingLf = $readmeWithLf + "`n## Fast Extra`n"
@@ -834,10 +885,10 @@ try {
         (Test-ReadmeFastCommandContract $readmeWithDescriptions $fastInstallCommand $fastUninstallCommand) -and
         (Test-ReadmeGlobalInstallerContract $readmeWithDescriptions $fastInstallCommand $fastUninstallCommand))
     Check 'R25_INSTALLATION_GUIDE_HAS_SCOPE_HARNESS_SAFETY_AND_STATUS' (
-        $installGuide.Contains($fastInstallUrl) -and $installGuide.Contains($fastUninstallUrl) -and
+        $installGuide.Contains($fastInstallUrl) -and $installGuide.Contains($fastUninstallCommand) -and
         $installGuide.Contains($script:CandidateVersion) -and
         $installGuide.Contains('https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest') -and
-        $installGuide.Contains($publicBootstrapVersion + '/install-olympus.ps1') -and
+        $installGuide.Contains('future release') -and
         $installGuide.Contains('immutable=true') -and
         $installGuide.Contains('time-zone-aware') -and
         $installGuide.Contains('published_at') -and
@@ -848,8 +899,8 @@ try {
         -not $installGuide.Contains('/' + $script:CandidateVersion + '/uninstall-olympus.ps1') -and
         $installGuide.Contains('ACTIVE DEVELOPMENT') -and
         $installGuide.Contains('FROZEN COMPATIBILITY') -and
-        $installGuide.Contains('-Project -Here') -and $installGuide.Contains('-ProjectPath') -and
-        $installGuide.Contains('-Global') -and $installGuide.Contains('opencode') -and
+        $installGuide.Contains('default_agent_receipt') -and $installGuide.Contains('pending_set') -and
+        $installGuide.Contains('pending_uninstall') -and $installGuide.Contains('opencode') -and
         $installGuide.Contains('codex') -and $installGuide.Contains('all') -and
         $installGuide.Contains('immutable=true') -and $installGuide.Contains('VerifyOnly'))
     $v049Start = $changelog.IndexOf('## v0.4.9', [StringComparison]::Ordinal)
@@ -894,7 +945,7 @@ try {
 
     $badVersionTarget = New-Target 'bad-version'
     Assert-QualificationCliTargets $cliInstallRoot $cliPathStorePath
-    $badVersion = (& pwsh -NoProfile -File $installer -Version 'v1.2.3-preview.1' -Target $badVersionTarget -SourceArchive $candidateArchive `
+    $badVersion = (& pwsh -NoProfile -File $installer -Version 'v1.2.3-preview.1' -SourceArchive $candidateArchive `
         -CliInstallRoot $cliInstallRoot -CliPathStorePath $cliPathStorePath 2>&1 | Out-String)
     Check 'R17_MALFORMED_VERSION_REJECTED' ($LASTEXITCODE -ne 0 -and $badVersion -match 'v1\.2\.3-preview\.1' -and
         $badVersion -match 'no coincide|does not match|validation pattern' -and
@@ -1055,6 +1106,7 @@ try {
     Write-Output 'RELEASE QUALIFICATION: FAIL'
     exit 1
 } finally {
+    if ($null -ne $isolatedEnvironment) { Exit-OlympusInstallerTestEnvironment $isolatedEnvironment }
     try { Stop-Transcript | Out-Null } catch { }
     if ($MockOpenCode -and $run -and (Test-Path -LiteralPath $run)) {
         $mockBin = Join-Path $run 'mock-bin'

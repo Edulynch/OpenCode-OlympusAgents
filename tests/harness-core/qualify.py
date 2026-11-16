@@ -186,10 +186,15 @@ def main(argv: list[str] | None = None) -> int:
     installer_text = (ROOT / "install.ps1").read_text(encoding="utf-8")
     bootstrap_text = (ROOT / "scripts/bootstrap.ps1").read_text(encoding="utf-8")
     check(
-        "INSTALLER_DEFAULTS_TO_OPENCODE_AND_EXPOSES_TWO_ADAPTERS",
+        "PUBLIC_INSTALLER_IS_GLOBAL_OPENCODE_ONLY",
         "[string]$Harness = 'opencode'" in installer_text
-        and "[string]$Scope = 'project'" in installer_text
-        and "[ValidateSet('opencode', 'codex', 'all')]" in installer_text,
+        and "[string]$Scope = 'global'" in installer_text
+        and "[ValidateSet('opencode')]" in installer_text
+        and "[ValidateSet('global')]" in installer_text,
+    )
+    check(
+        "INTERNAL_BOOTSTRAP_RETAINS_TWO_ADAPTERS",
+        "[ValidateSet('opencode', 'codex', 'all')]" in bootstrap_text,
     )
     check(
         "INSTALLER_DERIVES_INVENTORY_FROM_GENERATED_OUTPUTS",

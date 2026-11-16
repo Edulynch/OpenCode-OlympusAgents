@@ -2,7 +2,9 @@
 
 ## Start here
 
-Run [Fast Install](../README.md#fast-install) from the published `v0.6.1` bootstrap. That immutable bootstrap selects an eligible published stable release; its tag is separate from the selected product version. It asks for scope (**current project**, **another project**, or **global**) and harness (**OpenCode**, **Codex**, or **both**) when needed. A successful project or global install sets up the per-user `olympus` command and adds its `bin` folder to the current user's PATH; open a new PowerShell 7 shell afterward.
+The new [Fast Install](../README.md#fast-install) is global and OpenCode-only. It has no project/harness selectors or menus, and the current directory never selects the installation target. It sets up the per-user `olympus` command and its user PATH entry; open a new PowerShell 7 shell afterward.
+
+**Publication prerequisite:** this source prepares a future release. The immutable `v0.7.0` release has no generic installer asset. The URL below is intended, not a currently working endpoint. Publish a new release using the [asset publication procedure](DEVELOPMENT.md#publishing-the-generic-installer-asset); never modify `v0.7.0` or execute code from `master`.
 
 Then use `olympus version` and `olympus update` from any directory. The public [Fast Uninstall](../README.md#fast-uninstall) entrypoint and `olympus uninstall` remove only managed resources and Olympus's PATH entry.
 
@@ -13,56 +15,38 @@ The public PowerShell entrypoints are executable code. They select an immutable 
 - Windows; this is the only currently qualified installer platform. Linux and macOS are not qualified.
 - PowerShell 7 (`pwsh`) installed and available on `PATH`. Windows PowerShell 5.1 may start an entrypoint only when PowerShell 7 is also available; 5.1 alone is insufficient.
 - Python 3.11+ is used internally by the global CLI; users invoke `olympus`, not `python -m olympus`.
-- Git is required for project-scope installation and uninstallation. Use the root of a trusted Git worktree.
-- Install OpenCode V2, Codex CLI, or both according to the selected harness. This does not establish runtime discovery for every version.
+- OpenCode V2. This does not establish runtime discovery for every version.
 
-OpenCode V2 is in **ACTIVE DEVELOPMENT**. Codex is in **FROZEN COMPATIBILITY**: existing installation and safe-uninstall behavior remain, but no new capability or full parity is implied. Global installation is Windows-qualified. See [harness capabilities](HARNESS-CAPABILITIES.md) and [Codex compatibility](CODEX-COMPATIBILITY.md).
+OpenCode V2 is in **ACTIVE DEVELOPMENT**. Codex adapters and internal project/configuration engines remain for **FROZEN COMPATIBILITY**, not public installation. See [harness capabilities](HARNESS-CAPABILITIES.md) and [Codex compatibility](CODEX-COMPATIBILITY.md).
 
 ## Public PowerShell entrypoints
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/install-olympus.ps1')))
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/uninstall-olympus.ps1')))
+& ([scriptblock]::Create((irm 'https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1')))
+olympus uninstall
 ```
 
 Invoke the downloaded script block with `&` as shown.
 
-When run in an interactive terminal with no selection parameters, either entrypoint asks for scope and harness. A valid partial selection asks only for the missing values. For example, `-Global` asks only for a harness, while `-Harness codex` asks only for scope. If all required values are supplied, the command runs without prompting and is suitable for non-interactive use. If a required value is missing and interactive input is unavailable, it exits with `ARGUMENTS_REQUIRED` instead of waiting for input.
+Both source entrypoints, `install-olympus.ps1` and `uninstall-olympus.ps1`, are fixed to global OpenCode. Install accepts `-DryRun` or `-Update`; uninstall has no selection arguments. No interactive selection is required.
 
-### Scope and harness selection
+### Removed installation selectors
 
-| Scope | Parameters | Target |
-|---|---|---|
-| Current project | `-Project -Here` | Current directory; must be the Git worktree root |
-| Another project | `-ProjectPath <path>` | The specified Git worktree root |
-| Global | `-Global` | User-level runtime configuration |
+Project targets and Codex/dual installation are rejected before download or dispatch. CLI install/update/uninstall reject legacy `--scope`, `--harness`, `--target`, and `--version` selectors. The root tagged installer retains fixed `global`/`opencode` defaults and qualification-only source/version overrides, but rejects project/Codex modes.
 
-`-Harness` accepts `opencode`, `codex`, or `all`; it has no implicit default. Supply `-Project` and `-Here` together. `-ProjectPath`, `-Global`, and the `-Project -Here` pair are mutually exclusive; contradictory choices are rejected. Do not mix those scope selectors. A quoted `-ProjectPath` may contain spaces.
+Ten of the twelve wrappers at `install/{project,global}/{opencode,codex,all}.ps1` and `uninstall/{project,global}/{opencode,codex,all}.ps1` fail clearly without downloading or dispatching. Only the two `global/opencode.ps1` wrappers remain fixed aliases.
 
-The examples below fetch the public entrypoint text, then invoke it with explicit parameters. Run the `-Project -Here` examples from the project root. The project-path target intentionally contains spaces.
+### Ownership of the global default agent
 
-```powershell
-$install = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/install-olympus.ps1'))
-$uninstall = [scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.6.1/uninstall-olympus.ps1'))
+An existing `opencode.json` or `opencode.jsonc` remains user-owned. Olympus changes only its root `default_agent`, preserving other bytes, comments, encoding, and preferences. An optional `default_agent_receipt` in the existing installation manifest records actual prior presence/value; it never assumes `consultant`. If the value was already `kael`, an intact manifest-owned Kael agent must prove ownership first.
 
-# Install OpenCode in the current project, Codex in a project path, or both globally.
-& $install -Project -Here -Harness opencode
-& $install -ProjectPath 'C:\Users\Ada Lovelace\source\Sample Project' -Harness codex
-& $install -Global -Harness all
+Uninstall restores another prior value only while the field is still `kael`. It removes a previously absent or already-`kael` field rather than restoring a reference to the deleted agent. Later user choices and deleted configs are preserved. A new minimal config may be wholly manifest-owned; the permissions template itself is unchanged.
 
-# The corresponding safe uninstalls.
-& $uninstall -Project -Here -Harness opencode
-& $uninstall -ProjectPath 'C:\Users\Ada Lovelace\source\Sample Project' -Harness codex
-& $uninstall -Global -Harness all
-```
-
-For non-interactive use, provide one complete scope selection and `-Harness` (for example, `pwsh -NoProfile -File .\install-olympus.ps1 -Project -Here -Harness all`). A lone `-Project` or `-Here` is invalid; use both. PowerShell also rejects combinations such as `-Global -ProjectPath ...`. Without a terminal or other usable interactive input, incomplete selections fail with `ARGUMENTS_REQUIRED`.
-
-The twelve legacy install/uninstall wrappers remain for compatibility at `install/{project,global}/{opencode,codex,all}.ps1` and `uninstall/{project,global}/{opencode,codex,all}.ps1`. The unified entrypoints above are the two primary public commands.
+The receipt states `pending_set`, `committed`, and `pending_uninstall` are reconciled under the existing writer lock. Resume an interrupted set through install/update or an interrupted uninstall through uninstall; third-value conflicts fail closed. `VerifyOnly` never writes or approves a pending state. These guarantees cover this field lifecycle, not an all-resource transaction. Global defaults do not override project preferences or replace the agent already stored in an existing OpenCode session.
 
 ## Release selection, identity, and executable source
 
-The published `v0.6.1` entrypoint queries `https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest` metadata only to select a release. It requires `immutable=true`, `draft=false`, `prerelease=false`, a valid stable `tag_name`, and a nonempty, time-zone-aware `published_at` timestamp that is not more than five minutes in the future. The selected tag supplies `scripts/launch-latest.ps1`; that launcher fetches the installer and exact tag archive from the same tag and checks matching version and release markers. Both stages fail closed for missing, malformed, mutable, unpublished, or mismatched sources; there is no mutable-branch or older-launcher fallback.
+The generic entrypoint queries `https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest` metadata only to select a release. It requires `immutable=true`, `draft=false`, `prerelease=false`, a valid stable `tag_name`, and a nonempty, time-zone-aware `published_at` timestamp that is not more than five minutes in the future. The selected tag supplies `scripts/launch-latest.ps1`; that launcher fetches the installer and exact tag archive from the same tag and checks matching version and release markers. Both stages fail closed for missing, malformed, mutable, unpublished, or mismatched sources; there is no mutable-branch or older-launcher fallback.
 
 These checks establish release selection and tag identity, not cryptographic integrity. GitHub's immutability field is a platform assertion; the installer does not independently verify a signature or published SHA-256 for downloaded executable code. Review each downloaded stage separately if your trust policy requires it.
 
@@ -72,9 +56,8 @@ Maintainers may run `install.ps1` directly against a trusted local checkout inst
 
 ```powershell
 $source = (Resolve-Path '.').Path
-$target = 'C:\Users\Ada Lovelace\source\Sample Project'
 pwsh -NoProfile -File (Join-Path $source 'install.ps1') `
-    -Version 'v0.7.0' -SourceRoot $source -Target $target -Scope project -Harness opencode
+    -Version 'v0.8.0' -SourceRoot $source -DryRun
 ```
 
 Use the version actually declared by the checkout; do not copy the example version blindly. Local-source installation is for advanced, trusted-checkout use and is not evidence that the corresponding release is published or immutable.
@@ -99,7 +82,7 @@ olympus uninstall
 
 `--source` (when used) is an absolute trusted Olympus source checkout; it is
 not the installation target. The following scope auto-detection applies only
-to commands that select an effective user configuration: `update`, `agents
+to commands that select an effective user configuration: `agents
 list`, `config list`, `doctor`, and role aliases. They use a managed OpenCode
 project at the current directory when found, otherwise global scope. Supply
 `--scope` and, for project scope, `--target` to be explicit. Other commands
@@ -107,9 +90,9 @@ below do not inherit that rule.
 
 | Command | Scope and target | Effect |
 |---|---|---|
-| `olympus update` (`upgrade`) | Auto-detects, or accepts `--scope project\|global` and project `--target` | Applies the immutable stable release update; Windows/PowerShell 7 only. There is no preview mode. |
-| `olympus install` | Defaults to `--scope global --harness opencode`; project requires absolute `--target`. `--harness opencode\|codex\|all`; optional `--version <tag>` | `--dry-run` previews. Otherwise the installer executes, whether or not `--execute` is written. `--execute` makes that intent explicit. |
-| `olympus uninstall` | Same defaults and target rules as install | Omitting `--dry-run` executes. Global uninstall supports preview; project uninstall has no dry-run and rejects it. Execution removes only unchanged manifest-owned resources (and global CLI state where applicable). |
+| `olympus update` (`upgrade`) | Fixed global OpenCode; CWD does not select a project | Applies the immutable stable release update; Windows/PowerShell 7 only. There is no preview mode. |
+| `olympus install` | Fixed global OpenCode; no scope/harness/target/version selectors | `--dry-run` previews. Otherwise the installer executes; `--execute` makes that intent explicit. `--json` captures native output. |
+| `olympus uninstall` | Fixed global OpenCode | `--dry-run` previews; otherwise removes unchanged manifest-owned resources, reverses the still-owned default field, and uninstalls the global CLI/PATH entry. |
 | `olympus <role> set-model <id>` / `set-effort <value>` | `<role>`: `kael`, `veyra`, `orin`, `atlas`, `kovan`, `argus`, `nox`, `vera`, `talos`, `thales`, or `helios`; auto-detects or accepts scope/target | Writes the user override immediately and updates a managed installed OpenCode agent when applicable. This is not a canonical source edit and has no dry-run flag. |
 | `olympus models list`, `olympus agents list` | Canonical source for models; agents list uses auto-detection or explicit scope/target | Read-only lists. `models list` is offline; `agents list` shows effective values and their sources. |
 | `olympus models set-family <family> --opencode <id> --codex <id>` / `olympus agents set-model <role> [--family <family>] [--effort <value>]` (at least one option required) | Canonical checkout selected by `--source`, or this CLI's bundled source | Edits canonical model intent. `--dry-run` previews; omitting it executes the source edit. JSON output for these edits requires `--dry-run`. |
@@ -223,30 +206,24 @@ declaration with an inferred default.
 
 `olympus config list` shows effective model/effort values, precedence (**project override > global override > canonical defaults**), and absolute paths to each source. Scope-aware commands such as `agents list`, `config list`, and `doctor` select the managed OpenCode project at the current directory when one exists; otherwise they use global scope. Use `--scope project --target <absolute-worktree-root>` or `--scope global` to select explicitly. For example, `olympus doctor --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project'` checks that project. Doctor is read-only: it validates JSON and declared model/effort values and checks managed installation state, but never applies edits or checks provider access. For managed configuration changes, review `olympus config apply ... --dry-run` first, then use `--execute` only for the intended target; global execution is OpenCode-only. `olympus config recover` may change files and is only for reconciling the matching pending operation. See the [command scopes and effects](#command-scopes-and-effects) table before applying or recovering.
 
-Project installation remains explicit and uses the existing ownership safeguards:
+Installation is no longer offered per project or for Codex. The retained internal project engines and configuration commands protect compatibility; they do not reopen public installation modes. Existing local overrides are not automatically cleaned.
 
-```powershell
-olympus install --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project' --harness opencode --dry-run
-olympus install --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project' --harness opencode --execute
-olympus uninstall --scope project --target 'C:\Users\Ada Lovelace\source\Sample Project' --harness opencode --execute
-```
-
-`--dry-run` may use temporary acquisition/cache locations but does not write project resources. Global scope rejects `--target`; the official engine resolves the global root. Uninstall removes only unchanged, manifest-owned files. The CLI and update are qualified on Windows with PowerShell 7; Codex remains frozen compatibility.
+`--dry-run` may use temporary acquisition/cache locations but does not write global resources. The official engine resolves the global root. The CLI and update are qualified on Windows with PowerShell 7.
 
 ## Installation safety
 
-- Install only into a repository you trust. Project scope requires the Git worktree root.
+- Execute installers only from trusted official release sources or an explicitly trusted local checkout.
 - Installation uses ownership manifests and managed-file hashes; unrelated user files are preserved, and conflicting or drifted managed resources are not silently overwritten.
 - Uninstall removes only unchanged, manifest-owned resources. Review any ownership or drift error; do not bypass it.
-- `-VerifyOnly` is read-only and verifies the selected installed harness subset.
+- `-VerifyOnly` is read-only; it verifies the global OpenCode resources and rejects pending default-agent receipts.
 - Static installation does not establish runtime discovery on every runtime/version. Global installation is Windows-qualified only.
 
 ## Troubleshooting
 
 - **`OLYMPUS_REQUIRES_POWERSHELL_7`** — install PowerShell 7 and make `pwsh` available on `PATH`.
-- **`ARGUMENTS_REQUIRED`** — provide a complete scope and harness, or use a terminal with interactive input.
-- **`ARGUMENTS_INVALID` or parameter-set error** — select exactly one valid scope: `-Project -Here`, `-ProjectPath <path>`, or `-Global`; provide `-Harness opencode`, `-Harness codex`, or `-Harness all`.
+- **Unknown selector / `PUBLIC_INSTALL_ROUTE_UNSUPPORTED`** — remove legacy project/harness arguments and use the global OpenCode route.
 - **`LATEST_RELEASE_MUTABLE`, `LATEST_RELEASE_NOT_PUBLISHED`, or `LATEST_RELEASE_METADATA_*`** — stop. Do not switch to a branch URL or retry through a different installer.
 - **`LATEST_RELEASE_IDENTITY_MISMATCH` / `LAUNCHER_BOOTSTRAP_CONTRACT_MISSING`** — stop; downloaded tag contents did not satisfy the expected release contract.
-- **Git target or managed-file drift errors** — select the actual worktree root and review user changes. Do not delete or overwrite files to force installation.
+- **Managed-file drift errors** — review user changes. Do not delete or overwrite files to force installation.
+- **`GLOBAL_DEFAULT_AGENT_*`** — preserve the config and manifest; use the matching install/uninstall recovery operation. Do not invent a prior default or discard a receipt.
 - **Entrypoint URL returns not found** — check the official [Releases page](https://github.com/Edulynch/OpenCode-OlympusAgents/releases); do not substitute a branch URL or older launcher.

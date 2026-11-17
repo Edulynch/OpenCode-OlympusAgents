@@ -7,10 +7,12 @@ import hashlib
 import io
 import json
 import os
+import queue
 import re
 import shutil
 import subprocess
 import sys
+import threading
 import unittest
 import uuid
 from pathlib import Path
@@ -29,7 +31,7 @@ RELEASE_VERSION = _default_version.group(1)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from olympus import global_readonly, models_catalog, user_config
+from olympus import config_apply, config_apply_transaction, global_readonly, models_catalog, source_edit, user_config
 from olympus.cli import main
 
 
@@ -76,7 +78,8 @@ class GlobalCli(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.sandbox, ignore_errors=True)
 
-    def _engine(self, *, update: bool, answer: str | None = None, noninteractive: bool = False):
+    def _engine(self, *, update: bool, answer: str | None = None, noninteractive: bool = False,
+                env: dict[str, str] | None = None):
         base = [self.pwsh, "-NoProfile"]
         arguments = ["-Harness", "opencode", "-SourceVersion", RELEASE_VERSION]
         if update:
@@ -90,11 +93,52 @@ class GlobalCli(unittest.TestCase):
                 f"& '{escaped}' " + " ".join(arguments)
             )
             command = base + ["-Command", body]
-        env = self.env.copy()
+        env = (self.env if env is None else env).copy()
         if answer is not None:
             env["OLYMPUS_TEST_ANSWER"] = answer
         return subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True,
                               encoding="utf-8", errors="replace", timeout=60, check=False)
+
+    def _start_global_lock_owner(self, root: Path):
+        helper = ROOT / "scripts/target-writer-lock.ps1"
+        quote = lambda value: str(value).replace("'", "''")
+        body = (
+            f". '{quote(helper)}'; $lock = Enter-OlympusTargetWriterLock '{quote(root)}'; "
+            "[Console]::Out.WriteLine('LOCKED'); [Console]::Out.Flush(); "
+            "[Console]::In.ReadLine() | Out-Null; Exit-OlympusTargetWriterLock $lock"
+        )
+        process = subprocess.Popen(
+            [self.pwsh, "-NoProfile", "-NonInteractive", "-Command", body],
+            cwd=ROOT, env=self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", bufsize=1,
+        )
+        ready = queue.Queue()
+        reader = threading.Thread(target=lambda: ready.put(process.stdout.readline()), daemon=True)
+        reader.start()
+        try:
+            line = ready.get(timeout=15)
+        except queue.Empty:
+            process.kill()
+            stdout, stderr = process.communicate(timeout=10)
+            self.fail(f"PowerShell global lock owner did not acquire: {stdout!r} {stderr!r}")
+        if line.strip() != "LOCKED":
+            stdout, stderr = process.communicate(timeout=10)
+            self.fail(f"PowerShell global lock owner failed: {line!r} {stdout!r} {stderr!r}")
+        return process
+
+    def _stop_global_lock_owner(self, process):
+        if process.poll() is None:
+            process.stdin.write("release\n")
+            process.stdin.flush()
+        stdout, stderr = process.communicate(timeout=10)
+        self.assertEqual(0, process.returncode, f"PowerShell global lock owner failed: {stdout!r} {stderr!r}")
+
+    def _global_files(self):
+        return {
+            path.relative_to(self.root).as_posix(): path.read_bytes()
+            for path in self.root.rglob("*")
+            if path.is_file() and path.relative_to(self.root).as_posix() != source_edit._LOCK_NAME
+        }
 
     def _agent(self, role: str) -> Path:
         return self.root / "agents" / f"{role}.md"
@@ -334,6 +378,9 @@ class GlobalCli(unittest.TestCase):
         with mock.patch.dict(os.environ, env_patch):
             self.assertEqual(0, main(["--source", str(ROOT), "nox", "set-model", "openai/gpt-6.1-sol", "--scope", "global"]))
             self.assertEqual(0, main(["--source", str(ROOT), "nox", "set-effort", "high", "--scope", "global"]))
+            pending_marker = project / "olympus/opencode-guard-pending.json"
+            pending_marker.parent.mkdir(parents=True, exist_ok=True)
+            pending_marker.write_bytes(b"unrelated project-local marker")
             self.assertEqual(0, main(["--source", str(ROOT), "nox", "set-model", "openai/gpt-6-luna",
                                       "--scope", "project", "--target", str(project)]))
             rows = user_config.effective_roles(ROOT, "project", project)
@@ -352,6 +399,7 @@ class GlobalCli(unittest.TestCase):
             self.assertEqual("Run 'olympus doctor' after manual edits.", listed["manual_edit_reminder"])
         project_config = json.loads((project / ".opencode/olympus-config.json").read_text(encoding="utf-8"))
         self.assertEqual({"model": "openai/gpt-6-luna", "effort": "max"}, project_config["overrides"]["nox"])
+        self.assertEqual(b"unrelated project-local marker", pending_marker.read_bytes())
         agent = project / ".opencode/agents/nox.md"
         self.assertIn('model: "openai/gpt-6-luna#max"', agent.read_text(encoding="utf-8"))
         manifest_path = project / ".opencode/orchestrator-install.json"
@@ -485,6 +533,8 @@ class GlobalCli(unittest.TestCase):
 
     def test_global_override_persists_and_updates_only_managed_agent(self):
         models_before = (ROOT / "olympus/core/models.toml").read_bytes()
+        global_before = self._global_files()
+        settings = self.appdata / "Olympus/config.json"
         env_patch = {"APPDATA": str(self.appdata), "LOCALAPPDATA": str(self.localappdata),
                      "USERPROFILE": str(self.profile), "OPENCODE_CONFIG_DIR": str(self.root)}
         output = io.StringIO()
@@ -497,9 +547,21 @@ class GlobalCli(unittest.TestCase):
             self.assertEqual(0, code, output.getvalue())
             code = main(["--source", str(ROOT), "config", "list"])
             self.assertEqual(0, code, output.getvalue())
-        settings = self.appdata / "Olympus/config.json"
         self.assertEqual({"schema_version": 1, "overrides": {"nox": {"model": "openai/gpt-6.1-sol", "effort": "high"}}},
                          json.loads(settings.read_text(encoding="utf-8")))
+        self.assertEqual(
+            {"agents/nox.md", "olympus/orchestrator-install.json"},
+            {relative for relative, content in self._global_files().items()
+             if global_before.get(relative) != content},
+        )
+        self.assertEqual(
+            {relative: content for relative, content in global_before.items()
+             if relative not in {"agents/nox.md", "olympus/orchestrator-install.json"}},
+            {relative: content for relative, content in self._global_files().items()
+             if relative not in {"agents/nox.md", "olympus/orchestrator-install.json"}},
+        )
+        self.assertTrue(settings.is_file())
+        self.assertEqual(14, len(self._manifest()["managed_files"]))
         self.assertIn('model: "openai/gpt-6.1-sol#high"', self._agent("nox").read_text(encoding="utf-8"))
         manifest = self._manifest()
         entry = next(item for item in manifest["managed_files"] if item["path"] == "agents/nox.md")
@@ -515,6 +577,154 @@ class GlobalCli(unittest.TestCase):
             )
             user_config.apply_to_expected(ROOT, expected["opencode"])
         self.assertIn(b'model: "openai/gpt-6.1-sol#high"', expected["opencode"]["agents/nox.md"])
+
+    def test_global_override_preserves_current_thirteen_resource_user_config(self):
+        root = self.sandbox / "global-user-config"
+        root.mkdir()
+        (root / "opencode.json").write_text(
+            '{\n  "permissions": [\n'
+            '    {"action": "external_directory", "resource": "*", "effect": "ask"}\n'
+            '  ],\n  "user_setting": true\n}\n',
+            encoding="utf-8",
+        )
+        settings = self.sandbox / "user-config-13" / "Olympus" / "config.json"
+        env = self.env.copy()
+        env.update({"OPENCODE_CONFIG_DIR": str(root), "OLYMPUS_CONFIG_FILE": str(settings)})
+        installed = self._engine(update=False, env=env)
+        self.assertEqual(0, installed.returncode, installed.stdout + installed.stderr)
+        original_config = (root / "opencode.json").read_bytes()
+        manifest_path = root / "olympus/orchestrator-install.json"
+        manifest_before = manifest_path.read_bytes()
+        manifest = json.loads(manifest_before)
+        self.assertEqual(13, len(manifest["managed_files"]))
+        self.assertNotIn("opencode.jsonc", {item["path"] for item in manifest["managed_files"]})
+
+        with mock.patch.dict(os.environ, env, clear=True):
+            path, applied = user_config.set_override(ROOT, "nox", "effort", "high")
+
+        self.assertTrue(applied)
+        self.assertEqual(settings.resolve(), path)
+        self.assertEqual(original_config, (root / "opencode.json").read_bytes())
+        self.assertIn(b'model: "openai/gpt-6-luna#high"', (root / "agents/nox.md").read_bytes())
+        self.assertNotEqual(manifest_before, manifest_path.read_bytes())
+        self.assertEqual({"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
+                         json.loads(settings.read_text(encoding="utf-8")))
+
+    def test_global_override_creates_only_lock_root_when_safe_root_is_absent(self):
+        root = self.sandbox / "new-global" / "nested" / "opencode"
+        settings = self.sandbox / "new-override" / "Olympus" / "config.json"
+        env = self.env.copy()
+        env.update({"OPENCODE_CONFIG_DIR": str(root), "OLYMPUS_CONFIG_FILE": str(settings)})
+        with mock.patch.dict(os.environ, env, clear=True):
+            path, applied = user_config.set_override(ROOT, "nox", "effort", "high")
+
+        self.assertFalse(applied)
+        self.assertEqual(settings.resolve(), path)
+        self.assertEqual([".olympus-cli-edit.lock"], sorted(item.name for item in root.iterdir()))
+        self.assertEqual(0, (root / ".olympus-cli-edit.lock").stat().st_size)
+        self.assertFalse((root / "olympus/orchestrator-install.json").exists())
+        self.assertEqual({"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
+                         json.loads(settings.read_text(encoding="utf-8")))
+
+    def test_global_override_fails_closed_for_unresolved_or_unsafe_root(self):
+        settings = self.sandbox / "unresolved-override" / "Olympus" / "config.json"
+        env = self.env.copy()
+        env.pop("OPENCODE_CONFIG_DIR", None)
+        env["OLYMPUS_CONFIG_FILE"] = str(settings)
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch("olympus.global_readonly.shutil.which", return_value=None):
+            with self.assertRaisesRegex(user_config.UserConfigError, "Cannot safely resolve the global OpenCode root"):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+        self.assertFalse(settings.exists())
+
+        blocker = self.sandbox / "not-a-directory"
+        blocker.write_bytes(b"preserve")
+        unsafe_root = blocker / "opencode"
+        unsafe_settings = self.sandbox / "unsafe-override" / "Olympus" / "config.json"
+        unsafe_env = self.env.copy()
+        unsafe_env.update({"OPENCODE_CONFIG_DIR": str(unsafe_root),
+                           "OLYMPUS_CONFIG_FILE": str(unsafe_settings)})
+        with mock.patch.dict(os.environ, unsafe_env, clear=True):
+            with self.assertRaisesRegex(user_config.UserConfigError, "Cannot safely resolve the global OpenCode root"):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+        self.assertEqual(b"preserve", blocker.read_bytes())
+        self.assertFalse(unsafe_settings.exists())
+        self.assertFalse(unsafe_root.exists())
+
+    def test_global_override_refuses_shared_powershell_lock_before_read_or_write(self):
+        settings = self.appdata / "Olympus/config.json"
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_bytes(b"{invalid user override")
+        before_root = self._global_files()
+        before_settings = settings.read_bytes()
+        owner = self._start_global_lock_owner(self.root)
+        try:
+            with self.assertRaisesRegex(
+                    user_config.UserConfigError,
+                    "Cannot safely lock the global OpenCode root.*Stable lock is owned by another process"):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+            self.assertEqual(before_root, self._global_files())
+            self.assertEqual(before_settings, settings.read_bytes())
+            self.assertTrue((self.root / source_edit._LOCK_NAME).is_file())
+        finally:
+            self._stop_global_lock_owner(owner)
+
+    def test_global_override_refuses_pending_journals_and_unreadable_inspection(self):
+        settings = self.appdata / "Olympus/config.json"
+        for name in (".olympus-cli-config-apply", ".olympus-cli-edit"):
+            with self.subTest(pending=name):
+                pending = self.root / name
+                pending.write_bytes(b"corrupt pending evidence")
+                before_root, before_settings = self._global_files(), settings.read_bytes() if settings.exists() else None
+                with self.assertRaisesRegex(user_config.UserConfigError, "pending Olympus global"):
+                    user_config.set_override(ROOT, "nox", "effort", "high")
+                self.assertEqual(before_root, self._global_files())
+                self.assertEqual(before_settings, settings.read_bytes() if settings.exists() else None)
+                self.assertEqual(b"corrupt pending evidence", pending.read_bytes())
+                lock = source_edit._acquire_lock(self.root, create=False)
+                source_edit._release_lock(lock)
+                pending.unlink()
+
+        unreadable = self.root / ".olympus-cli-config-apply"
+        original_lstat = os.lstat
+
+        def fail_pending_inspection(path, *args, **kwargs):
+            if Path(path) == unreadable:
+                raise PermissionError("controlled journal inspection failure")
+            return original_lstat(path, *args, **kwargs)
+
+        before_root, before_settings = self._global_files(), settings.read_bytes() if settings.exists() else None
+        with mock.patch("olympus.config_apply_transaction.os.lstat", side_effect=fail_pending_inspection):
+            with self.assertRaisesRegex(user_config.UserConfigError, "pending Olympus global"):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+        self.assertEqual(before_root, self._global_files())
+        self.assertEqual(before_settings, settings.read_bytes() if settings.exists() else None)
+        self.assertFalse(unreadable.exists())
+
+    def test_global_override_refuses_guard_intent_and_unreadable_marker(self):
+        marker = self.root / global_readonly._OPENCODE_GUARD_INTENT
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_bytes(b"{corrupt guard intent")
+        before_root = self._global_files()
+        with self.assertRaisesRegex(user_config.UserConfigError, "OpenCode guard transaction is pending"):
+            user_config.set_override(ROOT, "nox", "effort", "high")
+        self.assertEqual(before_root, self._global_files())
+        self.assertEqual(b"{corrupt guard intent", marker.read_bytes())
+        marker.unlink()
+
+        original_read = config_apply._read_target_file
+
+        def fail_marker_read(root, relative, **kwargs):
+            if relative == global_readonly._OPENCODE_GUARD_INTENT:
+                return None, "controlled marker inspection failure"
+            return original_read(root, relative, **kwargs)
+
+        before_root = self._global_files()
+        with mock.patch("olympus.config_apply._read_target_file", side_effect=fail_marker_read):
+            with self.assertRaisesRegex(user_config.UserConfigError, "controlled marker inspection failure"):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+        self.assertEqual(before_root, self._global_files())
+        self.assertFalse(marker.exists())
 
     def test_doctor_reports_invalid_user_json_without_provider_checks(self):
         settings = self.appdata / "Olympus/config.json"

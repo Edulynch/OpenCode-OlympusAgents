@@ -33,7 +33,7 @@ Both source entrypoints, `install-olympus.ps1` and `uninstall-olympus.ps1`, are 
 ### Install a specific version
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.8.0/install.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.9.0/install.ps1')))
 ```
 
 The tagged `install.ps1` defaults to its embedded version and downloads the exact tag archive, so no extra `-Version` argument is needed. This bypasses `latest` selection. A versioned URL for `install-olympus.ps1` would not pin the installed version: that bootstrap still selects the latest release.
@@ -66,6 +66,17 @@ Overrides use `schema_version=1` with an `overrides` map; a missing file means
 empty, and precedence is project override, global override, then Core defaults.
 These project-scoped CLI operations do not install project resources.
 
+Global model and effort setters resolve the safe OpenCode root and coordinate
+with the installer and Python writers through the shared
+`.olympus-cli-edit.lock`. They refuse to read or update override/managed data
+while `.olympus-cli-config-apply`, `.olympus-cli-edit`, or
+`olympus/opencode-guard-pending.json` indicates pending recovery; setters do not
+recover or remove these controls. If the root cannot be resolved safely, the
+setter leaves the override and managed resources unchanged. If the safe root is
+known but absent, Olympus creates only its directory hierarchy and stable lock;
+without a managed manifest, the setter writes only the requested user override
+configuration.
+
 An incomplete or unsupported format is rejected without automatic conversion,
 adoption, or deletion. A complete current-format installation remains valid
 regardless of which release created it. If an older unsupported installation
@@ -84,7 +95,7 @@ Maintainers may run `install.ps1` directly against a trusted local checkout inst
 ```powershell
 $source = (Resolve-Path '.').Path
 pwsh -NoProfile -File (Join-Path $source 'install.ps1') `
-    -Version 'v0.8.0' -SourceRoot $source -DryRun
+    -Version 'v0.9.0' -SourceRoot $source -DryRun
 ```
 
 Use the version actually declared by the checkout; do not copy the example version blindly. Local-source installation is for advanced, trusted-checkout use and is not evidence that the corresponding release is published or immutable.
@@ -120,7 +131,7 @@ below do not inherit that rule.
 | `olympus update` (`upgrade`) | Fixed global OpenCode; CWD does not select a project | Applies the immutable stable release update; Windows/PowerShell 7 only. There is no preview mode. |
 | `olympus install` | Fixed global OpenCode; no scope/harness/target/version selectors | `--dry-run` previews. Otherwise the installer executes; `--execute` makes that intent explicit. `--json` captures native output. |
 | `olympus uninstall` | Fixed global OpenCode | `--dry-run` previews; otherwise removes unchanged manifest-owned resources, reverses the still-owned default field, and uninstalls the global CLI/PATH entry. |
-| `olympus <role> set-model <id>` / `set-effort <value>` | `<role>`: `kael`, `veyra`, `orin`, `atlas`, `kovan`, `argus`, `nox`, `vera`, `talos`, `thales`, or `helios`; auto-detects or accepts scope/target | Writes the user override immediately and updates a managed installed OpenCode agent when applicable. This is not a canonical source edit and has no dry-run flag. |
+| `olympus <role> set-model <id>` / `set-effort <value>` | `<role>`: `kael`, `veyra`, `orin`, `atlas`, `kovan`, `argus`, `nox`, `vera`, `talos`, `thales`, or `helios`; auto-detects or accepts scope/target | Writes the user override immediately and updates a managed installed OpenCode agent when applicable. Global setters require a safely resolved root and honor the shared lock and pending-recovery controls above. This is not a canonical source edit and has no dry-run flag. |
 | `olympus models list`, `olympus agents list` | Canonical source for models; agents list uses auto-detection or explicit scope/target | Read-only lists. `models list` is offline; `agents list` shows effective values and their sources. |
 | `olympus models set-family <family> --opencode <id>` / `olympus agents set-model <role> [--family <family>] [--effort <value>]` (at least one option required) | Canonical checkout selected by `--source`, or this CLI's bundled source | Edits canonical model intent. `--dry-run` previews; omitting it executes the source edit. JSON output for these edits requires `--dry-run`. |
 | `olympus config list` / `olympus config check` | List uses auto-detection or explicit scope/target; check reads the selected source and OpenCode harness | Both are read-only. List shows effective values, precedence, and paths; check compares renderer output without writing. |

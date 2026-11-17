@@ -240,7 +240,7 @@ def _write_atomic(path: Path, content: bytes) -> None:
 
 
 def _prepare_installed_update(source: Path, role: str, model: str, effort: str,
-                              scope: str, target: Path | None):
+                              scope: str, target: Path | None, *, global_root: Path | None = None):
     from . import config_apply, global_readonly
     from .cli import load_renderer
 
@@ -262,7 +262,7 @@ def _prepare_installed_update(source: Path, role: str, model: str, effort: str,
             if inventory_issues:
                 raise UserConfigError("The project Olympus inventory is unsupported; no configuration was changed.")
         else:
-            root = global_readonly.resolve_roots(("opencode",))["opencode"]
+            root = global_root or global_readonly.resolve_roots(("opencode",))["opencode"]
             manifest_relative = _MANIFEST
             raw_manifest = global_readonly._read(root, manifest_relative)
             if raw_manifest is None:
@@ -270,8 +270,6 @@ def _prepare_installed_update(source: Path, role: str, model: str, effort: str,
             expected = global_readonly._expected(source, renderer, ("opencode",))["opencode"]
             manifest, _ = global_readonly._parse_manifest_bytes(raw_manifest, "opencode", expected)
     except global_readonly.GlobalFault as error:
-        if error.reason == "global_path_unavailable" and scope == "global":
-            return None
         raise UserConfigError(str(error)) from error
     except (ValueError, UnicodeError) as error:
         raise UserConfigError("The installed OpenCode ownership manifest is invalid; no files were changed.") from error
@@ -298,6 +296,25 @@ def _prepare_installed_update(source: Path, role: str, model: str, effort: str,
     agent_path = root / (f".opencode/{relative}" if scope == "project" else relative)
     manifest_path = root / manifest_relative
     return agent_path, current, updated, manifest_path, raw_manifest, manifest_bytes
+
+
+def _check_global_recovery(root: Path) -> None:
+    from . import config_apply_transaction, global_readonly
+
+    if config_apply_transaction.pending(root):
+        raise UserConfigError(
+            "A pending Olympus global apply or source-edit journal blocks configuration changes; no files were changed."
+        )
+    try:
+        intent = global_readonly._read(root, global_readonly._OPENCODE_GUARD_INTENT)
+    except global_readonly.GlobalFault as error:
+        raise UserConfigError(
+            f"Cannot safely inspect the pending OpenCode guard intent; no configuration was changed: {error}"
+        ) from error
+    if intent is not None:
+        raise UserConfigError(
+            "An OpenCode guard transaction is pending; preserve it for explicit recovery; no files were changed."
+        )
 
 
 def _config_bytes(path: Path, scope: str, target: Path | None) -> bytes | None:
@@ -353,6 +370,7 @@ def set_override(source: Path, role: str, field: str, value: str,
         raise UserConfigError(f"Unknown Olympus agent '{role}'.")
     path = config_path(scope, target)
     lock = None
+    global_root = None
     if scope == "project":
         from . import config_apply, install_routing, source_edit
 
@@ -370,12 +388,32 @@ def set_override(source: Path, role: str, field: str, value: str,
             lock = source_edit._acquire_lock(target, create=True)
         except (source_edit.LockError, OSError) as error:
             raise UserConfigError(f"Cannot safely lock the managed project; no configuration was changed: {error}") from error
+    else:
+        from . import global_readonly, source_edit
+
+        try:
+            global_root = global_readonly.resolve_roots(("opencode",))["opencode"]
+        except (global_readonly.GlobalFault, OSError, RuntimeError) as error:
+            raise UserConfigError(
+                f"Cannot safely resolve the global OpenCode root; no configuration was changed: {error}"
+            ) from error
+        try:
+            global_root.mkdir(parents=True, exist_ok=True)
+            global_readonly._root(global_root)
+            global_root = global_readonly._root(global_root.resolve(strict=True))
+            lock = source_edit._acquire_lock(global_root, create=True)
+        except (global_readonly.GlobalFault, source_edit.LockError, OSError, RuntimeError) as error:
+            raise UserConfigError(
+                f"Cannot safely lock the global OpenCode root; no configuration was changed: {error}"
+            ) from error
     try:
         if scope == "project":
             from . import config_apply_transaction
 
             if config_apply_transaction.pending(target):
                 raise UserConfigError("A pending Olympus project edit blocks configuration changes; no files were changed.")
+        else:
+            _check_global_recovery(global_root)
         config = read_config(source, scope, target)
         override = dict(config["overrides"].get(role, {}))
         override[field] = value
@@ -388,7 +426,9 @@ def set_override(source: Path, role: str, field: str, value: str,
             raise UserConfigError(str(error)) from error
         config["overrides"][role] = override
         encoded = (json.dumps(config, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-        installed = _prepare_installed_update(source, role, effective_model, effective_effort, scope, target)
+        installed = _prepare_installed_update(
+            source, role, effective_model, effective_effort, scope, target, global_root=global_root,
+        )
         if scope == "project" and installed is None:
             raise UserConfigError("The project-managed OpenCode agent is unavailable; no configuration was changed.")
         _commit_override(path, encoded, scope, target, installed)

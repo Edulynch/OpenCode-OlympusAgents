@@ -2,16 +2,28 @@
 
 ## [Unreleased]
 
-### Support boundary
+## v0.9.0
 
-- Make OpenCode the only currently supported Olympus runtime; prior Codex behavior remains historical evidence, not a compatibility promise.
-- Keep public install/update/uninstall global and OpenCode-only. Project-scoped OpenCode configuration, overrides, apply/recovery, status, and read-only doctor remain separate CLI behavior.
-- Reject unsupported or incomplete installation formats without automatic conversion, adoption, or deletion. Existing complete current-format installations remain valid; remove an older unsupported installation with its matching release.
-- This section is unreleased; it assigns no new version and records no publication.
+### Highlights
 
-### Breaking changes
+- Make OpenCode the only currently supported Olympus runtime. Public install, update, and uninstall remain global/OpenCode-only and independent of the current directory; project-scoped OpenCode configuration, overrides, apply/recovery, status, and read-only doctor remain separate CLI behavior.
+- Retire the `-Harness codex` and `-Harness all` selectors, project/Codex installer wrappers, and Codex adapter. No current Codex capability or parity is claimed. Keep `upgrade` as an alias of `update`.
+- Coordinate global model/effort setters with the shared `.olympus-cli-edit.lock`, refuse pending recovery controls, and fail closed when the OpenCode root cannot be resolved safely.
+- Reject unsupported or incomplete legacy installation formats without automatic migration, conversion, adoption, or deletion. Complete current-format installations remain valid regardless of which release created them; remove an older unsupported installation with its matching release.
 
-- Retire the `-Harness codex` and `-Harness all` selectors, project/Codex installer wrappers, and the Codex adapter. Keep `upgrade` as an alias of `update`. Complete current-format installations remain accepted; older or incomplete formats are not migrated and must be removed with their matching release.
+### Capability limits
+
+- Windows with PowerShell 7 is the qualified installer platform; Python 3.11+ is required by the CLI. OpenCode V2 is the only currently supported runtime.
+- Local fixtures and static checks do not establish a public-endpoint install smoke, behavior in every real OpenCode session/version, provider access or inference, or native permission UI/approval. The separate public-endpoint install/VerifyOnly/uninstall smoke remains a release acceptance check.
+- The shared root lock coordinates same-root cooperating Olympus writers; it does not make writes atomic against arbitrary editors or guarantee crash-atomic changes across resources. GitHub immutability and tag identity are not independent cryptographic verification.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.9.0 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.9.0/docs/INSTALLATION.md). Public installation is global/OpenCode-only; project-scoped OpenCode configuration remains separate CLI behavior.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.9.0/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and static validation guidance. Local fixtures do not substitute for the separate public-endpoint install/VerifyOnly/uninstall smoke.
 
 ## v0.8.0
 

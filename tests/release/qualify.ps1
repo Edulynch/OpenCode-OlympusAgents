@@ -294,7 +294,7 @@ try {
     $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1',$script:CandidateVersion,'v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
     if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
         Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
-        Check 'R0_TARGET_IDENTITY_V080' ($script:CandidateVersion -ceq 'v0.8.0')
+        Check 'R0_TARGET_IDENTITY_V090' ($script:CandidateVersion -ceq 'v0.9.0')
         Check 'R0_STABLE_CANDIDATE_VERSION' ($script:CandidateVersion -match '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$')
         Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
         Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
@@ -546,18 +546,32 @@ try {
         $releaseNotes -match '(?i)read-only|VerifyOnly')
     Check 'R25_RELEASE_NOTES_KEEP_COMMANDS_IN_INSTALL_GUIDE' ($releaseNotes -notmatch '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/)[^\r\n]+?\.ps1' -and
         $releaseNotes -notmatch '(?i)\b(?:irm|iwr|Invoke-WebRequest)\b[^\r\n]*\.ps1')
-    $requiredHighlights = @('global OpenCode','default_agent_receipt','pending_set','pending_uninstall',
-        'config apply --dry-run','--execute','read-only','immutable','selected tag')
-    $missingHighlights = @($requiredHighlights | Where-Object { -not $releaseNotes.Contains($_) })
-    Check 'R25_CURRENT_RELEASE_HIGHLIGHTS' ($missingHighlights.Count -eq 0)
-    Check 'R25_CURRENT_CAPABILITY_GAPS_NOT_OVERCLAIMED' ($releaseNotes -match 'DENY\s*=\s*GAP' -and
-        $releaseNotes -match 'CONTEXTUAL_OLYMPUS_MAINTENANCE\s*=\s*GAP' -and
-        $releaseNotes -match 'QUESTION_CENTRALIZATION\s*=\s*PARTIAL' -and
-        $releaseNotes -match 'RESULT_RECONCILIATION\s*=\s*PARTIAL' -and
-        $releaseNotes -match 'ACTIVITY_VISIBILITY\s*=\s*PARTIAL\b' -and
-        $releaseNotes -notmatch '(?i)AEGIS\s*=\s*GAP|PARTIAL/BASIC' -and
-        $releaseNotes -match '(?i)does not establish broad version compatibility' -and
-        $releaseNotes -notmatch '(?i)Codex (?:has|provides|supports) (?:full parity|hard DENY|Aegis)')
+    $highlightsMatch = [regex]::Match($releaseNotes, '(?ims)^### Highlights\r?\n(?<body>.*?)(?=^### |^## |\z)')
+    $highlights = if ($highlightsMatch.Success) { $highlightsMatch.Groups['body'].Value } else { '' }
+    $requiredHighlights = @('only currently supported Olympus runtime',
+        'Public install, update, and uninstall remain global/OpenCode-only',
+        'independent of the current directory','project-scoped OpenCode configuration',
+        '-Harness codex','-Harness all','`upgrade` as an alias of `update`',
+        'global model/effort setters','`.olympus-cli-edit.lock`','pending recovery controls',
+        'OpenCode root cannot be resolved safely',
+        'automatic migration, conversion, adoption, or deletion',
+        'unsupported or incomplete legacy installation formats',
+        'Complete current-format installations remain valid')
+    $missingHighlights = @($requiredHighlights | Where-Object { -not $highlights.Contains($_) })
+    Check 'R25_V090_RELEASE_HIGHLIGHTS' ($missingHighlights.Count -eq 0)
+    $capabilityMatch = [regex]::Match($releaseNotes, '(?ims)^### Capability limits\r?\n(?<body>.*?)(?=^### |^## |\z)')
+    $capabilityLimits = if ($capabilityMatch.Success) { $capabilityMatch.Groups['body'].Value } else { '' }
+    Check 'R25_V090_CAPABILITY_LIMITS_NOT_OVERCLAIMED' (
+        $highlights.Contains('No current Codex capability or parity is claimed.') -and
+        $capabilityLimits -match '(?i)Windows with PowerShell 7' -and
+        $capabilityLimits -match '(?i)Python 3\.11\+' -and
+        $capabilityLimits -match '(?i)OpenCode V2' -and
+        $capabilityLimits -match '(?i)Local fixtures and static checks do not establish a public-endpoint install smoke' -and
+        $capabilityLimits -match '(?i)provider access or inference' -and
+        $capabilityLimits -match '(?i)native permission UI/approval' -and
+        $capabilityLimits -match '(?i)same-root cooperating Olympus writers' -and
+        $capabilityLimits -match '(?i)crash-atomic' -and
+        $releaseNotes -notmatch '(?i)Codex retains\s+DENY\s*=\s*GAP|Codex remains frozen compatibility|full Codex parity')
     $mutableExecutableUrl = '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/(?:master|main|refs/heads/(?:master|main))/[^\s]+?\.ps1|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/(?:master|main)/[^\s]+?\.ps1)'
     Check 'R25_RELEASE_NO_MUTABLE_EXECUTABLE_SOURCE' ($releaseNotes -notmatch $mutableExecutableUrl -and
         $versionText -match 'archive/refs/tags/\$Version\.zip')

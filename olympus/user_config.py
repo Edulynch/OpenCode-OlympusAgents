@@ -22,6 +22,7 @@ _MANIFEST = "olympus/orchestrator-install.json"
 _PROJECT_CONFIG = ".opencode/olympus-config.json"
 _HASH = re.compile(r"[0-9a-fA-F]{64}\Z")
 _AGENT_MODEL = re.compile(r'(?m)^model:\s*(?:"([^"]+)"|([^\r\n]+))\s*$')
+_DEFAULT_MAX_CHILDREN = 4
 
 
 def config_path(scope: str = "global", target: Path | None = None) -> Path:
@@ -156,16 +157,33 @@ def read_config(source: Path, scope: str = "global", target: Path | None = None)
         raise UserConfigError(f"Olympus configuration is not valid JSON: {path}: {error}") from error
     rows = _canonical_rows(source)
     roles = {row["role"] for row in rows}
+    allowed = {"schema_version", "overrides"}
+    if scope == "global":
+        allowed.add("orchestration")
     if (not isinstance(value, dict) or type(value.get("schema_version")) is not int
             or value["schema_version"] != 1 or not isinstance(value.get("overrides"), dict)
-            or set(value) != {"schema_version", "overrides"}):
+            or set(value) - allowed or not {"schema_version", "overrides"}.issubset(value)):
         raise UserConfigError(f"Olympus user configuration must contain schema_version 1 and an overrides object: {path}")
+    if scope == "global" and "orchestration" in value:
+        orchestration = value["orchestration"]
+        if (not isinstance(orchestration, dict) or set(orchestration) != {"max_children"}
+                or type(orchestration["max_children"]) is not int
+                or not 1 <= orchestration["max_children"] <= 8):
+            raise UserConfigError(
+                f"Olympus global orchestration must contain only integer max_children from 1 to 8: {path}"
+            )
     for role, override in value["overrides"].items():
         if role not in roles or not isinstance(override, dict) or not override or set(override) - {"model", "effort"}:
             raise UserConfigError(f"Invalid Olympus override for role '{role}' in {path}.")
         if any(not isinstance(item, str) or not item for item in override.values()):
             raise UserConfigError(f"Override values for '{role}' must be non-empty strings in {path}.")
     return value
+
+
+def max_children(source: Path) -> int:
+    """Return the validated global Kael prompt ceiling, defaulting to Core's four."""
+    orchestration = read_config(source, "global").get("orchestration", {})
+    return orchestration.get("max_children", _DEFAULT_MAX_CHILDREN)
 
 
 def effective_roles(source: Path, scope: str = "global", target: Path | None = None) -> list[dict]:
@@ -240,7 +258,8 @@ def _write_atomic(path: Path, content: bytes) -> None:
 
 
 def _prepare_installed_update(source: Path, role: str, model: str, effort: str,
-                              scope: str, target: Path | None, *, global_root: Path | None = None):
+                              scope: str, target: Path | None, *, global_root: Path | None = None,
+                              max_children: int | None = None):
     from . import config_apply, global_readonly
     from .cli import load_renderer
 
@@ -267,7 +286,9 @@ def _prepare_installed_update(source: Path, role: str, model: str, effort: str,
             raw_manifest = global_readonly._read(root, manifest_relative)
             if raw_manifest is None:
                 return None
-            expected = global_readonly._expected(source, renderer, ("opencode",))["opencode"]
+            expected = global_readonly._expected(
+                source, renderer, ("opencode",), max_children=max_children,
+            )["opencode"]
             manifest, _ = global_readonly._parse_manifest_bytes(raw_manifest, "opencode", expected)
     except global_readonly.GlobalFault as error:
         raise UserConfigError(str(error)) from error
@@ -290,7 +311,13 @@ def _prepare_installed_update(source: Path, role: str, model: str, effort: str,
         current = global_readonly._read(root, relative)
     if current is None or hashlib.sha256(current).hexdigest() != entries[0]["sha256"].lower():
         raise UserConfigError(f"Managed OpenCode agent {role} was changed outside Olympus; preserve it and run olympus doctor.")
-    updated = _replace_agent_model(current, model, effort, role)
+    if max_children is None:
+        updated = _replace_agent_model(current, model, effort, role)
+    else:
+        generated = expected.get(relative)
+        if generated is None:
+            raise UserConfigError(f"The OpenCode renderer does not manage expected agent {role}.")
+        updated = _replace_agent_model(generated, model, effort, role)
     entries[0]["sha256"] = hashlib.sha256(updated).hexdigest()
     manifest_bytes = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     agent_path = root / (f".opencode/{relative}" if scope == "project" else relative)
@@ -441,6 +468,49 @@ def set_override(source: Path, role: str, field: str, value: str,
     return path.resolve(), applied
 
 
+def set_max_children(source: Path, value: int) -> tuple[Path, bool]:
+    if type(value) is not int or not 1 <= value <= 8:
+        raise UserConfigError("max-parallel must be an integer from 1 to 8.")
+    from . import global_readonly, source_edit
+
+    try:
+        global_root = global_readonly.resolve_roots(("opencode",))["opencode"]
+    except (global_readonly.GlobalFault, OSError, RuntimeError) as error:
+        raise UserConfigError(
+            f"Cannot safely resolve the global OpenCode root; no configuration was changed: {error}"
+        ) from error
+    try:
+        global_root.mkdir(parents=True, exist_ok=True)
+        global_readonly._root(global_root)
+        global_root = global_readonly._root(global_root.resolve(strict=True))
+        lock = source_edit._acquire_lock(global_root, create=True)
+    except (global_readonly.GlobalFault, source_edit.LockError, OSError, RuntimeError) as error:
+        raise UserConfigError(
+            f"Cannot safely lock the global OpenCode root; no configuration was changed: {error}"
+        ) from error
+    try:
+        _check_global_recovery(global_root)
+        config = read_config(source, "global")
+        rows = {row["role"]: row for row in _canonical_rows(source)}
+        kael = config["overrides"].get("kael", {})
+        model = kael.get("model", rows["kael"]["models"]["opencode"])
+        effort = kael.get("effort", rows["kael"]["effort"])
+        try:
+            models_catalog.validate_assignment(model, effort, source)
+        except models_catalog.CatalogError as error:
+            raise UserConfigError(str(error)) from error
+        config["orchestration"] = {"max_children": value}
+        encoded = (json.dumps(config, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        installed = _prepare_installed_update(
+            source, "kael", model, effort, "global", None,
+            global_root=global_root, max_children=value,
+        )
+        _commit_override(config_path(), encoded, "global", None, installed)
+    finally:
+        source_edit._release_lock(lock)
+    return config_path().resolve(), installed is not None
+
+
 def config_listing(source: Path, scope: str = "global", target: Path | None = None) -> dict:
     roles = effective_roles(source, scope, target)
     path = config_path(scope, target).resolve()
@@ -462,11 +532,17 @@ def config_listing(source: Path, scope: str = "global", target: Path | None = No
     if scope == "project":
         sources.append({"layer": "project override", "path": str(path), "exists": path.is_file()})
     global_path = config_path().resolve()
+    parallel = {
+        "max_children": max_children(source),
+        "source": "GLOBAL",
+        "path": str(global_path),
+    }
     sources.append({"layer": "global override", "path": str(global_path), "exists": global_path.is_file()})
     sources.append({"layer": "canonical default", "path": str(models_path), "exists": models_path.is_file()})
     return {
         "scope": scope, "precedence": (["project override"] if scope == "project" else []) +
         ["global override", "canonical default"],
+        "max_parallel": parallel,
         "sources": sources,
         "opencode_root_state": root_state, "managed_agent_paths": agent_paths,
         "roles": roles,
@@ -477,8 +553,12 @@ def config_listing(source: Path, scope: str = "global", target: Path | None = No
 
 def diagnose(source: Path, scope: str = "global", target: Path | None = None) -> dict:
     roles = effective_roles(source, scope, target)
+    global_path = config_path().resolve()
     return {
         "state": "valid", "scope": scope, "config_path": str(config_path(scope, target).resolve()),
+        "max_parallel": {
+            "max_children": max_children(source), "source": "GLOBAL", "path": str(global_path),
+        },
         "catalog_path": str(models_catalog.catalog_path(source).resolve()),
         "models_checked": len(roles), "provider_access_checked": False,
     }

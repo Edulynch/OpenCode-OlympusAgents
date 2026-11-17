@@ -32,7 +32,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from olympus import config_apply, config_apply_transaction, global_readonly, models_catalog, source_edit, user_config
-from olympus.cli import main
+from olympus.cli import load_renderer, main
 
 
 class GlobalCli(unittest.TestCase):
@@ -79,15 +79,16 @@ class GlobalCli(unittest.TestCase):
         shutil.rmtree(self.sandbox, ignore_errors=True)
 
     def _engine(self, *, update: bool, answer: str | None = None, noninteractive: bool = False,
-                env: dict[str, str] | None = None):
+                env: dict[str, str] | None = None, source_root: Path = ROOT):
         base = [self.pwsh, "-NoProfile"]
         arguments = ["-Harness", "opencode", "-SourceVersion", RELEASE_VERSION]
         if update:
             arguments.append("-Update")
+        script = source_root / "scripts/global-install.ps1"
         if answer is None:
-            command = base + (["-NonInteractive"] if noninteractive else []) + ["-File", str(self.script), *arguments]
+            command = base + (["-NonInteractive"] if noninteractive else []) + ["-File", str(script), *arguments]
         else:
-            escaped = str(self.script).replace("'", "''")
+            escaped = str(script).replace("'", "''")
             body = (
                 "function global:Read-Host { param([string]$Prompt); Write-Host 'OLYMPUS_TEST_PROMPT'; Write-Host $Prompt; return $env:OLYMPUS_TEST_ANSWER }; "
                 f"& '{escaped}' " + " ".join(arguments)
@@ -96,8 +97,23 @@ class GlobalCli(unittest.TestCase):
         env = (self.env if env is None else env).copy()
         if answer is not None:
             env["OLYMPUS_TEST_ANSWER"] = answer
-        return subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True,
+        return subprocess.run(command, cwd=source_root, env=env, capture_output=True, text=True,
                               encoding="utf-8", errors="replace", timeout=60, check=False)
+
+    def _verify_global(self, env: dict[str, str] | None = None, *, source_root: Path = ROOT):
+        return subprocess.run(
+            [self.pwsh, "-NoProfile", "-NonInteractive", "-File", str(source_root / "scripts/global-install.ps1"),
+             "-Harness", "opencode", "-SourceVersion", RELEASE_VERSION, "-VerifyOnly"],
+            cwd=source_root, env=self.env if env is None else env, capture_output=True,
+            text=True, encoding="utf-8", errors="replace", timeout=60, check=False,
+        )
+
+    def _copy_global_source(self, destination: Path):
+        ignore = shutil.ignore_patterns("__pycache__", "*.pyc")
+        for directory in ("olympus", "scripts", ".opencode"):
+            shutil.copytree(ROOT / directory, destination / directory, ignore=ignore)
+        for filename in ("install.ps1", "opencode.jsonc"):
+            shutil.copy2(ROOT / filename, destination / filename)
 
     def _start_global_lock_owner(self, root: Path):
         helper = ROOT / "scripts/target-writer-lock.ps1"
@@ -577,6 +593,243 @@ class GlobalCli(unittest.TestCase):
             )
             user_config.apply_to_expected(ROOT, expected["opencode"])
         self.assertIn(b'model: "openai/gpt-6.1-sol#high"', expected["opencode"]["agents/nox.md"])
+
+    def test_global_max_parallel_updates_only_global_kael_and_survives_update_verify(self):
+        project = self._create_project()
+        project_before = {
+            path.relative_to(project).as_posix(): path.read_bytes()
+            for path in project.rglob("*") if path.is_file()
+        }
+        env_patch = {"APPDATA": str(self.appdata), "LOCALAPPDATA": str(self.localappdata),
+                     "USERPROFILE": str(self.profile), "OPENCODE_CONFIG_DIR": str(self.root),
+                     "OLYMPUS_CONFIG_FILE": str(self.appdata / "Olympus/config.json")}
+        with mock.patch.dict(os.environ, env_patch), contextlib.redirect_stdout(io.StringIO()):
+            kael = next(row for row in user_config.effective_roles(ROOT) if row["role"] == "kael")
+            self.assertEqual(0, main(["--source", str(ROOT), "config", "set-max-parallel", "2"]))
+            self.assertEqual(0, main(["--source", str(ROOT), "kael", "set-model", kael["model"],
+                                      "--scope", "global"]))
+            self.assertEqual(0, main(["--source", str(ROOT), "kael", "set-effort", kael["effort"],
+                                      "--scope", "global"]))
+
+            settings = json.loads((self.appdata / "Olympus/config.json").read_text(encoding="utf-8"))
+            self.assertEqual({"model": kael["model"], "effort": kael["effort"]}, settings["overrides"]["kael"])
+            self.assertEqual({"max_children": 2}, settings["orchestration"])
+            rendered = self._agent("kael").read_text(encoding="utf-8")
+            self.assertIn("at most two active children", rendered)
+            self.assertIn(f'model: "{kael["model"]}#{kael["effort"]}"', rendered)
+
+        self.assertEqual(project_before, {
+            path.relative_to(project).as_posix(): path.read_bytes()
+            for path in project.rglob("*") if path.is_file()
+        })
+        updated = self._engine(update=True)
+        self.assertEqual(0, updated.returncode, updated.stdout + updated.stderr)
+        verified = self._verify_global()
+        self.assertEqual(0, verified.returncode, verified.stdout + verified.stderr)
+        self.assertIn("OLYMPUS_GLOBAL_VERIFY: opencode", verified.stdout)
+        entry = next(item for item in self._manifest()["managed_files"] if item["path"] == "agents/kael.md")
+        self.assertEqual(hashlib.sha256(self._agent("kael").read_bytes()).hexdigest(), entry["sha256"])
+
+        with mock.patch.dict(os.environ, env_patch):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(0, main(["--source", str(ROOT), "config", "apply", "--scope", "project",
+                                          "--target", str(project), "--harness", "opencode", "--dry-run", "--json"]))
+            preview = json.loads(output.getvalue())
+            self.assertEqual([".opencode/agents/kael.md"],
+                             [item["path"] for item in preview["data"]["changes"]])
+            self.assertEqual(0, main(["--source", str(ROOT), "config", "apply", "--scope", "project",
+                                      "--target", str(project), "--harness", "opencode", "--execute"]))
+        project_kael = (project / ".opencode/agents/kael.md").read_text(encoding="utf-8")
+        self.assertIn("at most two active children", project_kael)
+        project_manifest = json.loads((project / ".opencode/orchestrator-install.json").read_text(encoding="utf-8"))
+        project_entry = next(item for item in project_manifest["managed_files"]
+                             if item["path"] == ".opencode/agents/kael.md")
+        self.assertEqual(hashlib.sha256((project / ".opencode/agents/kael.md").read_bytes()).hexdigest(),
+                         project_entry["sha256"])
+
+    def test_global_nondefault_cap_preserves_lf_and_crlf_with_python_and_native_verification(self):
+        source = self.sandbox / "newline-source"
+        self._copy_global_source(source)
+        kael_source = source / ".opencode/agents/kael.md"
+        canonical_kael = kael_source.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+
+        for name, newline in (("lf", "\n"), ("crlf", "\r\n")):
+            with self.subTest(newline=name):
+                kael_source.write_bytes(canonical_kael.replace("\n", newline).encode("utf-8"))
+                global_root = self.sandbox / f"newline-{name}" / "opencode"
+                global_root.mkdir(parents=True)
+                settings = self.sandbox / f"newline-{name}" / "Olympus/config.json"
+                settings.parent.mkdir(parents=True)
+                settings_bytes = (json.dumps({
+                    "schema_version": 1,
+                    "overrides": {"nox": {"model": "openai/gpt-6.1-sol", "effort": "high"}},
+                    "orchestration": {"max_children": 2},
+                }, indent=2) + "\n").encode("utf-8")
+                settings.write_bytes(settings_bytes)
+                env = self.env.copy()
+                env.update({
+                    "OPENCODE_CONFIG_DIR": str(global_root),
+                    "OLYMPUS_CONFIG_FILE": str(settings),
+                    "OLYMPUS_PYTHON": sys.executable,
+                })
+
+                installed = self._engine(update=False, env=env, source_root=source)
+                self.assertEqual(0, installed.returncode, installed.stdout + installed.stderr)
+
+                with mock.patch.dict(os.environ, env, clear=True):
+                    renderer = load_renderer(source)
+                    default = global_readonly._expected(
+                        source, renderer, ("opencode",), include_default_agent=True, max_children=4,
+                    )
+                    self.assertEqual(kael_source.read_bytes(), default["opencode"]["agents/kael.md"])
+                    expected = global_readonly._expected(
+                        source, renderer, ("opencode",), include_default_agent=True,
+                    )
+                    user_config.apply_to_expected(source, expected["opencode"])
+
+                    installed_kael = (global_root / "agents/kael.md").read_bytes()
+                    self.assertEqual(expected["opencode"]["agents/kael.md"], installed_kael)
+                    self.assertIn(b"MAX_ACTIVE_CHILDREN = 2", installed_kael)
+                    if newline == "\r\n":
+                        self.assertIn(b"\r\n", installed_kael)
+                        self.assertNotIn(b"\r\r\n", installed_kael)
+                        self.assertNotIn(b"\n", installed_kael.replace(b"\r\n", b""))
+                    else:
+                        self.assertNotIn(b"\r\n", installed_kael)
+                    installed_nox = (global_root / "agents/nox.md").read_bytes()
+                    self.assertEqual(expected["opencode"]["agents/nox.md"], installed_nox)
+                    self.assertIn(b'model: "openai/gpt-6.1-sol#high"', installed_nox)
+                    self.assertEqual(settings_bytes, settings.read_bytes())
+
+                    output = io.StringIO()
+                    with contextlib.redirect_stdout(output):
+                        doctor_code = main(["--source", str(source), "doctor", "--scope", "global", "--json"])
+                    self.assertEqual(0, doctor_code, output.getvalue())
+                    doctor = json.loads(output.getvalue())
+                    self.assertEqual("verified", doctor["data"]["harnesses"]["opencode"]["state"])
+                    self.assertEqual(2, doctor["data"]["user_configuration"]["max_parallel"]["max_children"])
+
+                verified = self._verify_global(env, source_root=source)
+                self.assertEqual(0, verified.returncode, verified.stdout + verified.stderr)
+                self.assertRegex(verified.stdout, r"(?m)^OLYMPUS_GLOBAL_VERIFY: opencode .* PASS")
+                manifest = json.loads((global_root / "olympus/orchestrator-install.json").read_text(encoding="utf-8"))
+                for relative, raw in (
+                    ("agents/kael.md", installed_kael),
+                    ("agents/nox.md", installed_nox),
+                ):
+                    entry = next(item for item in manifest["managed_files"] if item["path"] == relative)
+                    self.assertEqual(hashlib.sha256(raw).hexdigest(), entry["sha256"])
+
+    def test_global_max_parallel_refuses_pending_lock_and_managed_drift(self):
+        settings = self.appdata / "Olympus/config.json"
+        pending = self.root / ".olympus-cli-config-apply"
+        pending.write_bytes(b"preserve pending evidence")
+        before_root = self._global_files()
+        with self.assertRaisesRegex(user_config.UserConfigError, "pending Olympus global"):
+            user_config.set_max_children(ROOT, 2)
+        self.assertEqual(before_root, self._global_files())
+        self.assertFalse(settings.exists())
+        pending.unlink()
+
+        guard_intent = self.root / global_readonly._OPENCODE_GUARD_INTENT
+        guard_intent.parent.mkdir(parents=True, exist_ok=True)
+        guard_intent.write_bytes(b"{preserve guard intent")
+        before_root = self._global_files()
+        with self.assertRaisesRegex(user_config.UserConfigError, "OpenCode guard transaction is pending"):
+            user_config.set_max_children(ROOT, 2)
+        self.assertEqual(before_root, self._global_files())
+        self.assertFalse(settings.exists())
+        guard_intent.unlink()
+
+        owner = self._start_global_lock_owner(self.root)
+        try:
+            before_root = self._global_files()
+            with self.assertRaisesRegex(user_config.UserConfigError, "Stable lock is owned by another process"):
+                user_config.set_max_children(ROOT, 2)
+            self.assertEqual(before_root, self._global_files())
+            self.assertFalse(settings.exists())
+        finally:
+            self._stop_global_lock_owner(owner)
+
+        agent = self._agent("kael")
+        original = agent.read_bytes()
+        agent.write_bytes(original + b"\n# preserve drift\n")
+        drifted = agent.read_bytes()
+        before_manifest = self.manifest_path.read_bytes()
+        with self.assertRaisesRegex(user_config.UserConfigError, "changed outside Olympus"):
+            user_config.set_max_children(ROOT, 2)
+        self.assertEqual(drifted, agent.read_bytes())
+        self.assertEqual(before_manifest, self.manifest_path.read_bytes())
+        self.assertFalse(settings.exists())
+
+    def test_global_max_parallel_config_only_root_and_strict_global_project_schema(self):
+        absent_root = self.sandbox / "config-only" / "opencode"
+        settings = self.sandbox / "config-only-user" / "Olympus" / "config.json"
+        env = self.env.copy()
+        env.update({"OPENCODE_CONFIG_DIR": str(absent_root), "OLYMPUS_CONFIG_FILE": str(settings)})
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(4, user_config.max_children(ROOT))
+            for value in (1, 4, 8):
+                path, applied = user_config.set_max_children(ROOT, value)
+                self.assertEqual(value, user_config.max_children(ROOT))
+            self.assertEqual(settings.resolve(), path)
+            self.assertFalse(applied)
+        self.assertEqual([".olympus-cli-edit.lock"], sorted(item.name for item in absent_root.iterdir()))
+        self.assertEqual({"max_children": 8}, json.loads(settings.read_text(encoding="utf-8"))["orchestration"])
+        self.assertFalse((absent_root / "olympus/orchestrator-install.json").exists())
+
+        valid = {"schema_version": 1, "overrides": {}, "orchestration": {"max_children": 1}}
+        settings.write_text(json.dumps(valid), encoding="utf-8")
+        with mock.patch.dict(os.environ, env, clear=True):
+            listing = user_config.config_listing(ROOT, "project", self._create_project())
+            diagnosis = user_config.diagnose(ROOT)
+        self.assertEqual({"max_children": 1, "source": "GLOBAL", "path": str(settings.resolve())},
+                         listing["max_parallel"])
+        self.assertEqual(listing["max_parallel"], diagnosis["max_parallel"])
+
+        invalid = (
+            {"max_children": True}, {"max_children": "2"}, {"max_children": 2.0},
+            {"max_children": 0}, {"max_children": 9}, {"max_children": 2, "extra": 1},
+        )
+        original = settings.read_bytes()
+        for orchestration in invalid:
+            with self.subTest(orchestration=orchestration):
+                settings.write_text(json.dumps({**valid, "orchestration": orchestration}), encoding="utf-8")
+                invalid_bytes = settings.read_bytes()
+                with mock.patch.dict(os.environ, env, clear=True):
+                    with self.assertRaises(user_config.UserConfigError):
+                        user_config.max_children(ROOT)
+                self.assertEqual(invalid_bytes, settings.read_bytes())
+        settings.write_bytes(original)
+
+        before_root = {path.relative_to(self.root).as_posix(): path.read_bytes()
+                       for path in self.root.rglob("*") if path.is_file()}
+        before_settings = settings.read_bytes()
+        for invalid_value in ("0", "9", "2.0", "not-a-number"):
+            output = io.StringIO()
+            with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(output):
+                self.assertEqual(2, main(["--source", str(ROOT), "config", "set-max-parallel", invalid_value]))
+            self.assertEqual(before_settings, settings.read_bytes())
+            self.assertEqual(before_root, {
+                path.relative_to(self.root).as_posix(): path.read_bytes()
+                for path in self.root.rglob("*") if path.is_file()
+            })
+
+        project_config = self.sandbox / "strict-project" / ".opencode" / "olympus-config.json"
+        project_config.parent.mkdir(parents=True)
+        project_config.write_text(json.dumps(valid), encoding="utf-8")
+        with mock.patch.dict(os.environ, env, clear=True):
+            with self.assertRaises(user_config.UserConfigError):
+                user_config.read_config(ROOT, "project", project_config.parent.parent)
+
+        unsafe_env = env.copy()
+        unsafe_env["OPENCODE_CONFIG_DIR"] = str(Path(self.sandbox.anchor))
+        with mock.patch.dict(os.environ, unsafe_env, clear=True):
+            with self.assertRaises(user_config.UserConfigError):
+                user_config.set_max_children(ROOT, 3)
+        self.assertEqual(original, settings.read_bytes())
+        self.assertEqual([".olympus-cli-edit.lock"], sorted(item.name for item in absent_root.iterdir()))
 
     def test_global_override_preserves_current_thirteen_resource_user_config(self):
         root = self.sandbox / "global-user-config"

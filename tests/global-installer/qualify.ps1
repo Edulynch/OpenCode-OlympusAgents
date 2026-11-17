@@ -184,6 +184,62 @@ try {
     $globalInstall = Global-Install $project 'opencode'
     Check 'GLOBAL_OPENCODE_INSTALL' ($globalInstall.Code -eq 0 -and
         $globalInstall.Text -match 'OLYMPUS_GLOBAL_INSTALL: OPENCODE .* READY') ("exit=$($globalInstall.Code)`n$($globalInstall.Text)")
+    $capRoot = Join-Path $run 'cap-global'
+    [IO.Directory]::CreateDirectory($capRoot) | Out-Null
+    $capConfig = Join-Path $run 'cap-config.json'
+    $previousCapRoot = $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT
+    $previousConfigFile = $env:OLYMPUS_CONFIG_FILE
+    try {
+        $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $capRoot
+        $env:OLYMPUS_CONFIG_FILE = $capConfig
+        [IO.File]::WriteAllText($capConfig,
+            '{"schema_version":1,"overrides":{},"orchestration":{"max_children":2}}' + "`n", $utf8)
+        $capInstall = Global-Install $project 'opencode'
+        $capAgent = Join-Path $capRoot 'agents/kael.md'
+        $capManifest = Join-Path $capRoot 'olympus/orchestrator-install.json'
+        $manifest = [IO.File]::ReadAllText($capManifest) | ConvertFrom-Json
+        $kaelEntry = $manifest.managed_files | Where-Object { $_.path -ceq 'agents/kael.md' }
+        Check 'GLOBAL_MAX_PARALLEL_INITIAL_INSTALL' (
+            $capInstall.Code -eq 0 -and
+            [IO.File]::ReadAllText($capAgent).Contains('MAX_ACTIVE_CHILDREN = 2') -and
+            $kaelEntry.sha256 -ceq (Get-FileHash -LiteralPath $capAgent -Algorithm SHA256).Hash.ToLowerInvariant()
+        ) ("exit=$($capInstall.Code)`n$($capInstall.Text)")
+
+        [IO.File]::WriteAllText($capConfig,
+            '{"schema_version":1,"overrides":{},"orchestration":{"max_children":1}}' + "`n", $utf8)
+        $capUpdate = Run-Installer $project @('-Scope','global','-Harness','opencode','-Update')
+        $beforeCapVerify = Snapshot $capRoot
+        $capVerify = Global-Verify $project 'opencode'
+        Check 'GLOBAL_MAX_PARALLEL_UPDATE_VERIFYONLY' (
+            $capUpdate.Code -eq 0 -and
+            [IO.File]::ReadAllText($capAgent).Contains('MAX_ACTIVE_CHILDREN = 1') -and
+            $capVerify.Code -eq 0 -and $capVerify.Text -match 'OLYMPUS_GLOBAL_VERIFY: opencode' -and
+            (Snapshot $capRoot) -ceq $beforeCapVerify
+        ) ("update=$($capUpdate.Code)`n$($capUpdate.Text)`nverify=$($capVerify.Code)`n$($capVerify.Text)")
+
+        [IO.File]::WriteAllText($capConfig,
+            '{"schema_version":1,"overrides":{},"orchestration":{"max_children":true}}' + "`n", $utf8)
+        $beforeInvalidCap = Snapshot $capRoot
+        $invalidCap = Global-Install $project 'opencode'
+        Check 'GLOBAL_MAX_PARALLEL_REJECTS_BOOLEAN_WITHOUT_WRITES' (
+            $invalidCap.Code -ne 0 -and $invalidCap.Text -match 'USER_CONFIG_INVALID' -and
+            (Snapshot $capRoot) -ceq $beforeInvalidCap
+        ) ("exit=$($invalidCap.Code)`n$($invalidCap.Text)")
+
+        $caseVariantConfig = '{"schema_version":1,"overrides":{},"Orchestration":{"max_children":2}}' + "`n"
+        [IO.File]::WriteAllText($capConfig, $caseVariantConfig, $utf8)
+        $beforeCaseVariant = Snapshot $capRoot
+        $caseVariantInstall = Global-Install $project 'opencode'
+        Check 'GLOBAL_USER_CONFIG_REJECTS_CASE_VARIANT_KEY_WITHOUT_WRITES' (
+            $caseVariantInstall.Code -ne 0 -and
+            $caseVariantInstall.Text -match 'USER_CONFIG_INVALID' -and
+            (Snapshot $capRoot) -ceq $beforeCaseVariant -and
+            [IO.File]::ReadAllText($capConfig) -ceq $caseVariantConfig
+        ) ("exit=$($caseVariantInstall.Code)`n$($caseVariantInstall.Text)")
+    } finally {
+        $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $previousCapRoot
+        $env:OLYMPUS_CONFIG_FILE = $previousConfigFile
+    }
     Check 'GLOBAL_PROJECT_OVERRIDE_RETAINED' ($globalInstall.Text -match 'GLOBAL_INSTALLED PROJECT_LOCAL_REMAINS_AS_OVERRIDE' -and
         $globalInstall.Text -match 'PROJECT_LOCAL_OVERRIDE: opencode' -and
         (Snapshot $project) -ceq $projectBeforeGlobalInstall) ("exit=$($globalInstall.Code)`n$($globalInstall.Text)`nPROJECT_SNAPSHOT_UNCHANGED=$((Snapshot $project) -ceq $projectBeforeGlobalInstall)")

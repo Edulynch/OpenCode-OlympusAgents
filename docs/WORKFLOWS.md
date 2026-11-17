@@ -47,7 +47,7 @@ The canonical definitions remain in [Olympus Core](../olympus/README.md). Model/
 | Mode | Selection | What changes |
 | --- | --- | --- |
 | **NORMAL** | Default | Kael uses only useful, bounded parallelism; simple tasks need no fan-out. |
-| **FAST** | Explicit request | When work is independent and safe to split, Kael may use up to **four** active agents. Required checks, writer ownership, dependencies, permissions and completion gates remain unchanged. Dependent tasks never run in parallel just to fill the limit. |
+| **FAST** | Explicit request | When work is independent and safe to split, Kael may use up to **four** active agents by default; the global prompt ceiling can be set from 1 to 8 per root session. Required checks, writer ownership, dependencies, permissions and completion gates remain unchanged. Dependent tasks never run in parallel just to fill the limit. This prompt policy does not enforce the native scheduler. |
 
 ### Optional OpenCode task modifiers
 
@@ -64,7 +64,7 @@ surgical-mode
 | Marker | Intent | Does not change |
 | --- | --- | --- |
 | `long-mode` | Reduce optional questions while using the information already available | User approval and authorization requirements |
-| `fast-mode` | Request the existing FAST policy | Task dependencies, writer ownership, completion gates or the four-agent ceiling |
+| `fast-mode` | Request the existing FAST policy | Task dependencies, writer ownership, completion gates or the configured prompt ceiling |
 | `surgical-mode` | Focus on the requested change and avoid unrelated edits | Necessary tests and safety reviews |
 
 Markers may be combined at the end of a single task; they do not persist into future tasks. Ordinary mentions in documentation, code, quotations or nonterminal prose do not activate them. Ambiguous placement leaves NORMAL behavior unchanged. They are instructions to Kael, **not a parser or a runtime guarantee**. The canonical behavior is maintained in [Kael's OpenCode adapter source](../olympus/harnesses/opencode/agent-prompts/kael.md).

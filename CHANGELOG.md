@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Add `olympus config set-max-parallel N` for the global Kael prompt ceiling (1–8, default 4), preserved alongside model/effort settings and applied to managed global Kael output; explicit project config apply consumes the preference without retroactive project/session changes. The optional schema-1 `orchestration` field is not accepted by older CLIs.
+- Add opt-in current-shell PowerShell 7 (Windows) and Bash (Linux) completion from argparse-derived read-only candidates; no profile edits or dynamic filesystem/provider lookup.
+
 ## v0.9.0
 
 ### Highlights

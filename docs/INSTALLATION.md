@@ -111,6 +111,7 @@ olympus agents list
 olympus nox set-model openai/gpt-6-luna
 olympus nox set-effort high
 olympus config list
+olympus config set-max-parallel 2
 olympus doctor
 olympus install
 olympus uninstall
@@ -132,6 +133,7 @@ below do not inherit that rule.
 | `olympus install` | Fixed global OpenCode; no scope/harness/target/version selectors | `--dry-run` previews. Otherwise the installer executes; `--execute` makes that intent explicit. `--json` captures native output. |
 | `olympus uninstall` | Fixed global OpenCode | `--dry-run` previews; otherwise removes unchanged manifest-owned resources, reverses the still-owned default field, and uninstalls the global CLI/PATH entry. |
 | `olympus <role> set-model <id>` / `set-effort <value>` | `<role>`: `kael`, `veyra`, `orin`, `atlas`, `kovan`, `argus`, `nox`, `vera`, `talos`, `thales`, or `helios`; auto-detects or accepts scope/target | Writes the user override immediately and updates a managed installed OpenCode agent when applicable. Global setters require a safely resolved root and honor the shared lock and pending-recovery controls above. This is not a canonical source edit and has no dry-run flag. |
+| `olympus config set-max-parallel N` | Global user configuration; `N` is an integer from 1 to 8 | Updates Kael's prompt-level direct-child ceiling and the managed global Kael prompt when installed. Default is 4. It does not control the native scheduler, combine separate root sessions into one quota, cancel active children, or update existing project installations implicitly. |
 | `olympus models list`, `olympus agents list` | Canonical source for models; agents list uses auto-detection or explicit scope/target | Read-only lists. `models list` is offline; `agents list` shows effective values and their sources. |
 | `olympus models set-family <family> --opencode <id>` / `olympus agents set-model <role> [--family <family>] [--effort <value>]` (at least one option required) | Canonical checkout selected by `--source`, or this CLI's bundled source | Edits canonical model intent. `--dry-run` previews; omitting it executes the source edit. JSON output for these edits requires `--dry-run`. |
 | `olympus config list` / `olympus config check` | List uses auto-detection or explicit scope/target; check reads the selected source and OpenCode harness | Both are read-only. List shows effective values, precedence, and paths; check compares renderer output without writing. |
@@ -139,6 +141,21 @@ below do not inherit that rule.
 | `olympus config recover` | No scope recovers a pending canonical source edit; project recovery requires `--scope project --target`; global recovery uses `--scope global --harness opencode` | Explicitly reconciles pending transaction state and may change files. Use only for the matching pending operation. |
 | `olympus status` | Defaults to project and requires `--target`; use `--scope global` without a target for global metadata | Read-only reported manifest/install metadata; it does not verify file integrity. |
 | `olympus doctor` | Auto-detects or accepts explicit scope/target; project scope requires `--target`; `--harness opencode` is the supported harness | Read-only configuration and managed-installation diagnostics. It does not apply repairs or check provider access. |
+| `olympus completion powershell` / `olympus completion bash` | Current shell only: PowerShell 7 on Windows or Bash on Linux | Prints optional native registration code. Load it explicitly in the current shell; completion uses local CLI commands/options/choices only and does not inspect files, providers, networks, or configuration. No profile is edited. |
+
+For a project copy, first preview `olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --dry-run`, then execute only when the proposed change is intended. Project `config list` labels the concurrency ceiling as `GLOBAL`; changing the global preference does not retroactively rewrite existing project agents or sessions.
+
+To enable completion only in the current shell:
+
+```powershell
+olympus completion powershell | Out-String | Invoke-Expression
+```
+
+```bash
+eval "$(olympus completion bash)"
+```
+
+PowerShell registration is for Windows PowerShell 7; Bash registration is for Linux Bash. To persist it, review and copy the emitted registration into a user-owned profile yourself (for example `$PROFILE` or `~/.bashrc`). Olympus never creates or edits shell profiles automatically.
 
 `olympus update` selects an immutable stable release, refuses downgrades, preserves the user override file, and reports the prior/new version. If managed agents have changed, it lists their names and asks once; `y` permits the update, while `n`, Enter, or non-interactive input preserve them and stop. No hashes or old-version recovery are required.
 

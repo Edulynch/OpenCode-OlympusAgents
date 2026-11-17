@@ -44,10 +44,10 @@ Open a new PowerShell 7 window, then use `olympus version` and `olympus update` 
 
 ## Install a specific version
 
-To install `v0.9.0` instead of the latest release:
+To install `v0.10.0` instead of the latest release:
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.9.0/install.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.10.0/install.ps1')))
 ```
 
 The tagged installer defaults to that version and downloads its exact tag archive; no extra `-Version` argument is needed.

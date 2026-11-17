@@ -26,7 +26,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from olympus import config_apply, config_apply_transaction, doctor, global_readonly, install_routing, source_edit
-from olympus.cli import load_renderer as cli_load_renderer, main as cli_main, model_assignments as cli_model_assignments, parser as cli_parser, release_version, source_query as cli_source_query
+from olympus.cli import (_completion_candidates, load_renderer as cli_load_renderer,
+                         main as cli_main, model_assignments as cli_model_assignments,
+                         parser as cli_parser, release_version, source_query as cli_source_query)
 
 
 def load_file(name: str, path: Path):
@@ -60,6 +62,8 @@ class SliceA(unittest.TestCase):
         for name in ("render_harnesses.py", "olympus_cli.py", "olympus", "olympus.cmd", "bootstrap.ps1",
                      "launch-latest.ps1", "project-uninstall.ps1", "global-install.ps1", "target-writer-lock.ps1"):
             shutil.copy2(ROOT / "scripts" / name, self.source / "scripts" / name)
+        launcher = self.source / "scripts" / "olympus"
+        launcher.write_bytes(launcher.read_bytes().replace(b"\r\n", b"\n"))
         shutil.copy2(ROOT / "install.ps1", self.source / "install.ps1")
         self.source_version = release_version(self.source)
         self.renderer = load_file("fixture_renderer", self.source / "scripts/render_harnesses.py")
@@ -305,6 +309,139 @@ class SliceA(unittest.TestCase):
                         self.assertEqual((code, "", ""), self.call_main(command))
                         update.assert_called_once_with(self.source)
 
+    def test_slice_a_completion_candidates_are_argparse_derived_and_source_free(self):
+        cli = cli_parser()
+        self.assertIn("upgrade", _completion_candidates(cli, [], "up"))
+        self.assertEqual({"list", "set-max-parallel", "check", "apply", "recover", "-h", "--help"},
+                         set(_completion_candidates(cli, ["config"], "")))
+        self.assertIn("--scope", _completion_candidates(cli, ["config", "list"], ""))
+        self.assertIn("--target", _completion_candidates(cli, ["config", "apply", "--json"], ""))
+        self.assertEqual(["project", "global"],
+                         _completion_candidates(cli, ["config", "list", "--scope"], ""))
+        self.assertEqual(["--scope=project"],
+                         _completion_candidates(cli, ["config", "apply"], "--scope=pro"))
+        self.assertEqual(["powershell"],
+                         _completion_candidates(cli, ["completion"], "p"))
+        self.assertEqual([], _completion_candidates(cli, ["config", "list"], "x;"))
+
+        missing_source = self.sandbox / "missing-source"
+        generation = self.query("--source", str(missing_source), "completion", "bash")
+        self.assertEqual(0, generation.returncode, generation.stderr)
+        self.assertIn("complete -F _olympus_complete", generation.stdout)
+        powershell = self.query("completion", "powershell")
+        self.assertEqual(0, powershell.returncode, powershell.stderr)
+        self.assertIn("Register-ArgumentCompleter -Native", powershell.stdout)
+        self.assertNotIn("Invoke-Expression", powershell.stdout)
+
+        broken_config = self.sandbox / "broken-config.json"
+        broken_config.write_text("{invalid", encoding="utf-8")
+        environment = self.env.copy()
+        environment["OLYMPUS_CONFIG_FILE"] = str(broken_config)
+        sentinel = self.sandbox / "completion-token-executed.txt"
+        payload = b"OLYMPUS-COMPLETE-PS-V1\n" + json.dumps({
+            "words": ["--source", str(missing_source), "config"],
+            "current": "",
+        }).encode("utf-8")
+        result = subprocess.run(
+            [sys.executable, "-B", "-m", "olympus", "--_completion-query-v1"],
+            cwd=self.source, env=environment, input=payload, capture_output=True, timeout=20, check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn(b"set-max-parallel", result.stdout)
+        malicious = f'&& echo PWNED > "{sentinel}"'
+        payload = b"OLYMPUS-COMPLETE-PS-V1\n" + json.dumps({
+            "words": ["olympus", "config", "list"], "current": malicious,
+        }).encode("utf-8")
+        result = subprocess.run(
+            [sys.executable, "-B", "-m", "olympus", "--_completion-query-v1"],
+            cwd=self.source, env=environment, input=payload, capture_output=True, timeout=20, check=False,
+        )
+        self.assertEqual((0, b"", False), (result.returncode, result.stdout, sentinel.exists()))
+
+    def test_slice_a_bash_native_completion(self):
+        bash = shutil.which("bash")
+        if bash is None or os.name == "nt":
+            self.skipTest("Native Bash completion integration requires Linux Bash.")
+        environment = self.env.copy()
+        environment.update({
+            "OLYMPUS_PYTHON": sys.executable,
+            "PATH": str(self.source / "scripts") + os.pathsep + self.env.get("PATH", ""),
+        })
+        sentinel = self.sandbox / "bash-token-executed.txt"
+        script = f'''
+source <(python3 -B -m olympus completion bash)
+COMP_WORDS=(olympus config "")
+COMP_CWORD=2
+_olympus_complete
+printf 'COMMANDS:%s\\n' "${{COMPREPLY[*]}}"
+COMP_WORDS=(olympus config list --scope = pro)
+COMP_CWORD=5
+_olympus_complete
+printf 'VALUE:%s\\n' "${{COMPREPLY[*]}}"
+COMP_WORDS=(olympus config list '&& echo PWNED > "{sentinel}"')
+COMP_CWORD=3
+_olympus_complete
+test ! -e "{sentinel}"
+'''
+        result = subprocess.run(
+            [bash, "--noprofile", "--norc", "-c", script], cwd=self.source, env=environment,
+            capture_output=True, text=True, encoding="utf-8", timeout=30, check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("COMMANDS:list set-max-parallel check apply recover", result.stdout)
+        self.assertIn("VALUE:project", result.stdout)
+        self.assertFalse(sentinel.exists())
+
+    def test_slice_a_powershell_native_completion(self):
+        if os.name != "nt":
+            self.skipTest("Native PowerShell completion integration requires Windows PowerShell 7.")
+        pwsh = shutil.which("pwsh")
+        if pwsh is None:
+            self.skipTest("PowerShell 7 is unavailable.")
+        environment = self.env.copy()
+        environment.update({
+            "OLYMPUS_PYTHON": sys.executable,
+            "PATH": str(self.source / "scripts") + os.pathsep + self.env.get("PATH", ""),
+            "OLYMPUS_CONFIG_FILE": str(self.sandbox / "broken-config.json"),
+        })
+        Path(environment["OLYMPUS_CONFIG_FILE"]).write_text("{invalid", encoding="utf-8")
+        registration = self.query("completion", "powershell").stdout
+        script = self.sandbox / "completion.ps1"
+        script.write_text(
+            "$registration = @'\n" + registration + "\n'@\n"
+            ". ([scriptblock]::Create($registration))\n"
+            "$line = 'olympus --source \"C:\\missing\" config '\n"
+            "$result = TabExpansion2 -inputScript $line -cursorColumn $line.Length\n"
+            "$result.CompletionMatches.CompletionText\n"
+            "$line = 'olympus config list --scope g'\n"
+            "$result = TabExpansion2 -inputScript $line -cursorColumn $line.Length\n"
+            "$result.CompletionMatches.CompletionText\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [pwsh, "-NoProfile", "-NonInteractive", "-File", str(script)],
+            cwd=self.source, env=environment, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30, check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("set-max-parallel", result.stdout)
+        self.assertRegex(result.stdout, r"(?m)^global$")
+
+        launcher = self.source / "scripts" / "olympus.cmd"
+        batch = subprocess.list2cmdline([str(launcher), "--_completion-query-v1"])
+        command = f'"{environment["COMSPEC"]}" /d /s /c "{batch}"'
+        sentinel = self.sandbox / "cmd-token-executed.txt"
+        payload = b"OLYMPUS-COMPLETE-PS-V1\n" + json.dumps({
+            "words": ["olympus", "config", f'& echo PWNED > "{sentinel}"'],
+            "current": "",
+        }).encode("utf-8")
+        adapter = subprocess.run(
+            command, cwd=self.source, env=environment, input=payload, capture_output=True,
+            timeout=30, check=False,
+        )
+        self.assertEqual(0, adapter.returncode, adapter.stderr)
+        self.assertFalse(sentinel.exists())
+
     def test_slice_a_models_human_json_canonical_assignments(self):
         response = self.json_query("models", "list")
         self.assertEqual("models list", response["operation"])
@@ -332,6 +469,26 @@ class SliceA(unittest.TestCase):
         response = self.json_query("config", "check", "--harness", "opencode")
         self.assertTrue(response["data"]["coherent"])
         self.assertEqual(len(self.renderer.outputs_for(self.source, "opencode")), response["data"]["managed_outputs"])
+        default_outputs = self.renderer.outputs_for(self.source, "opencode")
+        self.assertEqual(default_outputs, self.renderer.outputs_for(self.source, "opencode", 4))
+        for path, content in default_outputs.items():
+            self.assertEqual(content.encode("utf-8"), path.read_bytes())
+        one_child = self.renderer.outputs_for(self.source, "opencode", 1)[
+            self.source / ".opencode/agents/kael.md"
+        ]
+        two_children = self.renderer.outputs_for(self.source, "opencode", 2)[
+            self.source / ".opencode/agents/kael.md"
+        ]
+        self.assertIn("keep child work sequential", one_child)
+        self.assertIn("7 / 1 = 7", one_child)
+        self.assertIn("two for common independent work", two_children)
+        self.assertIn("7 / 2 = 4/3", two_children)
+        eight_children = self.renderer.outputs_for(self.source, "opencode", 8)[
+            self.source / ".opencode/agents/kael.md"
+        ]
+        self.assertIn("MAX_ACTIVE_CHILDREN = 8", eight_children)
+        self.assertIn("7 / 7 = 1/1/1/1/1/1/1", eight_children)
+        self.assertNotIn("7 / 8 =", eight_children)
         human = self.query("config", "check", "--harness", "opencode")
         self.assertEqual(0, human.returncode)
         for key, value in response["data"].items():

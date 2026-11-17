@@ -230,7 +230,11 @@ def _manifest_record(target: Path) -> tuple[ProjectManifest | None, bytes | None
 def _render_managed_outputs(source: Path, renderer, installed: tuple[str, ...]) -> dict[str, dict[str, bytes]]:
     if installed != ("opencode",):
         raise PreviewFault(3, "unsupported_manifest_inventory", "Only the current OpenCode project inventory is supported.")
-    rendered = renderer.outputs_for(source, "opencode")
+    from . import user_config
+
+    children = user_config.max_children(source)
+    rendered = (renderer.outputs_for(source, "opencode") if children == 4
+                else renderer.outputs_for(source, "opencode", children))
     by_harness: dict[str, dict[str, bytes]] = {name: {} for name in installed}
     for path, content in rendered.items():
         try:

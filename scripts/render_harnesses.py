@@ -175,7 +175,70 @@ def prefix_yaml_description(text: str, identity: str, source: Path) -> str:
     return text[: match.start()] + rendered + text[match.end() :]
 
 
-def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[str, str], roles: set[str]) -> dict[Path, str]:
+def _parallel_guidance(children: int) -> str:
+    word = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}[children]
+    if children == 1:
+        return (
+            "NORMAL is cost/context-aware: adapt from zero to one child, preferring the\n"
+            "minimum useful parallelism. Use zero for direct/trivial work and one for\n"
+            "ordinary delegated work; keep child work sequential rather than splitting\n"
+            "independent work across concurrently active children."
+        )
+    if children == 2:
+        return (
+            "NORMAL is cost/context-aware: adapt from zero to two children, preferring the\n"
+            "minimum useful parallelism. Use zero for direct/trivial work, one for ordinary\n"
+            "delegated work, and two for common independent work only where both are useful."
+        )
+    if children == 4:
+        return (
+            "NORMAL is cost/context-aware: adapt from zero to four children, preferring the\n"
+            "minimum useful parallelism. Use zero for direct/trivial work, one for ordinary\n"
+            "delegated work, two for common independent work, and three or four only where\n"
+            "genuinely independent workstreams justify them. Before adding a concurrent child,\n"
+            "check that its distinct responsibility or independent batch partition can progress\n"
+            "without waiting, does not needlessly duplicate work, has clear result/integration\n"
+            "ownership, and yields meaningful latency or context benefit. Do not narrate this\n"
+            "check verbosely to the user."
+    )
+    if children > 4:
+        values = [
+            {3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}[count]
+            for count in range(3, children + 1)
+        ]
+        upper = ", ".join(values[:-1]) + ", or " + values[-1]
+    else:
+        upper = "three"
+    return (
+        f"NORMAL is cost/context-aware: adapt from zero to {word} children, preferring the\n"
+        "minimum useful parallelism. Use zero for direct/trivial work, one for ordinary\n"
+        f"delegated work, two for common independent work, and {upper} only where\n"
+        "genuinely independent workstreams justify them. Before adding a concurrent child,\n"
+        "check that its distinct responsibility or independent batch partition can progress\n"
+        "without waiting, does not needlessly duplicate work, has clear result/integration\n"
+        "ownership, and yields meaningful latency or context benefit. Do not narrate this\n"
+        "check verbosely to the user."
+    )
+
+
+def _balanced_shards(items: int, workers: int) -> str:
+    quotient, remainder = divmod(items, workers)
+    return "/".join(str(quotient + (index < remainder)) for index in range(workers))
+
+
+def _sharding_examples(children: int) -> str:
+    if children == 4:
+        return "20 items / 4 workers = 5/5/5/5; 7 / 4 = 2/2/2/1;\n100 / 4 ≈ 25 each"
+    seven_workers = min(7, children)
+    return (
+        f"20 items / {children} workers = {_balanced_shards(20, children)}; "
+        f"7 / {seven_workers} = {_balanced_shards(7, seven_workers)}; "
+        f"100 / {children} ≈ {round(100 / children)} each"
+    )
+
+
+def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[str, str],
+                     roles: set[str], max_children: int | None = None) -> dict[Path, str]:
     adapter = root / "olympus" / "harnesses" / "opencode"
     maintenance_policy_path = root / "olympus" / "policies" / "maintenance-context.md"
     maintenance_policy = read_text(maintenance_policy_path).strip()
@@ -191,7 +254,9 @@ def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[
             f"unexpected={sorted((metadata_roles | prompt_roles) - roles)}"
         )
 
-    children = policies["max_children"]
+    children = policies["max_children"] if max_children is None else max_children
+    if type(children) is not int or not 1 <= children <= 8:
+        raise RenderError("effective max_children must be an integer from 1 to 8")
     word = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}.get(children)
     if word is None:
         raise RenderError("max_children outside supported word mapping (1..8)")
@@ -213,7 +278,11 @@ def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[
             {
                 "max_children": children,
                 "max_children_word": word,
+                "max_children_plural": "" if children == 1 else "ren",
+                "max_children_s": "" if children == 1 else "s",
                 "max_children_title": word.title(),
+                "normal_parallelism_guidance": _parallel_guidance(children),
+                "sharding_examples": _sharding_examples(children),
                 "display_identity": identities[role],
                 "tfr_policy": tfr_policy if role == "kael" else "",
                 "maintenance_context_policy": maintenance_policy if role == "kael" else "",
@@ -272,11 +341,16 @@ def capability_doc(capabilities: dict) -> str:
     return "\n".join(lines)
 
 
-def outputs_for(root: Path, selected: str) -> dict[Path, str]:
+def outputs_for(root: Path, selected: str, max_children: int | None = None) -> dict[Path, str]:
     if selected != "opencode":
         raise RenderError(f"unsupported harness selector: {selected!r}; only 'opencode' is supported")
     models, policies, _, identities, roles = checked_sources(root)
-    return opencode_outputs(root, models, policies, identities, roles)
+    return opencode_outputs(root, models, policies, identities, roles, max_children)
+
+
+def rendered_kael(root: Path, max_children: int) -> str:
+    outputs = outputs_for(root, "opencode", max_children)
+    return outputs[root / ".opencode" / "agents" / "kael.md"]
 
 
 def run(root: Path, action: str, selected: str) -> int:
@@ -311,12 +385,21 @@ def run(root: Path, action: str, selected: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("render", "check"), help="render managed output or perform read-only drift check")
+    parser.add_argument("action", choices=("render", "check", "kael"),
+                        help="render managed output, check drift, or print a cap-specific Kael prompt")
     parser.add_argument("--harness", choices=("opencode",), default="opencode")
     parser.add_argument("--root", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--max-children", type=int, choices=range(1, 9), help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     root = (args.root or Path(__file__).resolve().parents[1]).resolve()
     try:
+        if args.action == "kael":
+            if args.max_children is None:
+                parser.error("kael requires --max-children")
+            if hasattr(sys.stdout, "reconfigure"):
+                sys.stdout.reconfigure(encoding="utf-8", newline="")
+            sys.stdout.write(rendered_kael(root, args.max_children))
+            return 0
         return run(root, args.action, args.harness)
     except RenderError as error:
         print(f"HARNESS_RENDER: ERROR: {error}", file=sys.stderr)

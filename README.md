@@ -58,7 +58,7 @@ The tagged installer defaults to that version and downloads its exact tag archiv
 
 **NORMAL (default):** Kael uses parallel work only when useful for the task.
 
-**FAST (explicit):** Up to four agents; keeps required checks and does not parallelize dependent tasks.
+**FAST (explicit):** Up to four agents by default; the global prompt ceiling is configurable from one to eight per Kael root session. It keeps required checks and does not parallelize dependent tasks.
 
 **Optional OpenCode task modifiers:** `long-mode` · `fast-mode` · `surgical-mode` are task-scoped prompt markers, not a parser or a runtime guarantee. [Examples and rules →](docs/WORKFLOWS.md#optional-opencode-task-modifiers)
 
@@ -75,6 +75,7 @@ olympus agents list
 olympus nox set-model openai/gpt-6-luna
 olympus nox set-effort high
 olympus config list
+olympus config set-max-parallel 2
 olympus config apply --scope global --harness opencode --dry-run
 olympus config apply --scope global --harness opencode --execute
 olympus config recover --scope global --harness opencode
@@ -82,6 +83,8 @@ olympus doctor
 ```
 
 Model IDs use the exact `provider/model-id` form from [Models.dev](https://models.dev). Effective values use project overrides, then global overrides, then canonical defaults. Olympus validates known catalog-declared capabilities offline; a model absent from its bundled snapshot produces a compatibility warning, not an access check or rejection. It never checks credentials, subscriptions, or model access. `config apply --dry-run` previews managed changes; applying globally currently supports OpenCode only and requires `--execute`. Global recovery is OpenCode-only, may change files, and is for the matching pending operation only. Doctor is read-only. `config list` prints absolute source paths. [Installation, command scopes, and safety →](docs/INSTALLATION.md#command-scopes-and-effects)
+
+Shell completion is opt-in for the current shell: `olympus completion powershell | Out-String | Invoke-Expression` on Windows PowerShell 7, or `eval "$(olympus completion bash)"` on Linux Bash. Olympus never edits a shell profile automatically.
 
 ## Fast Uninstall
 

@@ -252,6 +252,22 @@ an unsupported older installation only through its matching release. Managed
 drift and unowned conflicts remain protected; no user files are silently
 overwritten.
 
+The global configuration may additionally contain
+`"orchestration":{"max_children":N}` for integer `N` from 1 to 8; absence means
+the Core default of 4. This is a Kael prompt ceiling for direct children per
+root session, not scheduler enforcement or a shared cross-root quota. Model and
+effort setters preserve it. The renderer accepts an in-memory ceiling, while
+the ordinary render/check path retains the Core default bytes; global installer
+updates obtain non-default Kael text from the renderer without writing generated
+source outputs. Project config remains strict and consumes the global ceiling
+only through explicit project config apply.
+
+`olympus completion powershell|bash` prints opt-in current-shell registration.
+Completion candidates come from the argparse command tree and do not resolve
+the source checkout, read user configuration, inspect the filesystem, or query
+providers/networks. Native shell input is passed as framed data to the read-only
+candidate route; profiles are never modified automatically.
+
 Olympus does **not** require a globally clean target Git worktree. Unrelated modified, staged, untracked and tool-generated files (including unrelated content under `.opencode/`) are allowed and preserved. Safety is based on explicit managed destinations and ownership hashes, Git-root validation, and path containment; unsafe targets and unmanaged destination collisions still block. The installer never stashes, resets, cleans, stages, or normalizes user work.
 
 If drift occurs, inspect the reported path and manifest, back up any intentional edits, then restore the affected owned file from a known-good installation/revision before retrying. Do not delete the manifest or force an overwrite to bypass ownership checks. If the manifest itself is damaged or you cannot establish the installed baseline, stop and investigate before reinstalling; preserve unrelated work.

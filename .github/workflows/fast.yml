@@ -81,6 +81,12 @@ jobs:
           pwsh -NoProfile -File ./tests/global-cli/smoke.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: CLI completion (native PowerShell)
+        shell: pwsh
+        run: |
+          python -B -m unittest discover -s tests/harness-core -p test_cli.py -k completion -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Issue132 installer post-install runtime gate (isolated Windows fixtures)
         shell: pwsh
         run: |

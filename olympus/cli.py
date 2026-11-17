@@ -68,6 +68,9 @@ def parser() -> Parser:
     commands.add_parser("version", help="show the installed Olympus product version", allow_abbrev=False)
     commands.add_parser("update", aliases=["upgrade"], help="update the global OpenCode installation",
                         allow_abbrev=False).set_defaults(command="update")
+    completion = commands.add_parser("completion", help="print session-local shell completion registration",
+                                    allow_abbrev=False)
+    completion.add_argument("shell", choices=("powershell", "bash"))
     models = commands.add_parser("models", help="query or explicitly edit canonical model assignments", allow_abbrev=False)
     model_commands = models.add_subparsers(dest="action", required=True, parser_class=Parser)
     listing = model_commands.add_parser("list", help="list all eleven OpenCode role assignments", allow_abbrev=False)
@@ -109,6 +112,11 @@ def parser() -> Parser:
     config_list = config_commands.add_parser("list", help="list effective values, absolute source paths, and precedence", allow_abbrev=False)
     config_list.add_argument("--scope", choices=("project", "global"), help="select scope (default: effective scope)")
     config_list.add_argument("--target", type=Path, help="absolute managed project worktree root; project scope only")
+    max_parallel = config_commands.add_parser(
+        "set-max-parallel", help="set the global Kael child ceiling (default: 4; prompt policy only)",
+        allow_abbrev=False,
+    )
+    max_parallel.add_argument("value", type=int, metavar="N", help="integer from 1 to 8")
     check = config_commands.add_parser("check", help="compare renderer outputs without writing", allow_abbrev=False)
     check.add_argument("--harness", choices=("opencode",), default="opencode")
     check.add_argument("--json", action="store_true")
@@ -147,6 +155,227 @@ def parser() -> Parser:
     status.add_argument("--harness", choices=("opencode",), default="opencode")
     status.add_argument("--json", action="store_true")
     return root
+
+
+def _completion_candidates(cli_parser: argparse.ArgumentParser, words: list[str], current: str) -> list[str]:
+    """Return static argparse-derived candidates without parsing or resolving a source."""
+    if len(words) > 128 or any(len(word) > 4096 for word in (*words, current)):
+        return []
+    active = cli_parser
+    positionals = [action for action in active._actions if not action.option_strings]
+    positional_index = 0
+    pending = None
+    pending_count = 0
+
+    def nargs_count(action) -> int:
+        nargs = action.nargs
+        if nargs == 0 or isinstance(action, (argparse._StoreTrueAction, argparse._StoreFalseAction,
+                                             argparse._StoreConstAction, argparse._CountAction,
+                                             argparse._HelpAction, argparse._VersionAction)):
+            return 0
+        if nargs is None or nargs == "?":
+            return 1
+        if type(nargs) is int:
+            return nargs
+        return 0
+
+    for word in words:
+        if pending is not None:
+            if word == "=":
+                continue
+            pending_count -= 1
+            if pending_count <= 0:
+                pending = None
+            continue
+
+        option, separator, attached = word.partition("=")
+        option_action = active._option_string_actions.get(option) if word.startswith("-") else None
+        if option_action is not None:
+            count = nargs_count(option_action)
+            if count and separator and not attached:
+                pending, pending_count = option_action, count
+            elif count and not separator:
+                pending, pending_count = option_action, count
+            continue
+        if word.startswith("-") and word != "-":
+            continue
+        if positional_index >= len(positionals):
+            continue
+
+        action = positionals[positional_index]
+        if isinstance(action, argparse._SubParsersAction):
+            selected = action.choices.get(word)
+            positional_index += 1
+            if selected is not None:
+                active = selected
+                positionals = [item for item in active._actions if not item.option_strings]
+                positional_index = 0
+        elif action.nargs in ("*", "+"):
+            continue
+        else:
+            positional_index += 1
+
+    def choice_values(action) -> list[str]:
+        if action is None or action.choices is None:
+            return []
+        values = action.choices.keys() if isinstance(action.choices, dict) else action.choices
+        return [str(value) for value in values]
+
+    def matching(values: list[str], prefix: str) -> list[str]:
+        return [value for value in values if value.startswith(prefix)]
+
+    if pending is not None:
+        return matching(choice_values(pending), current)
+
+    if current.startswith("--") and "=" in current:
+        option, value_prefix = current.split("=", 1)
+        action = active._option_string_actions.get(option)
+        if action is not None and nargs_count(action):
+            return matching([f"{option}={value}" for value in choice_values(action)],
+                            f"{option}={value_prefix}")
+
+    if current.startswith("-"):
+        options = [option for action in active._actions for option in action.option_strings]
+        return matching(options, current)
+
+    if not current:
+        candidates = []
+        if positional_index < len(positionals):
+            candidates.extend(choice_values(positionals[positional_index]))
+        candidates.extend(option for action in active._actions for option in action.option_strings)
+        return candidates
+
+    if positional_index < len(positionals):
+        action = positionals[positional_index]
+        if isinstance(action, argparse._SubParsersAction):
+            return matching(choice_values(action), current)
+        return matching(choice_values(action), current)
+    return []
+
+
+_COMPLETION_POWERSHELL = r"""Register-ArgumentCompleter -Native -CommandName 'olympus','olympus.cmd' -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+    if ($null -eq $commandAst) { return }
+    $words = [System.Collections.Generic.List[string]]::new()
+    $elements = @($commandAst.CommandElements)
+    for ($index = 1; $index -lt $elements.Count; $index++) {
+        $element = $elements[$index]
+        if ($element.Extent.StartOffset -ge $cursorPosition) { break }
+        if ($element.Extent.EndOffset -ge $cursorPosition) { break }
+        if ($element -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+            $words.Add([string]$element.Value)
+        } elseif ($element -is [System.Management.Automation.Language.ExpandableStringExpressionAst] -and
+                  $element.NestedExpressions.Count -eq 0) {
+            $words.Add([string]$element.Value)
+        } elseif ($element -is [System.Management.Automation.Language.CommandParameterAst]) {
+            $raw = [string]$element.Extent.Text
+            if ($raw -match '^--[^=\s]+=[\s\S]*$') {
+                $words.Add($raw)
+                continue
+            }
+            if ($raw.StartsWith('-')) { $words.Add($raw) }
+            else { $words.Add('--' + $element.ParameterName.TrimStart('-')) }
+            if ($null -ne $element.Argument) {
+                if ($element.Argument -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                    $words.Add([string]$element.Argument.Value)
+                } elseif ($element.Argument -is [System.Management.Automation.Language.ExpandableStringExpressionAst] -and
+                          $element.Argument.NestedExpressions.Count -eq 0) {
+                    $words.Add([string]$element.Argument.Value)
+                } else {
+                    return
+                }
+            }
+        } else {
+            return
+        }
+    }
+    $payload = [ordered]@{ words = $words.ToArray(); current = [string]$wordToComplete } |
+        ConvertTo-Json -Compress
+    $frame = "OLYMPUS-COMPLETE-PS-V1`n" + $payload
+    try {
+        $candidates = $frame | & olympus --_completion-query-v1 2>$null
+        foreach ($candidate in $candidates) {
+            $text = [string]$candidate
+            if ($text.StartsWith([string]$wordToComplete, [StringComparison]::OrdinalIgnoreCase)) {
+                [System.Management.Automation.CompletionResult]::new(
+                    $text, $text, 'ParameterValue', $text
+                )
+            }
+        }
+    } catch { }
+}"""
+
+_COMPLETION_BASH = r"""_olympus_complete() {
+    COMPREPLY=()
+    local current
+    local candidate
+    local index word cursor=-1
+    local -a words=()
+    for ((index = 0; index < ${#COMP_WORDS[@]}; index++)); do
+        word="${COMP_WORDS[index]}"
+        if [[ $word == "=" && ${#words[@]} -gt 0 && ${words[${#words[@]}-1]} == --* ]]; then
+            words[${#words[@]}-1]+="="
+            [[ $index -eq $COMP_CWORD ]] && cursor=$((${#words[@]} - 1))
+            continue
+        fi
+        [[ $index -eq $COMP_CWORD ]] && cursor=${#words[@]}
+        words+=("$word")
+    done
+    (( cursor >= 1 && cursor < ${#words[@]} )) || return
+    current="${words[cursor]}"
+    while IFS= read -r candidate; do
+        [[ $candidate == "$current"* ]] && COMPREPLY+=("$candidate")
+    done < <(
+        {
+            printf '%s\0%s\0' 'OLYMPUS-COMPLETE-BASH-V1' "$cursor"
+            printf '%s\0' "${words[@]}"
+        } | olympus --_completion-query-v1 2>/dev/null
+    )
+}
+complete -F _olympus_complete -o nosort olympus"""
+
+
+def _completion_query(arguments: list[str]) -> int:
+    if arguments:
+        return 0
+    try:
+        raw = sys.stdin.buffer.read(32_769)
+        if len(raw) > 32_768:
+            return 0
+        if raw.startswith(b"OLYMPUS-COMPLETE-PS-V1\n"):
+            value = json.loads(raw[len(b"OLYMPUS-COMPLETE-PS-V1\n"):].decode("utf-8"))
+            if (not isinstance(value, dict) or set(value) != {"words", "current"}
+                    or not isinstance(value["words"], list) or not isinstance(value["current"], str)
+                    or any(not isinstance(item, str) for item in value["words"])):
+                return 0
+            words, current = value["words"], value["current"]
+        elif raw.startswith(b"OLYMPUS-COMPLETE-BASH-V1\0") and raw.endswith(b"\0"):
+            fields = raw[len(b"OLYMPUS-COMPLETE-BASH-V1\0"):-1].split(b"\0")
+            cursor = int(fields[0].decode("ascii"))
+            shell_words = [item.decode("utf-8") for item in fields[1:]]
+            if (len(shell_words) < 2 or cursor < 1 or cursor >= len(shell_words)
+                    or shell_words[0].replace("\\", "/").rsplit("/", 1)[-1].casefold()
+                    not in ("olympus", "olympus.cmd")):
+                return 0
+            words, current = shell_words[1:cursor], shell_words[cursor]
+        else:
+            return 0
+        candidates = _completion_candidates(parser(), words, current)
+    except (AttributeError, UnicodeError, ValueError, TypeError, json.JSONDecodeError):
+        return 0
+    for candidate in candidates:
+        print(candidate)
+    return 0
+
+
+def _completion_registration(arguments: list[str]) -> str | None:
+    for index, token in enumerate(arguments):
+        if token != "completion" or arguments[index + 1:] not in (["powershell"], ["bash"]):
+            continue
+        prefix = arguments[:index]
+        if not prefix or (len(prefix) == 2 and prefix[0] == "--source") or prefix == ["--version"]:
+            return arguments[index + 1]
+    return None
 
 
 def source_root(requested: Path | None) -> Path:
@@ -556,6 +785,12 @@ def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
+    if arguments == ["--_completion-query-v1"]:
+        return _completion_query([])
+    completion_shell = _completion_registration(arguments)
+    if completion_shell is not None:
+        print(_COMPLETION_POWERSHELL if completion_shell == "powershell" else _COMPLETION_BASH)
+        return 0
     response = {"schema_version": 1, "operation": "arguments", "result": "ok",
                 "context": {}, "data": {}, "issues": []}
     as_json = "--json" in arguments
@@ -585,6 +820,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "help":
             print(cli_parser.format_help(), end="")
             return 0
+        if args.command == "completion":
+            print(_COMPLETION_POWERSHELL if args.shell == "powershell" else _COMPLETION_BASH)
+            return 0
         if args.version or args.command == "version":
             print(f"olympus {release_version(source)}")
             return 0
@@ -608,6 +846,18 @@ def main(argv: list[str] | None = None) -> int:
             response["data"] = user_config.config_listing(source, scope, target)
             response["result"] = "ok"
             emit(response, as_json)
+            return 0
+        if args.command == "config" and args.action == "set-max-parallel":
+            if not 1 <= args.value <= 8:
+                raise CLIError("max-parallel must be an integer from 1 to 8.", 2)
+            from . import user_config
+
+            path, applied = user_config.set_max_children(source, args.value)
+            response["data"] = {"max_children": args.value, "scope": "global",
+                                "preference_scope": "global", "source": str(path),
+                                "installed_agent_updated": applied}
+            response["result"] = "ok"
+            emit(response, False)
             return 0
         if args.command in {
             "kael", "veyra", "orin", "atlas", "kovan", "argus", "nox", "vera", "talos", "thales", "helios",

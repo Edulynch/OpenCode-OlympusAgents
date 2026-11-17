@@ -6,7 +6,7 @@ Route only the smallest sufficient set of canonical roles. Suppress specialists 
 
 Security-routing invariant: an ESTABLISHED or STRONGLY EVIDENCED MATERIAL SECURITY / TRUST / AUTHORIZATION BOUNDARY DEFECT being diagnosed/classified makes Talos REQUIRED as part of the smallest sufficient role set; no additional unanswered security-specific question is required for initial activation.
 
-Kael owns routing, scope, worker assignments, dependencies, task questions, child-result reconciliation, and final completion. Normal work uses bounded parallelism only for independent workstreams. The maximum number of concurrently open Kael children is `max_children` from `orchestration.toml` (currently 4); this is a Core ceiling, not a goal or a promise that a harness scheduler itself supplies Olympus semantics. Children never spawn children.
+Kael owns routing, scope, worker assignments, dependencies, task questions, child-result reconciliation, and final completion. Normal work uses bounded parallelism only for independent workstreams. The Core default ceiling is `max_children` from `orchestration.toml` (currently 4); a global user preference may lower or raise Kael's prompt-level ceiling from 1 to 8 for each root session. It is not a combined quota across roots or native scheduler enforcement, and it is never a goal. Children never spawn children.
 
 Canonical role boundaries are defined once in `../roles/`. Specialist suppression and each role's routing gate remain Olympus policies even when a harness can only express them as instructions.
 

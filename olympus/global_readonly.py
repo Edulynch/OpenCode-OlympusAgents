@@ -89,10 +89,15 @@ def resolve_roots(selected: tuple[str, ...]) -> dict[str, Path]:
     return {"opencode": _opencode_root()}
 
 
-def _expected(source: Path, renderer, selected: tuple[str, ...], *, include_default_agent: bool = False) -> dict[str, dict[str, bytes]]:
+def _expected(source: Path, renderer, selected: tuple[str, ...], *, include_default_agent: bool = False,
+              max_children: int | None = None) -> dict[str, dict[str, bytes]]:
     if selected != ("opencode",):
         raise GlobalFault("global_harness_unsupported", "Only the OpenCode global installation is supported.")
-    rendered = renderer.outputs_for(source, "opencode")
+    from . import user_config
+
+    children = user_config.max_children(source) if max_children is None else max_children
+    rendered = (renderer.outputs_for(source, "opencode") if children == 4
+                else renderer.outputs_for(source, "opencode", children))
     outputs = {name: {} for name in selected}
     for file, content in rendered.items():
         if not file.is_relative_to(source) or not isinstance(content, str):
@@ -106,12 +111,12 @@ def _expected(source: Path, renderer, selected: tuple[str, ...], *, include_defa
         elif relative.startswith(".codex/") or relative == "CODEX.md":
             raise GlobalFault("source_inventory_unsupported", f"Renderer returned an obsolete resource: {relative}")
         if harness in outputs:
-            # The native installer retains checkout line endings. Do not turn
-            # a coherent CRLF source into a different managed byte inventory.
+            # Preserve the checkout's newline style even when cap-specific
+            # rendering makes the expected content differ from the source.
             if harness == "opencode" and file.is_file():
                 raw = file.read_bytes()
-                if raw == content.replace("\n", "\r\n").encode("utf-8"):
-                    content = raw.decode("utf-8")
+                newline = "\r\n" if b"\r\n" in raw else "\n"
+                content = content.replace("\r\n", "\n").replace("\n", newline)
             outputs[harness][destination] = content.encode("utf-8")
     if "opencode" in outputs:
         # The native global installer owns this guard only when no user config

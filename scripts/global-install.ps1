@@ -158,15 +158,81 @@ function Get-OlympusUserConfigPath {
     return Join-Path $appData 'Olympus/config.json'
 }
 
+function Get-RenderedKaelPrompt([int]$MaxChildren) {
+    $pythonExecutable = $env:OLYMPUS_PYTHON
+    if (-not $pythonExecutable) {
+        $python = Get-Command python.exe -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($null -eq $python) {
+            $python = Get-Command python -CommandType Application -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+        }
+        if ($null -ne $python) { $pythonExecutable = $python.Source }
+    }
+    if (-not $pythonExecutable) { Fail 'PYTHON_UNAVAILABLE' 'A Python 3.11+ executable is required to render a non-default Kael ceiling.' }
+    $renderer = Join-Path $SourceRoot 'scripts/render_harnesses.py'
+    $start = [Diagnostics.ProcessStartInfo]::new()
+    $start.FileName = $pythonExecutable
+    $start.UseShellExecute = $false
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    $start.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
+    $start.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
+    foreach ($argument in @('-B', $renderer, 'kael', '--root', $SourceRoot,
+            '--max-children', [string]$MaxChildren)) {
+        $start.ArgumentList.Add([string]$argument)
+    }
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $start
+    try {
+        if (-not $process.Start()) { Fail 'SOURCE_RENDERER_FAILED' 'Could not start the canonical renderer.' }
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        $process.WaitForExit()
+        $text = $stdout.GetAwaiter().GetResult()
+        if ($process.ExitCode -ne 0) {
+            Fail 'SOURCE_RENDERER_FAILED' "The canonical renderer rejected the global Kael ceiling: $($stderr.GetAwaiter().GetResult())"
+        }
+        return $text
+    } catch {
+        if ($_.Exception.Message -match 'PYTHON_UNAVAILABLE|SOURCE_RENDERER_FAILED') { throw }
+        Fail 'SOURCE_RENDERER_FAILED' 'The canonical renderer could not produce a cap-specific Kael prompt.'
+    } finally {
+        $process.Dispose()
+    }
+}
+
 function Apply-OpenCodeUserOverrides([System.Collections.IDictionary]$Outputs) {
     $configPath = Get-OlympusUserConfigPath
     if (-not (Test-Path -LiteralPath $configPath)) { return }
     if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { Fail 'USER_CONFIG_INVALID' 'Olympus user configuration is not a file.' }
     try { $config = [IO.File]::ReadAllText($configPath) | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop }
     catch { Fail 'USER_CONFIG_INVALID' 'Olympus user configuration is not valid JSON.' }
-    if ($config.schema_version -ne 1 -or $config.overrides -isnot [System.Collections.IDictionary] -or
-        @($config.Keys | Where-Object { $_ -notin @('schema_version','overrides') }).Count -gt 0) {
+    if ($config -isnot [System.Collections.IDictionary] -or $config.schema_version -ne 1 -or
+        $config.overrides -isnot [System.Collections.IDictionary] -or
+        @($config.Keys | Where-Object { $_ -cnotin @('schema_version','overrides','orchestration') }).Count -gt 0) {
         Fail 'USER_CONFIG_INVALID' 'Olympus user configuration must use schema_version 1 and an overrides object.'
+    }
+    $maxChildren = 4
+    if ($config.Contains('orchestration')) {
+        $orchestration = $config['orchestration']
+        if ($orchestration -isnot [System.Collections.IDictionary] -or
+            @($orchestration.Keys | Where-Object { $_ -cne 'max_children' }).Count -gt 0 -or
+            @($orchestration.Keys | Where-Object { $_ -ceq 'max_children' }).Count -ne 1) {
+            Fail 'USER_CONFIG_INVALID' 'Global orchestration may contain only max_children.'
+        }
+        $maxChildren = $orchestration['max_children']
+        if (($maxChildren -isnot [int] -and $maxChildren -isnot [long]) -or
+            $maxChildren -lt 1 -or $maxChildren -gt 8) {
+            Fail 'USER_CONFIG_INVALID' 'Global max_children must be an integer from 1 to 8.'
+        }
+        if ($maxChildren -ne 4) {
+            $kael = Get-RenderedKaelPrompt ([int]$maxChildren)
+            if ([string]$Outputs['agents/kael.md'] -match "`r`n") {
+                $kael = $kael.Replace("`n", "`r`n")
+            }
+            $Outputs['agents/kael.md'] = $kael
+        }
     }
     $catalogPath = Join-Path $SourceRoot 'olympus/core/models-dev.json'
     if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) { Fail 'SOURCE_FILE_MISSING' 'The offline Models.dev catalog is missing.' }
@@ -874,7 +940,8 @@ function Test-ManagedDefaultConfigChange([string]$Path) {
 }
 
 function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
-    [System.Collections.IDictionary]$RecoverOutputs = $null, [switch]$AllowModifiedAgents) {
+    [System.Collections.IDictionary]$RecoverOutputs = $null, [switch]$AllowModifiedAgents,
+    [System.Collections.IDictionary]$ExpectedOutputs = $null) {
     if ($Harness -cne 'opencode') { Fail 'GLOBAL_MANIFEST_INVALID' "Unsupported harness '$Harness'." }
     $script:ModifiedManagedAgents = @()
     $script:DefaultAgentManagedUserChange = $false
@@ -929,7 +996,7 @@ function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
     if ($null -eq $receipt) {
         Fail 'GLOBAL_DEFAULT_AGENT_RECEIPT_MISSING' 'A current OpenCode global manifest must include a valid default_agent receipt.'
     }
-    $baseOutputs = Get-GlobalOutputs 'opencode'
+    $baseOutputs = if ($null -ne $ExpectedOutputs) { $ExpectedOutputs } else { Get-GlobalOutputs 'opencode' }
     $expectedBasePaths = @($baseOutputs.Keys)
     $entries = @($manifest.managed_files)
     if ($entries.Count -notin @($expectedBasePaths.Count, ($expectedBasePaths.Count + 1))) {
@@ -1164,14 +1231,17 @@ function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]
         return
     }
 
-    $recoverOutputs = if ($null -ne $guardIntent -and -not $VerifyOnly) { Get-GlobalOutputs $SelectedHarness } else { $null }
-    $allowModifiedAgents = $Update -and $SelectedHarness -eq 'opencode'
-    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:$VerifyOnly -RecoverOutputs $recoverOutputs -AllowModifiedAgents:$allowModifiedAgents
-    Confirm-ModifiedManagedAgents
-    $oldEntries = Get-ManifestEntryMap $manifest
     $outputs = Get-GlobalOutputs $SelectedHarness
     if ($SelectedHarness -eq 'opencode') {
         Apply-OpenCodeUserOverrides $outputs
+    }
+    $recoverOutputs = if ($null -ne $guardIntent -and -not $VerifyOnly) { $outputs } else { $null }
+    $allowModifiedAgents = $Update -and $SelectedHarness -eq 'opencode'
+    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:$VerifyOnly `
+        -RecoverOutputs $recoverOutputs -AllowModifiedAgents:$allowModifiedAgents -ExpectedOutputs $outputs
+    Confirm-ModifiedManagedAgents
+    $oldEntries = Get-ManifestEntryMap $manifest
+    if ($SelectedHarness -eq 'opencode') {
         Add-OpenCodeGlobalGuard $root $oldEntries $outputs $manifest
     }
     $newEntries = @{}

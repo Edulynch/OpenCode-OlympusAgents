@@ -49,6 +49,7 @@ $lock = $null
 try {
     $lock = Enter-OlympusTargetWriterLock $Target
     [Console]::Out.WriteLine('LOCKED')
+    [Console]::Out.WriteLine("IDENTITY=$($lock.Identity)")
     [Console]::Out.Flush()
     if ($Mode -eq 'hold') { [Console]::In.ReadLine() | Out-Null }
 } catch {
@@ -390,6 +391,12 @@ try {
             self.assertTrue(lock_path.is_file(), "PowerShell must create an initially absent lock")
             self.assertEqual(0, lock_path.stat().st_size)
             if os.name != "nt":
+                powershell_identity = powershell_owner.stdout.readline().strip()
+                python_stat = lock_path.stat()
+                expected_identity = (
+                    f"{python_stat.st_dev:016X}:{python_stat.st_ino:016X}"
+                )
+                self.assertEqual(f"IDENTITY={expected_identity}", powershell_identity)
                 mode = lock_path.stat().st_mode & 0o777
                 self.assertEqual(0o600, mode & 0o600,
                                  "A Unix lock created by PowerShell must remain owner-readable/writable")

@@ -2,8 +2,26 @@
 
 ## [Unreleased]
 
-- Add `olympus config set-max-parallel N` for the global Kael prompt ceiling (1–8, default 4), preserved alongside model/effort settings and applied to managed global Kael output; explicit project config apply consumes the preference without retroactive project/session changes. The optional schema-1 `orchestration` field is not accepted by older CLIs.
-- Add opt-in current-shell PowerShell 7 (Windows) and Bash (Linux) completion from argparse-derived read-only candidates; no profile edits or dynamic filesystem/provider lookup.
+## v0.10.0
+
+### Highlights
+
+- Add `olympus config set-max-parallel N` for the global Kael direct-child prompt policy per root session: integer 1–8, default 4, excluding the root. This is not a hard runtime or concurrent-root quota; it does not cancel work or change existing context retroactively. Preserve optional schema-1 `orchestration.max_children` alongside model/effort settings; the setter updates the global preference only, and explicit project config apply consumes it.
+- Add opt-in current-shell native `olympus completion powershell|bash` with a shared argparse-derived pure backend and safe typed-data transport: PowerShell 7 on Windows and Bash on Linux, with no profile writes, provider/filesystem lookups, or model-catalog evaluation. Bash completion is not a Linux installer/update port.
+
+### Capability limits
+
+- The optional schema-1 `orchestration.max_children` field is rejected by older CLIs; the prompt policy is not a hard runtime or concurrent-root quota.
+- Windows with PowerShell 7 is the qualified installer platform; Python 3.11+ is required by the CLI. OpenCode V2 is the supported runtime.
+- Local static and mock fixtures do not establish a public-endpoint install, provider access or inference, or native permission UI/approval.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.10.0 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.10.0/docs/INSTALLATION.md). Public installation is global/OpenCode-only; project-scoped OpenCode configuration remains separate CLI behavior.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.10.0/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and static validation guidance. Local fixtures do not substitute for a separate public-endpoint install/VerifyOnly/uninstall smoke.
 
 ## v0.9.0
 

@@ -580,9 +580,14 @@ Use this state machine for each release:
 2. **Tag candidate.** Create the candidate tag from the validated commit. A
    beta/prerelease must not use mutable `master` as its installer source.
 3. **Validate the immutable remote tag.** Fetch/inspect that exact tag and run
-   installer and VerifyOnly checks against its tag-shaped source/URL in
-   disposable Git projects. Local-source `tests/release/qualify.ps1` does not
-   replace this tagged-source validation.
+   installer and `VerifyOnly` checks against its tag-shaped source/URL in
+   disposable, isolated global OpenCode roots—not disposable Git projects.
+   Use `tests/installer-test-environment.ps1` and
+   `Enter-OlympusInstallerTestEnvironment` to isolate process-wide OpenCode
+   roots; pass an explicit CLI install root and file-backed PATH store with
+   `-InstallRoot` and `-PathStorePath`. The global installer must not target a
+   project checkout. Local-source `tests/release/qualify.ps1` does not replace
+   this tagged-source validation.
 4. **If PASS, create the GitHub Release.** Use the same tag and validated notes,
    then run `pwsh -NoProfile -File ./tests/release/github-release-notes.ps1
    -Version <tag>` to check the actual published Release body.

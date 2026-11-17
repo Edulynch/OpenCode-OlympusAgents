@@ -42,10 +42,37 @@ public static class OlympusTargetWriterLockFileInfo
     }
 
     [DllImport("libc", EntryPoint = "fstat", SetLastError = true)]
-    private static extern int FStat(int descriptor, IntPtr buffer);
+    private static extern int FStatNative(int descriptor, IntPtr buffer);
 
     [DllImport("libc", EntryPoint = "lstat", CharSet = CharSet.Ansi, SetLastError = true)]
-    private static extern int LStat(string path, IntPtr buffer);
+    private static extern int LStatNative(string path, IntPtr buffer);
+
+    [DllImport("libc", EntryPoint = "fstat$INODE64", ExactSpelling = true, SetLastError = true)]
+    private static extern int FStatDarwinX64(int descriptor, IntPtr buffer);
+
+    [DllImport("libc", EntryPoint = "lstat$INODE64", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+    private static extern int LStatDarwinX64(string path, IntPtr buffer);
+
+    // Darwin x64 exports inode64 aliases; ARM64 and Linux keep the bare symbols.
+    private static bool UsesDarwinX64Inode64Symbols()
+    {
+        return RuntimeInformation.IsOSPlatform(OSPlatform.OSX) &&
+            RuntimeInformation.ProcessArchitecture == Architecture.X64;
+    }
+
+    private static int FStat(int descriptor, IntPtr buffer)
+    {
+        return UsesDarwinX64Inode64Symbols()
+            ? FStatDarwinX64(descriptor, buffer)
+            : FStatNative(descriptor, buffer);
+    }
+
+    private static int LStat(string path, IntPtr buffer)
+    {
+        return UsesDarwinX64Inode64Symbols()
+            ? LStatDarwinX64(path, buffer)
+            : LStatNative(path, buffer);
+    }
 
     [DllImport("libc", EntryPoint = "flock", SetLastError = true)]
     private static extern int FLock(int descriptor, int operation);

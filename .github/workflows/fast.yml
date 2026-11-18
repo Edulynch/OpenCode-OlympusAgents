@@ -68,7 +68,7 @@ jobs:
           pwsh -NoProfile -File ./tests/global-installer/qualify.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Issue128 global CLI (focused Windows gate)
+      - name: "Global CLI: install, update, verify, and uninstall (isolated Windows)"
         shell: pwsh
         env:
           OLYMPUS_TEST_ROOT: ${{ runner.temp }}/opencode
@@ -87,13 +87,13 @@ jobs:
           python -B -m unittest discover -s tests/harness-core -p test_cli.py -k completion -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Issue132 installer post-install runtime gate (isolated Windows fixtures)
+      - name: Installer post-install validation (mocked OpenCode; isolated Windows fixtures)
         shell: pwsh
         run: |
           pwsh -NoProfile -File ./tests/release/postinstall-runtime.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: OA77 worktree activation (deterministic Windows)
+      - name: Worktree activation and provisioning safeguards (isolated Windows fixtures)
         shell: pwsh
         run: |
           # Exercise current local-source worktree provisioning and safety gates in temporary Git fixtures.
@@ -111,7 +111,7 @@ jobs:
           }
 
   slice-a-linux:
-    name: Slice A / Linux
+    name: Read-only and integrated CLI coverage / Linux
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -129,12 +129,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Confirm Slice A has no TOML Kit dependency
+      - name: Confirm read-only CLI gate has no TOML Kit dependency
         shell: bash
         run: |
-          python -B -c 'import importlib.util; assert importlib.util.find_spec("tomlkit") is None, "Slice A environment unexpectedly contains TOML Kit"'
+          python -B -c 'import importlib.util; assert importlib.util.find_spec("tomlkit") is None, "Read-only CLI environment unexpectedly contains TOML Kit"'
 
-      - name: Slice A (offline read-only CLI)
+      - name: Read-only CLI behavior (offline)
         shell: bash
         run: |
           python -B -c 'import sys; assert sys.version_info >= (3, 11)'
@@ -143,7 +143,7 @@ jobs:
           python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_a -v
           test -x scripts/olympus
 
-      - name: Slice B (integrated, isolated TOML Kit)
+      - name: Integrated CLI behavior (isolated TOML Kit)
         shell: bash
         run: |
           venv="$RUNNER_TEMP/olympus-cli-slice-b"
@@ -163,7 +163,7 @@ jobs:
           fi
 
   c2-3-writer-compat:
-    name: C2.3 writer compatibility / ${{ matrix.platform }}
+    name: Project manifest, writer-lock, and CLI safety / ${{ matrix.platform }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     strategy:
@@ -197,21 +197,21 @@ jobs:
           $ErrorActionPreference = 'Stop'
           python --version
           $pythonVersion = & python -c 'import sys; print("{}.{}.{}".format(*sys.version_info[:3])); raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'
-          if ($LASTEXITCODE -ne 0) { throw 'C2.3 requires Python 3.11 or newer.' }
-          Write-Output "C2.3 Python actual: $pythonVersion"
+          if ($LASTEXITCODE -ne 0) { throw 'Project writer-lock qualification requires Python 3.11 or newer.' }
+          Write-Output "Writer-lock qualification Python actual: $pythonVersion"
 
           pwsh --version
           $powerShellVersion = & pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
           if ($LASTEXITCODE -ne 0) { throw 'Cannot query the installed PowerShell version.' }
           $parsedPowerShellVersion = [version]($powerShellVersion | Select-Object -Last 1)
-          if ($parsedPowerShellVersion.Major -lt 7) { throw "C2.3 requires PowerShell 7+: $powerShellVersion" }
-          Write-Output "C2.3 PowerShell actual: $powerShellVersion"
+          if ($parsedPowerShellVersion.Major -lt 7) { throw "Project writer-lock qualification requires PowerShell 7+: $powerShellVersion" }
+          Write-Output "Writer-lock qualification PowerShell actual: $powerShellVersion"
 
           $tempRoot = & python -c 'import tempfile; print(tempfile.gettempdir())'
           if ($LASTEXITCODE -ne 0) { throw 'Cannot locate the native temporary filesystem.' }
           New-Item -ItemType Directory -Force -Path (Join-Path $tempRoot 'opencode') | Out-Null
 
-      - name: Run every required C2.3/C3 writer-lock test on native filesystem
+      - name: Project manifest and writer-lock compatibility (native filesystem)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -221,7 +221,7 @@ jobs:
           if ($testExitCode -ne 0) { exit $testExitCode }
           $transcript = $testOutput -join "`n"
           if ($transcript -notmatch '(?m)^Ran 15 tests in ') {
-            throw 'C2.3/C3 writer-lock qualification did not execute all 15 required tests.'
+            throw 'Project manifest and writer-lock qualification did not execute all 15 required tests.'
           }
           if ($env:RUNNER_OS -eq 'Windows') {
             if ($transcript -match 'skipped' -and
@@ -230,11 +230,11 @@ jobs:
               throw 'Windows may skip only the symlink fixture when host privileges prohibit creating it.'
             }
             if ($transcript -notmatch '(?m)^OK(?: \(skipped=1\))?$') {
-              throw 'C2.3/C3 Windows test result is incomplete.'
+              throw 'Project manifest and writer-lock Windows results are incomplete.'
             }
           } else {
             if ($transcript -match 'skipped' -or $transcript -notmatch '(?m)^OK$') {
-              throw 'Linux and macOS must execute every C2.3/C3 writer-lock test without skips.'
+              throw 'Linux and macOS must execute every project manifest and writer-lock case without skips.'
             }
           }
 
@@ -245,10 +245,10 @@ jobs:
           $previewTranscript = $previewOutput -join "`n"
           if ($previewTranscript -notmatch '(?m)^Ran 1 test in ' -or
               $previewTranscript -notmatch '(?m)^OK$') {
-            throw 'C2.3 CLI preview and disabled --execute regression did not pass.'
+            throw 'CLI preview and disabled --execute safety regression did not pass.'
           }
 
-      - name: Slice C4 (Windows project doctor)
+      - name: Windows project doctor (read-only)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -260,10 +260,10 @@ jobs:
           $transcript = $testOutput -join "`n"
           if ($transcript -notmatch '(?m)^Ran 4 tests in ' -or
               $transcript -notmatch '(?m)^OK$') {
-            throw 'Slice C4 Windows project doctor tests did not all pass.'
+            throw 'Windows project doctor checks did not all pass.'
           }
 
-      - name: Slice C5 (Windows install/uninstall routing)
+      - name: Windows install, update, and uninstall routing
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -275,10 +275,10 @@ jobs:
           $transcript = $testOutput -join "`n"
           if ($transcript -notmatch '(?m)^Ran 10 tests in ' -or
               $transcript -notmatch '(?m)^OK$') {
-            throw 'Slice C5 Windows install/uninstall routing tests did not all pass without skips.'
+            throw 'Windows install, update, and uninstall routing tests did not all pass without skips.'
           }
 
-      - name: Slice C7 (Windows global read-only)
+      - name: Windows global diagnostics and project inventory isolation
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -291,7 +291,7 @@ jobs:
           $transcript = $testOutput -join "`n"
           if ($transcript -notmatch '(?m)^Ran 18 tests in ' -or
               $transcript -notmatch '(?m)^OK$' -or $transcript -match 'skipped') {
-            throw 'Slice C7 Windows global read-only tests must all pass without skips.'
+            throw 'Windows global diagnostics and project inventory tests must all pass without skips.'
           }
 
       - name: Confirm source checkout unchanged
@@ -301,5 +301,5 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Git status failed' }
           if ($changes.Count -gt 0) {
             $changes | Out-Host
-            throw 'C2.3 qualification modified the source checkout'
+            throw 'Project manifest and writer-lock qualification modified the source checkout'
           }

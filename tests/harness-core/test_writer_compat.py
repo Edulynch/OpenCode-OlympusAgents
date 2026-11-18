@@ -1,4 +1,4 @@
-"""Focused Slice C2.3 provenance and Python/PowerShell writer regressions."""
+"""Focused manifest provenance and cross-language project-writer regressions."""
 
 from __future__ import annotations
 

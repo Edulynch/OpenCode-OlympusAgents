@@ -367,11 +367,18 @@ It does not call tag-transition stability a second time; that check is
 already nested in release qualification. Phase 11's historical corpus is
 retained as evidence, not executed as current contract tests by these profiles.
 
-The [`FAST / Windows` CI job](../.github/workflows/fast.yml) runs FAST and then
-additional authority, global-installer, global-CLI/smoke, post-install runtime,
-and worktree-activation gates. A local FAST pass does not establish that those
-additional CI gates passed. Other CI jobs also select their own qualification
-slices.
+| CI check | What it verifies |
+| --- | --- |
+| [`FAST / Windows`](../.github/workflows/fast.yml) | Required for `master`. Runs offline FAST, authority checks, the packaged CLI lifecycle with mocked release downloads, native PowerShell completion, and isolated installer and worktree fixtures. The post-install fixture uses mocked OpenCode. |
+| [`Read-only and integrated CLI coverage / Linux`](../.github/workflows/fast.yml) | Read-only CLI without TOML Kit, followed by integrated CLI tests in a dedicated environment. |
+| [`Project manifest, writer-lock, and CLI safety`](../.github/workflows/fast.yml) | Native filesystem tests on Windows, Linux, and macOS. Windows also checks project diagnostics, installer routing, global diagnostics, and project inventory isolation. |
+| [`Secret and link gates`](../.github/workflows/secrets.yml) | Secret scanning and documentation links on Windows and Linux. |
+| [`Global-only ASK/DENY / Windows V2 API`](../.github/workflows/native-permission-api.yml) | Real OpenCode V2 permission handling with a local model stub. The assertion rejects ASK through the API; it does not test the interactive permission UI or a hosted model. |
+
+A local FAST pass is not a pass for all CI jobs. Use display names that describe
+the behavior and distinguish real runtime from mocked fixtures. Keep required
+check names and internal `unittest -k` selectors stable; compare the selected
+cases if you change a selector or the test names it matches.
 
 **RUNTIME** does not include FULL or FAST. It runs external-work ownership
 disposable process cases and the

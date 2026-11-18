@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import hashlib
 import io
@@ -294,43 +295,82 @@ class SliceA(unittest.TestCase):
     def test_slice_a_help_version(self):
         help_result = self.query("--help")
         self.assertEqual(0, help_result.returncode)
-        for text in ("--source", "models list --json", "config check", "status --scope project", "Python 3.11+",
-                     "olympus update", "olympus nox set-model openai/gpt-6-luna", "models.dev"):
+        for text in ("--source CHECKOUT", "olympus version", "olympus update", "olympus doctor --scope global",
+                     "olympus nox set-effort high",
+                     "agents, models", "config check, config apply, config recover",
+                     "models set-family", "agents set-model", "olympus <command> --help"):
             self.assertIn(text, help_result.stdout)
-        for command in ("models set-family", "agents set-model", "config recover"):
-            self.assertIn(command, help_result.stdout)
-        self.assertIn("update (upgrade)", help_result.stdout)
-        for command in ("install", "uninstall"):
-            self.assertRegex(help_result.stdout, rf"(?m)^\s*{command}\s+")
-        self.assertIn("doctor --scope project", help_result.stdout)
-        self.assertIn("config apply --scope project", help_result.stdout)
+        self.assertLessEqual(len(help_result.stdout.splitlines()), 25)
+        self.assertNotIn("veyra", help_result.stdout)
+        self.assertIn("upgrade = update", help_result.stdout)
+        self.assertIn("install, uninstall", help_result.stdout)
+        self.assertIn("status, completion, help", help_result.stdout)
+        short_help = self.query("-h")
+        help_command = self.query("help")
+        self.assertEqual(0, short_help.returncode)
+        self.assertEqual(0, help_command.returncode)
+        self.assertEqual(help_result.stdout, short_help.stdout)
+        self.assertEqual(help_result.stdout, help_command.stdout)
+
+        paths = []
+
+        def collect_help_paths(current, prefix=()):
+            for action in current._actions:
+                if isinstance(action, argparse._SubParsersAction):
+                    for name, child in action.choices.items():
+                        route = (*prefix, name)
+                        paths.append(route)
+                        collect_help_paths(child, route)
+
+        collect_help_paths(cli_parser())
+        self.assertEqual(54, len(paths))
+        self.assertEqual(40, sum(
+            not any(len(other) > len(path) and other[:len(path)] == path for other in paths)
+            for path in paths
+        ))
+        for path in paths:
+            with self.subTest(help_path=path):
+                result = self.query(*path, "--help")
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertIn("Example:", result.stdout)
+
         apply_help = self.query("config", "apply", "--help")
         self.assertIn("--dry-run", apply_help.stdout)
         self.assertIn("--execute", apply_help.stdout)
+        self.assertIn("Project scope needs", apply_help.stdout)
         install_help = self.query("install", "--help")
         self.assertNotIn("--version", install_help.stdout)
         self.assertNotIn("--scope", install_help.stdout)
+        self.assertIn("Preview may leave temporary/cache effects", install_help.stdout)
         uninstall_help = self.query("uninstall", "--help")
         self.assertIn("--execute", uninstall_help.stdout)
+        self.assertIn("Remove unchanged manifest-owned", uninstall_help.stdout)
         version = self.query("--version")
         self.assertEqual(0, version.returncode)
-        self.assertIn(f"olympus {self.source_version}", version.stdout)
+        self.assertEqual([f"olympus {self.source_version}"], version.stdout.splitlines())
         self.assertNotIn(str(self.source), version.stdout)
-        self.assertIn(f"olympus {self.source_version}", self.query("version").stdout)
+        self.assertEqual([f"olympus {self.source_version}"], self.query("version").stdout.splitlines())
         self.assertEqual(0, self.query("help").returncode)
 
     def test_slice_a_update_and_upgrade_share_update_handler(self):
         for command in ("update", "upgrade"):
             self.assertEqual("update", cli_parser().parse_args([command]).command)
             for code in (0, 3):
-                with self.subTest(command=command, code=code):
-                    with mock.patch("olympus.system_cli.update", return_value=code) as update:
-                        self.assertEqual((code, "", ""), self.call_main(command))
-                        update.assert_called_once_with(self.source)
+                for verbose in (False, True):
+                    arguments = (command, "--verbose") if verbose else (command,)
+                    with self.subTest(command=command, code=code, verbose=verbose):
+                        with mock.patch("olympus.system_cli.update", return_value=code) as update:
+                            self.assertEqual((code, "", ""), self.call_main(*arguments))
+                            update.assert_called_once_with(self.source, verbose=verbose)
 
     def test_slice_a_completion_candidates_are_argparse_derived_and_source_free(self):
         cli = cli_parser()
         self.assertIn("upgrade", _completion_candidates(cli, [], "up"))
+        self.assertTrue(
+            {"kael", "veyra", "orin", "atlas", "kovan", "argus", "nox", "vera", "talos", "thales", "helios"}
+            <= set(_completion_candidates(cli, [], ""))
+        )
+        self.assertIn("set-effort", _completion_candidates(cli, ["nox"], ""))
         self.assertEqual({"list", "set-max-parallel", "check", "apply", "recover", "--verbose", "-h", "--help"},
                          set(_completion_candidates(cli, ["config"], "")))
         self.assertIn("--scope", _completion_candidates(cli, ["config", "list"], ""))
@@ -1471,7 +1511,7 @@ test ! -e "{sentinel}"
 
     def smoke_entry(self, entry):
         self.assertGreaterEqual(sys.version_info, (3, 11))
-        for arguments, expected in ((("--help",), "models list --json"),
+        for arguments, expected in ((("--help",), "agents, models"),
                                     (("--version",), f"olympus {self.source_version}")):
             result = self.query(*arguments, entry=entry)
             self.assertEqual(0, result.returncode, result.stderr)
@@ -1741,25 +1781,46 @@ test ! -e "{sentinel}"
                         return_value=subprocess.CompletedProcess([], 0)) as native:
             code, stdout, stderr = self.call_main("update")
         self.assertEqual(0, code)
-        self.assertIn("Update command succeeded", stdout)
-        self.assertIn("review the native output above", stdout)
+        self.assertIn("Checking for updates...", stdout)
         self.assertEqual("", stderr)
         kwargs = native.call_args.kwargs
         self.assertNotIn("capture_output", kwargs)
         self.assertNotIn("stdout", kwargs)
         self.assertNotIn("stderr", kwargs)
         self.assertNotIn("-NonInteractive", native.call_args.args[0])
+        self.assertEqual("1", kwargs["env"]["OLYMPUS_UPDATE_COMPACT"])
 
         with mock.patch("olympus.system_cli.sys.platform", "win32"), \
              mock.patch("olympus.system_cli.shutil.which", return_value="pwsh"), \
              mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.5", "")), \
              mock.patch("olympus.system_cli.subprocess.run",
-                        return_value=subprocess.CompletedProcess([], 17)):
+                        return_value=subprocess.CompletedProcess([], 23)):
             code, stdout, stderr = self.call_main("update")
-        self.assertEqual(17, code)
-        self.assertIn("effects may be unconfirmed", stderr)
-        self.assertIn("native output", stderr)
+        self.assertEqual(23, code)
+        self.assertIn("native exit 23", stderr)
+        self.assertIn("No automatic retry", stderr)
         self.assertNotIn("succeeded", stdout)
+
+        with mock.patch("olympus.system_cli.sys.platform", "win32"), \
+             mock.patch("olympus.system_cli.shutil.which", return_value="pwsh"), \
+             mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.5", "")), \
+             mock.patch("olympus.system_cli.subprocess.run",
+                        return_value=subprocess.CompletedProcess([], 3)):
+            code, stdout, stderr = self.call_main("update")
+        self.assertEqual(3, code)
+        self.assertIn("native exit 3", stderr)
+        self.assertNotIn("no installation changes were made", stdout.lower() + stderr.lower())
+
+        with mock.patch("olympus.system_cli.sys.platform", "win32"), \
+             mock.patch("olympus.system_cli.shutil.which", return_value="pwsh"), \
+             mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.5", "")), \
+             mock.patch("olympus.system_cli.subprocess.run",
+                        return_value=subprocess.CompletedProcess([], 0)) as native_verbose:
+            code, stdout, stderr = self.call_main("update", "--verbose")
+        self.assertEqual(0, code)
+        self.assertIn("-Verbose", native_verbose.call_args.args[0])
+        self.assertNotIn("OLYMPUS_UPDATE_COMPACT", native_verbose.call_args.kwargs["env"])
+        self.assertEqual("", stderr)
 
         with mock.patch("olympus.system_cli.sys.platform", "win32"), \
              mock.patch("olympus.system_cli.shutil.which", return_value="pwsh"), \
@@ -4585,10 +4646,15 @@ raise SystemExit(main(sys.argv[1:]))
         before = self._file_snapshot()
         help_result = self._run("--help")
         self.assertEqual(0, help_result.returncode, help_result.stderr)
-        # The help distinguishes the read-only preview from explicit project writes.
-        for command in ("set-family", "set-model", "recover", "config apply --scope project",
-                        "writes only with --execute"):
+        # The root map points to command help, where preview and write modes are explicit.
+        for command in ("models set-family", "agents set-model", "config recover",
+                        "olympus <command> --help"):
             self.assertIn(command, help_result.stdout)
+        apply_help = self._run("config", "apply", "--help")
+        self.assertEqual(0, apply_help.returncode, apply_help.stderr)
+        normalized_apply_help = " ".join(apply_help.stdout.split())
+        for mode in ("--dry-run", "--execute", "Project scope needs an absolute Git worktree --target"):
+            self.assertIn(mode, normalized_apply_help)
         self.assertEqual(before, self._file_snapshot())
         cases = (
             ("models", "set-family", "sol"),

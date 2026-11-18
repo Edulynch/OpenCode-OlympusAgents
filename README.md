@@ -86,11 +86,13 @@ To install `v0.11.0` instead of the latest release:
 
 | Try this in PowerShell 7 | What it does |
 | --- | --- |
+| `olympus --help` | See common commands and examples. |
+| `olympus update` | Check for a newer stable release. |
 | `olympus agents list` | See agent models and reasoning settings. |
 | `olympus config set-max-parallel 6` | Save the global limit for active direct subagents per root session. |
 | `olympus doctor --scope global` | Check the global installation without changing it. |
 
-🔍 **Need detail?** Add `--verbose`. Use `--json` where supported for scripts. [All CLI commands and advanced options →](docs/INSTALLATION.md#olympus-cli)
+🔍 **Need detail?** Try `olympus update --help` for command help or add `--verbose` to see what ran. Use `--json` where supported for scripts. [All CLI commands and advanced options →](docs/INSTALLATION.md#olympus-cli)
 
 ## Fast Uninstall
 

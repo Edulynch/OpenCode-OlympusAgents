@@ -23,6 +23,37 @@ function New-Release {
     return @{ tag_name='v9.8.7'; immutable=$true; draft=$false; prerelease=$false; published_at='2026-10-01T12:00:00Z' }
 }
 
+function Set-UpdateFixture([string]$GlobalVersion, [string]$CliVersion) {
+    $globalManifest = Join-Path $env:OPENCODE_CONFIG_DIR 'olympus/orchestrator-install.json'
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $globalManifest)) | Out-Null
+    $globalState = [ordered]@{
+        schema_version = 1
+        scope = 'global'
+        installed_version = $GlobalVersion
+        installed_harnesses = @('opencode')
+    } | ConvertTo-Json -Depth 5
+    [IO.File]::WriteAllText($globalManifest, $globalState + "`n", [Text.UTF8Encoding]::new($false))
+
+    $installRoot = Join-Path $env:LOCALAPPDATA 'Programs/Olympus'
+    $versionRoot = Join-Path $installRoot "versions/$CliVersion"
+    $files = @(
+        @{ path='install.ps1'; content="[string]`$Version = '$CliVersion',`n`$ReleaseVersion = '$CliVersion'`n" },
+        @{ path='scripts/olympus_cli.py'; content="# fixture CLI $CliVersion`n" },
+        @{ path='scripts/launch-latest.ps1'; content="# fixture launcher $CliVersion`n" }
+    )
+    $entries = foreach ($file in $files) {
+        $path = Join-Path $versionRoot $file.path
+        [IO.Directory]::CreateDirectory((Split-Path -Parent $path)) | Out-Null
+        [IO.File]::WriteAllText($path, $file.content, [Text.UTF8Encoding]::new($false))
+        @{ path=$file.path; sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
+    }
+    $cliManifest = [ordered]@{ schema_version=1; version=$CliVersion; files=@($entries) } | ConvertTo-Json -Depth 10
+    [IO.File]::WriteAllText((Join-Path $versionRoot 'olympus-cli-manifest.json'),
+        $cliManifest + "`n", [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $installRoot 'current.txt'),
+        $CliVersion + "`n", [Text.UTF8Encoding]::new($false))
+}
+
 function Invoke-RestMethod {
     [CmdletBinding()]
     param([string]$Uri, [hashtable]$Headers)
@@ -145,6 +176,21 @@ try {
     }
     $dry = Invoke-Subject 'scripts/launch-latest.ps1' @{Action='install'; DryRun=$true}
     Check 'LAUNCHER_DRYRUN_FORWARDED' ($dry.Code -eq 0 -and $dry.Dispatch.Contains('-DryRun')) $dry.Text
+
+    Set-UpdateFixture 'v9.8.7' 'v9.8.7'
+    $sameVersion = Invoke-Subject 'scripts/launch-latest.ps1' @{Action='install'; Update=$true}
+    Check 'UPDATE_SAME_VERSION_NO_INSTALLER_DOWNLOAD' (
+        $sameVersion.Code -eq 0 -and -not $sameVersion.Dispatched -and
+        $script:metadataCalls -eq 1 -and $script:downloads.Count -eq 0 -and
+        $sameVersion.Text.Contains('Already up to date (v9.8.7).')
+    ) $sameVersion.Text
+    Set-UpdateFixture 'v9.8.8' 'v9.8.8'
+    $newerLocal = Invoke-Subject 'scripts/launch-latest.ps1' @{Action='install'; Update=$true}
+    Check 'UPDATE_NEWER_LOCAL_NO_DOWNGRADE' (
+        $newerLocal.Code -eq 0 -and -not $newerLocal.Dispatched -and
+        $script:metadataCalls -eq 1 -and $script:downloads.Count -eq 0 -and
+        $newerLocal.Text.Contains('Already up to date (v9.8.8 is newer than latest stable v9.8.7).')
+    ) $newerLocal.Text
 
     $invalidMetadata = @(
         @{ Field='immutable'; Value=$false; Reason='LATEST_RELEASE_MUTABLE' },

@@ -15,8 +15,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Utf8NoBom = [Text.UTF8Encoding]::new($false)
 
-function Assert([string]$Name, [bool]$Condition) {
-    if (-not $Condition) { throw "$Name FAIL" }
+function Assert([string]$Name, [bool]$Condition, [string]$Evidence = '') {
+    if (-not $Condition) { throw "$Name FAIL`n$Evidence" }
     Write-Output "$Name PASS"
 }
 
@@ -36,12 +36,31 @@ function Invoke-Olympus([string]$Name, [string[]]$CommandArguments, [string]$Exp
     return $output
 }
 
+function Invoke-OlympusFailure([string]$Name, [string[]]$CommandArguments, [int]$ExpectedExitCode, [string]$Expected) {
+    $output = (& olympus @CommandArguments 2>&1 | Out-String)
+    $code = $LASTEXITCODE
+    if ($code -ne $ExpectedExitCode -or $output -notmatch $Expected) {
+        throw "CLI_FAILURE_MISMATCH: $Name exit=$code expected=$ExpectedExitCode`n$output"
+    }
+    Write-Host "CLI $Name PASS"
+    return $output
+}
+
+function Get-TreeSnapshot([string]$Root) {
+    $prefix = $Root.TrimEnd('\','/') + [IO.Path]::DirectorySeparatorChar
+    return @(Get-ChildItem -LiteralPath $Root -File -Recurse -Force | Sort-Object FullName | ForEach-Object {
+        $relative = $_.FullName.Substring($prefix.Length).Replace('\','/')
+        "$relative=$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash)"
+    })
+}
+
 if ($MockLatest) {
     function global:Invoke-RestMethod {
         [CmdletBinding()]
         param([string]$Uri, [hashtable]$Headers)
         [IO.File]::AppendAllText($env:OLYMPUS_SMOKE_REQUEST_LOG, "metadata $Uri`n", [Text.UTF8Encoding]::new($false))
         if ($Uri -cne $env:OLYMPUS_SMOKE_METADATA_URI) { throw "Unexpected metadata request blocked: $Uri" }
+        if ($env:OLYMPUS_SMOKE_METADATA_FAIL -eq '1') { throw 'SMOKE_METADATA_UNAVAILABLE' }
         return [IO.File]::ReadAllText($env:OLYMPUS_SMOKE_METADATA_FIXTURE) | ConvertFrom-Json -Depth 20 -ErrorAction Stop
     }
 
@@ -59,6 +78,7 @@ if ($MockLatest) {
     foreach ($name in @('Action', 'DryRun', 'Update')) {
         if ($PSBoundParameters.ContainsKey($name)) { $launchArguments[$name] = $PSBoundParameters[$name] }
     }
+    if ($PSBoundParameters.ContainsKey('Verbose')) { $launchArguments['Verbose'] = $true }
     & $env:OLYMPUS_SMOKE_LAUNCHER @launchArguments
     exit $LASTEXITCODE
 }
@@ -80,7 +100,16 @@ if ($Child) {
     try {
         $env:PYTHONPATH = $env:OLYMPUS_SMOKE_HOOK_DIR
         $env:OLYMPUS_SMOKE_UPDATE_HOOK = '1'
-        [void](Invoke-Olympus 'stable-update' @('update') ("OLYMPUS_RELEASE_SELECTED: tag=" + [regex]::Escape($env:OLYMPUS_SMOKE_RELEASE_VERSION) + ' immutable=true'))
+        $updateOutput = Invoke-Olympus 'stable-update' @('update') ("Updated to " + [regex]::Escape($env:OLYMPUS_SMOKE_RELEASE_VERSION) + '\.')
+        Assert 'UPDATE_PROGRESS_AND_RESULT_VISIBLE' (
+            $updateOutput.Contains('Checking for updates...') -and
+            $updateOutput.Contains("Updating Olympus from") -and
+            $updateOutput.Contains("Updated to $($env:OLYMPUS_SMOKE_RELEASE_VERSION).")
+        )
+        Assert 'UPDATE_DEFAULT_OUTPUT_IS_CONCISE' (
+            $updateOutput -notmatch '(?m)^OLYMPUS_(SOURCE|RELEASE_SELECTED|ENTRYPOINT|RELEASE_EXECUTING|RELEASE_EXECUTED|GLOBAL_INSTALL|CLI|CLI_PATH):' -and
+            $updateOutput -match 'GLOBAL_DEFAULT_AGENT:'
+        ) $updateOutput
     } finally {
         [Environment]::SetEnvironmentVariable('PYTHONPATH', $oldPythonPath, 'Process')
         [Environment]::SetEnvironmentVariable('OLYMPUS_SMOKE_UPDATE_HOOK', $oldHook, 'Process')
@@ -89,6 +118,133 @@ if ($Child) {
     [void](Invoke-Olympus 'version-after-update' @('version') ("^olympus " + [regex]::Escape($env:OLYMPUS_SMOKE_RELEASE_VERSION) + '$'))
     [void](Invoke-Olympus 'agents-list-after-update' @('agents', 'list') '(?m)^[ \t]+nox[ \t]+openai/gpt-6\.1-sol[ \t]+high[ \t]+global override\r?$')
     [void](Invoke-Olympus 'doctor' @('doctor') 'doctor: ok')
+
+    $globalBeforeNoOp = @(Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)
+    $cliBeforeNoOp = @(Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)
+    $requestCountBeforeNoOp = @([IO.File]::ReadAllText($env:OLYMPUS_SMOKE_REQUEST_LOG) -split "`n" |
+        Where-Object { $_ }).Count
+    try {
+        $env:PYTHONPATH = $env:OLYMPUS_SMOKE_HOOK_DIR
+        $env:OLYMPUS_SMOKE_UPDATE_HOOK = '1'
+        $sameVersionResult = "Already up to date ($($env:OLYMPUS_SMOKE_RELEASE_VERSION))."
+        $defaultNoOp = Invoke-Olympus 'same-version-update-1' @('update') ([regex]::Escape($sameVersionResult))
+        $verboseNoOp = Invoke-Olympus 'same-version-update-2' @('update', '--verbose') ([regex]::Escape($sameVersionResult))
+    } finally {
+        [Environment]::SetEnvironmentVariable('PYTHONPATH', $oldPythonPath, 'Process')
+        [Environment]::SetEnvironmentVariable('OLYMPUS_SMOKE_UPDATE_HOOK', $oldHook, 'Process')
+    }
+    Assert 'UPDATE_VERBOSE_OUTPUT_RETAINS_TECHNICAL_DETAILS' (
+        $verboseNoOp -match 'Global OpenCode and active CLI version markers match' -and
+        $verboseNoOp -match ('Active global CLI installation path: ' + [regex]::Escape($env:OLYMPUS_SMOKE_INSTALL_ROOT)) -and
+        $defaultNoOp -notmatch 'Active global CLI installation path:'
+    )
+    Assert 'SAME_VERSION_UPDATE_GLOBAL_FILES_UNCHANGED' (@(Compare-Object $globalBeforeNoOp (Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)).Count -eq 0)
+    Assert 'SAME_VERSION_UPDATE_CLI_AND_PATH_UNCHANGED' (@(Compare-Object $cliBeforeNoOp (Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)).Count -eq 0)
+    $sameVersionRequests = @([IO.File]::ReadAllText($env:OLYMPUS_SMOKE_REQUEST_LOG) -split "`n" |
+        Where-Object { $_ })
+    Assert 'SAME_VERSION_UPDATE_CHECKS_METADATA_TWICE' (@($sameVersionRequests | Where-Object { $_ -like 'metadata *' }).Count -eq 3)
+    Assert 'SAME_VERSION_UPDATE_NEVER_REDOWNLOADS_ASSETS' (
+        @($sameVersionRequests | Where-Object { $_ -like 'installer *' }).Count -eq 1 -and
+        @($sameVersionRequests | Where-Object { $_ -like 'archive *' }).Count -eq 1 -and
+        $sameVersionRequests.Count -eq ($requestCountBeforeNoOp + 2)
+    )
+
+    $originalManifestBytes = [IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST)
+    $originalCurrentBytes = [IO.File]::ReadAllBytes((Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT 'current.txt'))
+    $requestCountBeforeBlocked = $sameVersionRequests.Count
+    try {
+        $env:PYTHONPATH = $env:OLYMPUS_SMOKE_HOOK_DIR
+        $env:OLYMPUS_SMOKE_UPDATE_HOOK = '1'
+        [IO.File]::Delete($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST)
+        $preflightFailure = Invoke-OlympusFailure 'missing-installation-update-blocked' @('update') 3 'UPDATE_INSTALLATION_UNKNOWN'
+        Assert 'UPDATE_PREFLIGHT_FAILURE_CONFIRMS_NO_CHANGE' ($preflightFailure -match 'Update did not start; no installation changes were made')
+        [IO.File]::WriteAllBytes($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST, $originalManifestBytes)
+
+        $manifest = [IO.File]::ReadAllText($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST) | ConvertFrom-Json -AsHashtable -Depth 20
+        $manifest.installed_version = 'local'
+        [IO.File]::WriteAllText($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST,
+            ($manifest | ConvertTo-Json -Depth 20) + "`n", $Utf8NoBom)
+        [void](Invoke-OlympusFailure 'unknown-global-version-update-blocked' @('update') 3 'UPDATE_VERSION_UNKNOWN')
+        [IO.File]::WriteAllBytes($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST, $originalManifestBytes)
+
+        $manifest = [IO.File]::ReadAllText($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST) | ConvertFrom-Json -AsHashtable -Depth 20
+        $manifest.installed_version = 'v0.0.0'
+        [IO.File]::WriteAllText($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST,
+            ($manifest | ConvertTo-Json -Depth 20) + "`n", $Utf8NoBom)
+        [void](Invoke-OlympusFailure 'split-version-update-blocked' @('update') 3 'UPDATE_VERSION_MISMATCH')
+        [IO.File]::WriteAllBytes($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST, $originalManifestBytes)
+
+        [IO.File]::WriteAllText((Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT 'current.txt'), '../invalid' + "`n", $Utf8NoBom)
+        [void](Invoke-OlympusFailure 'invalid-cli-pointer-update-blocked' @('update') 3 'Olympus CLI release files are missing')
+        [IO.File]::WriteAllBytes((Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT 'current.txt'), $originalCurrentBytes)
+
+        $requestsBeforeNetworkFailure = @([IO.File]::ReadAllText($env:OLYMPUS_SMOKE_REQUEST_LOG) -split "`n" |
+            Where-Object { $_ })
+        Assert 'BLOCKED_LOCAL_VERSIONS_FAIL_BEFORE_METADATA' (@($requestsBeforeNetworkFailure | Where-Object { $_ -like 'metadata *' }).Count -eq 3)
+        $env:OLYMPUS_SMOKE_METADATA_FAIL = '1'
+        [void](Invoke-OlympusFailure 'metadata-network-failure-no-write' @('update') 3 'SMOKE_METADATA_UNAVAILABLE')
+    } finally {
+        [IO.File]::WriteAllBytes($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST, $originalManifestBytes)
+        [IO.File]::WriteAllBytes((Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT 'current.txt'), $originalCurrentBytes)
+        [Environment]::SetEnvironmentVariable('PYTHONPATH', $oldPythonPath, 'Process')
+        [Environment]::SetEnvironmentVariable('OLYMPUS_SMOKE_UPDATE_HOOK', $oldHook, 'Process')
+        [Environment]::SetEnvironmentVariable('OLYMPUS_SMOKE_METADATA_FAIL', $null, 'Process')
+    }
+    Assert 'BLOCKED_UPDATES_DO_NOT_CHANGE_GLOBAL_FILES' (@(Compare-Object $globalBeforeNoOp (Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)).Count -eq 0)
+    Assert 'BLOCKED_UPDATES_DO_NOT_CHANGE_CLI_OR_PATH' (@(Compare-Object $cliBeforeNoOp (Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)).Count -eq 0)
+    $requestsAfterFailures = @([IO.File]::ReadAllText($env:OLYMPUS_SMOKE_REQUEST_LOG) -split "`n" | Where-Object { $_ })
+    Assert 'NETWORK_FAILURE_ONLY_ADDS_METADATA_REQUEST' (@($requestsAfterFailures | Where-Object { $_ -like 'metadata *' }).Count -eq 4)
+    Assert 'NETWORK_FAILURE_DOES_NOT_FETCH_ASSETS' (
+        @($requestsAfterFailures | Where-Object { $_ -like 'installer *' }).Count -eq 1 -and
+        @($requestsAfterFailures | Where-Object { $_ -like 'archive *' }).Count -eq 1 -and
+        $requestsAfterFailures.Count -eq ($requestCountBeforeBlocked + 1)
+    )
+
+    $originalFixtureInstallerBytes = [IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_RELEASE_INSTALLER)
+    $requestCountBeforeInstallerFailure = $requestsAfterFailures.Count
+    try {
+        $env:PYTHONPATH = $env:OLYMPUS_SMOKE_HOOK_DIR
+        $env:OLYMPUS_SMOKE_UPDATE_HOOK = '1'
+        $manifest = [IO.File]::ReadAllText($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST) | ConvertFrom-Json -AsHashtable -Depth 20
+        $manifest.installed_version = $env:OLYMPUS_SMOKE_SOURCE_VERSION
+        [IO.File]::WriteAllText($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST,
+            ($manifest | ConvertTo-Json -Depth 20) + "`n", $Utf8NoBom)
+        [IO.File]::WriteAllText((Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT 'current.txt'),
+            $env:OLYMPUS_SMOKE_SOURCE_VERSION + "`n", $Utf8NoBom)
+        $failingInstaller = @"
+[CmdletBinding()]
+param(
+    [string]`$Version = '$($env:OLYMPUS_SMOKE_RELEASE_VERSION)',
+    [string]`$Scope = 'global',
+    [string]`$Harness = 'opencode',
+    [switch]`$Update
+)
+`$ReleaseVersion = '$($env:OLYMPUS_SMOKE_RELEASE_VERSION)'
+exit 23
+"@
+        [IO.File]::WriteAllText($env:OLYMPUS_SMOKE_RELEASE_INSTALLER, $failingInstaller, $Utf8NoBom)
+        [void](Invoke-OlympusFailure 'installer-failure-exit-23-preserved' @('update') 23 'Effects may be partial')
+        [IO.File]::WriteAllText($env:OLYMPUS_SMOKE_RELEASE_INSTALLER, $failingInstaller.Replace('exit 23', 'exit 3'), $Utf8NoBom)
+        $nativeExit3 = Invoke-OlympusFailure 'installer-failure-exit-3-preserved' @('update') 3 'Effects may be partial'
+        Assert 'NATIVE_EXIT_3_IS_NOT_PREFLIGHT_FAILURE' (
+            $nativeExit3 -notmatch 'Update did not start; no installation changes were made' -and
+            $nativeExit3 -match 'Effects may be partial'
+        )
+    } finally {
+        [IO.File]::WriteAllBytes($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST, $originalManifestBytes)
+        [IO.File]::WriteAllBytes((Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT 'current.txt'), $originalCurrentBytes)
+        [IO.File]::WriteAllBytes($env:OLYMPUS_SMOKE_RELEASE_INSTALLER, $originalFixtureInstallerBytes)
+        [Environment]::SetEnvironmentVariable('PYTHONPATH', $oldPythonPath, 'Process')
+        [Environment]::SetEnvironmentVariable('OLYMPUS_SMOKE_UPDATE_HOOK', $oldHook, 'Process')
+    }
+    Assert 'INSTALLER_FAILURE_DOES_NOT_CHANGE_GLOBAL_FILES' (@(Compare-Object $globalBeforeNoOp (Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)).Count -eq 0)
+    Assert 'INSTALLER_FAILURE_DOES_NOT_CHANGE_CLI_OR_PATH' (@(Compare-Object $cliBeforeNoOp (Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)).Count -eq 0)
+    $requestsAfterInstallerFailure = @([IO.File]::ReadAllText($env:OLYMPUS_SMOKE_REQUEST_LOG) -split "`n" | Where-Object { $_ })
+    Assert 'INSTALLER_FAILURE_IS_FIXTURED_WITHOUT_ARCHIVE' (
+        @($requestsAfterInstallerFailure | Where-Object { $_ -like 'installer *' }).Count -eq 3 -and
+        @($requestsAfterInstallerFailure | Where-Object { $_ -like 'archive *' }).Count -eq 1 -and
+        $requestsAfterInstallerFailure.Count -eq ($requestCountBeforeInstallerFailure + 4)
+    )
 
     try {
         $env:PYTHONPATH = $env:OLYMPUS_SMOKE_HOOK_DIR
@@ -104,7 +260,7 @@ if ($Child) {
     Assert 'USER_CLI_VERSION_DIRECTORY_PRESERVED' (Test-Path -LiteralPath $env:OLYMPUS_SMOKE_VERSION_MARKER -PathType Leaf)
     Assert 'GLOBAL_MANIFEST_UNINSTALLED' (-not (Test-Path -LiteralPath $env:OLYMPUS_SMOKE_GLOBAL_MANIFEST))
     Assert 'CLI_CURRENT_POINTER_UNINSTALLED' (-not (Test-Path -LiteralPath (Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT 'current.txt')))
-    Write-Output 'ISSUE128_GLOBAL_CLI_SMOKE: PASS'
+    Write-Output 'INSTALLED_CLI_LIFECYCLE: PASS'
     exit 0
 }
 
@@ -151,6 +307,8 @@ $environmentNames = @(
     'OLYMPUS_SMOKE_PATH_STORE', 'OLYMPUS_SMOKE_RELEASE_VERSION', 'OLYMPUS_SMOKE_RELEASE_INSTALLER',
     'OLYMPUS_SMOKE_RELEASE_ARCHIVE', 'OLYMPUS_SMOKE_METADATA_FIXTURE', 'OLYMPUS_SMOKE_REQUEST_LOG',
     'OLYMPUS_SMOKE_METADATA_URI', 'OLYMPUS_SMOKE_RAW_BASE', 'OLYMPUS_SMOKE_ARCHIVE_URI', 'OLYMPUS_SMOKE_PWSH',
+    'OLYMPUS_SMOKE_METADATA_FAIL', 'OLYMPUS_SMOKE_SOURCE_VERSION',
+    'OLYMPUS_UPDATE_COMPACT', 'OLYMPUS_CLI_UPDATE_COMPACT',
     'OLYMPUS_SMOKE_SCRIPT', 'OLYMPUS_SMOKE_HOOK_DIR', 'OLYMPUS_SMOKE_OTHER_DIR', 'OLYMPUS_SMOKE_LAUNCHER_PATH',
     'OLYMPUS_SMOKE_OPENCODE_CONFIG', 'OLYMPUS_SMOKE_GLOBAL_MARKER', 'OLYMPUS_SMOKE_BIN_MARKER',
     'OLYMPUS_SMOKE_VERSION_MARKER', 'OLYMPUS_SMOKE_GLOBAL_MANIFEST', 'OLYMPUS_SMOKE_USER_CONFIG',
@@ -205,6 +363,9 @@ try {
     $env:XDG_CONFIG_HOME = Join-Path $run 'xdg'
     $env:PYTHONDONTWRITEBYTECODE = '1'
     foreach ($name in @('OLYMPUS_CONFIG_HOME', 'OLYMPUS_CONFIG_FILE')) {
+        [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+    }
+    foreach ($name in @('OLYMPUS_UPDATE_COMPACT', 'OLYMPUS_CLI_UPDATE_COMPACT')) {
         [Environment]::SetEnvironmentVariable($name, $null, 'Process')
     }
     $env:OLYMPUS_CONFIG_FILE = $userConfig
@@ -316,6 +477,7 @@ subprocess.run = _run
     $env:OLYMPUS_SMOKE_INSTALL_ROOT = $installRoot
     $env:OLYMPUS_SMOKE_PATH_STORE = $pathStore
     $env:OLYMPUS_SMOKE_RELEASE_VERSION = $nextVersion
+    $env:OLYMPUS_SMOKE_SOURCE_VERSION = $sourceVersion
     $env:OLYMPUS_SMOKE_RELEASE_INSTALLER = $fixtureInstallerPath
     $env:OLYMPUS_SMOKE_RELEASE_ARCHIVE = $releaseArchive
     $env:OLYMPUS_SMOKE_METADATA_FIXTURE = $metadataFixture
@@ -410,7 +572,9 @@ subprocess.run = _run
     foreach ($name in @('OLYMPUS_SMOKE_INSTALL_ROOT', 'OLYMPUS_SMOKE_PATH_STORE', 'OLYMPUS_SMOKE_RELEASE_VERSION',
             'OLYMPUS_SMOKE_RELEASE_INSTALLER', 'OLYMPUS_SMOKE_RELEASE_ARCHIVE', 'OLYMPUS_SMOKE_METADATA_FIXTURE',
             'OLYMPUS_SMOKE_REQUEST_LOG', 'OLYMPUS_SMOKE_METADATA_URI', 'OLYMPUS_SMOKE_RAW_BASE',
-            'OLYMPUS_SMOKE_ARCHIVE_URI', 'OLYMPUS_SMOKE_PWSH', 'OLYMPUS_SMOKE_SCRIPT', 'OLYMPUS_SMOKE_HOOK_DIR',
+            'OLYMPUS_SMOKE_ARCHIVE_URI', 'OLYMPUS_SMOKE_PWSH', 'OLYMPUS_SMOKE_METADATA_FAIL',
+            'OLYMPUS_SMOKE_SOURCE_VERSION',
+            'OLYMPUS_SMOKE_SCRIPT', 'OLYMPUS_SMOKE_HOOK_DIR',
             'OLYMPUS_SMOKE_OTHER_DIR', 'OLYMPUS_SMOKE_LAUNCHER_PATH', 'OLYMPUS_SMOKE_OPENCODE_CONFIG',
             'OLYMPUS_SMOKE_GLOBAL_MARKER', 'OLYMPUS_SMOKE_BIN_MARKER', 'OLYMPUS_SMOKE_VERSION_MARKER',
             'OLYMPUS_SMOKE_GLOBAL_MANIFEST', 'OLYMPUS_SMOKE_USER_CONFIG')) {
@@ -433,10 +597,16 @@ subprocess.run = _run
     } finally { $childProcess.Dispose() }
 
     $requests = [IO.File]::ReadAllText($requestLog)
+    $requestLines = @($requests -split "`n" | Where-Object { $_ })
     Assert 'MOCKED_STABLE_RELEASE_METADATA' ($requests -match ('(?m)^metadata ' + [regex]::Escape($apiUri) + '$'))
     Assert 'MOCKED_RELEASE_INSTALLER' ($requests -match ('(?m)^installer ' + [regex]::Escape("$rawBase/$nextVersion/install.ps1") + '$'))
     Assert 'MOCKED_RELEASE_ARCHIVE' ($requests -match ('(?m)^archive ' + [regex]::Escape($archiveUri) + '$'))
-    Assert 'ALL_RELEASE_REQUESTS_FIXTURED' (@($requests -split "`n" | Where-Object { $_ }).Count -eq 3)
+    Assert 'ALL_RELEASE_REQUESTS_FIXTURED' (
+        $requestLines.Count -eq 10 -and
+        @($requestLines | Where-Object { $_ -like 'metadata *' }).Count -eq 6 -and
+        @($requestLines | Where-Object { $_ -like 'installer *' }).Count -eq 3 -and
+        @($requestLines | Where-Object { $_ -like 'archive *' }).Count -eq 1
+    )
 
     Assert 'USER_OPENCODE_CONFIG_UNCHANGED' ([Convert]::ToBase64String($savedOpenCodeConfig) -ceq
         [Convert]::ToBase64String([IO.File]::ReadAllBytes($opencodeConfig)))

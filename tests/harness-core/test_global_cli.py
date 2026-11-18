@@ -623,15 +623,12 @@ class GlobalCli(unittest.TestCase):
         self.assertIn(b'model: "openai/gpt-6.1-sol#high"', expected["opencode"]["agents/nox.md"])
 
     def test_global_command_destinations_are_hash_owned_and_removed_on_uninstall(self):
-        from olympus.cli import load_renderer
-
-        outputs = load_renderer(ROOT).outputs_for(ROOT, "opencode")
         manifest = self._manifest()
         entries = {item["path"]: item["sha256"] for item in manifest["managed_files"]}
         for command in ("olympus.ultra", "olympus.performance"):
             relative = f"commands/{command}.md"
             raw = (self.root / relative).read_bytes()
-            self.assertEqual(outputs[ROOT / ".opencode" / relative].encode("utf-8"), raw)
+            self.assertEqual((ROOT / ".opencode" / relative).read_bytes(), raw)
             self.assertEqual(hashlib.sha256(raw).hexdigest(), entries[relative])
 
         removed = self._uninstall_global(self.env)

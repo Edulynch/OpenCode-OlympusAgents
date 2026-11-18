@@ -311,6 +311,10 @@ class GlobalCli(unittest.TestCase):
         self.assertIn("compatibility are unverified", updated.stdout + updated.stderr)
 
     def test_cli_package_owns_generated_inventory_and_only_removes_its_path_entry(self):
+        expected_cli_commands = {
+            ".opencode/commands/olympus.ultra.md",
+            ".opencode/commands/olympus.performance.md",
+        }
         for name, initial_path, expected_after_uninstall, should_own in (
                 ("preexisting", "{bin}", "{bin}", False),
                 ("added", "C:\\user-tools", "C:\\user-tools", True)):
@@ -330,18 +334,25 @@ class GlobalCli(unittest.TestCase):
                 package_paths = {entry["path"] for entry in manifest["files"]}
                 self.assertTrue({".opencode/agents/kael.md", ".opencode/plugins/olympus-activity/activity.ts",
                                  ".opencode/scripts/worktree-setup.ps1", "opencode.jsonc"}.issubset(package_paths))
+                self.assertEqual(expected_cli_commands, {
+                    path for path in package_paths if path.startswith(".opencode/commands/")
+                })
                 self.assertFalse(any(path.startswith(".codex/") or path == "CODEX.md"
                                      for path in package_paths))
-                self.assertFalse(any(path.startswith(".opencode/commands/") for path in package_paths))
                 ownership = install_root / "path-entry.txt"
                 self.assertEqual(should_own, ownership.exists())
                 if should_own:
                     self.assertEqual(bin_path.resolve(), Path(ownership.read_text(encoding="utf-8")).resolve())
 
+                user_command = current / ".opencode/commands/user-owned.md"
+                user_command.parent.mkdir(parents=True, exist_ok=True)
+                user_command.write_bytes(b"user-owned CLI data\n")
                 removed = self._cli_installer("uninstall", install_root, path_store)
                 self.assertEqual(0, removed.returncode, removed.stdout + removed.stderr)
                 self.assertEqual(expected_after_uninstall.format(bin=str(bin_path)),
                                  path_store.read_text(encoding="utf-8"))
+                self.assertTrue(all(not (current / command).exists() for command in expected_cli_commands))
+                self.assertEqual(b"user-owned CLI data\n", user_command.read_bytes())
                 self.assertFalse(ownership.exists())
                 self.assertEqual(not should_own, bin_path.exists())
 
@@ -357,6 +368,10 @@ class GlobalCli(unittest.TestCase):
             destination.mkdir(parents=True)
             for index in range(1, count + 1):
                 (destination / f"fixture-{index:02}{suffix}").write_text(generated, encoding="utf-8")
+        for relative in (*expected_cli_commands, ".opencode/commands/user-owned.md"):
+            destination = source / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(generated, encoding="utf-8")
         for relative in (".opencode/plugins/olympus-activity/activity.ts", ".opencode/plugins/olympus-activity/tui.tsx",
                          ".opencode/scripts/worktree-setup.ps1", "opencode.jsonc"):
             destination = source / relative
@@ -377,6 +392,10 @@ class GlobalCli(unittest.TestCase):
         self.assertEqual(0, installed.returncode, installed.stdout + installed.stderr)
         manifest = json.loads((version_root / "olympus-cli-manifest.json").read_text(encoding="utf-8"))
         package_paths = {entry["path"] for entry in manifest["files"]}
+        self.assertEqual(expected_cli_commands, {
+            path for path in package_paths if path.startswith(".opencode/commands/")
+        })
+        self.assertFalse((version_root / ".opencode/commands/user-owned.md").exists())
         self.assertFalse(any("__pycache__" in path or path.endswith(".pyc") for path in package_paths))
         self.assertFalse((version_root / "olympus/__pycache__").exists())
         self.assertEqual(user_bytes, user_file.read_bytes())
@@ -390,6 +409,10 @@ class GlobalCli(unittest.TestCase):
         self.assertEqual(0, reinstalled.returncode, reinstalled.stdout + reinstalled.stderr)
         manifest = json.loads((version_root / "olympus-cli-manifest.json").read_text(encoding="utf-8"))
         package_paths = {entry["path"] for entry in manifest["files"]}
+        self.assertEqual(expected_cli_commands, {
+            path for path in package_paths if path.startswith(".opencode/commands/")
+        })
+        self.assertFalse((version_root / ".opencode/commands/user-owned.md").exists())
         self.assertFalse(any("__pycache__" in path or path.endswith(".pyc") for path in package_paths))
         self.assertFalse((version_root / "olympus/__pycache__").exists())
         final_removed = self._cli_installer("uninstall", install_root, path_store)

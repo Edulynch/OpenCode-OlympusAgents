@@ -891,7 +891,7 @@ test ! -e "{sentinel}"
 
     def test_slice_c7_project_inventory_excludes_global_only_commands(self):
         expected = config_apply._render_managed_outputs(
-            self.source, self.renderer, ("opencode",),
+            self.source.resolve(), self.renderer, ("opencode",),
         )["opencode"]
         command_paths = {
             ".opencode/commands/olympus.ultra.md",

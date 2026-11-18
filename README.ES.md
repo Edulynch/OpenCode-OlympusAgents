@@ -46,10 +46,10 @@ Abre OpenCode en tu proyecto y dile a Kael qué quieres hacer:
 
 ## 📌 Instala una versión específica
 
-Para instalar `v0.11.0` en lugar de la versión más reciente:
+Para instalar `v0.11.1` en lugar de la versión más reciente:
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.11.0/install.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.11.1/install.ps1')))
 ```
 
 <a id="the-team"></a>

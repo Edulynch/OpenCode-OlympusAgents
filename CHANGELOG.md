@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## v0.11.1
+
+### Highlights
+
+- Shorten `olympus --help` to a 24-line overview. All 54 CLI command/subcommand routes retain their own help with examples.
+- Make `olympus update` a no-op when the recorded CLI and global OpenCode versions both match the latest stable release: report that Olympus is up to date without downloading or running the installer. Native warnings, confirmations, and exit codes are preserved; use `--verbose` for technical details.
+- Clarify CI/test labels and their documentation without changing which checks run.
+
+### Capability limits
+
+- The update no-op compares recorded versions only; it is not an integrity check.
+- Windows with PowerShell 7 is the qualified installer platform; Python 3.11+ is required by the CLI. OpenCode V2 is the supported runtime.
+- Local static and mock fixtures do not establish a public-endpoint install, provider access or inference, or native permission UI/approval.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.11.1 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.11.1/docs/INSTALLATION.md). Public installation is global/OpenCode-only; project-scoped OpenCode configuration remains separate CLI behavior.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.11.1/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and static validation guidance. Matching recorded versions are not an integrity check, and local fixtures do not substitute for a separate public-endpoint install/VerifyOnly/uninstall smoke.
+
 ## v0.11.0
 
 ### Highlights

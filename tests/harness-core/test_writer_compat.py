@@ -187,7 +187,10 @@ try {
         outputs = namespace["outputs_for"](ROOT, "opencode")
         for path in outputs:
             relative = path.relative_to(ROOT).as_posix()
-            if not (relative.startswith(".opencode/") or relative == "opencode.jsonc"):
+            # Development commands are shipped globally, not in project manifests.
+            if relative.startswith(".opencode/commands/") or not (
+                relative.startswith(".opencode/") or relative == "opencode.jsonc"
+            ):
                 continue
             # Bootstrap hashes checkout bytes, including their existing newline style.
             raw = (ROOT / relative).read_bytes()

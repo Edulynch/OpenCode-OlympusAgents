@@ -83,16 +83,16 @@ try {
     $allAgentText = ($agents | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
     $modelLines = @($agents | ForEach-Object { ([regex]::Match([IO.File]::ReadAllText($_.FullName), '(?m)^model:.*$')).Value })
     Check 'RR13_MODELS' ($modelLines.Count -eq 11 -and
-        $kael -match 'model: "openai/gpt-6.1-sol#high"' -and
-        (Text '.opencode/agents/atlas.md') -match 'model: openai/gpt-6.1-sol#high' -and
-        (Text '.opencode/agents/argus.md') -match 'model: openai/gpt-6.1-sol#high' -and
-        (Text '.opencode/agents/talos.md') -match 'model: openai/gpt-6.1-sol#high' -and
-        (Text '.opencode/agents/helios.md') -match 'model: openai/gpt-6.1-sol#high' -and
-        (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.1-sol#xhigh' -and
+        $kael -match 'model: "openai/gpt-6.2-sol#high"' -and
+        (Text '.opencode/agents/atlas.md') -match 'model: openai/gpt-6.2-sol#high' -and
+        (Text '.opencode/agents/argus.md') -match 'model: openai/gpt-6.2-sol#high' -and
+        (Text '.opencode/agents/talos.md') -match 'model: openai/gpt-6.2-sol#high' -and
+        (Text '.opencode/agents/helios.md') -match 'model: openai/gpt-6.2-sol#high' -and
+        (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.2-sol#xhigh' -and
         @(@('veyra','orin','kovan','nox','vera') | ForEach-Object { (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max' }) -notcontains $false)
     Check 'RR14_CONCURRENCY' ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
-        $kael -match 'FAST is an explicit user-selected latency-priority profile' -and
-        $kael -match 'FAST never overrides writer ownership')
+        $kael -match 'Four is a ceiling, never a target' -and
+        (Text '.opencode/commands/olympus.ultra.md') -match 'bypass ownership')
     Check 'RR15_NO_LUNA_FAST' ($allAgentText -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
     Check 'RR16_RESTART_CHRONOLOGY' ($kael -match 'Later message/tool activity or a collected result outranks\s+an older session metadata snapshot' -and
         $kael -match 'stored `session.outcome` predates later\s+activity' -and

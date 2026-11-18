@@ -123,7 +123,7 @@ try {
         $maintenance -match 'do not perform dependent writes' -and
         $maintenance -match 'A native `/goal` surface remains opt-in')
     Check INVARIANTS ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
-        $kael -match 'model: "openai/gpt-6.1-sol#high"' -and
+        $kael -match 'model: "openai/gpt-6.2-sol#high"' -and
         $kael -notmatch 'Luna Fast|project-context\.json')
     Write-Output 'PREFLIGHT / SCOPED DISCOVERY QUALIFICATION: PASS (static policy contracts + fixture only; no live delegation or native permission behavior executed)'
     exit 0

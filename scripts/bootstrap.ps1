@@ -241,10 +241,25 @@ function Apply-OpenCodeProjectOverrides([string]$Repo, [System.Collections.IDict
         if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { Fail 'USER_CONFIG_INVALID' "The $layerName Olympus configuration is not a file." }
         try { $config = [IO.File]::ReadAllText($configPath) | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop }
         catch { Fail 'USER_CONFIG_INVALID' "The $layerName Olympus configuration is not valid JSON." }
+        $allowedConfigKeys = @('schema_version', 'overrides')
+        if ($layerName -eq 'global') { $allowedConfigKeys += 'orchestration' }
         if ($config -isnot [System.Collections.IDictionary] -or $config.schema_version -ne 1 -or
             $config.overrides -isnot [System.Collections.IDictionary] -or
-            @($config.Keys | Where-Object { $_ -notin @('schema_version', 'overrides') }).Count -gt 0) {
+            @($config.Keys | Where-Object { $_ -cnotin $allowedConfigKeys }).Count -gt 0) {
             Fail 'USER_CONFIG_INVALID' "The $layerName Olympus configuration must use schema_version 1 and an overrides object."
+        }
+        if ($layerName -eq 'global' -and $config.Contains('orchestration')) {
+            $orchestration = $config['orchestration']
+            if ($orchestration -isnot [System.Collections.IDictionary] -or
+                @($orchestration.Keys | Where-Object { $_ -cne 'max_children' }).Count -gt 0 -or
+                @($orchestration.Keys | Where-Object { $_ -ceq 'max_children' }).Count -ne 1) {
+                Fail 'USER_CONFIG_INVALID' 'Global orchestration may contain only max_children.'
+            }
+            $maxChildren = $orchestration['max_children']
+            if (($maxChildren -isnot [int] -and $maxChildren -isnot [long]) -or
+                $maxChildren -lt 1 -or $maxChildren -gt 8) {
+                Fail 'USER_CONFIG_INVALID' 'Global max_children must be an integer from 1 to 8.'
+            }
         }
         $configs += ,$config
     }

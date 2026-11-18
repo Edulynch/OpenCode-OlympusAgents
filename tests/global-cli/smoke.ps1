@@ -70,7 +70,7 @@ if ($Child) {
 
     [void](Invoke-Olympus 'version-before-update' @('version') '^olympus v[0-9]+\.[0-9]+\.[0-9]+$')
     [void](Invoke-Olympus 'help' @('help') 'Olympus global CLI')
-    [void](Invoke-Olympus 'agents-list' @('agents', 'list') 'nox \| Nox')
+    [void](Invoke-Olympus 'agents-list' @('agents', 'list') '(?m)^[ \t]+nox[ \t]+openai/gpt-6-luna[ \t]+max[ \t]+canonical default\r?$')
     [void](Invoke-Olympus 'nox-set-model' @('nox', 'set-model', 'openai/gpt-6.1-sol') 'openai/gpt-6\.1-sol')
     [void](Invoke-Olympus 'nox-set-effort' @('nox', 'set-effort', 'high') 'high')
     [void](Invoke-Olympus 'config-list' @('config', 'list') 'Run ''olympus doctor'' after manual edits\.')
@@ -87,7 +87,7 @@ if ($Child) {
     }
 
     [void](Invoke-Olympus 'version-after-update' @('version') ("^olympus " + [regex]::Escape($env:OLYMPUS_SMOKE_RELEASE_VERSION) + '$'))
-    [void](Invoke-Olympus 'agents-list-after-update' @('agents', 'list') 'openai/gpt-6\.1-sol')
+    [void](Invoke-Olympus 'agents-list-after-update' @('agents', 'list') '(?m)^[ \t]+nox[ \t]+openai/gpt-6\.1-sol[ \t]+high[ \t]+global override\r?$')
     [void](Invoke-Olympus 'doctor' @('doctor') 'doctor: ok')
 
     try {
@@ -357,7 +357,14 @@ subprocess.run = _run
         -not (Test-Path -LiteralPath (Join-Path $packagedSource '.codex')) -and
         -not (Test-Path -LiteralPath (Join-Path $packagedSource 'CODEX.md'))
     )
-    Assert 'PROJECT_COMMANDS_NOT_PACKAGED' (-not (Test-Path -LiteralPath (Join-Path $packagedSource '.opencode/commands')))
+    $packagedCommandDirectory = Join-Path $packagedSource '.opencode/commands'
+    $packagedCommands = if (Test-Path -LiteralPath $packagedCommandDirectory -PathType Container) {
+        @(Get-ChildItem -LiteralPath $packagedCommandDirectory -File | ForEach-Object { $_.Name })
+    } else { @() }
+    $packagedCommandNames = ($packagedCommands | Sort-Object) -join '|'
+    Assert 'PACKAGED_ONLY_REQUIRED_GLOBAL_COMMANDS' (
+        $packagedCommandNames -ceq 'olympus.performance.md|olympus.ultra.md'
+    )
     $persistedPath = [IO.File]::ReadAllText($pathStore)
     Assert 'PATH_STORE_ISOLATED' ($persistedPath -ceq [IO.Path]::GetFullPath($bin))
     $userPathCollision = @(($originalUserPath -split ';') | Where-Object {

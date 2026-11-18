@@ -140,11 +140,15 @@ function Get-DocumentationErrors([hashtable]$Docs, [string]$Version) {
         '`installed_version=local` or a release tag',
         'nonempty `installed_from_commit`',
         '`default_agent_receipt`',
-        '13 base resources',
-        'manages 14 resources',
-        'Both counts are current formats, not legacy inventories.',
-        'fail closed without conversion, adoption, or deletion',
-        'Use the matching release to remove an unsupported older installation'
+        '15 base resources are managed',
+        '16 resources are managed',
+        'Both are valid current formats.',
+        'The two namespaced command files are global-only',
+        'exact, hash-verified v0.10.0 global 13/14-path inventories',
+        '`VerifyOnly`, global doctor, and global config apply report that an update is required',
+        'New command destinations that already exist without current manifest ownership are collisions',
+        'An incomplete or unsupported format is rejected without automatic conversion, adoption, or deletion',
+        'If an older unsupported installation needs removal, use the release that owns it'
     )) {
         if ($installationContract.IndexOf($phrase, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
             $issues.Add('DOC_INSTALLATION_FORMAT_CONTRACT_INCOMPLETE')
@@ -288,9 +292,10 @@ $bad = $docs.Clone()
 $bad['README.md'] += "`nPrepared for a future release.`n"
 Assert-Rejected $bad $version 'DOC_STALE_PUBLICATION_WARNING'
 $bad = $docs.Clone()
-$bad['docs/HARNESSES.md'] = $bad['docs/HARNESSES.md'].Replace(
-    'Both counts are current formats, not legacy inventories.',
-    'Both counts are legacy inventories.')
+$bad['docs/INSTALLATION.md'] = $bad['docs/INSTALLATION.md'] -replace 'Both are valid current\s+formats\.', 'Both are legacy formats.'
+if ($bad['docs/INSTALLATION.md'] -ceq $docs['docs/INSTALLATION.md']) {
+    throw 'REGRESSION_MUTATION_NOT_APPLIED: installation format contract'
+}
 Assert-Rejected $bad $version 'DOC_INSTALLATION_FORMAT_CONTRACT_INCOMPLETE'
 $bad = $docs.Clone()
 $bad['docs/HARNESS-CAPABILITIES.md'] = $bad['docs/HARNESS-CAPABILITIES.md'].Replace(

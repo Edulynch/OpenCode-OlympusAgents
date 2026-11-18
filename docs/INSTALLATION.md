@@ -2,7 +2,9 @@
 
 ## Start here
 
-The [Fast Install](../README.md#fast-install) is global and OpenCode-only. It has no project/harness selectors or menus, and the current directory never selects the installation target. It sets up the per-user `olympus` command and its user PATH entry; open a new PowerShell 7 shell afterward.
+Quick guides: [English](../README.md) · [Español](../README.ES.md).
+
+The [Fast Install](../README.md#fast-install) is global and OpenCode-only. It has no project/harness selectors or menus, and the current directory never selects the installation target. It sets up the per-user `olympus` command and its user PATH entry; open a new PowerShell 7 shell afterward. It also installs exactly `/olympus.ultra` and `/olympus.performance` as global OpenCode commands; bare aliases are not provided.
 
 Choose the latest release below or [install a specific version](#install-a-specific-version). Do not execute installers from a mutable `master` URL.
 
@@ -33,7 +35,7 @@ Both source entrypoints, `install-olympus.ps1` and `uninstall-olympus.ps1`, are 
 ### Install a specific version
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.10.0/install.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.11.0/install.ps1')))
 ```
 
 The tagged `install.ps1` defaults to its embedded version and downloads the exact tag archive, so no extra `-Version` argument is needed. This bypasses `latest` selection. A versioned URL for `install-olympus.ps1` would not pin the installed version: that bootstrap still selects the latest release.
@@ -58,9 +60,29 @@ Current project manifests use `schema_version=1`, explicit `scope=project`,
 Global manifests use `schema_version=1`, `scope=global`, exactly OpenCode,
 `installed_version=local` or a release tag, a nonempty `installed_from_commit`,
 and a valid `default_agent_receipt`. When the existing global config is
-user-owned, 13 base resources are managed and the config remains unowned; if
-Olympus creates the config, 14 resources are managed. Both are valid current
-formats.
+user-owned, 15 base resources are managed and the config remains unowned; if
+Olympus creates the config, 16 resources are managed. Both are valid current
+formats. The two namespaced command files are global-only and are not added to
+project manifests or project config apply.
+
+The installer recognizes only the exact, hash-verified v0.10.0 global 13/14-path
+inventories for safe upgrade or uninstall. `VerifyOnly`, global doctor, and
+global config apply report that an update is required; they do not create the
+missing commands or change the target. New command destinations that already
+exist without current manifest ownership are collisions, even when their bytes
+match Olympus output; the installer will not adopt or overwrite them.
+
+### Update from v0.10.0
+
+```powershell
+olympus update
+olympus version
+olympus doctor --scope global
+```
+
+The updater preserves your explicit model and effort overrides and global
+concurrency preference. Use the updater, not `config apply`, to install the
+two new commands. Verify them in a new OpenCode session.
 
 Overrides use `schema_version=1` with an `overrides` map; a missing file means
 empty, and precedence is project override, global override, then Core defaults.
@@ -95,7 +117,7 @@ Maintainers may run `install.ps1` directly against a trusted local checkout inst
 ```powershell
 $source = (Resolve-Path '.').Path
 pwsh -NoProfile -File (Join-Path $source 'install.ps1') `
-    -Version 'v0.10.0' -SourceRoot $source -DryRun
+    -Version 'v0.11.0' -SourceRoot $source -DryRun
 ```
 
 Use the version actually declared by the checkout; do not copy the example version blindly. Local-source installation is for advanced, trusted-checkout use and is not evidence that the corresponding release is published or immutable.
@@ -116,6 +138,15 @@ olympus doctor
 olympus install
 olympus uninstall
 ```
+
+Human output is concise by default and summarizes the result, selected scope or
+target, and relevant changes. Install/uninstall also retain native preservation
+notices and summarize planned resource actions; `--verbose` shows the complete
+captured native details. `olympus update` keeps the native PowerShell stream
+attached for interactive confirmation and reports only the command result; its
+output determines whether a release was applied. `--json` output is unchanged
+and contains no human-output banners; `--verbose` does not alter its payload or
+exit status.
 
 ### Command scopes and effects
 
@@ -170,16 +201,17 @@ the payload was captured, then run this PowerShell-compatible Python recipe.
 It derives provider/model IDs from the API mapping, retains the declared
 reasoning/tool-call booleans, and records only explicitly listed `effort`
 values; it does not infer defaults. Duplicate or malformed data fails before
-the catalog is written.
+the catalog is written. Snapshot lookup keys preserve Models.dev's upstream
+spelling, including nested or special-character IDs; they are not CLI
+assignment syntax. Empty IDs and control characters remain invalid.
 
 ```powershell
 $raw = (Resolve-Path '.\models.dev.raw.json').Path
 $catalog = 'olympus/core/models-dev.json'
-$snapshotDate = '2026-11-13' # Set to the saved payload's capture date.
+$snapshotDate = '2026-11-17' # Set to the saved payload's capture date.
 @'
 import hashlib
 import json
-import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -199,10 +231,12 @@ assert isinstance(providers, dict) and providers
 models = {}
 for provider_id, provider in sorted(providers.items()):
     assert isinstance(provider_id, str) and provider_id and isinstance(provider, dict)
+    assert not any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in provider_id)
     provider_models = provider.get("models")
     assert isinstance(provider_models, dict)
     for model_key, model in sorted(provider_models.items()):
         assert isinstance(model_key, str) and model_key and isinstance(model, dict)
+        assert not any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in model_key)
         assert model.get("id") == model_key
         reasoning, tool_call = model.get("reasoning"), model.get("tool_call")
         assert type(reasoning) is bool and type(tool_call) is bool
@@ -219,7 +253,6 @@ for provider_id, provider in sorted(providers.items()):
         assert all(isinstance(value, str) and value for value in efforts)
         assert len(efforts) == len(set(efforts))
         model_id = f"{provider_id}/{model_key}"
-        assert re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]*/[A-Za-z0-9][A-Za-z0-9._:/-]*", model_id)
         assert model_id not in models
         models[model_id] = {
             "efforts": efforts, "reasoning": reasoning, "tool_call": tool_call,

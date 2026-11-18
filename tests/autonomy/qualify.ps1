@@ -7,6 +7,7 @@ $work = Join-Path $root 'tests/.phase4c-work'
 $fixture = Join-Path $work ('autonomy-' + [guid]::NewGuid().ToString('N'))
 $utf8 = [Text.UTF8Encoding]::new($false)
 $originalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
+$originalOlympusConfig = [Environment]::GetEnvironmentVariable('OLYMPUS_CONFIG_FILE','Process')
 $mockBin = $null
 function Check([string]$Id, [bool]$Ok) {
     if (-not $Ok) { throw "$Id FAIL" }
@@ -29,6 +30,7 @@ function Enable-OfflineOpenCodeStub([string]$FixtureRoot) {
     $env:PATH = (@($script:mockBin,$PSHOME) + $parts) -join [IO.Path]::PathSeparator
 }
 try {
+    $env:OLYMPUS_CONFIG_FILE = Join-Path $fixture 'isolated-user-config.json'
     if ($QualificationSlice -eq 'Offline') {
         [IO.Directory]::CreateDirectory($work) | Out-Null
         Enable-OfflineOpenCodeStub $work
@@ -89,6 +91,7 @@ try {
     exit 1
 } finally {
     [Environment]::SetEnvironmentVariable('PATH',$originalPath,'Process')
+    [Environment]::SetEnvironmentVariable('OLYMPUS_CONFIG_FILE',$originalOlympusConfig,'Process')
     if ($mockBin -and (Test-Path -LiteralPath $mockBin)) {
         Remove-Item -LiteralPath $mockBin -Recurse -Force -ErrorAction SilentlyContinue
     }

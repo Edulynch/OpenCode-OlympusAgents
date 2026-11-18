@@ -27,7 +27,7 @@ if str(ROOT) not in sys.path:
 
 from olympus import config_apply, config_apply_transaction, doctor, global_readonly, install_routing, source_edit
 from olympus.cli import (_completion_candidates, load_renderer as cli_load_renderer,
-                         main as cli_main, model_assignments as cli_model_assignments,
+                         emit as cli_emit, main as cli_main, model_assignments as cli_model_assignments,
                          parser as cli_parser, release_version, source_query as cli_source_query)
 
 
@@ -83,6 +83,11 @@ class SliceA(unittest.TestCase):
         self.env["PYTHONDONTWRITEBYTECODE"] = "1"
         self.env["PYTHONUTF8"] = "1"
         self.env["OLYMPUS_PYTHON"] = sys.executable
+        self.env["OLYMPUS_CONFIG_FILE"] = str(self.sandbox / "user-config.json")
+        # In-process plans and subprocesses must use the same isolated preferences.
+        environment = mock.patch.dict(os.environ, self.env, clear=True)
+        environment.start()
+        self.addCleanup(environment.stop)
 
     def snapshot(self):
         paths = set(self.sandbox.rglob("*"))
@@ -181,7 +186,8 @@ class SliceA(unittest.TestCase):
         entries = []
         for path, content in self.renderer.outputs_for(self.source, "opencode").items():
             relative = path.relative_to(self.source).as_posix()
-            if not (relative.startswith(".opencode/") or relative == "opencode.jsonc"):
+            if (not (relative.startswith(".opencode/") or relative == "opencode.jsonc")
+                    or relative.startswith(".opencode/commands/")):
                 continue
             raw = content.encode("utf-8")
             destination = self.target / Path(relative)
@@ -213,7 +219,7 @@ class SliceA(unittest.TestCase):
     def create_global_managed_install(self, version="local"):
         """Prepare official global inventories under synthetic, isolated roots."""
         inventories = global_readonly._expected(self.source, self.renderer, ("opencode",),
-                                                include_default_agent=True)
+                                                include_default_agent=True, max_children=4)
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         entries = []
         for relative, raw in sorted(inventories["opencode"].items()):
@@ -264,6 +270,19 @@ class SliceA(unittest.TestCase):
         (root / "opencode.jsonc").unlink()
         return manifest_path
 
+    def downgrade_global_install_to_v010(self, manifest_path):
+        root = manifest_path.parent.parent
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        legacy_commands = {"commands/olympus.ultra.md", "commands/olympus.performance.md"}
+        manifest["managed_files"] = [
+            item for item in manifest["managed_files"] if item["path"] not in legacy_commands
+        ]
+        for relative in legacy_commands:
+            (root / relative).unlink()
+        manifest["installed_version"] = "v0.10.0"
+        manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        return manifest
+
     def canonical_role(self, role):
         return next(item for item in cli_model_assignments(self.renderer, self.source)["roles"]
                     if item["role"] == role)
@@ -312,7 +331,7 @@ class SliceA(unittest.TestCase):
     def test_slice_a_completion_candidates_are_argparse_derived_and_source_free(self):
         cli = cli_parser()
         self.assertIn("upgrade", _completion_candidates(cli, [], "up"))
-        self.assertEqual({"list", "set-max-parallel", "check", "apply", "recover", "-h", "--help"},
+        self.assertEqual({"list", "set-max-parallel", "check", "apply", "recover", "--verbose", "-h", "--help"},
                          set(_completion_candidates(cli, ["config"], "")))
         self.assertIn("--scope", _completion_candidates(cli, ["config", "list"], ""))
         self.assertIn("--target", _completion_candidates(cli, ["config", "apply", "--json"], ""))
@@ -458,12 +477,237 @@ test ! -e "{sentinel}"
             self.assertEqual(intent["family"], row["family"])
             self.assertEqual(intent["effort"], row["effort"])
             self.assertEqual(models["families"][intent["family"]], row["models"])
-            for value in (row["role"], row["identity"], row["family"], row["effort"], *row["models"].values()):
+            for value in (row["role"], row["family"], row["effort"], *row["models"].values()):
                 self.assertIn(value, human.stdout)
+        verbose = self.query("models", "list", "--verbose")
+        for row in rows:
+            self.assertIn(row["identity"], verbose.stdout)
+        self.assertIn("AGENT", human.stdout)
+        self.assertIn("MODEL", human.stdout)
         by_role = {row["role"]: row for row in rows}
         self.assertEqual({"opencode"}, set(by_role["kael"]["models"]))
         self.assertEqual({"opencode"}, set(by_role["kael"]["representation"]))
         self.assertNotIn("aegis", by_role)
+
+    def test_slice_a_compact_verbose_and_json_output_contract(self):
+        human = self.query("agents", "list")
+        verbose = self.query("agents", "list", "--verbose")
+        json_plain = self.query("agents", "list", "--json")
+        json_verbose = self.query("agents", "list", "--json", "--verbose")
+        self.assertEqual((0, 0, 0, 0), (
+            human.returncode, verbose.returncode, json_plain.returncode, json_verbose.returncode,
+        ))
+        self.assertIn("agents list: ok", human.stdout)
+        self.assertIn("Scope: global", human.stdout)
+        self.assertRegex(human.stdout, r"(?m)^  kael\s+openai/")
+        self.assertIn("canonical default", human.stdout)
+        self.assertNotIn("schema_version", human.stdout)
+        self.assertNotIn('"roles":', human.stdout)
+        self.assertNotIn("sha256", human.stdout)
+        status = self.query("status", "--target", str(self.target))
+        self.assertEqual(0, status.returncode, status.stdout + status.stderr)
+        self.assertIn("Installation: absent", status.stdout)
+        self.assertIn("Integrity: unverified (metadata only; not verified)", status.stdout)
+        self.assertIn("Next step: run 'olympus doctor' to verify installation integrity.", status.stdout)
+        self.create_managed_install()
+        project_config = self.query("config", "list", "--scope", "project", "--target", str(self.target))
+        self.assertEqual(0, project_config.returncode, project_config.stdout + project_config.stderr)
+        self.assertIn(f"Target: {self.target}", project_config.stdout)
+        self.assertIn("Global prompt ceiling: 4 children", project_config.stdout)
+        self.assertIn("not an effective project setting", project_config.stdout)
+        check = self.query("config", "check")
+        check_verbose = self.query("config", "check", "--verbose")
+        self.assertEqual((0, 0), (check.returncode, check_verbose.returncode))
+        self.assertIn("Renderer outputs: coherent", check.stdout)
+        self.assertIn("model access: unknown", check.stdout)
+        self.assertNotIn('"coherent":', check.stdout)
+        self.assertIn("coherent: true", check_verbose.stdout)
+        self.assertIn(str(self.source / "olympus/core/models.toml"), verbose.stdout)
+        self.assertEqual(json.loads(json_plain.stdout), json.loads(json_verbose.stdout))
+        for result in (json_plain, json_verbose):
+            self.assertEqual(1, len(result.stdout.splitlines()))
+            payload = json.loads(result.stdout)
+            self.assertEqual({"schema_version", "operation", "result", "context", "data", "issues"}, set(payload))
+            self.assertEqual(1, payload["schema_version"])
+            self.assertEqual("agents list", payload["operation"])
+
+    def test_slice_a_unknown_and_empty_human_sections_are_explicit(self):
+        empty = {"operation": "agents list", "result": "ok", "context": {},
+                 "data": {"roles": []}, "issues": []}
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            cli_emit(empty, False)
+        self.assertIn("Assignments:\n  (none)", stdout.getvalue())
+        self.assertEqual("", stderr.getvalue())
+
+        unknown = {
+            "operation": "doctor", "result": "blocked", "context": {"scope": "global"},
+            "data": {
+                "installation_state": "unknown", "integrity": "unverified",
+                "verification": {"state": "unavailable"},
+                "harnesses": {"opencode": {"state": "blocked", "root": str(self.target)}},
+            },
+            "issues": [{"code": "verification_unavailable", "message": "Verification was not established."}],
+        }
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            cli_emit(unknown, False)
+        text = stdout.getvalue()
+        self.assertIn("Installation: unknown", text)
+        self.assertIn("Integrity: unverified", text)
+        self.assertIn("Verification: unavailable", text)
+        self.assertIn("opencode: blocked", text)
+        self.assertIn("verification_unavailable", stderr.getvalue())
+        self.assertNotIn("schema_version", text)
+        self.assertNotIn("sha256", text)
+
+        setter = {
+            "operation": "config set-max-parallel", "result": "ok", "context": {},
+            "data": {"max_children": 2, "scope": "global", "preference_scope": "global",
+                     "installed_agent_updated": False},
+            "issues": [],
+        }
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            cli_emit(setter, False)
+        self.assertIn("Saved global prompt ceiling: 2 children (prompt policy only).", stdout.getvalue())
+        self.assertIn("Installed agent: not updated (saved only)", stdout.getvalue())
+        self.assertEqual(1, len(stdout.getvalue().splitlines()))
+        self.assertNotIn("effective project", stdout.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        setter["result"] = "blocked"
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            cli_emit(setter, False)
+        self.assertNotIn("Saved ", stdout.getvalue())
+        self.assertIn("No setting change confirmed.", stdout.getvalue())
+
+    def test_slice_a_native_install_summary_keeps_actions_preservation_and_unknown_output(self):
+        native_stdout = (
+            "GLOBAL_INSTALL_DRY_RUN: opencode\n"
+            "CREATE: agents/kael.md\n"
+            "UPDATE: agents/nox.md\n"
+            "REMOVE: agents/old.md\n"
+            "PRESERVE_DEFAULT_AGENT: user value or deletion\n"
+            "A future native safety diagnostic\n"
+        )
+        response = {
+            "operation": "install", "result": "preview", "context": {"scope": "global"},
+            "data": {
+                "mode": "dry-run", "engine": "scripts/launch-latest.ps1", "state": "preview",
+                "effects": "target_read_only_preview; temporary/cache effects may remain",
+                "installation_state": "not_installed", "native_stdout": native_stdout,
+                "native_stderr": "Native warning: retained user configuration\n",
+            },
+            "issues": [],
+        }
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            cli_emit(response, False)
+        text = stdout.getvalue()
+        self.assertIn("install: preview", text)
+        self.assertNotIn("Installation: not_installed", text)
+        self.assertIn("Target was not changed; temporary/cache effects may remain.", text)
+        self.assertIn("Planned resources: create 1, update 1, remove 1", text)
+        self.assertIn("PRESERVE_DEFAULT_AGENT: user value or deletion", text)
+        self.assertIn("Native notice: A future native safety diagnostic", text)
+        self.assertIn("Next step: review the native plan, then rerun with --execute", text)
+        self.assertNotIn("agents/kael.md", text)
+        self.assertIn("Native warning: retained user configuration", stderr.getvalue())
+
+        verbose = io.StringIO()
+        with redirect_stdout(verbose):
+            cli_emit(response, False, verbose=True)
+        self.assertIn(json.dumps(native_stdout, ensure_ascii=False), verbose.getvalue())
+
+        response.update({
+            "result": "ok",
+            "data": {
+                "mode": "execute", "engine": "scripts/launch-latest.ps1", "state": "ok",
+                "effects": "native_engine_confirmed_success",
+                "native_stdout": (
+                    "OLYMPUS_RELEASE_SELECTED: tag=v0.11.0 immutable=true published_at=2026-11-18T00:00:00Z\n"
+                    "OLYMPUS_GLOBAL_INSTALL: OPENCODE v0.11.0 NO_CHANGES "
+                    "(15 managed resources; root=C:\\Users\\Ada\\OpenCode)\n"
+                    "GLOBAL_DEFAULT_AGENT: kael selected on first install; later user choices and deletions preserved.\n"
+                ),
+            },
+        })
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            cli_emit(response, False)
+        text = stdout.getvalue()
+        self.assertIn("install: ok", text)
+        self.assertIn("Selected release: v0.11.0", text)
+        self.assertIn("Native result: OPENCODE v0.11.0 NO_CHANGES (15 managed resources).", text)
+        self.assertIn("later user choices and deletions preserved", text)
+        self.assertIn("run 'olympus doctor' to verify the installation", text)
+        self.assertNotIn("C:\\Users\\Ada", text)
+
+        response.update({
+            "operation": "uninstall", "result": "unconfirmed",
+            "data": {"mode": "execute", "engine": "scripts/global-install.ps1",
+                     "state": "unconfirmed", "effects": "unconfirmed_after_native_failure",
+                     "native_stdout": "PRESERVE_USER_CONFIG: opencode.json\npartial native result\n"},
+        })
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            cli_emit(response, False)
+        text = stdout.getvalue()
+        self.assertIn("uninstall: unconfirmed", text)
+        self.assertIn("PRESERVE_USER_CONFIG: opencode.json", text)
+        self.assertIn("Native notice: partial native result", text)
+        self.assertIn("Effects are unconfirmed after native failure.", text)
+        self.assertNotIn("uninstall: ok", text)
+
+        response.update({
+            "result": "blocked",
+            "data": {"mode": "execute", "engine": "not_started", "state": "not_started",
+                     "effects": "none_confirmed", "native_stderr": "PowerShell 7 is unavailable."},
+            "issues": [{"code": "powershell_unavailable", "message": "No native operation was started."}],
+        })
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            cli_emit(response, False)
+        self.assertIn("uninstall: blocked", stdout.getvalue())
+        self.assertIn("No effects confirmed.", stdout.getvalue())
+        self.assertIn("no native engine was started", stdout.getvalue())
+        self.assertIn("PowerShell 7 is unavailable.", stderr.getvalue())
+        self.assertIn("No native operation was started.", stderr.getvalue())
+
+    def test_slice_a_doctor_guidance_is_shared_by_compact_and_verbose_output(self):
+        response = {
+            "operation": "doctor", "result": "failed", "context": {"scope": "global"},
+            "data": {},
+            "issues": [{"code": "global_managed_file_drift", "message": "Managed path changed."}],
+        }
+        recommendation = (
+            "Inspect the listed global managed path and preserve local edits; "
+            "reconcile ownership before any update or uninstall."
+        )
+        for verbose in (False, True):
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with self.subTest(verbose=verbose), redirect_stdout(stdout), redirect_stderr(stderr):
+                cli_emit(response, False, verbose=verbose)
+            self.assertEqual(1, stdout.getvalue().count(recommendation))
+
+    def test_slice_a_apply_blocked_and_model_no_changes_are_compact(self):
+        blocked = self.query(*self.config_apply_arguments())
+        self.assertEqual(3, blocked.returncode, blocked.stdout + blocked.stderr)
+        self.assertIn("config apply: blocked", blocked.stdout)
+        self.assertIn("Resources to update (0):", blocked.stdout)
+        self.assertIn("manifest_missing", blocked.stderr)
+        self.assertNotIn("sha256", blocked.stdout)
+        self.assertNotIn("managed_files", blocked.stdout)
+        self.assertNotIn('"data":', blocked.stdout)
+
+        blocked_json = self.query(*self.config_apply_arguments(), "--json", "--verbose")
+        self.assertEqual(3, blocked_json.returncode)
+        response = json.loads(blocked_json.stdout)
+        self.assertEqual("blocked", response["result"])
+        self.assertEqual("manifest_missing", response["issues"][0]["code"])
+        self.assertEqual(1, len(blocked_json.stdout.splitlines()))
+
 
     def test_slice_a_check_renderer_interface_and_human_json(self):
         response = self.json_query("config", "check", "--harness", "opencode")
@@ -480,16 +724,16 @@ test ! -e "{sentinel}"
             self.source / ".opencode/agents/kael.md"
         ]
         self.assertIn("keep child work sequential", one_child)
-        self.assertIn("7 / 1 = 7", one_child)
+        self.assertIn("MAX_ACTIVE_CHILDREN = 1", one_child)
         self.assertIn("two for common independent work", two_children)
-        self.assertIn("7 / 2 = 4/3", two_children)
+        self.assertIn("MAX_ACTIVE_CHILDREN = 2", two_children)
         eight_children = self.renderer.outputs_for(self.source, "opencode", 8)[
             self.source / ".opencode/agents/kael.md"
         ]
         self.assertIn("MAX_ACTIVE_CHILDREN = 8", eight_children)
-        self.assertIn("7 / 7 = 1/1/1/1/1/1/1", eight_children)
-        self.assertNotIn("7 / 8 =", eight_children)
-        human = self.query("config", "check", "--harness", "opencode")
+        self.assertIn("/olympus.ultra <prompt>", eight_children)
+        self.assertNotIn("FAST is an explicit", eight_children)
+        human = self.query("config", "check", "--harness", "opencode", "--verbose")
         self.assertEqual(0, human.returncode)
         for key, value in response["data"].items():
             self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
@@ -552,7 +796,7 @@ test ! -e "{sentinel}"
         response = self.json_query(*arguments)
         self.assertEqual("absent", response["result"])
         self.assertEqual([], response["data"]["installed_harnesses"])
-        human = self.query(*arguments)
+        human = self.query(*arguments, "--verbose")
         self.assertEqual(0, human.returncode)
         for key, value in response["data"].items():
             self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
@@ -566,7 +810,7 @@ test ! -e "{sentinel}"
         self.assertEqual("unverified", response["data"]["integrity"])
         self.assertEqual("unverified", response["data"]["ownership"])
         self.assertEqual("unknown", response["data"]["assignments"])
-        human = self.query(*arguments)
+        human = self.query(*arguments, "--verbose")
         for key, value in response["data"].items():
             self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
 
@@ -640,9 +884,32 @@ test ! -e "{sentinel}"
 
         human = self.query(*self.config_apply_arguments("opencode"))
         self.assertEqual(0, human.returncode, human.stderr)
-        self.assertIn("resources_to_update:", human.stdout)
+        self.assertIn("Resources to update (2):", human.stdout)
         self.assertIn(".opencode/agents/kael.md", human.stdout)
+        self.assertIn(".opencode/orchestrator-install.json", human.stdout)
         self.assertIn("no target writes", human.stdout)
+
+    def test_slice_c7_project_inventory_excludes_global_only_commands(self):
+        expected = config_apply._render_managed_outputs(
+            self.source.resolve(), self.renderer, ("opencode",),
+        )["opencode"]
+        command_paths = {
+            ".opencode/commands/olympus.ultra.md",
+            ".opencode/commands/olympus.performance.md",
+        }
+        self.assertEqual(15, len(expected))
+        self.assertTrue(command_paths.isdisjoint(expected))
+
+        manifest_path = self.create_managed_install()
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(15, len(manifest["managed_files"]))
+        self.assertTrue(command_paths.isdisjoint(
+            {item["path"] for item in manifest["managed_files"]}
+        ))
+        preview = self.json_query(*self.config_apply_arguments())
+        self.assertEqual("ok", preview["result"])
+        self.assertEqual([], preview["data"]["changes"])
+        self.assertTrue(all(not (self.target / relative).exists() for relative in command_paths))
 
     def test_slice_c6_opencode_reports_custom_agent_and_independent_root_assignments(self):
         self.create_managed_install()
@@ -683,7 +950,7 @@ test ! -e "{sentinel}"
         self.assertEqual("agent", kael_role["harnesses"]["opencode"]["representation"])
         self.assertEqual("selected", assignments["roots"]["opencode"]["state"])
 
-        human = self.query(*self.config_apply_arguments("opencode"))
+        human = self.query(*self.config_apply_arguments("opencode"), "--verbose")
         self.assertEqual(0, human.returncode, human.stdout + human.stderr)
         self.assertIn(f"assignments: {json.dumps(assignments, ensure_ascii=False)}", human.stdout)
 
@@ -705,7 +972,7 @@ test ! -e "{sentinel}"
         role = next(row for row in expected["roles"] if row["role"] == "veyra")
         self.assertEqual("vendor/custom-veyra", role["harnesses"]["opencode"]["current"]["model"])
 
-        applied = self.invoke_cli(*arguments[:-1], "--execute")
+        applied = self.invoke_cli(*arguments[:-1], "--execute", "--verbose")
         self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
         disclosure = next(line.removeprefix("assignments: ") for line in applied.stdout.splitlines()
                           if line.startswith("assignments: "))
@@ -715,7 +982,7 @@ test ! -e "{sentinel}"
 
         # A no-op remains informative without rewriting the managed target.
         before_noop = self.snapshot()
-        repeated = self.invoke_cli(*arguments[:-1], "--execute")
+        repeated = self.invoke_cli(*arguments[:-1], "--execute", "--verbose")
         self.assertEqual(0, repeated.returncode, repeated.stdout + repeated.stderr)
         self.assertIn("assignments: ", repeated.stdout)
         self.assertIn("execution: no_changes", repeated.stdout)
@@ -944,8 +1211,10 @@ test ! -e "{sentinel}"
         self.assertEqual("absent", response["data"]["harnesses"]["opencode"])
         human = self.query(*arguments)
         self.assertEqual(0, human.returncode, human.stdout + human.stderr)
-        for key, value in response["data"].items():
-            self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
+        self.assertIn("Installation: absent", human.stdout)
+        self.assertIn("Integrity: unverified", human.stdout)
+        self.assertNotIn("schema_version", human.stdout)
+        self.assertNotIn("managed_files", human.stdout)
 
     def test_slice_c4_invalid_requests_and_manifest_ownership_are_read_only(self):
         invalid = self.query("doctor", "--scope", "global", "--target", str(self.target), "--harness", "opencode")
@@ -1046,7 +1315,7 @@ test ! -e "{sentinel}"
             self.assertEqual("verified", response["data"]["harnesses"]["opencode"])
         else:
             self.assertEqual("platform_unqualified", response["issues"][0]["code"])
-        human = self.query(*arguments)
+        human = self.query(*arguments, "--verbose")
         self.assertEqual(expected_code, human.returncode, human.stdout + human.stderr)
         for key, value in response["data"].items():
             self.assertIn(f"{key}: {json.dumps(value, ensure_ascii=False)}", human.stdout)
@@ -1212,7 +1481,7 @@ test ! -e "{sentinel}"
             with self.subTest(entry=entry, arguments=arguments):
                 response = self.json_query("--source", str(self.source), *arguments, entry=entry)
                 self.assertEqual(str(self.source), response["context"]["source"])
-                human = self.query("--source", str(self.source), *arguments, entry=entry)
+                human = self.query("--source", str(self.source), *arguments, "--verbose", entry=entry)
                 self.assertEqual(0, human.returncode, human.stderr)
                 self.assertIn(str(self.source), human.stdout)
                 if arguments[0] == "models":
@@ -1464,6 +1733,54 @@ test ! -e "{sentinel}"
         finally:
             os.chdir(previous)
 
+    def test_slice_c5_update_keeps_native_streams_and_reports_timeout_unconfirmed(self):
+        with mock.patch("olympus.system_cli.sys.platform", "win32"), \
+             mock.patch("olympus.system_cli.shutil.which", return_value="pwsh"), \
+             mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.5", "")), \
+             mock.patch("olympus.system_cli.subprocess.run",
+                        return_value=subprocess.CompletedProcess([], 0)) as native:
+            code, stdout, stderr = self.call_main("update")
+        self.assertEqual(0, code)
+        self.assertIn("Update command succeeded", stdout)
+        self.assertIn("review the native output above", stdout)
+        self.assertEqual("", stderr)
+        kwargs = native.call_args.kwargs
+        self.assertNotIn("capture_output", kwargs)
+        self.assertNotIn("stdout", kwargs)
+        self.assertNotIn("stderr", kwargs)
+        self.assertNotIn("-NonInteractive", native.call_args.args[0])
+
+        with mock.patch("olympus.system_cli.sys.platform", "win32"), \
+             mock.patch("olympus.system_cli.shutil.which", return_value="pwsh"), \
+             mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.5", "")), \
+             mock.patch("olympus.system_cli.subprocess.run",
+                        return_value=subprocess.CompletedProcess([], 17)):
+            code, stdout, stderr = self.call_main("update")
+        self.assertEqual(17, code)
+        self.assertIn("effects may be unconfirmed", stderr)
+        self.assertIn("native output", stderr)
+        self.assertNotIn("succeeded", stdout)
+
+        with mock.patch("olympus.system_cli.sys.platform", "win32"), \
+             mock.patch("olympus.system_cli.shutil.which", return_value="pwsh"), \
+             mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.5", "")), \
+             mock.patch("olympus.system_cli.subprocess.run",
+                        side_effect=subprocess.TimeoutExpired(["pwsh"], 1200)):
+            code, stdout, stderr = self.call_main("update")
+        self.assertEqual(4, code)
+        self.assertIn("effects are unconfirmed", stderr)
+        self.assertIn("inspect olympus doctor before retrying", stderr.lower())
+        self.assertNotIn("finished", stdout)
+
+        with mock.patch("olympus.system_cli.sys.platform", "win32"), \
+             mock.patch("olympus.system_cli.shutil.which", return_value="pwsh"), \
+             mock.patch("olympus.install_routing._powershell_version", return_value=(True, "PowerShell 7.5", "")), \
+             mock.patch("olympus.system_cli.subprocess.run", side_effect=KeyboardInterrupt):
+            code, stdout, stderr = self.call_main("update")
+        self.assertEqual(4, code)
+        self.assertIn("Update interrupted; effects are unconfirmed", stderr)
+        self.assertNotIn("Operation interrupted", stdout)
+
     @unittest.skipUnless(os.name == "nt", "Native project uninstall is Windows-qualified only")
     def test_slice_c5_windows_project_uninstall_preserves_unmanaged_and_blocks_drift(self):
         if shutil.which("pwsh") is None:
@@ -1618,10 +1935,42 @@ test ! -e "{sentinel}"
         self.assertEqual("unverified", item["integrity"])
         self.assertEqual("synthetic-commit", item["installed_from_commit"])
         self.assertEqual(str(manifest.parent.parent), item["root"])
-        self.assertEqual(14, item["managed_files"])
+        self.assertEqual(16, item["managed_files"])
         self.assertEqual("not_performed", response["data"]["runtime_discovery"])
 
-    def test_slice_c7_global_current_13_resource_user_config_is_preserved(self):
+    def test_slice_c7_v010_global_status_reports_legacy_but_doctor_and_apply_require_upgrade(self):
+        root = Path(self.env["OPENCODE_CONFIG_DIR"])
+        for owned_guard, expected_count in ((True, 14), (False, 13)):
+            with self.subTest(owned_guard=owned_guard):
+                shutil.rmtree(root)
+                root.mkdir()
+                manifest_path = self.create_global_managed_install()["opencode"]
+                if not owned_guard:
+                    manifest_path = self.make_global_user_config_install()
+                manifest = self.downgrade_global_install_to_v010(manifest_path)
+                self.assertEqual(expected_count, len(manifest["managed_files"]))
+                before = self.snapshot()
+
+                status = self.json_query("status", "--scope", "global", "--harness", "opencode")
+                self.assertEqual("ok", status["result"])
+                item = status["data"]["harnesses"]["opencode"]
+                self.assertEqual("v0.10.0", item["installed_version"])
+                self.assertEqual(expected_count, item["managed_files"])
+                self.assertEqual("unverified", item["integrity"])
+
+                for arguments in (
+                    ("doctor", "--scope", "global", "--harness", "opencode"),
+                    ("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run"),
+                ):
+                    with self.subTest(operation=arguments[0]):
+                        response = self.json_query(*arguments, code=3)
+                        self.assertEqual("blocked", response["result"])
+                        self.assertEqual("global_upgrade_required", response["issues"][0]["code"])
+                        if arguments[0] == "config":
+                            self.assertEqual([], response["data"]["changes"])
+                self.assertEqual(before, self.snapshot(), "Legacy status, doctor, and apply must not write.")
+
+    def test_slice_c7_global_current_15_resource_user_config_is_preserved(self):
         manifest_path = self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         manifest_path = self.make_global_user_config_install()
@@ -1629,11 +1978,11 @@ test ! -e "{sentinel}"
         preview = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
         self.assertEqual("no_changes", preview["result"])
         self.assertEqual([], preview["data"]["changes"])
-        self.assertEqual(13, preview["data"]["harnesses"]["opencode"]["managed_files"])
+        self.assertEqual(15, preview["data"]["harnesses"]["opencode"]["managed_files"])
         self.assertEqual(user_config, (root / "opencode.json").read_bytes())
         self.assertTrue(manifest_path.is_file())
 
-    def test_slice_c7_global_13_resource_inventory_without_receipted_config_is_refused(self):
+    def test_slice_c7_global_15_resource_inventory_without_receipted_config_is_refused(self):
         manifests = self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
@@ -1648,7 +1997,7 @@ test ! -e "{sentinel}"
         self.assertEqual(before, self.snapshot())
         self.assertFalse((root / "opencode.jsonc").exists())
 
-    def test_slice_c7_global_current_13_resource_unsafe_user_config_blocks_preview(self):
+    def test_slice_c7_global_current_15_resource_unsafe_user_config_blocks_preview(self):
         self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         self.make_global_user_config_install()
@@ -1664,7 +2013,7 @@ test ! -e "{sentinel}"
         again = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
         self.assertEqual("global_external_guard_unsafe", again["issues"][0]["code"])
 
-    def test_slice_c7_global_current_13_resource_ambiguous_wildcards_do_not_bypass_ask(self):
+    def test_slice_c7_global_current_15_resource_ambiguous_wildcards_do_not_bypass_ask(self):
         # V2 treats '**', '?*', '*/**', and '?:/**' as broad matches on paths.
         # A later ALLOW must not be certified as an ASK/DENY fallback.
         self.create_global_managed_install()
@@ -1722,7 +2071,7 @@ test ! -e "{sentinel}"
         self.assertEqual("safe_user_config", response["data"]["harnesses"]["opencode"]["external_guard"])
         self.assertEqual(safe_text, user_config.read_text(encoding="utf-8"))
 
-    def test_slice_c7_global_current_13_resource_safe_jsonc_is_preserved(self):
+    def test_slice_c7_global_current_15_resource_safe_jsonc_is_preserved(self):
         # Comments, URLs in strings, and trailing commas are supported by V2.
         manifests = self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
@@ -1752,6 +2101,13 @@ test ! -e "{sentinel}"
         self.create_global_managed_install()
         response = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
         self.assertEqual("no_changes", response["result"])
+        human = self.query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
+        self.assertIn("config apply: no_changes", human.stdout)
+        self.assertIn("Scope: global", human.stdout)
+        self.assertIn("Resources to update (0):", human.stdout)
+        self.assertIn("Next step: none; the target is already current.", human.stdout)
+        self.assertNotIn("sha256", human.stdout)
+        self.assertNotIn('"roles":', human.stdout)
         assignments = response["data"]["assignments"]
         self.assertEqual(["opencode"], assignments["selected_harnesses"])
         self.assertEqual("partial", assignments["status"])
@@ -1779,6 +2135,14 @@ test ! -e "{sentinel}"
         self.assertIn({"harness": "opencode", "path": relative, "action": "update",
                        "current_sha256": hashlib.sha256(altered).hexdigest(),
                        "proposed_sha256": hashlib.sha256(raw).hexdigest()}, response["data"]["changes"])
+        human = self.query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
+        self.assertEqual(0, human.returncode, human.stdout + human.stderr)
+        self.assertIn("Resources to update (2):", human.stdout)
+        self.assertIn("agents/kael.md", human.stdout)
+        self.assertIn("olympus/orchestrator-install.json", human.stdout)
+        self.assertIn("Next step: rerun this command with --execute", human.stdout)
+        self.assertNotIn("sha256", human.stdout)
+        self.assertNotIn('"assignments":', human.stdout)
 
     def test_slice_c7_global_preview_manifest_drift_and_foreign_inventory_block(self):
         manifests = self.create_global_managed_install()
@@ -1954,7 +2318,7 @@ test ! -e "{sentinel}"
         self.assertEqual(expected, (root / "agents/veyra.md").read_bytes())
         self.assertEqual(user_config, (root / "opencode.json").read_bytes())
         manifest = json.loads((root / "olympus/orchestrator-install.json").read_text(encoding="utf-8"))
-        self.assertEqual(13, len(manifest["managed_files"]))
+        self.assertEqual(15, len(manifest["managed_files"]))
         self.assertNotIn("opencode.json", {item["path"] for item in manifest["managed_files"]})
 
     def test_slice_c8_global_apply_blocks_a_pending_journal_before_lock_or_writes(self):
@@ -2123,7 +2487,8 @@ test ! -e "{sentinel}"
 
         with mock.patch.dict(os.environ, self.env, clear=True), \
              mock.patch("olympus.config_apply_transaction.os.replace", side_effect=interrupt_after_replace):
-            code, output, errors = self.call_main("config", "apply", "--scope", "global", "--harness", "opencode", "--execute")
+             code, output, errors = self.call_main("config", "apply", "--scope", "global", "--harness", "opencode",
+                                                  "--execute", "--verbose")
         self.assertEqual(4, code, output + errors)
         self.assertIn("config recover --scope global --harness opencode", output + errors)
         self.assertIn('execution: "unconfirmed"', output)
@@ -2730,7 +3095,7 @@ class SliceBModelEdit(unittest.TestCase):
         with self.assertRaisesRegex(model_edit.ModelEditError, "Mixed LF/CRLF"):
             model_edit._prepare_toml_candidate(mixed, {("families", "sol", "opencode"): "new-id"})
         invalid_effort = baseline.replace(b'effort = "high"', b'effort = "bad\\nvalue"', 1)
-        for raw in (b"[families\n", baseline.replace(b"openai/gpt-6.1-sol", b"invalid id", 1), invalid_effort):
+        for raw in (b"[families\n", baseline.replace(b"openai/gpt-6.2-sol", b"invalid id", 1), invalid_effort):
             with self.subTest(raw=raw[:24]):
                 with self.assertRaises(model_edit.ModelEditError):
                     model_edit._prepare_toml_candidate(raw, {("families", "sol", "codex"): "new-codex"})
@@ -2753,7 +3118,7 @@ class SliceBModelEdit(unittest.TestCase):
         self.assertEqual(before, self.snapshot(), "Preview must be completely in memory")
         self.assertEqual(["argus", "atlas", "helios", "kael", "talos", "thales"],
                          candidate.preview["data"]["affected_roles"])
-        self.assertEqual("openai/gpt-6.1-sol", candidate.preview["data"]["roles"][0]
+        self.assertEqual("openai/gpt-6.2-sol", candidate.preview["data"]["roles"][0]
                          ["models"]["opencode"]["old"])
         rows = {row["role"]: row for row in candidate.preview["data"]["roles"]}
         self.assertEqual({"opencode": "agent"}, rows["kael"]["representation"])
@@ -4271,8 +4636,9 @@ raise SystemExit(main(sys.argv[1:]))
         self.assertEqual(0, human.returncode, human.stderr)
         self.assertIn("agents set-model: ok", human.stdout)
         self.assertIn("veyra", human.stdout)
-        self.assertIn("write_set:", human.stdout)
+        self.assertIn("Files to update (2):", human.stdout)
         self.assertNotIn('"schema_version"', human.stdout)
+        self.assertNotIn("sha256", human.stdout)
 
         kael = self._run("agents", "set-model", "kael", "--family", "luna", "--effort", "max",
                          "--dry-run", "--json")
@@ -4313,10 +4679,13 @@ raise SystemExit(main(sys.argv[1:]))
     def test_slice_b_t018_explicit_commit_noop_and_unmanaged_file_preservation(self):
         initial_noop_before = self._file_snapshot()
         initial_noop = self._run(
-            "models", "set-family", "sol", "--opencode", "openai/gpt-6.1-sol",
+            "models", "set-family", "sol", "--opencode", "openai/gpt-6.2-sol",
         )
         self.assertEqual(0, initial_noop.returncode, (initial_noop.stdout, initial_noop.stderr))
         self.assertIn("execution: no_changes", initial_noop.stdout)
+        self.assertIn("models set-family: no_changes", initial_noop.stdout)
+        self.assertNotIn("sha256", initial_noop.stdout)
+        self.assertNotIn("write_set:", initial_noop.stdout)
         self.assertEqual(initial_noop_before, self._file_snapshot())
         self.assertFalse((self.source / ".olympus-cli-edit.lock").exists())
         self.assertFalse((self.source / ".olympus-cli-edit").exists())
@@ -4598,7 +4967,7 @@ raise SystemExit(main(sys.argv[1:]))
             ("luna", ("models", "set-family", "luna", "--opencode", "openai/t019-luna"), 6),
             ("specialist", ("agents", "set-model", "veyra", "--family", "sol", "--effort", "high"), 2),
             ("kael", ("agents", "set-model", "kael", "--family", "luna", "--effort", "max"), 3),
-            ("no-op", ("models", "set-family", "sol", "--opencode", "openai/gpt-6.1-sol"), 0),
+            ("no-op", ("models", "set-family", "sol", "--opencode", "openai/gpt-6.2-sol"), 0),
         )
         for label, command, expected_count in cases:
             with self.subTest(case=label):

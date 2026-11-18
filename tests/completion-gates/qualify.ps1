@@ -43,9 +43,16 @@ try {
     $kael = Text '.opencode/agents/kael.md'
     $maintenancePolicy = Text 'olympus/policies/maintenance-context.md'
     $docs = Text 'docs/DEVELOPMENT.md'
+    $ultra = Text '.opencode/commands/olympus.ultra.md'
+    $performance = Text '.opencode/commands/olympus.performance.md'
     Check 'KAEL_JOIN' ($kael -match 'enumerate the required direct child' -and $kael -match 'consume each result' -and
         $kael -match 'Never declare final completion while a required direct child is non-terminal' -and
         $kael -match 'IN PROGRESS / waiting')
+    Check 'TASK_COMMANDS_KEEP_COMPLETION_GATES' (
+        $ultra -match 'completion gates' -and $ultra -match 'reconciliation' -and
+        $performance -match 'completion gate' -and
+        $performance -match 'correctness validation'
+    )
     Check 'API_SEMANTICS' ($docs -match 'MESSAGE_COMPLETE, ROOT_IDLE and FAMILY_COMPLETE' -and
         $docs -match 'No native family-wide wait|no documented family-wide wait' -and $docs -match 'session/active' -and
         $docs -match 'CLI `opencode run` exit or a root assistant response is not a session-family completion signal')
@@ -111,6 +118,18 @@ try {
         $kael -match 'Never declare final completion while a required direct child is non-terminal')
     $nativeSessions = [regex]::Match($kaelSource, '(?ms)^## Native child sessions\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
     $completionSource = [regex]::Match($kaelSource, '(?ms)^## Completion gate\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
+    foreach ($prompt in @($kaelSource, $kael)) {
+        Check 'NATIVE_PARENT_YIELD' (
+            $prompt -match 'keep the logical task pending, not the\s+model turn active' -and
+            $prompt -match 'When no independent work remains, send one IN PROGRESS update and end the current\s+turn; native child notifications resume the parent' -and
+            $prompt -match 'Yielding is not completion,\s+cancellation, or permission to release ownership' -and
+            $prompt -match 'results remain pending and no independent work is available, yield again' -and
+            $prompt -notmatch 'Keep the turn open|or end the root turn after a progress message')
+        Check 'NO_ACTIVE_CHILD_WAIT' (
+            $prompt -match 'Do not repeat unchanged progress\s+updates' -and
+            $prompt -match 'Never use repeated reasoning, no-op tools, unrelated skill loads, sleeps,\s+or polling solely to wait for children' -and
+            $prompt -match 'Do not launch replacement children')
+    }
     Check 'NATIVE_BACKGROUND_SCHEMA_NEUTRAL' (
         $nativeSessions -match 'OpenCode 2\.3 and later always runs child sessions in\s+the background' -and
         $nativeSessions -match 'On earlier versions,\s+use background behavior only when the currently exposed schema provides it' -and
@@ -127,6 +146,7 @@ try {
     }
     $partialReport = Child-ReportGate $child.state $child.report $child.parentInterrupted `
         $child.consumed $child.validated $child.outcome
+    $unconsumedReport = Child-ReportGate 'completed' 'final' $false $false $true 'succeeded'
     $child.state='completed'; $child.report='final'; $child.consumed=$true
     $child.validated=$true; $child.outcome='succeeded'
     $terminalReport = Child-ReportGate $child.state $child.report $child.parentInterrupted `
@@ -134,6 +154,9 @@ try {
     Check 'RUNNING_THEN_TERMINAL_ORIGINAL_REPORT' ($partialReport.writerOwned -and
         -not $partialReport.done -and -not $terminalReport.writerOwned -and
         $terminalReport.done -and $child.sessionID -eq 'synthetic-original')
+    Check 'YIELDED_TASK_RETAINS_COMPLETION_GATE' ($rootExitedWithChildRunning.state -eq 'PARTIAL' -and
+        $unconsumedReport.writerOwned -and -not $unconsumedReport.done -and
+        $terminalReport.done -and -not $terminalReport.writerOwned)
     $interruptedParent = Child-ReportGate 'running' 'partial' $true $false $false ''
     Check 'PARENT_INTERRUPT_DOES_NOT_CANCEL_CHILD' ($interruptedParent.parentInterrupted -and
         -not $interruptedParent.childCancelled -and $interruptedParent.writerOwned -and
@@ -142,8 +165,8 @@ try {
     $allAgentText = ($agents | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
     Check 'NO_LUNA_FAST' ($allAgentText -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
     $workersMatch = @(@('veyra','orin','kovan','nox','vera') | ForEach-Object { (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max' }) -notcontains $false
-    Check 'MODELS' ($kael -match 'model: "?openai/gpt-6.1-sol#high' -and
-        (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.1-sol#xhigh' -and
+    Check 'MODELS' ($kael -match 'model: "?openai/gpt-6.2-sol#high' -and
+        (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.2-sol#xhigh' -and
         $workersMatch)
     Write-Output 'COMPLETION GATE QUALIFICATION: PASS (static + synthetic; live qualification separate)'
     exit 0

@@ -28,6 +28,30 @@ _HASH = re.compile(r"[0-9a-fA-F]{64}\Z")
 _POWERSHELL_VERSION = re.compile(r"(?m)^PowerShell ([0-9]+)\.")
 _CONFIG_PATH = re.compile(r"(?m)^\s*config\s{2,}(?P<path>.+?)\s*$")
 _REPARSE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+_GLOBAL_COMMANDS = frozenset({
+    "commands/olympus.ultra.md",
+    "commands/olympus.performance.md",
+})
+_LEGACY_GLOBAL_BASE = frozenset({
+    "agents/argus.md",
+    "agents/atlas.md",
+    "agents/helios.md",
+    "agents/kael.md",
+    "agents/kovan.md",
+    "agents/nox.md",
+    "agents/orin.md",
+    "agents/talos.md",
+    "agents/thales.md",
+    "agents/vera.md",
+    "agents/veyra.md",
+    "plugins/olympus-activity/activity.ts",
+    "plugins/olympus-activity/tui.tsx",
+})
+_CURRENT_GLOBAL_BASE = _LEGACY_GLOBAL_BASE | _GLOBAL_COMMANDS
+_LEGACY_GLOBAL_INVENTORIES = {
+    _LEGACY_GLOBAL_BASE,
+    _LEGACY_GLOBAL_BASE | {"opencode.jsonc"},
+}
 
 
 class GlobalFault(ValueError):
@@ -108,6 +132,8 @@ def _expected(source: Path, renderer, selected: tuple[str, ...], *, include_defa
             harness, destination = "opencode", relative.removeprefix(".opencode/")
         elif relative.startswith(".opencode/plugins/olympus-activity/"):
             harness, destination = "opencode", relative.removeprefix(".opencode/")
+        elif relative in {".opencode/" + command for command in _GLOBAL_COMMANDS}:
+            harness, destination = "opencode", relative.removeprefix(".opencode/")
         elif relative.startswith(".codex/") or relative == "CODEX.md":
             raise GlobalFault("source_inventory_unsupported", f"Renderer returned an obsolete resource: {relative}")
         if harness in outputs:
@@ -131,7 +157,7 @@ def _expected(source: Path, renderer, selected: tuple[str, ...], *, include_defa
                 raise GlobalFault("source_invalid", "Global permission guard template is not an object.", 1)
             guard = guard[:opening + 1] + b'\n  "default_agent": "kael",' + guard[opening + 1:]
         outputs["opencode"]["opencode.jsonc"] = guard
-    if len(outputs["opencode"]) != 14:
+    if len(outputs["opencode"]) != 16:
         raise GlobalFault("source_inventory_unsupported", "Global renderer inventory differs from the official engine.")
     return outputs
 
@@ -188,16 +214,20 @@ def _parse_manifest_bytes(raw: bytes, harness: str, expected: dict[str, bytes] |
         if expected is not None and path not in expected:
             raise GlobalFault("unsupported_global_inventory", "Global manifest owns a resource outside the current adapter inventory.")
         entries[path] = digest.lower()
-    if expected is not None:
-        allowed_inventory = {
-            frozenset(expected),
-            frozenset(set(expected) - {"opencode.jsonc"}),
-        }
-        if frozenset(entries) not in allowed_inventory:
-            raise GlobalFault("unsupported_global_inventory", "Global manifest inventory does not match the current adapter inventory.")
-    elif len(entries) not in (13, 14):
-        raise GlobalFault("unsupported_global_inventory", "Global manifest must contain the current 13- or 14-resource OpenCode inventory.")
+    current_inventory = {
+        frozenset(expected) if expected is not None else _CURRENT_GLOBAL_BASE | {"opencode.jsonc"},
+        frozenset(set(expected) - {"opencode.jsonc"}) if expected is not None else _CURRENT_GLOBAL_BASE,
+    }
+    legacy_inventory = _LEGACY_GLOBAL_INVENTORIES if data["installed_version"] == "v0.10.0" else set()
+    if frozenset(entries) not in current_inventory | legacy_inventory:
+        raise GlobalFault("unsupported_global_inventory",
+                          "Global manifest inventory is neither the current 15/16-resource set nor the exact v0.10.0 legacy 13/14-resource set.")
     return data, entries
+
+
+def _is_legacy_inventory(manifest: dict, entries: dict[str, str]) -> bool:
+    return (manifest.get("installed_version") == "v0.10.0"
+            and frozenset(entries) in _LEGACY_GLOBAL_INVENTORIES)
 
 
 def _validate_default_agent_receipt(receipt: Any) -> dict:
@@ -450,6 +480,7 @@ def _native_failure_reason(stdout: str, harness: str) -> tuple[str, str, int]:
         "GLOBAL_DEFAULT_AGENT_RECOVERY_PENDING": ("recovery_pending", "global_default_agent_recovery_pending", 3),
         "GLOBAL_DEFAULT_AGENT_DRIFT": ("default_agent_drift", "global_default_agent_drift", 1),
         "GLOBAL_DEFAULT_AGENT_CONFIG_INVALID": ("config_invalid", "global_default_agent_config_invalid", 3),
+        "GLOBAL_UPGRADE_REQUIRED": ("upgrade_required", "global_upgrade_required", 3),
     }
     prefix = f"GLOBAL_HARNESS_FAILED: {harness} "
     for line in stdout.splitlines():
@@ -569,6 +600,16 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                     raise GlobalFault("global_guard_recovery_pending", "An OpenCode guard transaction is pending; rerun the global installer to reconcile ownership.")
                 if "opencode.jsonc" not in entries:
                     item["external_guard"] = _unowned_opencode_guard(root)
+                if _is_legacy_inventory(manifest, entries):
+                    item["state"] = "upgrade_required"
+                    blocked.append(harness)
+                    failure_codes.append(3)
+                    response["issues"].append({
+                        "code": "global_upgrade_required",
+                        "message": "This verified v0.10.0 global inventory predates the namespaced commands; run olympus update before config apply or doctor.",
+                        "harness": harness,
+                    })
+                    continue
                 if operation == "config apply":
                     if "opencode.jsonc" in current:
                         # The installer owns this field lifecycle, not the renderer.

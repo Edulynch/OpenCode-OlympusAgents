@@ -2,15 +2,13 @@
 
 # 🏛️ Olympus Agents
 
-<img src="docs/assets/olympus-cover.png" alt="Olympus Agents team on Mount Olympus" width="100%">
-
 **Your AI coding team. One prompt. Eleven roles. You stay in control.**
 
-*Tell Kael what you want to build. Olympus brings in the right specialists.*
+🌐 **English · [Español](README.ES.md)**
 
 [![Latest release](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) [![Windows qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](docs/HARNESSES.md) [![MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
 
-**[⚡ Install](#fast-install) · [🎯 Try it](#your-first-task) · [🧭 Workflows](#normal-vs-fast) · [🛠️ CLI](#portable-cli) · [🗑️ Uninstall](#fast-uninstall) · [📚 Guides](#guides)**
+**[🎯 Try it](#your-first-task) · [⚡ Install](#fast-install) · [👥 Team](#the-team) · [🧭 Commands](#task-parallelism) · [🛠️ CLI](#portable-cli) · [📚 Guides](#guides)**
 
 </div>
 
@@ -18,81 +16,89 @@
 
 ## 🎯 Your First Task
 
-After installation, open OpenCode in your project and try a prompt:
+Open OpenCode in your project and tell Kael what you want to do:
 
 > 📱 **Build:** Create a Flutter habit tracker with local storage and a simple first screen.
 
 > 🐛 **Fix:** Find why this API fails, fix the cause, and run the relevant tests.
 
-> ⚡ **FAST:** Review these independent modules, fix confirmed bugs, and summarize the checks.
+> ⚡ **Ultra:** `/olympus.ultra Review these independent modules, fix confirmed bugs, and summarize the checks.`
 
-**🧭 Kael coordinates.** Ten specialists help with discovery, architecture, coding, testing, review, and security. [Meet the team →](docs/WORKFLOWS.md#the-team)
+> 📈 **Performance:** `/olympus.performance Reduce the latency of this endpoint while preserving its behavior.`
 
-## Requirements
-
-🪟 **Windows** · **PowerShell 7 (`pwsh`)** · **OpenCode V2** · **Python 3.11+** for the Olympus CLI.
+**🧭 Start with Kael.** It brings in specialists when they help. You don't have to pick an agent for each step.
 
 ## Fast Install
 
-The installer is **global and OpenCode-only**, regardless of the current directory. There are no project or harness menus. It selects a published, immutable stable release, then runs the installer and archive from that exact tag. GitHub's immutability flag is not independent cryptographic signature verification. Installation sets Kael as the global default, installs the per-user `olympus` command, and adds only its `bin` folder to the user PATH.
+🪟 **Requirements:** Windows · PowerShell 7 (`pwsh`) · OpenCode V2 · Python 3.11+ for the CLI.
 
 ```powershell
 & ([scriptblock]::Create((irm 'https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1')))
 ```
 
-Open a new PowerShell 7 window, then use `olympus version` and `olympus update` to see and maintain the installed product version. [Installation and safety details →](docs/INSTALLATION.md).
+✅ **After installing:** open a new PowerShell 7 window and run `olympus version`.
+
+🔄 **Already installed?** Run `olympus update`, then `olympus doctor --scope global`.
+
+🛡️ **Scope:** installation is **global and OpenCode-only**. It selects a published, immutable release, sets Kael as the global default, and adds the per-user `olympus` command to PATH. [Installation safeguards →](docs/INSTALLATION.md)
 
 ## Install a specific version
 
-To install `v0.10.0` instead of the latest release:
+To install `v0.11.0` instead of the latest release:
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.10.0/install.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.11.0/install.ps1')))
 ```
 
-The tagged installer defaults to that version and downloads its exact tag archive; no extra `-Version` argument is needed.
+<a id="the-team"></a>
 
-<a id="normal-vs-fast"></a>
+## 👥 Meet the team
 
-## 🧭 NORMAL vs FAST
+| Agent | When it helps |
+| --- | --- |
+| 🧭 **Kael** | Coordinates your task and brings together the results. |
+| 🔎 **Veyra** | Finds relevant code, documentation, and evidence. |
+| 🏗️ **Orin** | Designs interfaces and weighs architecture choices. |
+| 🗺️ **Atlas** | Turns an agreed change into an ordered plan. |
+| 💻 **Kovan** | Implements changes within the agreed scope. |
+| 🐛 **Argus** | Diagnoses bugs when the cause isn't obvious. |
+| 🧪 **Nox** | Runs checks and verifies what actually happened. |
+| ⚖️ **Vera** | Reviews changes independently for errors and regressions. |
+| 🛡️ **Talos** | Diagnoses security defects and assesses impact. |
+| 🧠 **Thales** | Helps untangle difficult technical failures. |
+| 🚀 **Helios** | Weighs performance improvements against their cost and risk. |
 
-**NORMAL (default):** Kael uses parallel work only when useful for the task.
+🧠 **Default models:** Sol roles use GPT‑6.2 Sol. Luna roles and your explicit model choices are unchanged. [Model configuration →](docs/INSTALLATION.md#olympus-cli)
 
-**FAST (explicit):** Up to four agents by default; the global prompt ceiling is configurable from one to eight per Kael root session. It keeps required checks and does not parallelize dependent tasks.
+<a id="task-parallelism"></a>
 
-**Optional OpenCode task modifiers:** `long-mode` · `fast-mode` · `surgical-mode` are task-scoped prompt markers, not a parser or a runtime guarantee. [Examples and rules →](docs/WORKFLOWS.md#optional-opencode-task-modifiers)
+## 🧭 Task Parallelism
+
+⚡ **`/olympus.ultra <prompt>`** — uses independent work up to the configured prompt ceiling (1–8). Two useful tasks mean at most two workers, even if six slots are available.
+
+📈 **`/olympus.performance <prompt>`** — starts with a baseline and proposes an improvement. Kael asks before applying it unless that specific change is already approved. Afterward, it compares results and checks for regressions.
+
+💬 **Both need a prompt.** There are no bare `/ultra` or `/performance` aliases. Blank-argument usage is a prompt-level guard, not deterministic native argument validation. [Workflow details →](docs/WORKFLOWS.md#native-task-commands)
 
 <a id="portable-cli"></a>
 
 ## 🛠️ Olympus CLI
 
-From any directory in a new PowerShell 7 window:
+| Try this in PowerShell 7 | What it does |
+| --- | --- |
+| `olympus agents list` | See agent models and reasoning settings. |
+| `olympus config set-max-parallel 6` | Save the global limit for active direct subagents per root session. |
+| `olympus doctor --scope global` | Check the global installation without changing it. |
 
-```text
-olympus version
-olympus update
-olympus agents list
-olympus nox set-model openai/gpt-6-luna
-olympus nox set-effort high
-olympus config list
-olympus config set-max-parallel 2
-olympus config apply --scope global --harness opencode --dry-run
-olympus config apply --scope global --harness opencode --execute
-olympus config recover --scope global --harness opencode
-olympus doctor
-```
-
-Model IDs use the exact `provider/model-id` form from [Models.dev](https://models.dev). Effective values use project overrides, then global overrides, then canonical defaults. Olympus validates known catalog-declared capabilities offline; a model absent from its bundled snapshot produces a compatibility warning, not an access check or rejection. It never checks credentials, subscriptions, or model access. `config apply --dry-run` previews managed changes; applying globally currently supports OpenCode only and requires `--execute`. Global recovery is OpenCode-only, may change files, and is for the matching pending operation only. Doctor is read-only. `config list` prints absolute source paths. [Installation, command scopes, and safety →](docs/INSTALLATION.md#command-scopes-and-effects)
-
-Shell completion is opt-in for the current shell: `olympus completion powershell | Out-String | Invoke-Expression` on Windows PowerShell 7, or `eval "$(olympus completion bash)"` on Linux Bash. Olympus never edits a shell profile automatically.
+🔍 **Need detail?** Add `--verbose`. Use `--json` where supported for scripts. [All CLI commands and advanced options →](docs/INSTALLATION.md#olympus-cli)
 
 ## Fast Uninstall
-
-🗑️ **Use `olympus uninstall`** to remove the global OpenCode installation and CLI. Uninstall removes only intact managed files and the Olympus PATH entry. It reverses only the still-owned `default_agent` field; later user choices, comments, preferences, and unrelated files are preserved.
 
 ```powershell
 olympus uninstall
 ```
+
+🗑️ Removes unchanged Olympus-managed resources and its PATH entry while preserving unrelated files and later default-agent choices. [Removal details →](docs/INSTALLATION.md)
 
 <a id="guides"></a>
 
@@ -101,13 +107,12 @@ olympus uninstall
 | | Start here |
 | --- | --- |
 | ⚡ **Install / remove** | [Scopes, direct parameters and troubleshooting](docs/INSTALLATION.md) |
-| 🎯 **Use Olympus** | [Team, NORMAL/FAST, prompt examples and task modifiers](docs/WORKFLOWS.md) |
+| 🎯 **Use Olympus** | [Team, task commands and prompt examples](docs/WORKFLOWS.md) |
 | 🛠️ **CLI** | [Commands, model configuration, and diagnostics](docs/INSTALLATION.md#olympus-cli) |
 | 🧩 **OpenCode support** | [Current capability contract](docs/HARNESS-CAPABILITIES.md) · [Installation and safety](docs/INSTALLATION.md) |
+| 🛡️ **Security** | [Report a security issue](SECURITY.md) |
 | 🧑‍💻 **Contribute** | [Development](docs/DEVELOPMENT.md) · [Roadmap](docs/ROADMAP.md) · [Worktrees](docs/WORKTREES.md) |
 | 📦 **Releases** | [Latest stable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) · [All releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Changelog](CHANGELOG.md) |
 | 📖 **All docs** | [Documentation index](docs/README.md) · [License](LICENSE) |
-
-**🚦 Support:** Olympus currently supports OpenCode only. The public installer is global/OpenCode-only; Windows is the qualified installer platform. Static checks do not establish every native runtime behavior. [Details →](docs/HARNESSES.md)
 
 <sub>Olympus is an independent orchestration system, not a fork. The specialized-team idea was informed in part by [codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).</sub>

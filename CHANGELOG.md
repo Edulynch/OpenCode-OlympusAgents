@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## v0.11.0
+
+### Highlights
+
+- Let Kael yield its model turn while native children run, without completing the task or releasing ownership; prohibit active reasoning/tool loops used only to wait and retain terminal-result reconciliation.
+- Add `/olympus.ultra <prompt>` for useful, safe native batched dispatch within the configured child ceiling, and `/olympus.performance <prompt>` for baseline evidence, a bounded optimization proposal, approval before implementation, and before/after correctness validation. Neither has a bare alias. Remove user-facing FAST, `fast-mode`, `long-mode`, and `surgical-mode`; keep the internal FAST qualification profile and trivial fast path.
+- Make human CLI output concise by default: assignment tables, single-line setter confirmations, visible planned paths, verification states, and actionable native-operation summaries. `--verbose` exposes technical details; existing `--json` payloads and exit codes remain unchanged.
+- Upgrade canonical Sol defaults to `openai/gpt-6.2-sol`, preserving existing reasoning efforts, Luna assignments, and explicit user overrides. Refresh the offline Models.dev snapshot without relaxing runtime model-ID validation.
+
+### Capability limits
+
+- Blank-argument usage is a prompt-level guard, not deterministic native argument validation. Ultra is not a hard runtime or concurrent-root quota and does not guarantee simultaneous CPU inference or a latency improvement.
+- Global command ownership adds two resources. Exact, hash-verified v0.10.0 global 13/14-path inventories can be upgraded by the installer; global config apply does not create the commands. Unowned command collisions fail closed.
+- Human-readable output has changed; scripts should use existing `--json` output where available instead of parsing presentation text.
+- Windows with PowerShell 7 is the qualified installer platform; Python 3.11+ is required by the CLI. OpenCode V2 is the supported runtime.
+- Local static and mock fixtures do not establish a public-endpoint install, provider access or inference, or native permission UI/approval.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.11.0 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.11.0/docs/INSTALLATION.md). Public installation is global/OpenCode-only; project-scoped OpenCode configuration remains separate CLI behavior.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.11.0/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and static validation guidance. Local fixtures do not substitute for a separate public-endpoint install/VerifyOnly/uninstall smoke.
+
 ## v0.10.0
 
 ### Highlights

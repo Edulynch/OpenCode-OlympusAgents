@@ -83,7 +83,6 @@ try {
     $kael = Text '.opencode/agents/kael.md'
     $docs = Text 'docs/DEVELOPMENT.md'
     $section = [regex]::Match($kael, '(?ms)^## Trivial task / authority fast path\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
-    $surgicalMode = [regex]::Match($kael, '(?ms)^- \*\*`surgical-mode`\*\* (?<body>.*?)(?=^[ \t]*\r?\nModifiers compose)').Groups['body'].Value
 
     Check 'FAST_POLICY_SPECIALIST_VALUE' ($section -match 'Specialist value must exceed orchestration cost' -and
         $section -match '(?is)Do not launch Veyra to rediscover established ownership,\s*Nox\s+for an outcome Kael can observe,\s*or another specialist without a gate-based need')
@@ -114,11 +113,11 @@ try {
         $section -match 'eligible write' -and $section -match 'actual objective')
     Check 'FAST_POLICY_TRIVIAL_COMPLETION_GATE' ($kael -match 'TRIVIAL FAST-PATH CHANGE: Kael directly implements a small scoped change when effective tools/authority allow, or uses one scoped Kovan writer when that adds value, followed by lightweight direct Kael validation' -and
         $kael -match 'no separate tester/reviewer unless requested or new evidence requires escalation')
-    Check 'SURGICAL_MODE_MINIMUM_SCOPE_WITH_TESTS' ($surgicalMode -match 'files causally necessary' -and
-        $surgicalMode -match 'including indispensable tests or dependencies' -and
-        $surgicalMode -match 'Avoid refactors,\s+upgrades, cleanup, or opportunistic improvements' -and
-        $surgicalMode -match 'preserve mandatory validation' -and
-        $surgicalMode -match 'Report external or unrelated findings without implementing them')
+    Check 'RETIRED_USER_MODIFIERS_KEEP_TRIVIAL_FAST_PATH' (
+        $kael -match 'TRIVIAL FAST-PATH CHANGE' -and
+        $kael -notmatch 'fast-mode|long-mode|surgical-mode|FAST is an explicit user-selected' -and
+        $docs -notmatch 'fast-mode|long-mode|surgical-mode'
+    )
 
     # A small, deterministic write has exactly one writer child and no specialist stages.
     $single = Invoke-FastPath (New-Task)

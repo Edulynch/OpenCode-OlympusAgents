@@ -1,7 +1,7 @@
 # Canonical OpenCode model intent.
 
 [families.sol]
-opencode = "openai/gpt-6.1-sol"
+opencode = "openai/gpt-6.2-sol"
 
 [families.luna]
 opencode = "openai/gpt-6-luna"

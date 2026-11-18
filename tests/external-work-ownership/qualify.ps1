@@ -52,7 +52,7 @@ try {
     $kael = Text '.opencode/agents/kael.md'
     $docs = Text 'docs/DEVELOPMENT.md'
     Check 'KAEL_FOREGROUND_OWNERSHIP' ($kael -match 'Kael owns every process, controller, build/test job, and native child session' -and
-        $kael -match 'Keep the turn open from launch through tracking,\s*wait/join, collection, validation, and finalization' -and
+        $kael -match 'Keep the task pending from launch through tracking,\s*wait/join, collection, validation, and finalization' -and
         $kael -match 'background does not authorize detached work' -and
         $kael -match 'report BLOCKED without starting it' -and
         $docs -match 'Keep the task open through tracking, wait/join,\s*collection, validation, and finalization' -and
@@ -69,13 +69,14 @@ try {
     Check 'NO_PERSISTENT_SYSTEM' (-not (Test-Path -LiteralPath (Join-Path $repo '.olympus/jobs.json')))
     $agents = Get-ChildItem (Join-Path $repo '.opencode/agents') -Filter '*.md'
     $agentText = ($agents | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
-    Check 'MODELS_AND_NO_LUNA_FAST' ($kael -match 'model: "openai/gpt-6.1-sol#high"' -and
-        (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.1-sol#xhigh' -and
+    Check 'MODELS_AND_NO_LUNA_FAST' ($kael -match 'model: "openai/gpt-6.2-sol#high"' -and
+        (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.2-sol#xhigh' -and
         @(@('veyra','orin','kovan','nox','vera') | ForEach-Object {
             (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max'
         }) -notcontains $false -and $agentText -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
-    Check 'CONCURRENCY_4_4' ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
-        $kael -match 'fan out up to four useful children' -and $kael -match 'NORMAL is cost/context-aware')
+    Check 'CONFIGURED_CEILING_AND_ADAPTIVE_DEFAULT' ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
+        $kael -match 'NORMAL is cost/context-aware' -and
+        (Text '.opencode/commands/olympus.ultra.md') -match 'Maximize useful, safe concurrency')
     }
     if ($StaticOnly) { Write-Output 'EXTERNAL WORK OWNERSHIP QUALIFICATION: PASS (static only)'; exit 0 }
     if (-not $StaticOnly) {

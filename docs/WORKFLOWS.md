@@ -1,6 +1,6 @@
 # Working with Olympus
 
-The [README](../README.md) is the quick-start page. This guide explains the roles, prompt modes and boundaries in more detail. Olympus is a team coordinated by Kael, not an additional model subscription or an autonomous runtime outside OpenCode. Configure access to the models you plan to use in your own harness.
+Start with the quick guide in [English](../README.md) or [Español](../README.ES.md). This guide explains task commands and workflow boundaries. Olympus coordinates agents within OpenCode; configure model access in OpenCode as usual.
 
 ## Try a task
 
@@ -16,58 +16,35 @@ Open OpenCode in your project and describe the outcome:
 
 ### Ask for independent work
 
-> Review these four independent modules for reproducible issues. Fix the confirmed bugs, preserve required checks, and summarize the results.
->
-> FAST
+> `/olympus.ultra Review these four independent modules for reproducible issues. Fix confirmed bugs, preserve required checks, and summarize the results.`
 
-FAST is selected explicitly by the user's task. It is not a command that grants broader permissions or guarantees that four workers will run.
+The command asks Kael to maximize useful, safe concurrency within the configured ceiling; it does not grant broader permissions or guarantee that any particular number of workers will run.
 
 ## The team
 
-Kael is the single coordinator. Olympus Core defines **11 canonical roles**, represented through the currently supported OpenCode adapter. These are responsibilities, not a guarantee of runtime behavior beyond the documented evidence.
+Kael coordinates the [eleven-agent team](../README.md#the-team) ([Español](../README.ES.md#the-team)). [Olympus Core](../olympus/README.md) defines the role boundaries.
 
-| Icon | Role | Focus |
+## Parallelism
+
+| Policy | Selection | What changes |
 | --- | --- | --- |
-| 🧭 | **Kael** · The Master | Coordinate, select specialists and reconcile results |
-| 🔎 | **Veyra** · The Explorer | Gather relevant evidence |
-| 🏗️ | **Orin** · The Architect | Design solutions within the agreed scope |
-| 🗺️ | **Atlas** · The Planner | Sequence and bound execution |
-| 💻 | **Kovan** · The Coder | Implement approved changes |
-| 🐛 | **Argus** · The Bug Hunter | Reproduce and diagnose defects |
-| 🧪 | **Nox** · The Tester | Verify observed behavior |
-| ⚖️ | **Vera** · The Judge | Review independently |
-| 🛡️ | **Talos** · The Sentinel | Assess security risks |
-| 🧠 | **Thales** · The Sage | Resolve difficult uncertainty |
-| 🚀 | **Helios** · The Optimizer | Examine performance tradeoffs |
+| **Default** | Any ordinary task | Kael adapts parallelism to useful independent work; simple tasks need no fan-out. The global prompt ceiling can be set from 1 to 8 per root session. |
+| **Ultra** | `/olympus.ultra <prompt>` | Kael actively seeks useful independent work up to the configured ceiling. It is not a target; dependencies, ownership, permissions, validation and completion gates remain unchanged. This prompt policy does not enforce the native scheduler. |
 
-The canonical definitions remain in [Olympus Core](../olympus/README.md). Model/provider availability depends on the user's OpenCode configuration.
+### Native task commands
 
-## NORMAL vs FAST
-
-| Mode | Selection | What changes |
-| --- | --- | --- |
-| **NORMAL** | Default | Kael uses only useful, bounded parallelism; simple tasks need no fan-out. |
-| **FAST** | Explicit request | When work is independent and safe to split, Kael may use up to **four** active agents by default; the global prompt ceiling can be set from 1 to 8 per root session. Required checks, writer ownership, dependencies, permissions and completion gates remain unchanged. Dependent tasks never run in parallel just to fill the limit. This prompt policy does not enforce the native scheduler. |
-
-### Optional OpenCode task modifiers
-
-These are **experimental, opt-in prompt markers for Kael on OpenCode V2 only**, not native OpenCode slash commands, CLI flags or runtime features. A controlled A/B test observed completed tasks but **did not establish causal performance improvements** from the modifiers ([issue #92 evidence](https://github.com/Edulynch/OpenCode-OlympusAgents/issues/92#issuecomment-6440098753)).
-
-Place the markers on their own unquoted lines in the **final contiguous block of the task prompt**. They are exact and case-sensitive. For example:
+The global OpenCode installation provides exactly these two namespaced commands:
 
 ```text
-Find the smallest safe fix for the failing API test. Run the relevant checks.
-
-surgical-mode
+/olympus.ultra <prompt>
+/olympus.performance <prompt>
 ```
 
-| Marker | Intent | Does not change |
-| --- | --- | --- |
-| `long-mode` | Reduce optional questions while using the information already available | User approval and authorization requirements |
-| `fast-mode` | Request the existing FAST policy | Task dependencies, writer ownership, completion gates or the configured prompt ceiling |
-| `surgical-mode` | Focus on the requested change and avoid unrelated edits | Necessary tests and safety reviews |
+There are no bare `/ultra` or `/performance` aliases. Both commands run in the current Kael session, accept the full task text, and retain normal role, authority, native-permission, dependency, validation, reconciliation and completion gates. Empty or whitespace-only arguments display usage and must not trigger tools or agents; this guard is in the prompt because native command metadata has no required-argument field, so it is not deterministic runtime enforcement.
 
-Markers may be combined at the end of a single task; they do not persist into future tasks. Ordinary mentions in documentation, code, quotations or nonterminal prose do not activate them. Ambiguous placement leaves NORMAL behavior unchanged. They are instructions to Kael, **not a parser or a runtime guarantee**. The canonical behavior is maintained in [Kael's OpenCode adapter source](../olympus/harnesses/opencode/agent-prompts/kael.md).
+`/olympus.ultra` asks Kael to launch ready, independent assignments together up to the configured 1–8 ceiling. More eligible work can start as slots free up. Kael does not fill slots with duplicate, overlapping, dependent or otherwise unhelpful work.
+
+`/olympus.performance` is explicit optimization intent. Kael uses the existing target/baseline/Helios gate when useful, presents a concrete proposal and stops for human approval before implementation unless the user already approved a sufficiently specific direction with understood tradeoffs. Optimization does not automatically select Ultra. Successful implementation still requires before/after/delta/target evidence and correctness validation. The canonical behavior is maintained in [Kael's OpenCode adapter source](../olympus/harnesses/opencode/agent-prompts/kael.md).
 
 ## Contextual maintenance and ownership
 

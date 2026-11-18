@@ -218,7 +218,7 @@ try {
     Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue
     if ($LASTEXITCODE -ne 0) { Fail "Isolated global installation failed: $installText" }
     $manifest = Get-Content -LiteralPath (Join-Path $configRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
-    if (@($manifest.managed_files).Count -ne 14) { Fail 'Global-only manifest does not own 14 expected resources.' }
+    if (@($manifest.managed_files).Count -ne 16) { Fail 'Global-only manifest does not own 16 expected resources.' }
 
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
     try {

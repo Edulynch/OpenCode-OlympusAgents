@@ -228,6 +228,36 @@ def main() -> int:
     kael_prompt = opencode_files["kael"].read_text(encoding="utf-8")
     for name, result in kael_compact_contract_checks(kael_prompt).items():
         check(name, result)
+    check("RETIRED_USER_MODIFIERS_REMOVED", all(marker not in kael_prompt for marker in (
+        "FAST:", "FAST is an explicit user-selected", "fast-mode", "long-mode", "surgical-mode",
+    )) and "TRIVIAL FAST-PATH CHANGE" in kael_prompt)
+    command_sources = {
+        path.stem: path.read_text(encoding="utf-8")
+        for path in (ROOT / "olympus/harnesses/opencode/commands").glob("*.md")
+    }
+    expected_commands = {"olympus.ultra", "olympus.performance"}
+    check("EXACT_NAMESPACED_COMMAND_SOURCE_SET", set(command_sources) == expected_commands)
+    for name, command in command_sources.items():
+        metadata = yaml_frontmatter(command)
+        rendered_path = ROOT / ".opencode" / "commands" / f"{name}.md"
+        rendered = rendered_path.read_text(encoding="utf-8") if rendered_path.is_file() else ""
+        check(f"COMMAND_{name.upper().replace('.', '_')}_NATIVE_SHAPE",
+              metadata is not None and "agent: kael" in metadata[0].splitlines()
+              and "subagent: false" in metadata[0].splitlines()
+              and not any(line.startswith(("model:", "template:")) for line in metadata[0].splitlines())
+              and "$ARGUMENTS" in command and "empty or contains only whitespace" in command
+              and "Do not call tools or launch agents." in command and "!`" not in command
+              and rendered_path.is_file()
+              and GENERATED_MARKER in rendered)
+    check("ULTRA_COMMAND_PRESERVES_CEILING_AND_GATES",
+          "MAX_ACTIVE_CHILDREN" in command_sources.get("olympus.ultra", "")
+          and "Do not add filler" in command_sources.get("olympus.ultra", "")
+          and "completion gates" in command_sources.get("olympus.ultra", ""))
+    check("PERFORMANCE_COMMAND_RETAINS_APPROVAL_AND_MEASUREMENT",
+          "explicit optimization request" in command_sources.get("olympus.performance", "")
+          and "human approval before implementation" in command_sources.get("olympus.performance", "")
+          and "before/after/delta/target measurements" in command_sources.get("olympus.performance", "")
+          and "does not select `/olympus.ultra`" in command_sources.get("olympus.performance", ""))
     check("NO_RETIRED_AEGIS_OR_MAINTAIN_OUTPUT", "aegis" not in opencode_files and
           not (ROOT / ".opencode/commands/maintain.md").exists())
     generated_agent_frontmatter = {
@@ -258,7 +288,7 @@ def main() -> int:
 
     kael_intent = models["roles"]["kael"]
     check("MODEL_FAMILIES_OPENCODE_ONLY", all(set(family) == {"opencode"} for family in models["families"].values()))
-    check("SOL_OPENCODE_MODEL", models["families"]["sol"]["opencode"] == "openai/gpt-6.1-sol")
+    check("SOL_OPENCODE_MODEL", models["families"]["sol"]["opencode"] == "openai/gpt-6.2-sol")
     check("LUNA_REMAINS_LUNA", models["families"]["luna"]["opencode"].endswith("gpt-6-luna") and all(models["roles"][r]["family"] == "luna" for r in ("veyra", "orin", "kovan", "nox", "vera")))
     check("NO_STALE_GPT_6_SOL_OUTPUT", all("gpt-6-sol" not in path.read_text(encoding="utf-8") for path in [*opencode_files.values(), ROOT / "opencode.jsonc"]))
     check("EFFORTS_CANONICAL", models["roles"]["thales"]["effort"] == "xhigh" and models["roles"]["kovan"]["effort"] == "max" and all(models["roles"][r]["effort"] == "high" for r in ("kael", "atlas", "argus", "talos", "helios")))
@@ -370,7 +400,7 @@ def main() -> int:
     report_output_snapshot("ROOT_MANAGED_OUTPUT_BEFORE", before)
     check(
         "SAFE_ROOT_OPENCODE_OUTPUT_COVERAGE",
-        len(managed) == 15
+        len(managed) == 17
         and ROOT / ".opencode/scripts/worktree-setup.ps1" in managed,
     )
     root_render_blocked = False
@@ -403,8 +433,8 @@ def main() -> int:
         original_models = fixture_models.read_text(encoding="utf-8")
         fixture_models.write_text(
             original_models.replace(
-                'opencode = "openai/gpt-6.1-sol"',
-                'opencode = "openai/gpt-6.1-sol"\ncodex = "openai/gpt-6.1-sol"',
+                'opencode = "openai/gpt-6.2-sol"',
+                'opencode = "openai/gpt-6.2-sol"\ncodex = "openai/gpt-6.2-sol"',
                 1,
             ),
             encoding="utf-8",

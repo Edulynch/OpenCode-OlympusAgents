@@ -102,6 +102,17 @@ function New-SourceArchive([string]$sourceRoot, [string]$tag, [string]$archivePa
     if ((Test-Path -LiteralPath (Join-Path $sourceRoot $installationGuide) -PathType Leaf) -and $installationGuide -notin $files) {
         $files += $installationGuide
     }
+    # Include only these new release resources before they are committed, not arbitrary untracked files.
+    foreach ($relative in @(
+        'olympus/harnesses/opencode/commands/olympus.ultra.md',
+        'olympus/harnesses/opencode/commands/olympus.performance.md',
+        '.opencode/commands/olympus.ultra.md',
+        '.opencode/commands/olympus.performance.md'
+    )) {
+        if ((Test-Path -LiteralPath (Join-Path $sourceRoot $relative) -PathType Leaf) -and $relative -notin $files) {
+            $files += $relative
+        }
+    }
     foreach ($relative in $files) {
         $sourceFile = Join-Path $sourceRoot $relative
         $destination = Join-Path $top $relative
@@ -294,7 +305,7 @@ try {
     $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1',$script:CandidateVersion,'v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
     if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
         Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
-        Check 'R0_TARGET_IDENTITY_V0100' ($script:CandidateVersion -ceq 'v0.10.0')
+        Check 'R0_TARGET_IDENTITY_V0110' ($script:CandidateVersion -ceq 'v0.11.0')
         Check 'R0_STABLE_CANDIDATE_VERSION' ($script:CandidateVersion -match '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$')
         Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
         Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
@@ -372,7 +383,7 @@ try {
             Check 'R9_HUD_DISCOVERY' ($LASTEXITCODE -eq 0 -and $plugins -match 'olympus-activity')
         } finally { Pop-Location }
         $expected = @{
-            kael=@('gpt-6.1-sol','high','primary'); thales=@('gpt-6.1-sol','xhigh','subagent'); atlas=@('gpt-6.1-sol','high','subagent'); argus=@('gpt-6.1-sol','high','subagent'); talos=@('gpt-6.1-sol','high','subagent'); helios=@('gpt-6.1-sol','high','subagent')
+            kael=@('gpt-6.2-sol','high','primary'); thales=@('gpt-6.2-sol','xhigh','subagent'); atlas=@('gpt-6.2-sol','high','subagent'); argus=@('gpt-6.2-sol','high','subagent'); talos=@('gpt-6.2-sol','high','subagent'); helios=@('gpt-6.2-sol','high','subagent')
             veyra=@('gpt-6-luna','max','subagent'); orin=@('gpt-6-luna','max','subagent'); kovan=@('gpt-6-luna','max','subagent')
             nox=@('gpt-6-luna','max','subagent'); vera=@('gpt-6-luna','max','subagent')
         }
@@ -405,8 +416,11 @@ try {
     }
     Check 'R10_TRUSTED_AUTONOMY' ((Perm $k shell allow) -and (Perm $k edit allow) -and (Perm $n shell allow) -and (Perm $n edit deny))
     $kaelText = [IO.File]::ReadAllText((Join-Path $target '.opencode/agents/kael.md'))
-    Check 'R11_FAST_POLICY' ($kaelText -match 'MAX_ACTIVE_CHILDREN = 4' -and $kaelText -match 'minimum useful parallelism' -and
-        $kaelText -match 'FAST' -and $kaelText -match 'balanced shards: 20 items / 4 workers = 5/5/5/5')
+    Check 'R11_NAMESPACED_PARALLEL_POLICY' ($kaelText -match 'MAX_ACTIVE_CHILDREN = 4' -and
+        $kaelText -match 'minimum useful parallelism' -and
+        $kaelText -match '/olympus\.ultra <prompt>' -and $kaelText -match '/olympus\.performance <prompt>' -and
+        $kaelText -match 'native parallel tool-call batch' -and
+        $kaelText -notmatch 'FAST is an explicit user-selected|fast-mode|long-mode|surgical-mode')
 
     # Prerelease identifiers are accepted end-to-end for current source archives.
     foreach ($entry in @(@('alpha','v0.3.0-alpha.1',$alphaArchive), @('beta','v0.3.0-beta.2',$betaArchive), @('rc','v0.3.0-rc.1',$rcArchive))) {
@@ -548,27 +562,24 @@ try {
         $releaseNotes -notmatch '(?i)\b(?:irm|iwr|Invoke-WebRequest)\b[^\r\n]*\.ps1')
     $highlightsMatch = [regex]::Match($releaseNotes, '(?ims)^### Highlights\r?\n(?<body>.*?)(?=^### |^## |\z)')
     $highlights = if ($highlightsMatch.Success) { $highlightsMatch.Groups['body'].Value } else { '' }
-    $requiredHighlights = @('olympus config set-max-parallel N',
-        'direct-child prompt policy per root session','integer 1–8, default 4','excluding the root',
-        'not a hard runtime or concurrent-root quota',
-        'does not cancel work or change existing context retroactively',
-        'schema-1 `orchestration.max_children`','alongside model/effort settings',
-        'setter updates the global preference only',
-        'explicit project config apply consumes it',
-        'current-shell native `olympus completion powershell|bash`','shared argparse-derived pure backend',
-        'safe typed-data transport','PowerShell 7 on Windows','Bash on Linux',
-        'no profile writes','provider/filesystem lookups','model-catalog evaluation',
-        'not a Linux installer/update port')
+    $requiredHighlights = @('yield its model turn', 'terminal-result reconciliation',
+        '/olympus.ultra <prompt>', '/olympus.performance <prompt>', 'native batched dispatch',
+        'approval before implementation', 'before/after correctness validation',
+        'internal FAST qualification profile', 'human CLI output',
+        '`--verbose`', '`--json` payloads and exit codes remain unchanged',
+        '`openai/gpt-6.2-sol`', 'explicit user overrides')
     $missingHighlights = @($requiredHighlights | Where-Object { -not $highlights.Contains($_) })
-    Check 'R25_V0100_RELEASE_HIGHLIGHTS' ($missingHighlights.Count -eq 0)
+    Check 'R25_V0110_RELEASE_HIGHLIGHTS' ($missingHighlights.Count -eq 0)
     $capabilityMatch = [regex]::Match($releaseNotes, '(?ims)^### Capability limits\r?\n(?<body>.*?)(?=^### |^## |\z)')
     $capabilityLimits = if ($capabilityMatch.Success) { $capabilityMatch.Groups['body'].Value } else { '' }
     $compatibilityDocs = [IO.File]::ReadAllText((Join-Path $source 'README.md')) + "`n" +
         [IO.File]::ReadAllText((Join-Path $source 'docs/INSTALLATION.md')) + "`n" +
         [IO.File]::ReadAllText((Join-Path $source 'docs/DEVELOPMENT.md'))
-    Check 'R25_V0100_CAPABILITY_LIMITS_NOT_OVERCLAIMED' (
-        $capabilityLimits -match '(?i)optional schema-1 `orchestration\.max_children` field is rejected by older CLIs' -and
+    Check 'R25_V0110_CAPABILITY_LIMITS_NOT_OVERCLAIMED' (
+        $capabilityLimits -match '(?i)prompt-level guard, not deterministic native argument validation' -and
         $capabilityLimits -match '(?i)not a hard runtime or concurrent-root quota' -and
+        $capabilityLimits -match '(?i)does not guarantee simultaneous CPU inference or a latency improvement' -and
+        $capabilityLimits -match '(?i)Unowned command collisions fail closed' -and
         $capabilityLimits -match '(?i)Windows with PowerShell 7' -and
         $capabilityLimits -match '(?i)Python 3\.11\+' -and
         $capabilityLimits -match '(?i)OpenCode V2' -and

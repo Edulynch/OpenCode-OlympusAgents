@@ -260,7 +260,7 @@ exit 23
     Assert 'USER_CLI_VERSION_DIRECTORY_PRESERVED' (Test-Path -LiteralPath $env:OLYMPUS_SMOKE_VERSION_MARKER -PathType Leaf)
     Assert 'GLOBAL_MANIFEST_UNINSTALLED' (-not (Test-Path -LiteralPath $env:OLYMPUS_SMOKE_GLOBAL_MANIFEST))
     Assert 'CLI_CURRENT_POINTER_UNINSTALLED' (-not (Test-Path -LiteralPath (Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT 'current.txt')))
-    Write-Output 'ISSUE128_GLOBAL_CLI_SMOKE: PASS'
+    Write-Output 'INSTALLED_CLI_LIFECYCLE: PASS'
     exit 0
 }
 

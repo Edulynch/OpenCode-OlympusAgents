@@ -305,7 +305,7 @@ try {
     $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1',$script:CandidateVersion,'v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
     if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
         Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
-        Check 'R0_TARGET_IDENTITY_V0110' ($script:CandidateVersion -ceq 'v0.11.0')
+        Check 'R0_TARGET_IDENTITY_V0111' ($script:CandidateVersion -ceq 'v0.11.1')
         Check 'R0_STABLE_CANDIDATE_VERSION' ($script:CandidateVersion -match '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$')
         Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
         Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
@@ -548,6 +548,15 @@ try {
     $notesEnd = if ($nextRelease.Success) { $notesStart + $script:CandidateHeading.Length + $nextRelease.Index } else { $changelog.Length }
     if ($notesEnd -le $notesStart) { throw "Release-notes section for $($script:CandidateVersion) is unbounded." }
     $releaseNotes = $changelog.Substring($notesStart, $notesEnd - $notesStart)
+    $historicalHeading = [regex]::Match($changelog, '(?m)^## v0\.11\.0\r?$')
+    if (-not $historicalHeading.Success) { throw 'Historical v0.11.0 release notes are missing.' }
+    $historicalStart = $historicalHeading.Index
+    $afterHistorical = $changelog.Substring($historicalStart + $historicalHeading.Length)
+    $nextHistoricalRelease = [regex]::Match($afterHistorical, '(?m)^##[ \t]+v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?(?:[ \t]+[^\r\n]*)?\r?$')
+    $historicalEnd = if ($nextHistoricalRelease.Success) {
+        $historicalStart + $historicalHeading.Length + $nextHistoricalRelease.Index
+    } else { $changelog.Length }
+    $historicalNotes = $changelog.Substring($historicalStart, $historicalEnd - $historicalStart)
     $installGuideUrl = "https://github.com/Edulynch/OpenCode-OlympusAgents/blob/$($script:CandidateVersion)/docs/INSTALLATION.md"
     $installGuide = [IO.File]::ReadAllText((Join-Path $source 'docs/INSTALLATION.md'))
     $verifyGuideUrl = "$installGuideUrl#release-selection-identity-and-executable-source"
@@ -560,18 +569,18 @@ try {
         $releaseNotes -match '(?i)read-only|VerifyOnly')
     Check 'R25_RELEASE_NOTES_KEEP_COMMANDS_IN_INSTALL_GUIDE' ($releaseNotes -notmatch '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/)[^\r\n]+?\.ps1' -and
         $releaseNotes -notmatch '(?i)\b(?:irm|iwr|Invoke-WebRequest)\b[^\r\n]*\.ps1')
-    $highlightsMatch = [regex]::Match($releaseNotes, '(?ims)^### Highlights\r?\n(?<body>.*?)(?=^### |^## |\z)')
-    $highlights = if ($highlightsMatch.Success) { $highlightsMatch.Groups['body'].Value } else { '' }
+    $historicalHighlightsMatch = [regex]::Match($historicalNotes, '(?ims)^### Highlights\r?\n(?<body>.*?)(?=^### |^## |\z)')
+    $historicalHighlights = if ($historicalHighlightsMatch.Success) { $historicalHighlightsMatch.Groups['body'].Value } else { '' }
     $requiredHighlights = @('yield its model turn', 'terminal-result reconciliation',
         '/olympus.ultra <prompt>', '/olympus.performance <prompt>', 'native batched dispatch',
         'approval before implementation', 'before/after correctness validation',
         'internal FAST qualification profile', 'human CLI output',
         '`--verbose`', '`--json` payloads and exit codes remain unchanged',
         '`openai/gpt-6.2-sol`', 'explicit user overrides')
-    $missingHighlights = @($requiredHighlights | Where-Object { -not $highlights.Contains($_) })
+    $missingHighlights = @($requiredHighlights | Where-Object { -not $historicalHighlights.Contains($_) })
     Check 'R25_V0110_RELEASE_HIGHLIGHTS' ($missingHighlights.Count -eq 0)
-    $capabilityMatch = [regex]::Match($releaseNotes, '(?ims)^### Capability limits\r?\n(?<body>.*?)(?=^### |^## |\z)')
-    $capabilityLimits = if ($capabilityMatch.Success) { $capabilityMatch.Groups['body'].Value } else { '' }
+    $historicalCapabilityMatch = [regex]::Match($historicalNotes, '(?ims)^### Capability limits\r?\n(?<body>.*?)(?=^### |^## |\z)')
+    $capabilityLimits = if ($historicalCapabilityMatch.Success) { $historicalCapabilityMatch.Groups['body'].Value } else { '' }
     $compatibilityDocs = [IO.File]::ReadAllText((Join-Path $source 'README.md')) + "`n" +
         [IO.File]::ReadAllText((Join-Path $source 'docs/INSTALLATION.md')) + "`n" +
         [IO.File]::ReadAllText((Join-Path $source 'docs/DEVELOPMENT.md'))
@@ -587,6 +596,19 @@ try {
         $capabilityLimits -match '(?i)provider access or inference' -and
         $capabilityLimits -match '(?i)native permission UI/approval' -and
         $compatibilityDocs -notmatch '(?i)older CLIs|orchestration\.max_children.{0,80}rejected')
+    $activeHighlightsMatch = [regex]::Match($releaseNotes, '(?ims)^### Highlights\r?\n(?<body>.*?)(?=^### |^## |\z)')
+    $activeHighlights = if ($activeHighlightsMatch.Success) { $activeHighlightsMatch.Groups['body'].Value } else { '' }
+    $activeCapabilityMatch = [regex]::Match($releaseNotes, '(?ims)^### Capability limits\r?\n(?<body>.*?)(?=^### |^## |\z)')
+    $activeCapabilityLimits = if ($activeCapabilityMatch.Success) { $activeCapabilityMatch.Groups['body'].Value } else { '' }
+    Check 'R25_V0111_RELEASE_HIGHLIGHTS_AND_LIMITS' (
+        $activeHighlights -match '(?i)24-line overview' -and
+        $activeHighlights -match '(?i)54 CLI command/subcommand routes' -and
+        $activeHighlights -match '(?i)without downloading or running the installer' -and
+        $activeHighlights -match '(?i)without changing which checks run' -and
+        $activeCapabilityLimits -match '(?i)recorded versions only; it is not an integrity check' -and
+        $activeCapabilityLimits -match '(?i)Windows with PowerShell 7' -and
+        $activeCapabilityLimits -match '(?i)Python 3\.11\+' -and
+        $activeCapabilityLimits -match '(?i)OpenCode V2')
     $mutableExecutableUrl = '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/(?:master|main|refs/heads/(?:master|main))/[^\s]+?\.ps1|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/(?:master|main)/[^\s]+?\.ps1)'
     Check 'R25_RELEASE_NO_MUTABLE_EXECUTABLE_SOURCE' ($releaseNotes -notmatch $mutableExecutableUrl -and
         $versionText -match 'archive/refs/tags/\$Version\.zip')

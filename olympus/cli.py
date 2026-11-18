@@ -27,7 +27,8 @@ def parser() -> Parser:
         "Olympus validates declared catalog capabilities but never verifies model access, credentials, or subscriptions. "
         "Use 'olympus config list' for absolute configuration paths and precedence. "
         "Use 'olympus install' or 'olympus update' for the global OpenCode installation; "
-        "then run 'olympus doctor', which only verifies configuration."
+        "then run 'olympus doctor', which only verifies configuration. "
+        "Human output is concise by default; add --verbose for technical details. --json remains machine-readable."
     )
     root = Parser(
         prog="olympus",
@@ -63,6 +64,7 @@ def parser() -> Parser:
     )
     root.add_argument("--source", type=Path, help="absolute trusted source checkout (before command)")
     root.add_argument("--version", action="store_true", help="show the source release version")
+    root.add_argument("--verbose", action="store_true", help="show technical response details")
     commands = root.add_subparsers(dest="command", parser_class=Parser)
     commands.add_parser("help", help="show Olympus commands and model configuration guidance", allow_abbrev=False)
     commands.add_parser("version", help="show the installed Olympus product version", allow_abbrev=False)
@@ -154,6 +156,18 @@ def parser() -> Parser:
     status.add_argument("--target", type=Path, help="absolute Git worktree root; required for project scope")
     status.add_argument("--harness", choices=("opencode",), default="opencode")
     status.add_argument("--json", action="store_true")
+
+    def add_verbose_options(current: argparse.ArgumentParser) -> None:
+        for action in current._actions:
+            if not isinstance(action, argparse._SubParsersAction):
+                continue
+            for child in action.choices.values():
+                if "--verbose" not in child._option_string_actions:
+                    child.add_argument("--verbose", action="store_true", default=argparse.SUPPRESS,
+                                       help="show technical response details")
+                add_verbose_options(child)
+
+    add_verbose_options(root)
     return root
 
 
@@ -528,9 +542,336 @@ def installation_status(source: Path, args, response: dict) -> int:
     return 0
 
 
-def emit(response: dict, as_json: bool) -> None:
+def _source_label(path: str) -> str:
+    if path.replace("\\", "/").endswith("/olympus/core/models.toml"):
+        return "canonical default"
+    if path.replace("\\", "/").endswith("/.opencode/olympus-config.json"):
+        return "project override"
+    return "global override"
+
+
+def _emit_issues(response: dict) -> None:
+    for issue in response.get("issues", []):
+        details = [issue.get("code", "issue"), issue.get("message", "")]
+        for key in ("path", "harness"):
+            if issue.get(key):
+                details.append(f"{key}={issue[key]}")
+        print(": ".join(value for value in details if value), file=sys.stderr)
+
+
+def _emit_assignments(rows: list[dict]) -> None:
+    if not rows:
+        print("  (none)")
+        return
+    models = [row.get("model") or row["models"]["opencode"] for row in rows]
+    width = max(len("MODEL"), *(len(model) for model in models))
+    print(f"  {'AGENT':<8}  {'MODEL':<{width}}  {'EFFORT':<6}  SOURCE")
+    for row, model in zip(rows, models):
+        if "model_source" in row:
+            source = _source_label(row["model_source"])
+            effort_source = _source_label(row["effort_source"])
+            if effort_source != source:
+                source += f"; effort: {effort_source}"
+        else:
+            source = row["family"]
+        print(f"  {row['role']:<8}  {model:<{width}}  {row['effort']:<6}  {source}")
+
+
+_DOCTOR_GUIDANCE = {
+    "managed_file_drift": "Inspect the listed managed path and compare it with the trusted source; preserve local edits and reconcile ownership before any update or uninstall.",
+    "global_managed_file_drift": "Inspect the listed global managed path and preserve local edits; reconcile ownership before any update or uninstall.",
+    "source_drift": "Run `python scripts/render_harnesses.py check --harness opencode` in the displayed source; reconcile intentional source/output differences before applying anything.",
+    "invalid_manifest": "Preserve the manifest and managed files; inspect and manually reconcile the manifest format and ownership before install, update, or uninstall.",
+    "invalid_global_manifest": "Preserve the global manifest and resources; inspect and manually reconcile its format and ownership before install, update, or uninstall.",
+    "ambiguous_manifest": "Preserve both manifest locations and all managed files; resolve which manifest owns this displayed project before taking action.",
+    "unsafe_manifest": "Preserve the manifest and target files; inspect the unsafe path or file type before any operation that could change ownership.",
+    "manifest_too_large": "Preserve the manifest; inspect it manually and do not treat this read-limit result as a valid ownership check.",
+    "invalid_manifest_entry": "Preserve the manifest and managed files; inspect the malformed entry and reconcile ownership before any update or uninstall.",
+    "invalid_manifest_hash": "Preserve the manifest and managed files; inspect the invalid hash entry without rewriting it to match current files.",
+    "unsupported_manifest_inventory": "Preserve the manifest and managed files; compare its inventory with a trusted compatible source before taking action.",
+    "unsupported_global_inventory": "Preserve the global manifest and files; compare its inventory with a trusted compatible source before taking action.",
+    "version_mismatch": "Compare the recorded and source versions shown above, then choose the intended trusted release before any explicit update; no version change was made.",
+    "unsupported_global_version": "Preserve the global installation and verify its recorded release against a trusted supported release before changing it.",
+    "platform_unqualified": "Run doctor on a Windows system with PowerShell 7 (pwsh); this platform result did not verify the installation.",
+    "verifier_missing": "Inspect the displayed trusted source checkout and restore its verifier only from that source; no installation verification ran.",
+    "verifier_unavailable": "Run doctor on Windows with PowerShell 7 (pwsh) available; this result did not verify the installation.",
+    "verifier_version_unsupported": "Use PowerShell 7 or later (`pwsh`) and rerun doctor; this result did not verify the installation.",
+    "native_verify_unavailable": "Check the displayed platform, PowerShell 7 availability, and verifier diagnostic; no verification was established.",
+    "verification_unavailable": "Review the verifier diagnostic above and rerun doctor only when the stated verification prerequisite is available.",
+    "verification_failed": "Review the VerifyOnly diagnostic above and preserve the indicated files while reconciling the cause; doctor made no repair.",
+    "invalid_user_configuration": "Inspect the configuration path named above and correct its JSON, schema, or declared model/effort values manually, then rerun doctor.",
+    "harness_absent": "Confirm the selected harness and scope are intended; install it only after reviewing the displayed target and ownership.",
+    "invalid_target": "Select the intended existing Git worktree root and keep the canonical source checkout separate from the project target.",
+    "source_is_target": "Choose a separate existing project worktree; never use the canonical source checkout as its own installation target.",
+    "git_unavailable": "Make Git available and verify the selected directory is the intended worktree root before rerunning doctor.",
+    "target_unconfirmed": "Verify the displayed directory is the actual Git worktree root and that Git can inspect it; no target was changed.",
+    "invalid_global_root": "Select the intended absolute global configuration root and verify it is not a filesystem root before retrying.",
+    "global_path_unavailable": "Verify the OpenCode CLI or configured global path and inspect the selected global root before retrying; do not guess or move the root.",
+    "unsafe_global_root": "Inspect the displayed global path components for links, reparse points, or non-directory entries; preserve them until ownership is clear.",
+    "unsafe_global_resource": "Preserve the reported global resource and inspect its path/type manually before any operation that could change it.",
+    "global_external_guard_unsafe": "Inspect the existing global OpenCode config and resolve ambiguous rules manually; establish an external_directory ASK or DENY fallback before applying configuration.",
+    "global_install_conflict": "Preserve the user-owned conflicting resource and inspect the reported path; do not force an overwrite.",
+    "global_apply_recovery_pending": "Preserve the pending journal and verify it belongs to the displayed global OpenCode root; use only the explicit recovery path named in the diagnostic.",
+    "global_guard_recovery_pending": "Preserve the pending intent and global config; inspect the interrupted install and verify root ownership before choosing recovery.",
+    "source_invalid": "Inspect the canonical source and renderer diagnostic above; resolve source errors before applying any generated output.",
+    "source_inventory_unsupported": "Compare the displayed source inventory with the supported adapter inventory and use a compatible trusted source before applying anything.",
+    "configuration_invalid": "Inspect the configuration diagnostic and displayed path, correct the input manually, and rerun doctor; no repair was attempted.",
+    "read_failed": "Check that the displayed source or target resource is readable, preserve its contents, then rerun doctor.",
+    "query_failed": "Review the query diagnostic and displayed source/target paths; verify them manually before retrying and do not repair managed files from this generic error.",
+}
+
+
+def _doctor_recommendation(code: str) -> str:
+    return _DOCTOR_GUIDANCE.get(
+        code, "Review this issue code and message before choosing a repair; no repair was attempted.",
+    )
+
+
+def _emit_native_output_summary(data: dict) -> None:
+    counts = {}
+    notices = []
+    for raw_line in data.get("native_stdout", "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        action, separator, _ = line.partition(":")
+        if separator and action in ("CREATE", "UPDATE", "REMOVE"):
+            action = action.lower()
+            counts[action] = counts.get(action, 0) + 1
+        elif line.startswith(("OLYMPUS_ENTRYPOINT:", "OLYMPUS_RELEASE_EXECUTING:",
+                              "OLYMPUS_RELEASE_EXECUTED:")):
+            continue
+        elif line.startswith("OLYMPUS_RELEASE_SELECTED:"):
+            match = re.search(r"\btag=([^\s]+)", line)
+            notices.append(f"Selected release: {match.group(1)}" if match else f"Native output: {line}")
+        elif line.startswith("OLYMPUS_GLOBAL_INSTALL:"):
+            match = re.match(
+                r"OLYMPUS_GLOBAL_INSTALL:\s+(\S+)\s+(\S+)\s+(\S+)\s+\((\d+) managed resources;",
+                line,
+            )
+            notices.append(
+                f"Native result: {match.group(1)} {match.group(2)} {match.group(3)} "
+                f"({match.group(4)} managed resources)."
+                if match else f"Native output: {line}"
+            )
+        elif line.startswith(("GLOBAL_INSTALL_DRY_RUN:", "GLOBAL_UNINSTALL_DRY_RUN:")):
+            notices.append(f"Native preview: {line.partition(':')[2].strip()}")
+        elif line.startswith("OLYMPUS_UPDATE:"):
+            notices.append(f"Native update: {line.partition(':')[2].strip()}")
+        else:
+            # Unknown output may be a safety diagnostic; keep it visible in compact mode.
+            notices.append(f"Native notice: {line}")
+    if counts:
+        print("Planned resources: " + ", ".join(f"{action} {count}" for action, count in counts.items()))
+    for notice in notices:
+        print(notice)
+
+
+def _emit_human_summary(response: dict) -> None:
+    operation, result = response.get("operation", "Olympus"), response.get("result", "unknown")
+    context, data = response.get("context", {}), response.get("data", {})
+    setter = operation == "config set-max-parallel" or operation.endswith(("set-model", "set-effort"))
+    if setter and result == "ok":
+        if "max_children" in data:
+            message = f"Saved global prompt ceiling: {data['max_children']} children (prompt policy only)."
+        else:
+            field = "model" if "model" in data else "effort"
+            message = f"Saved {data['role']} {field}: {data[field]} ({data.get('scope', 'global')})."
+        if "installed_agent_updated" in data:
+            message += " Installed agent: " + ("updated." if data["installed_agent_updated"] else "not updated (saved only).")
+        if data.get("target"):
+            message += f" Target: {data['target']}"
+        print(message)
+        _emit_issues(response)
+        return
+    print(f"{operation}: {result}")
+    scope = context.get("scope", data.get("scope"))
+    if scope:
+        print(f"Scope: {scope}")
+    target = context.get("target", data.get("target"))
+    if not target and operation == "config list" and scope == "project":
+        project_config = next((item for item in data.get("sources", [])
+                               if item.get("layer") == "project override"), None)
+        if project_config:
+            target = str(Path(project_config["path"]).parent.parent)
+    harness_data = data.get("harnesses", {})
+    if not target and isinstance(harness_data, dict):
+        opencode = harness_data.get("opencode", {})
+        if isinstance(opencode, dict):
+            target = opencode.get("root")
+    if target:
+        print(f"Target: {target}")
+
+    if operation in ("models list", "agents list"):
+        print("Assignments:")
+        _emit_assignments(data.get("roles", []))
+    elif operation == "config list":
+        parallel = data.get("max_parallel", {})
+        if parallel:
+            print(f"Global prompt ceiling: {parallel['max_children']} children (prompt policy; not an effective project setting)")
+        precedence = data.get("precedence", [])
+        if precedence:
+            print(f"Precedence: {' > '.join(precedence)}")
+        print(f"OpenCode root: {data.get('opencode_root_state', 'unknown')}")
+        print("Effective assignments:")
+        _emit_assignments(data.get("roles", []))
+        sources = data.get("sources", [])
+        if sources:
+            print("Configuration sources:")
+            for item in sources:
+                state = "present" if item["exists"] else "not created"
+                print(f"  {item['layer']}: {item['path']} ({state})")
+        print("Next step: run 'olympus doctor' after manual edits.")
+    elif operation == "config check":
+        print(f"Renderer outputs: {'coherent' if data.get('coherent') else 'drift'} "
+              f"({data.get('managed_outputs', 0)} checked)")
+        print("Installation verification: not performed; model access: unknown")
+    elif operation == "config apply":
+        harnesses = data.get("selected_harnesses", [])
+        if not harnesses:
+            harnesses = [context["harness"]] if context.get("harness") else []
+        if harnesses:
+            print(f"Harness: {', '.join(harnesses)}")
+        if "source_version" in data:
+            print(f"Source version: {data['source_version']}")
+        if "preview_state" in data:
+            print(f"Preview: {data['preview_state']}")
+        if "execution" in data:
+            execution = data["execution"]
+            print(f"Execution: {execution}")
+        elif data.get("preview_only"):
+            print("Execution: not run (preview only; no target writes)")
+        assignments = data.get("assignments", {})
+        if assignments.get("status") in ("verified", "partial", "unsupported"):
+            print(f"Assignments: {assignments['status']}")
+        changes = data.get("changes", [])
+        manifest = data.get("manifest")
+        if not isinstance(manifest, dict):
+            opencode = data.get("harnesses", {}).get("opencode", {})
+            manifest = opencode.get("manifest", {}) if isinstance(opencode, dict) else {}
+        manifest_path = manifest.get("path") if isinstance(manifest, dict) else None
+        manifest_planned = bool(changes) or bool(manifest.get("write_planned")) if isinstance(manifest, dict) else bool(changes)
+        add_manifest = bool(manifest_path and manifest_planned
+                            and manifest_path not in {item["path"] for item in changes})
+        print(f"Resources to update ({len(changes) + int(add_manifest)}):")
+        for item in changes:
+            print(f"  {item['path']}")
+        if add_manifest:
+            print(f"  {manifest_path} (ownership manifest)")
+        if not changes and not add_manifest:
+            print("  (none)")
+        unchanged = data.get("unchanged", [])
+        if not changes and data.get("preview_state") == "no_changes":
+            print(f"Resources already current: {len(unchanged)}")
+        preserved = data.get("preserved", {})
+        if preserved.get("harnesses"):
+            print(f"Harnesses preserved: {', '.join(preserved['harnesses'])}")
+        if data.get("preview_only") and (changes or add_manifest):
+            print("Next step: rerun this command with --execute to apply the listed changes.")
+        elif data.get("execution") in ("unconfirmed", "rollback_unconfirmed"):
+            print("Next step: inspect the target and use the matching 'olympus config recover' command before retrying.")
+        elif data.get("execution") == "rollback_confirmed":
+            print("Next step: review the reported failure, then rerun the preview before deciding whether to retry.")
+        elif response.get("issues") and data.get("preview_only"):
+            print("Next step: resolve the listed blockers and rerun the preview; no target writes were made.")
+        elif response.get("issues") and data.get("execution") == "not_started":
+            print("Next step: resolve the listed blocker; execution did not start.")
+        elif response.get("issues"):
+            print("Next step: resolve the listed blocker and rerun the preview before applying.")
+        elif result == "no_changes":
+            print("Next step: none; the target is already current.")
+    elif operation in ("doctor", "status"):
+        state = data.get("installation_state")
+        if state:
+            print(f"Installation: {state}")
+        integrity = data.get("integrity")
+        if integrity:
+            print(f"Integrity: {integrity}" + (" (metadata only; not verified)" if operation == "status" else ""))
+        harnesses = data.get("harnesses", {})
+        if isinstance(harnesses, dict):
+            for name, item in harnesses.items():
+                if isinstance(item, dict):
+                    state = item.get("state", "unknown")
+                    if operation == "status":
+                        state += f"; integrity {item.get('integrity', 'unverified')}"
+                    print(f"{name}: {state}")
+                else:
+                    print(f"{name}: {item}")
+        verification = data.get("verification", {})
+        if verification:
+            print(f"Verification: {verification.get('state', 'unknown')}")
+        user_configuration = data.get("user_configuration", {})
+        if user_configuration:
+            print(f"User configuration: {user_configuration.get('state', 'unknown')}")
+        if data.get("recorded_version"):
+            print(f"Recorded version: {data['recorded_version']}")
+        if operation == "status":
+            print("Next step: run 'olympus doctor' to verify installation integrity.")
+        elif not response.get("issues"):
+            print("Next step: none; no repair is needed." if result == "ok"
+                  else "Next step: review the installation state before changing it.")
+    elif setter:
+        print("No setting change confirmed.")
+    elif operation in ("install", "uninstall"):
+        if data.get("engine"):
+            print(f"Native engine: {data.get('state', data['engine'])}")
+        if data.get("effects"):
+            effects = {
+                "none_confirmed": "No effects confirmed.",
+                "unconfirmed_until_native_result": "Unconfirmed until the native engine returns.",
+                "target_read_only_preview; temporary/cache effects may remain":
+                    "Target was not changed; temporary/cache effects may remain.",
+                "unconfirmed; descendant processes may continue":
+                    "Effects are unconfirmed; descendant processes may continue.",
+                "unconfirmed_after_native_failure": "Effects are unconfirmed after native failure.",
+                "native_engine_confirmed_success": "Native engine confirmed success.",
+                "global harness removed; CLI cleanup failed":
+                    "Global resources were removed, but CLI PATH cleanup failed.",
+            }.get(data["effects"], data["effects"])
+            print(f"Effects: {effects}")
+        if data.get("installation_state") and result != "preview":
+            print(f"Installation: {data['installation_state']}")
+        _emit_native_output_summary(data)
+        if data.get("native_stderr"):
+            print(data["native_stderr"].rstrip(), file=sys.stderr)
+        if result == "preview":
+            print("Next step: review the native plan, then rerun with --execute to apply it.")
+        elif result == "ok" and operation == "install":
+            print("Next step: run 'olympus doctor' to verify the installation.")
+        elif result == "ok":
+            print("Next step: open a new shell to refresh the removed PATH entry.")
+        elif result == "blocked":
+            print("Next step: resolve the listed blocker; no native engine was started.")
+        elif result == "unconfirmed":
+            print("Next step: inspect the selected installation and native output before retrying; effects are unconfirmed.")
+        elif result == "failed":
+            print("Next step: review the native diagnostic and resolve it before retrying.")
+    elif operation == "config recover":
+        recovery = data.get("recovery")
+        if recovery:
+            print(f"Recovery: {recovery}")
+    else:
+        for key, value in data.items():
+            if value is None or isinstance(value, (str, int, float, bool)):
+                print(f"{key}: {value}")
+
+    _emit_issues(response)
+    if operation == "doctor":
+        for issue in response.get("issues", []):
+            recommendation = _doctor_recommendation(issue.get("code"))
+            scope = response.get("context", {}).get("scope")
+            context = f" ({scope} scope)" if scope else ""
+            print(f"Next step{context}: {recommendation}")
+    elif operation == "config check" and response.get("issues"):
+        print("Next step: reconcile source/output differences, then rerun 'olympus config check'.")
+
+
+def emit(response: dict, as_json: bool, *, verbose: bool = False) -> None:
     if as_json:
         print(json.dumps(response, ensure_ascii=False))
+        return
+    if not verbose:
+        _emit_human_summary(response)
         return
     print(f"{response['operation']}: {response['result']}")
     for key, value in response["context"].items():
@@ -551,55 +892,10 @@ def emit(response: dict, as_json: bool) -> None:
             print(f"{key}: {json.dumps(value, ensure_ascii=False)}")
     if response["operation"] == "config list":
         print("Run 'olympus doctor' after manual edits.")
-    for issue in response["issues"]:
-        print(f"{issue['code']}: {issue['message']}", file=sys.stderr)
+    _emit_issues(response)
     if response["operation"] == "doctor":
-        guidance = {
-            "managed_file_drift": "Inspect the listed managed path and compare it with the trusted source; preserve local edits and reconcile ownership before any update or uninstall.",
-            "global_managed_file_drift": "Inspect the listed global managed path and preserve local edits; reconcile ownership before any update or uninstall.",
-            "source_drift": "Run `python scripts/render_harnesses.py check --harness opencode` in the displayed source; reconcile intentional source/output differences before applying anything.",
-            "invalid_manifest": "Preserve the manifest and managed files; inspect and manually reconcile the manifest format and ownership before install, update, or uninstall.",
-            "invalid_global_manifest": "Preserve the global manifest and resources; inspect and manually reconcile its format and ownership before install, update, or uninstall.",
-            "ambiguous_manifest": "Preserve both manifest locations and all managed files; resolve which manifest owns this displayed project before taking action.",
-            "unsafe_manifest": "Preserve the manifest and target files; inspect the unsafe path or file type before any operation that could change ownership.",
-            "manifest_too_large": "Preserve the manifest; inspect it manually and do not treat this read-limit result as a valid ownership check.",
-            "invalid_manifest_entry": "Preserve the manifest and managed files; inspect the malformed entry and reconcile ownership before any update or uninstall.",
-            "invalid_manifest_hash": "Preserve the manifest and managed files; inspect the invalid hash entry without rewriting it to match current files.",
-            "unsupported_manifest_inventory": "Preserve the manifest and managed files; compare its inventory with a trusted compatible source before taking action.",
-            "unsupported_global_inventory": "Preserve the global manifest and files; compare its inventory with a trusted compatible source before taking action.",
-            "version_mismatch": "Compare the recorded and source versions shown above, then choose the intended trusted release before any explicit update; no version change was made.",
-            "unsupported_global_version": "Preserve the global installation and verify its recorded release against a trusted supported release before changing it.",
-            "platform_unqualified": "Run doctor on a Windows system with PowerShell 7 (pwsh); this platform result did not verify the installation.",
-            "verifier_missing": "Inspect the displayed trusted source checkout and restore its verifier only from that source; no installation verification ran.",
-            "verifier_unavailable": "Run doctor on Windows with PowerShell 7 (pwsh) available; this result did not verify the installation.",
-            "verifier_version_unsupported": "Use PowerShell 7 or later (`pwsh`) and rerun doctor; this result did not verify the installation.",
-            "native_verify_unavailable": "Check the displayed platform, PowerShell 7 availability, and verifier diagnostic; no verification was established.",
-            "verification_unavailable": "Review the verifier diagnostic above and rerun doctor only when the stated verification prerequisite is available.",
-            "verification_failed": "Review the VerifyOnly diagnostic above and preserve the indicated files while reconciling the cause; doctor made no repair.",
-            "invalid_user_configuration": "Inspect the configuration path named above and correct its JSON, schema, or declared model/effort values manually, then rerun doctor.",
-            "harness_absent": "Confirm the selected harness and scope are intended; install it only after reviewing the displayed target and ownership.",
-            "invalid_target": "Select the intended existing Git worktree root and keep the canonical source checkout separate from the project target.",
-            "source_is_target": "Choose a separate existing project worktree; never use the canonical source checkout as its own installation target.",
-            "git_unavailable": "Make Git available and verify the selected directory is the intended worktree root before rerunning doctor.",
-            "target_unconfirmed": "Verify the displayed directory is the actual Git worktree root and that Git can inspect it; no target was changed.",
-            "invalid_global_root": "Select the intended absolute global configuration root and verify it is not a filesystem root before retrying.",
-            "global_path_unavailable": "Verify the OpenCode CLI or configured global path and inspect the selected global root before retrying; do not guess or move the root.",
-            "unsafe_global_root": "Inspect the displayed global path components for links, reparse points, or non-directory entries; preserve them until ownership is clear.",
-            "unsafe_global_resource": "Preserve the reported global resource and inspect its path/type manually before any operation that could change it.",
-            "global_external_guard_unsafe": "Inspect the existing global OpenCode config and resolve ambiguous rules manually; establish an external_directory ASK or DENY fallback before applying configuration.",
-            "global_install_conflict": "Preserve the user-owned conflicting resource and inspect the reported path; do not force an overwrite.",
-            "global_apply_recovery_pending": "Preserve the pending journal and verify it belongs to the displayed global OpenCode root; use only the explicit recovery path named in the diagnostic.",
-            "global_guard_recovery_pending": "Preserve the pending intent and global config; inspect the interrupted install and verify root ownership before choosing recovery.",
-            "source_invalid": "Inspect the canonical source and renderer diagnostic above; resolve source errors before applying any generated output.",
-            "source_inventory_unsupported": "Compare the displayed source inventory with the supported adapter inventory and use a compatible trusted source before applying anything.",
-            "configuration_invalid": "Inspect the configuration diagnostic and displayed path, correct the input manually, and rerun doctor; no repair was attempted.",
-            "read_failed": "Check that the displayed source or target resource is readable, preserve its contents, then rerun doctor.",
-            "query_failed": "Review the query diagnostic and displayed source/target paths; verify them manually before retrying and do not repair managed files from this generic error.",
-        }
         for issue in response["issues"]:
-            recommendation = guidance.get(issue.get("code"))
-            if recommendation is None:
-                recommendation = "Review this issue code and message before choosing a repair; no repair was attempted."
+            recommendation = _doctor_recommendation(issue.get("code"))
             scope = response.get("context", {}).get("scope")
             context = f" ({scope} scope)" if scope else ""
             print(f"next step{context}: {recommendation}")
@@ -688,13 +984,13 @@ def _run_model_edit(source: Path, args, response: dict) -> int:
         if args.json:
             print(json.dumps(response, ensure_ascii=False))
         else:
-            print(model_edit._format_preview_human(preview))
+            print(model_edit._format_preview_human(preview, verbose=args.verbose))
         return 0
 
     # Execution is the explicit command without --dry-run. Show the exact
     # candidate before staging or replacing any target; no extra prompt.
     print("Execution preview (not yet applied):")
-    print(model_edit._format_preview_human(preview))
+    print(model_edit._format_preview_human(preview, verbose=args.verbose, executing=True))
     try:
         prepared = source_edit._prepare_batch(candidate)
         if prepared is None:
@@ -740,7 +1036,7 @@ def _run_recovery(source: Path, response: dict) -> int:
     return 0
 
 
-def _run_project_recovery(source: Path, args, response: dict) -> int:
+def _run_project_recovery(source: Path, args, response: dict, *, verbose: bool = False) -> int:
     from . import config_apply, config_apply_transaction
     from . import source_edit
 
@@ -759,12 +1055,12 @@ def _run_project_recovery(source: Path, args, response: dict) -> int:
     except config_apply_transaction.TransactionError as error:
         response["result"] = {1: "failed", 3: "blocked", 4: "unconfirmed"}.get(error.code, "failed")
         response["issues"] = [{"code": response["result"], "message": str(error)}]
-        emit(response, False)
+        emit(response, False, verbose=verbose)
         return error.code
     except (OSError, UnicodeError, source_edit.BatchError, source_edit.LockError) as error:
         response["result"] = "unconfirmed"
         response["issues"] = [{"code": "unconfirmed", "message": str(error)}]
-        emit(response, False)
+        emit(response, False, verbose=verbose)
         return 4
     response["result"] = "no_changes" if result == "no_changes" else "ok"
     response["data"] = {"recovery": result}
@@ -794,9 +1090,15 @@ def main(argv: list[str] | None = None) -> int:
     response = {"schema_version": 1, "operation": "arguments", "result": "ok",
                 "context": {}, "data": {}, "issues": []}
     as_json = "--json" in arguments
+    verbose = False
+
+    def output(payload: dict, json_output: bool) -> None:
+        emit(payload, json_output, verbose=verbose)
+
     try:
         cli_parser = parser()
         args = cli_parser.parse_args(arguments)
+        verbose = args.verbose
         if args.version and args.command:
             raise CLIError("--version cannot be combined with a command", 2)
         if not args.version and not args.command:
@@ -837,7 +1139,7 @@ def main(argv: list[str] | None = None) -> int:
             rows = user_config.effective_roles(source, scope, target)
             response["data"] = {"scope": scope, "target": str(target) if target else None, "roles": rows}
             response["result"] = "ok"
-            emit(response, args.json)
+            output(response, args.json)
             return 0
         if args.command == "config" and args.action == "list":
             from . import user_config
@@ -845,7 +1147,7 @@ def main(argv: list[str] | None = None) -> int:
             scope, target = user_config.select_scope(source, args.scope, args.target)
             response["data"] = user_config.config_listing(source, scope, target)
             response["result"] = "ok"
-            emit(response, as_json)
+            output(response, as_json)
             return 0
         if args.command == "config" and args.action == "set-max-parallel":
             if not 1 <= args.value <= 8:
@@ -857,7 +1159,7 @@ def main(argv: list[str] | None = None) -> int:
                                 "preference_scope": "global", "source": str(path),
                                 "installed_agent_updated": applied}
             response["result"] = "ok"
-            emit(response, False)
+            output(response, False)
             return 0
         if args.command in {
             "kael", "veyra", "orin", "atlas", "kovan", "argus", "nox", "vera", "talos", "thales", "helios",
@@ -872,7 +1174,7 @@ def main(argv: list[str] | None = None) -> int:
                                  "target": str(target) if target else None,
                                  "source": str(path), "installed_agent_updated": applied}
             response["result"] = "ok"
-            emit(response, False)
+            output(response, False)
             return 0
         if response["operation"] in ("models list", "config check"):
             harness = getattr(args, "harness", "opencode")
@@ -880,17 +1182,17 @@ def main(argv: list[str] | None = None) -> int:
             response["data"], response["issues"] = source_query(source, response["operation"], harness)
             if response["issues"]:
                 response["result"] = "failed"
-            emit(response, as_json)
+            output(response, as_json)
             return 1 if response["issues"] else 0
         if response["operation"] in ("models set-family", "agents set-model"):
             return _run_model_edit(source, args, response)
         if response["operation"] == "config recover":
             if args.scope == "global":
                 code = _run_global_recovery(source, args, response)
-                emit(response, as_json)
+                output(response, as_json)
                 return code
             if args.scope is not None or args.target is not None:
-                return _run_project_recovery(source, args, response)
+                return _run_project_recovery(source, args, response, verbose=verbose)
             if args.harness is not None:
                 raise CLIError("--harness requires --scope global for config recovery.", 2)
             return _run_recovery(source, response)
@@ -914,19 +1216,19 @@ def main(argv: list[str] | None = None) -> int:
                         load_renderer=load_renderer, release_version=release_version,
                         assignment_query=model_assignments, operation="config apply",
                     )
-                emit(response, as_json)
+                output(response, as_json)
                 return code
 
             if args.execute:
                 return config_apply.execute(
                     source, args, response, source_query=source_query,
                     load_renderer=load_renderer, release_version=release_version,
-                    assignment_query=model_assignments,
+                    assignment_query=model_assignments, verbose=verbose,
                 )
             code = config_apply.preview(source, args, response, source_query=source_query,
                                         load_renderer=load_renderer, release_version=release_version,
                                         assignment_query=model_assignments)
-            config_apply.emit_preview(response, as_json)
+            config_apply.emit_preview(response, as_json, verbose=verbose)
             return code
         if response["operation"] == "doctor":
             from . import doctor
@@ -943,7 +1245,7 @@ def main(argv: list[str] | None = None) -> int:
                 except user_config.UserConfigError as error:
                     response["result"] = "failed"
                     response["issues"] = [{"code": "invalid_user_configuration", "message": str(error)}]
-                    emit(response, as_json)
+                    output(response, as_json)
                     return 1
             elif project_request:
                 args.scope = "project"
@@ -968,7 +1270,7 @@ def main(argv: list[str] | None = None) -> int:
             except (user_config.UserConfigError, CatalogError) as error:
                 response["result"] = "failed"
                 response["issues"] = [{"code": "invalid_user_configuration", "message": str(error)}]
-                emit(response, as_json)
+                output(response, as_json)
                 return 1
 
             if args.scope == "global":
@@ -981,21 +1283,21 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 if user_configuration is not None:
                     response["data"]["user_configuration"] = user_configuration
-                emit(response, as_json)
+                output(response, as_json)
                 return code
 
             code = doctor.diagnose(source, args, response, source_version=release_version(source),
                                    source_query=source_query)
             if user_configuration is not None:
                 response["data"]["user_configuration"] = user_configuration
-            emit(response, as_json)
+            output(response, as_json)
             return code
         if response["operation"] in ("install", "uninstall"):
             from . import install_routing
 
-            return install_routing.run(source, args, response, emit=emit, as_json=as_json)
+            return install_routing.run(source, args, response, emit=output, as_json=as_json)
         code = installation_status(source, args, response)
-        emit(response, as_json)
+        output(response, as_json)
         return code
     except CLIError as error:
         if error.code == 3:
@@ -1008,17 +1310,17 @@ def main(argv: list[str] | None = None) -> int:
             "code": "invalid_arguments" if error.code == 2 else "query_failed",
             "message": str(error),
         })
-        emit(response, as_json)
+        output(response, as_json)
         return error.code
     except ValueError as error:
         response["result"] = "failed"
         response["issues"].append({"code": "configuration_invalid", "message": str(error)})
-        emit(response, as_json)
+        output(response, as_json)
         return 1
     except (OSError, UnicodeError) as error:
         response["result"] = "failed"
         response["issues"].append({"code": "read_failed", "message": str(error)})
-        emit(response, as_json)
+        output(response, as_json)
         return 1
     except KeyboardInterrupt:
         code = 4
@@ -1050,7 +1352,7 @@ def main(argv: list[str] | None = None) -> int:
             "code": "unconfirmed" if code == 4 else "preflight_interrupted",
             "message": message,
         })
-        emit(response, as_json)
+        output(response, as_json)
         return code
 
 

@@ -8,7 +8,7 @@ Maintainer-facing, directional, evidence-driven and subject to validation. This 
 - Do not add Codex support, compatibility fallbacks, or parity gates. Historical Codex components, evaluations, and release claims remain dated evidence only; they do not define current support or compatibility.
 - Preserve OpenCode capability limits and evidence dates. Do not generalize a scoped runtime result to untested versions or platforms.
 - The eleven canonical Olympus Core roles and their responsibilities remain intact. Runtime support status does not remove or reassign a role.
-- Kael's three optional execution modifiers are OpenCode-only and task-scoped: terminal standalone `long-mode`, `fast-mode`, and `surgical-mode` lines. `fast-mode` reuses existing FAST; no parser, scheduler, model, or permission change is introduced. Prompt instructions can define marker placement, but static checks do not prove live model recognition or compliance.
+- OpenCode exposes exactly two global task commands: `/olympus.ultra <prompt>` for maximum useful safe concurrency within the configured ceiling, and `/olympus.performance <prompt>` for the existing explicit-only optimization gate. There are no bare aliases; empty-argument usage is a prompt-level guard, not deterministic native enforcement.
 
 ## Current foundation — SHIPPED
 
@@ -48,13 +48,13 @@ and projects need not install every optional device, game, or web tool.
 | **KEEP** | Kael's coordination, authority checks, useful specialists, dependency management, result reconciliation, and truthful completion; runtime-owned tools, sessions, and permissions. |
 | **REDUCE** | Unnecessary specialist fan-out, mandatory all-role workflows, broad tool-suite installation, and blanket validation. Use only the smallest useful roles and TFR-proportionate checks; preserve applicable project and CI gates. |
 | **DEFER** | Product feature implementation and the proposed mobile/game pilot below. The 70–80% useful-work target is an objective to measure, not a demonstrated capability. No product scope or acceptance decision is made here. |
-| **REUSE** | Completed #74 Capability Preflight, completed #34 TFR, current Question Barrier/FAST/completion policies, and the target project's authorized runtime/tooling. Do not create parallel mechanisms. |
+| **REUSE** | Completed #74 Capability Preflight, completed #34 TFR, current Question Barrier, configured concurrency ceiling and completion policies, and the target project's authorized runtime/tooling. Do not create parallel mechanisms. |
 
-Evidence boundary: Preflight, TFR, FAST, native permissions, and session/result handling
-are existing contracts with their documented qualification limits. The three Kael
-modifiers are prompt instructions available in the OpenCode adapter; this change has
-static contract evidence only, not live marker-recognition evidence. The pilot is
-proposed, not performed, and no autonomy percentage is claimed.
+Evidence boundary: Preflight, TFR, configured concurrency, native permissions, and session/result handling
+are existing contracts with their documented qualification limits. The two Kael
+command behaviors are prompt instructions available in the OpenCode adapter; this
+change has static contract evidence only, not live command-recognition evidence.
+The pilot is proposed, not performed, and no autonomy percentage is claimed.
 
 ### Future pilot proposal — not executed in this maintenance
 
@@ -107,21 +107,28 @@ The table captures shipped roles and current in-validation identities. Model ent
 
 Explicit user optimization intent may engage Helios; a performance fact alone never does. Cheap feasibility triage precedes bounded Nox measurements or Veyra source evidence. Helios proposes a small, evidence-backed benefit/effort/risk envelope or **DO_NOT_OPTIMIZE**; two automatic consultations normally suffice, third automatic denied. **STOP for user approval** of the concrete proposal before any implementation; Kael alone coordinates approved work, and success requires measured **BEFORE / AFTER / DELTA / TARGET / CORRECTNESS**. Static, synthetic, fresh-install, managed-upgrade and full non-live regression qualification passed. User-executed live evidence passed: Case A (Kael `ses_f1d00092cffei3vpkwwod5V6Gw`) used one Sol High Helios (`ses_f1cffb27fffeQK1m5hcXSf3t3u`) for two consultations in the same session, with bounded Kael-owned Veyra evidence (`ses_f1cff4df4ffeTmrPSOqZia0GBp`), a conservative proposal and an explicit approval stop; Case B (Kael `ses_f1cd99003ffeq9C1V0uMOt5G5L`) was observation-only, with zero Helios children. Case A's generic observer flagged `complete=False`, but native reconciliation confirmed the succeeded root, both terminal children consumed, empty inbox and no remaining required work. Neither live case was rerun during release review.
 
-## Command UX — CLOSED
+## Command UX — namespaced OpenCode commands
 
-Phase 10 evaluated `/power`, `/plan`, `/performance` and `/fast`; none provides an exclusive capability or authority boundary that justifies a new Olympus command. Natural language and existing routing remain the primary UX. The former separate maintenance command and role are retired by Issue #28's approved clean break. `/goal` remains opt-in and user-selected only where the native surface provides it; Kael does not trigger it invisibly or assume it delegates.
+The earlier Phase 10 decision dropped unnamespaced `/power`, `/plan`,
+`/performance`, and `/fast` shortcuts. Current OpenCode provides exactly
+`/olympus.ultra <prompt>` and `/olympus.performance <prompt>` as global native
+commands. Ultra maximizes useful, safe concurrency only up to the configured
+ceiling; Performance enters the existing Helios gate and still stops for
+approval before implementation. Neither changes ownership or completion gates,
+and neither has a bare alias. Empty-argument usage is guarded in the prompt
+because native command metadata has no required-arguments field. `/goal` remains
+opt-in and user-selected where the native surface provides it; Kael does not
+trigger it invisibly or assume it delegates.
 
-- `/power` — **DROP**. It mixes model, reasoning, parallelism, configuration and routing concerns; Olympus is not a model-configuration dashboard.
-- `/plan` — **DROP as an Olympus command**. Users can say “Plan X. Do not implement.” Atlas remains optional. A runtime-native command is not an Olympus command or equivalent to invoking Atlas.
-- `/performance` — **DROP**. An explicit optimization request already activates the Helios workflow; a discoverability alias adds no capability.
-- `/fast` — **DROP**. Keep contextual `FAST: <task>` for useful parallelism. It is distinct from FAST qualification and the automatic fast path; it never skips validation or completion gates.
+- `/power` and `/plan` — **DROP as Olympus commands**. Natural-language requests use the normal routing and Atlas gate; the runtime's built-in `/plan` is not an Olympus role invocation.
+- Bare `/performance` and `/fast` — **DROP**. Use the explicit namespaced commands above; FAST remains only a maintainer qualification profile, and the trivial fast path remains a policy optimization for routing.
 
 ## Phase order
 
 | Phase | Status | Target / qualification focus |
 |---|---|---|
-| 0 — Foundation | **SHIPPED** | OpenCode V2 runtime, preflight/discovery, completion and external-work gates, HUD, trusted-project execution, contextual maintenance, NORMAL/FAST up to four. |
-| 1 — Adaptive Concurrency finalization | **DEFERRED** | The earlier NORMAL 4 / FAST 6 proposal remains unimplemented. Current policy retains useful parallelism by default in NORMAL and explicitly requested FAST with at most four active children; this maintenance release makes no concurrency change. |
+| 0 — Foundation | **SHIPPED** | OpenCode V2 runtime, preflight/discovery, completion and external-work gates, HUD, trusted-project execution, contextual maintenance, adaptive concurrency within the configured ceiling. |
+| 1 — Adaptive Concurrency finalization | **DEFERRED** | The earlier two-profile concurrency proposal remains unimplemented. Default routing is useful and adaptive; `/olympus.ultra` asks for maximum useful safe concurrency up to the configured 1–8 prompt ceiling without changing the native scheduler or gates. |
 | 2 — Current Sorin baseline qualification | **SUPERSEDED** | The Sorin-specific qualification plan was superseded by shipped Phase 4 Thales evolution; no Sorin agent or session is to be resurrected. Evidence: the Thales evolution entry in `CHANGELOG.md` and the Phase 4 migration qualification in `tests/thales/`. |
 | 3 — Role Purity + Iterative Evidence | **SHIPPED** | Kael-mediated Role Purity, same-session Sorin evidence follow-up, no-progress stop, completion ownership, and Issue #1 reconciliation. Historical evidence is preserved; current routing has no separate maintenance handoff. |
 | 4 — Thales evolution | **SHIPPED** | Sorin visible identity → Thales The Sage; Sol XHigh deep-escalation role, user-executed live routing and deterministic negative control passed. |
@@ -130,7 +137,7 @@ Phase 10 evaluated `/power`, `/plan`, `/performance` and `/fast`; none provides 
 | 7 — Talos The Sentinel | **SHIPPED** | Bounded security defect and trust-boundary diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. |
 | 8 — Helios The Optimizer | **SHIPPED** | Explicit-only feasibility/proposal, mandatory user approval, before/after validation; user-executed live cases A and B passed. |
 | 9 — Contextual maintenance (Issue #28) | **IN VALIDATION** | One Kael handles OlympusAgents and external-project work using the normal specialists and gates; former separate maintenance role/command are removed. Historical Codex capability labels are not current support claims. |
-| 10 — Command UX | **CLOSED** | `/power`, `/plan`, `/performance` and `/fast` were evaluated and dropped. Natural language and existing routing remain primary; `/goal` remains opt-in and is never triggered invisibly. |
+| 10 — Command UX | **SUPERSEDED** | Earlier bare shortcuts remain dropped; the current exact namespaced commands are `/olympus.ultra` and `/olympus.performance`, with no aliases. |
 | 11 — Integrated Routing Qualification | **SHIPPED** | [Closure evidence](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/baseline.md): qualification is complete with no pending native cases. Case I remains guided PARTIAL; Argus/Thales same-session follow-up runtime coverage was NOT_EXERCISED. These are non-blocking limits, not evidence that every runtime path was exercised. |
 | 12 — Cross-harness evaluation | **CLOSED — HISTORICAL** | [Results](history/PHASE12-CROSS-HARNESS-RESULTS.md): 3 matched pairs / 6 verified executions at that time; PASS for tested invariants only. This does not establish current Codex support, total parity, superiority, or a harness/model winner. |
 
@@ -174,5 +181,5 @@ Talos is an optional pure security-defect reasoner, not an auditor, implementer 
 | Runaway diagnostic loops, Thales overuse/underuse | Evidence budgets, no-progress stop, uncertainty gate and negative controls. |
 | Atlas overplanning; Argus gap-vs-bug confusion; Talos security overclassification | Gate planning by complexity; classify against evidence before specialist routing. |
 | Helios analysis costs more than benefit; third-party fork/patch debt | Baseline and expected-value stop; reversible containment first, explicit approval for patch/fork. |
-| Command ambiguity or sprawl, including confusion among `FAST:`, FAST qualification and fast path | Keep natural language and routing primary; preserve dependency, writer, validation and completion gates. |
+| Command ambiguity or sprawl, including confusion between Ultra, Performance, maintainer FAST qualification and the trivial fast path | Keep command names exact; preserve dependency, writer, validation, approval and completion gates. |
 | False completion | Join, collect, validate and report all required work, including descendants and external jobs. |

@@ -83,10 +83,10 @@ try {
     Check RP13_RECOVER_ORIGINAL ($k -match 'wait for\s+the original native result and consume it once' -and $k -match 'After a successfully reconciled')
     Check RP14_UNKNOWN_STOPS ($k -match 'unknown/unrecoverable\s+execution stop as COMPLETION_UNCONFIRMED' -and $d -match 'Unknown execution\s+stops as COMPLETION_UNCONFIRMED')
     Check RP15_ISSUE1_INTACT ($k -match 'MISSING PARENT TOOL OUTPUT != CHILD FAILURE' -and $k -match 'only positive native evidence that no child was\s+created' -and $k -match 'No second worker is launched')
-    Check RP16_MODEL_MAPPING ($k -match 'model: "openai/gpt-6.1-sol#high"' -and $s -match 'model: openai/gpt-6.1-sol#xhigh' -and
+    Check RP16_MODEL_MAPPING ($k -match 'model: "openai/gpt-6.2-sol#high"' -and $s -match 'model: openai/gpt-6.2-sol#xhigh' -and
         @($workers | Where-Object { $_ -notmatch 'model: "openai/gpt-6-luna#max"' }).Count -eq 0)
     Check RP17_CONCURRENCY_UNCHANGED ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and
-        $k -match 'fan out up to four useful children' -and $k -match 'NORMAL is cost/context-aware: adapt from zero to four children')
+        $k -match 'Four is a ceiling, never a target' -and $k -match 'NORMAL is cost/context-aware: adapt from zero to four children')
     $allAgents = @($k,$s) + $workers
     Check RP18_NO_LUNA_FAST (($allAgents -join "`n") -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
     Check 'THALES_READ_ONLY' ((Denied $s 'shell') -and (Denied $s 'edit') -and (Denied $s 'subagent'))
@@ -105,10 +105,12 @@ try {
     Check RP11_NORMAL_RECONCILIATION ($rr -match 'CASE_A_HISTORICAL_ORDER' -and $k -match 'Kael-mediated iterative evidence loops reconcile the original worker')
     Check RP13_NO_FALSE_FAILURE_EVIDENCE ($k -match 'missing parent\s+tool output is not FAILED evidence' -and $k -match 'Never re-consult Thales using\s+fabricated failure')
     Check RP14_NO_INDETERMINATE_RETRY ($k -match 'permission to\s+launch a replacement' -and $k -match 'No second worker is launched')
-    Check RP17_THIRD_AUTO_DENIED ($k -match 'No third automatic consultation' -and $k -match 'explicit user authorization' -and $k -match '`/power`, FAST mode, complexity')
+    Check RP17_THIRD_AUTO_DENIED ($k -match 'No third automatic consultation' -and
+        $k -match 'explicit user authorization' -and $k -match '`/power`, `/olympus\.ultra`, complexity')
     Check RP18_COMPLETION_OWNERSHIP ($k -match 'reasoner final result consumed' -and $k -match 'zero unresolved required work')
-    Check RP19_MODEL_MAPPING ($k -match 'model: "openai/gpt-6.1-sol#high"' -and $s -match 'model: openai/gpt-6.1-sol#xhigh' -and @($workers | Where-Object { $_ -notmatch 'model: "openai/gpt-6-luna#max"' }).Count -eq 0)
-    Check RP20_CONCURRENCY ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
+    Check RP19_MODEL_MAPPING ($k -match 'model: "openai/gpt-6.2-sol#high"' -and $s -match 'model: openai/gpt-6.2-sol#xhigh' -and @($workers | Where-Object { $_ -notmatch 'model: "openai/gpt-6-luna#max"' }).Count -eq 0)
+    Check RP20_CONCURRENCY ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and
+        (Text '.opencode/commands/olympus.ultra.md') -match 'Maximize useful, safe concurrency')
     Check RP21_NO_LUNA_FAST (($allAgents -join "`n") -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
 
     $a=New-Loop

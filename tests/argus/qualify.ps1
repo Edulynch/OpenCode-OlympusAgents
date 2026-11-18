@@ -77,7 +77,7 @@ function Simulate([string]$case, [string]$worker = 'TERMINAL') {
     }
     [pscustomobject]@{ Status=$status; Sessions=$sessions; Consultations=$calls; WorkerParent=$workerParent; SessionID=if ($eligible) { 'argus-1' } else { '' } }
 }
-$expected = @{ kael='gpt-6.1-sol#high'; atlas='gpt-6.1-sol#high'; argus='gpt-6.1-sol#high'; thales='gpt-6.1-sol#xhigh'; helios='gpt-6.1-sol#high'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
+$expected = @{ kael='gpt-6.2-sol#high'; atlas='gpt-6.2-sol#high'; argus='gpt-6.2-sol#high'; thales='gpt-6.2-sol#xhigh'; helios='gpt-6.2-sol#high'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
     if ($QualificationSlice -ne 'Runtime') {
@@ -92,7 +92,7 @@ try {
         $a -match $headingPattern -and $a -match 'mode: subagent' -and
         (Test-Path -LiteralPath (Join-Path $source 'olympus/roles/argus.md') -PathType Leaf) -and
         (Test-OpenCodeGeneratedAgentManaged $b $renderer $source 'argus'))
-    Check AR2 ($a -match 'model: openai/gpt-6.1-sol#high')
+    Check AR2 ($a -match 'model: openai/gpt-6.2-sol#high')
     Check AR3 ($k -match '(?s)action: subagent\s+resource: argus\s+effect: allow' -and $k -match 'atlas, argus, talos, and helios are valid child role IDs')
     foreach ($pair in @(@('AR4','shell'),@('AR5','edit'),@('AR6','subagent'))) { Check $pair[0] ($a -match ('(?s)action: ' + $pair[1] + '\s+resource: "\*"\s+effect: deny')) }
     Check AR7 (@('read','glob','grep','list','lsp' | Where-Object { $a -notmatch ('(?s)action: ' + $_ + '\s+resource: "\*"\s+effect: deny') }).Count -eq 0)
@@ -117,7 +117,7 @@ try {
     Check AR26 ($k -match 'MISSING OUTPUT != WORKER FAILURE' -and $k -match 'COMPLETION_UNCONFIRMED' -and $k -match 'never launch replacement')
     Check AR29 ($k -match 'BUG_DIAGNOSIS means diagnosis only' -and $a -match 'Kael owns final completion')
     Check AR30 (@($expected.Keys | Where-Object { ([IO.File]::ReadAllText((Join-Path $source ".opencode/agents/$_.md"))) -notmatch ('(?m)^model: "?openai/' + [regex]::Escape($expected[$_]) + '"?\r?$') }).Count -eq 0)
-    Check AR31 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
+    Check AR31 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'Four is a ceiling, never a target')
     Check AR32 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and
         $b.Contains("'.opencode/agents/sorin.md'") -and
         $b.Contains('foreach ($retiredPath in $RetiredOpenCodeResources)') -and
@@ -145,7 +145,7 @@ try {
     try { $agents = ((& opencode debug agents 2>$null | Out-String) | ConvertFrom-Json -Depth 100) }
     finally { Pop-Location }
     $effectiveArgus = @($agents | Where-Object id -eq 'argus')
-    Check F_FRESH ($freshResult.Code -eq 0 -and @($effectiveArgus | Where-Object { $_.model.id -eq 'gpt-6.1-sol' -and $_.model.variant -eq 'high' -and $_.mode -eq 'subagent' }).Count -eq 1 -and @($agents | Where-Object id -eq 'sorin').Count -eq 0)
+    Check F_FRESH ($freshResult.Code -eq 0 -and @($effectiveArgus | Where-Object { $_.model.id -eq 'gpt-6.2-sol' -and $_.model.variant -eq 'high' -and $_.mode -eq 'subagent' }).Count -eq 1 -and @($agents | Where-Object id -eq 'sorin').Count -eq 0)
     Check F_EFFECTIVE_DENY ($effectiveArgus.Count -eq 1 -and @('shell','edit','subagent','read','glob','grep','list','lsp' | Where-Object { $action = $_; @($effectiveArgus[0].permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq 'deny' }).Count -lt 1 -or @($effectiveArgus[0].permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq 'allow' }).Count -gt 0 }).Count -eq 0)
     Check F_ROSTER (@($expected.Keys | Where-Object { $id = $_; $want = $expected[$id].Split('#'); @($agents | Where-Object { $_.id -eq $id -and $_.model.id -eq $want[0] -and $_.model.variant -eq $want[1] }).Count -ne 1 }).Count -eq 0)
     }

@@ -1,0 +1,12 @@
+---
+description: Evaluate an explicit performance or optimization task
+agent: kael
+subagent: false
+---
+
+User task:
+$ARGUMENTS
+
+If the user task is empty or contains only whitespace, respond only with `Usage: /olympus.performance <prompt>`. Do not call tools or launch agents.
+
+Otherwise treat the task above as the user's explicit optimization request and apply Kael's existing Optimization Gate. Establish a meaningful target and baseline evidence; involve Helios only when useful under that gate, and use bounded evidence gathering. Present any concrete proposal, conservative benefit, effort, risk, and tradeoffs, then stop for the required human approval before implementation unless the user already approved that sufficiently concrete direction with understood tradeoffs. A successful implementation still requires before/after/delta/target measurements and correctness validation. This command does not select `/olympus.ultra`, authorize implementation, or bypass any ownership, permission, dependency, reconciliation, validation, or completion gate.

@@ -239,8 +239,8 @@ harness-provenance or detection metadata is not ownership. An existing current
 global manifest uses the same path and schema with `scope=global`, exactly
 OpenCode, `installed_version=local` or a release tag, a nonempty
 `installed_from_commit`, and a valid `default_agent_receipt`. With an existing
-user-owned global config, the 13 base resources are managed and the config
-remains unowned; when Olympus creates the config, all 14 resources are managed.
+user-owned global config, the 15 base resources are managed and the config
+remains unowned; when Olympus creates the config, all 16 resources are managed.
 Both forms are current.
 
 Overrides use `schema_version=1` and an `overrides` map; a missing override file
@@ -274,7 +274,7 @@ If drift occurs, inspect the reported path and manifest, back up any intentional
 
 ## Qualification
 
-The contextual `FAST:` request asks Olympus to use useful independent parallelism within its existing limits. The `FAST` qualification profile below selects offline checks; these two meanings are separate, and neither skips required validation or completion gates.
+`/olympus.ultra <prompt>` asks Kael to maximize useful independent parallelism within the configured ceiling and existing gates. `FAST` below names only OlympusAgents' offline qualification profile; it is not a user-facing execution mode or trigger.
 
 ### TFR in software built with Olympus
 
@@ -442,7 +442,7 @@ slices; they do not add suites, profiles to Olympus itself, or duplicate tests.
 
 `olympus/core/models.toml` is the sole conceptual role→family/effort map.
 Currently supported OpenCode identifiers are rendered from that file: Sol uses
-`openai/gpt-6.1-sol`; Luna remains GPT-6 Luna. Sol roles retain `high` except
+`openai/gpt-6.2-sol`; Luna remains GPT-6 Luna. Sol roles retain `high` except
 Thales (`xhigh`); Luna roles retain `max`. Change a family identifier in Core
 and re-render—do not update agent files or installer model tables by hand.
 Qualify the model mapping and installer check with:
@@ -488,7 +488,7 @@ drift/missing-output detection, canonical role/model/policy sources, and the
 current OpenCode capability contract. Static checks do not establish live
 runtime behavior.
 
-Current code refuses unsupported older manifests and retired-resource conflicts without migration, adoption, or deletion. The Preflight harness checks policy ordering, target/ownership boundaries and a small cart/auth fixture **statically**; it does not execute agents or verify actual child count, discovery tool calls or latency. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Adaptive Concurrency / FAST checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release qualification's `-MockOpenCode` mode uses a task-local deterministic CLI fixture to exercise installer/bootstrap and verification behavior without contacting a live OpenCode runtime; it does not establish runtime agent/plugin discovery. The release, dirty-worktree, and installer compatibility harnesses use **local source**, not the remote tag, and do not test the interactive UI. The dirty-worktree harness checks unrelated bytes, Git status, index diffs, managed conflict/drift, reinstall and a local-source managed update. The compatibility harness launches the installer via both Windows PowerShell 5.1 (when present) and PowerShell 7 into separate disposable Git projects, and tests missing `pwsh` with a process-local PATH. Some harnesses retain disposable fixtures; check their output. The adaptive-concurrency harness's `DOC` check verifies that the README describes NORMAL as the default using only useful parallelism, FAST as explicitly requested with up to four agents, and FAST as preserving checks and task dependencies.
+Current code refuses unsupported older manifests and retired-resource conflicts without migration, adoption, or deletion. The Preflight harness checks policy ordering, target/ownership boundaries and a small cart/auth fixture **statically**; it does not execute agents or verify actual child count, discovery tool calls or latency. The Activity HUD harness tests presentation, installation, and plugin discovery, not interactive rendering. Ultra/performance command and adaptive-concurrency checks are static; the autonomy harness checks effective permissions and bootstrap, not interactive child execution. The release qualification's `-MockOpenCode` mode uses a task-local deterministic CLI fixture to exercise installer/bootstrap and verification behavior without contacting a live OpenCode runtime; it does not establish runtime agent/plugin discovery. The release, dirty-worktree, and installer compatibility harnesses use **local source**, not the remote tag, and do not test the interactive UI. The dirty-worktree harness checks unrelated bytes, Git status, index diffs, managed conflict/drift, reinstall and a local-source managed update. The compatibility harness launches the installer via both Windows PowerShell 5.1 (when present) and PowerShell 7 into separate disposable Git projects, and tests missing `pwsh` with a process-local PATH. Some harnesses retain disposable fixtures; check their output. The adaptive-concurrency harness's `DOC` check verifies that the README describes adaptive useful concurrency by default, Ultra as maximizing useful work only up to its configured ceiling, and all existing task dependencies and gates.
 
 `tests/worktree-activation/qualify.ps1` is a Windows-only, disposable Git regression against the current local source. It bootstraps a main fixture using the local installer's version metadata, creates two linked worktrees (whose `.git` entries are files), confirms that neither initially discovers Kael, then provisions both through the manifest-owned helper. It checks per-checkout manifest hashes, user-file preservation, idempotence, conflicts, source drift, and invalid-manifest refusal without writes. Its OpenCode CLI is a deterministic stub; this does not verify live OpenCode runtime behavior.
 
@@ -549,6 +549,39 @@ otherwise report BLOCKED without starting it. Missing output is not failure and
 never authorizes a blind retry. `tests/external-work-ownership/qualify.ps1`
 checks this shared Kael contract and disposable process ownership; it is not an
 interactive-agent or runtime-permission test.
+
+### Native child waiting without active reasoning
+
+Keeping a task pending does not require keeping a model turn active. With native
+background children, Kael may continue independent work; otherwise it sends one
+IN PROGRESS update and ends the turn. Native child notifications resume the
+parent to reconcile the original results. If work is still pending and there is
+nothing independent to do, it yields again without repeating unchanged updates.
+Yielding does not complete the task, cancel children, release writer ownership,
+or authorize replacement invocations. Final completion still requires all
+required terminal results to be collected, validated, and consumed once.
+Repeated reasoning, no-op calls, unrelated skill loads, sleeps, and polling are
+not waiting mechanisms.
+
+`tests/completion-gates/qualify.ps1` checks this prompt contract and synthetic
+completion/ownership gates; it does not establish live notification delivery or
+latency. For a focused live regression, use the persistent OpenCode service and
+a new session loading the corrected Kael prompt, with a small explicitly
+requested batch of independent token-only children and no file writes:
+
+- Retain each original child session ID and use native trace/event timestamps
+  for task start, each launch, each child's terminal result, parent receipt, and
+  the final synthesis. Do not ask the model to estimate timestamps or add polling.
+- Check that idle waiting produces no repeated reasoning or unrelated tool calls,
+  that native notifications resume reconciliation, and that only the original
+  children are consumed before the final response.
+- Separate launch overhead, child execution, result-delivery delay, and final
+  synthesis. Record `TECHNICAL_EXECUTION_TIME` and `TOTAL_ORCHESTRATION_TIME`
+  separately; mark unavailable timestamps or active-execution totals unobserved.
+  Overlapping child durations must not be summed as wall-clock latency.
+- Report the actual timings and failures; a static PASS or successful invocation
+  count is not proof of latency improvement. The historical v2.0.15
+  `tests/completion-gates/live-family.ps1` is not a current-runtime benchmark.
 
 OpenCode v2.0.15 completion semantics: `POST /api/session/{sessionID}/command` executes a slash-command callback immediately; `POST /api/session/{sessionID}/prompt` durably admits input and schedules execution. A CLI `opencode run` exit or a root assistant response is not a session-family completion signal. `POST /api/experimental/session/{sessionID}/wait` waits for **one** agent loop to become idle (HTTP 204), not its descendants or a terminal result. `GET /api/session/active` lists only foreground drains owned by that server process: absence is not proof of terminal completion. Use `GET /api/session?parentID=<root>` (paginate), recursively discover descendants, `GET /api/session/{sessionID}` (outcome, time.idle), `GET /api/session/{sessionID}/inbox` and messages/export to verify terminal result and parent consumption. Recheck family membership before concluding. There is no documented family-wide wait in this version. Distinguish MESSAGE_COMPLETE, ROOT_IDLE and FAMILY_COMPLETE (the last is a validated workflow condition, not an OpenCode API status). If a child has no terminal outcome/result, classify it as unconfirmed even if the root has gone idle. Bounded waits must end with an honest PARTIAL/BLOCKED report rather than fabricate success.
 

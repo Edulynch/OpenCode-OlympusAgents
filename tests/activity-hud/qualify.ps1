@@ -9,6 +9,7 @@ $fixture = Join-Path $work ('activity-' + [guid]::NewGuid().ToString('N'))
 $plugin = '.opencode/plugins/olympus-activity'
 $utf8 = [Text.UTF8Encoding]::new($false)
 $originalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
+$originalOlympusConfig = [Environment]::GetEnvironmentVariable('OLYMPUS_CONFIG_FILE','Process')
 $mockBin = $null
 function Enable-OfflineOpenCodeStub([string]$FixtureRoot) {
     $script:mockBin = Join-Path $FixtureRoot ('activity-opencode-' + [guid]::NewGuid().ToString('N'))
@@ -24,6 +25,7 @@ function Enable-OfflineOpenCodeStub([string]$FixtureRoot) {
     $env:PATH = (@($script:mockBin,$PSHOME) + $parts) -join [IO.Path]::PathSeparator
 }
 try {
+    $env:OLYMPUS_CONFIG_FILE = Join-Path $fixture 'isolated-user-config.json'
     if ($QualificationSlice -eq 'Offline') {
         [IO.Directory]::CreateDirectory($work) | Out-Null
         Enable-OfflineOpenCodeStub $work
@@ -106,6 +108,7 @@ try {
     exit 1
 } finally {
     [Environment]::SetEnvironmentVariable('PATH',$originalPath,'Process')
+    [Environment]::SetEnvironmentVariable('OLYMPUS_CONFIG_FILE',$originalOlympusConfig,'Process')
     if ($mockBin -and (Test-Path -LiteralPath $mockBin)) {
         Remove-Item -LiteralPath $mockBin -Recurse -Force -ErrorAction SilentlyContinue
     }

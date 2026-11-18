@@ -34,6 +34,10 @@ _RETIRED_OPEN_CODE_AGENTS = (
     ".opencode/agents/sorin.md",
     ".opencode/agents/maintenance.md",
 )
+_GLOBAL_ONLY_OPENCODE_OUTPUTS = frozenset({
+    ".opencode/commands/olympus.ultra.md",
+    ".opencode/commands/olympus.performance.md",
+})
 
 
 class PreviewFault(ValueError):
@@ -243,6 +247,8 @@ def _render_managed_outputs(source: Path, renderer, installed: tuple[str, ...]) 
             relative = path.relative_to(source).as_posix()
         except ValueError as error:
             raise PreviewFault(3, "source_path_unsafe", f"Rendered source output is outside the checkout: {path}") from error
+        if relative in _GLOBAL_ONLY_OPENCODE_OUTPUTS:
+            continue
         if relative.startswith(".opencode/") or relative == "opencode.jsonc":
             harness = "opencode"
         elif relative.startswith(".codex/") or relative == "CODEX.md":
@@ -791,7 +797,7 @@ def _plan_fingerprint(response: dict) -> tuple:
 
 
 def execute(source: Path, args, response: dict, *, source_query: Callable, load_renderer: Callable,
-            release_version: Callable, assignment_query: Callable) -> int:
+            release_version: Callable, assignment_query: Callable, verbose: bool = False) -> int:
     """Explicitly apply one previewed project plan under the shared target lock."""
     from . import config_apply_transaction as transaction
     from . import source_edit
@@ -800,7 +806,7 @@ def execute(source: Path, args, response: dict, *, source_query: Callable, load_
                    load_renderer=load_renderer, release_version=release_version,
                    assignment_query=assignment_query)
     if code:
-        emit_preview(response, False)
+        emit_preview(response, False, verbose=verbose)
         return code
     preview_printed = False
     try:
@@ -812,13 +818,13 @@ def execute(source: Path, args, response: dict, *, source_query: Callable, load_
             response["data"]["preview_state"] = "no_changes"
             response["data"]["preview_only"] = False
             response["data"]["execution"] = "no_changes"
-            emit_preview(response, False)
+            emit_preview(response, False, verbose=verbose)
             print("execution: no_changes")
             return 0
 
         before = _plan_fingerprint(response)
         print("Execution preview (not yet applied):")
-        emit_preview(response, False)
+        emit_preview(response, False, verbose=verbose)
         preview_printed = True
 
         def revalidate():
@@ -865,7 +871,7 @@ def execute(source: Path, args, response: dict, *, source_query: Callable, load_
     except PreviewFault as error:
         code = _failed(response, error)
         if not preview_printed:
-            emit_preview(response, False)
+            emit_preview(response, False, verbose=verbose)
         else:
             print(f"config apply: {response['result']}", file=sys.stderr)
             print(str(error), file=sys.stderr)
@@ -881,7 +887,7 @@ def execute(source: Path, args, response: dict, *, source_query: Callable, load_
             print(f"config apply: {response['result']}", file=sys.stderr)
             print(str(error), file=sys.stderr)
         else:
-            emit_preview(response, False)
+            emit_preview(response, False, verbose=verbose)
         return error.code
     except (OSError, UnicodeError, source_edit.BatchError, source_edit.LockError) as error:
         response["result"] = "unconfirmed"
@@ -891,15 +897,67 @@ def execute(source: Path, args, response: dict, *, source_query: Callable, load_
             print("config apply: unconfirmed", file=sys.stderr)
             print(str(error), file=sys.stderr)
         else:
-            emit_preview(response, False)
+            emit_preview(response, False, verbose=verbose)
         return 4
 
 
-def emit_preview(response: dict, as_json: bool) -> None:
+def emit_preview(response: dict, as_json: bool, *, verbose: bool = False) -> None:
     if as_json:
         print(json.dumps(response, ensure_ascii=False))
         return
     print(f"{response['operation']}: {response['result']}")
+    if not verbose:
+        context, data = response.get("context", {}), response.get("data", {})
+        if context.get("scope"):
+            print(f"Scope: {context['scope']}")
+        if context.get("target"):
+            print(f"Target: {context['target']}")
+        if context.get("harness"):
+            print(f"Harness: {context['harness']}")
+        if "source_version" in data:
+            print(f"Source version: {data['source_version']}")
+        if "preview_state" in data:
+            print(f"Preview: {data['preview_state']}")
+        execution = data.get("execution")
+        if execution:
+            print(f"Execution: {execution}")
+        elif data.get("preview_only"):
+            print("Execution: not run (preview only; no target writes)")
+        if isinstance(data.get("manifest"), dict):
+            manifest = data["manifest"]
+            print(f"Ownership: {manifest.get('ownership', 'unknown')}")
+        manifest = data.get("manifest", {})
+        changes = data.get("changes", [])
+        manifest_path = manifest.get("path") if isinstance(manifest, dict) else None
+        add_manifest = bool(manifest_path and (changes or manifest.get("write_planned"))
+                            and manifest_path not in {item["path"] for item in changes})
+        print(f"Resources to update ({len(changes) + int(add_manifest)}):")
+        for item in changes:
+            print(f"  {item['path']}")
+        if add_manifest:
+            print(f"  {manifest['path']} (ownership manifest)")
+        if not changes and not add_manifest:
+            print("  (none)")
+        unchanged = data.get("unchanged", [])
+        if data.get("preview_state") == "no_changes":
+            print(f"Resources already current: {len(unchanged)}")
+        preserved = data.get("preserved", {})
+        if preserved.get("harnesses"):
+            print(f"Harnesses preserved: {', '.join(preserved['harnesses'])}")
+        if data.get("preview_only") and (changes or add_manifest):
+            print("Next step: rerun this command with --execute to apply the listed changes.")
+        elif response.get("issues") and data.get("preview_only"):
+            print("Next step: resolve the listed blockers and rerun the preview; no target writes were made.")
+        elif execution in ("unconfirmed", "unconfirmed_after_failure"):
+            print("Next step: inspect the target and run the matching 'olympus config recover' command before retrying.")
+        elif response.get("result") == "no_changes":
+            print("Next step: none; the target is already current.")
+        for issue in response.get("issues", []):
+            details = [issue.get("code", "issue"), issue.get("message", "")]
+            if issue.get("path"):
+                details.append(f"path={issue['path']}")
+            print(": ".join(value for value in details if value), file=sys.stderr)
+        return
     for key, value in response["context"].items():
         print(f"{key}: {value}")
     data = response["data"]

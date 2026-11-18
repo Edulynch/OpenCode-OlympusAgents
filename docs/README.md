@@ -1,13 +1,13 @@
 # Documentation index
 
-Start with the icon-first [README](../README.md) for quick commands and task examples, then open the guide for the subject you need. This index maps current guidance to its source of truth and keeps completed work and old decisions easy to find.
+Start with the quick guide in [English](../README.md) or [Español](../README.ES.md) for examples, installation, and the eleven-agent team. Then open the guide for the subject you need.
 
 ## Sources of truth
 
 | Subject | Canonical source | Use |
 | --- | --- | --- |
 | First install and removal | [README](../README.md) and [installation guide](INSTALLATION.md) | The README has the two first-run commands; the guide explains supported platforms, parameters, safeguards, and troubleshooting. |
-| Using the agents, task modes, and prompt examples | [Workflow guide](WORKFLOWS.md) | The README shows the first task; this guide owns the operator-facing NORMAL/FAST and experimental modifier explanations. Canonical behavior stays in Core. |
+| Team, commands, and prompt examples | [README](../README.md#the-team) and [workflow guide](WORKFLOWS.md) | The README introduces the team; the workflow guide explains `/olympus.ultra` and `/olympus.performance`. Canonical behavior stays in Core. |
 | Olympus roles, routing, authority, and policies | [Olympus Core](../olympus/README.md) | Edit the canonical Core or adapter source when behavior changes. Generated harness files are outputs. |
 | Harness capabilities and support status | [Capability source](../olympus/harnesses/capabilities.toml) and [OpenCode capability contract](HARNESS-CAPABILITIES.md) | OpenCode is the only currently supported Olympus runtime. |
 | Feature requirements and evidence | [`specs/`](../specs/README.md) | Keep implemented and retrospective contracts there. `specs/future/` is a proposal register, not implementation authority. |
@@ -30,7 +30,7 @@ This index covers current guidance, dated release records, and the operator work
 | [ISSUE-LEDGER.md](ISSUE-LEDGER.md) | Maintainer-facing snapshot of issue decisions, evidence limits, next gates, and Git/WIP lifecycle | **Vigente, operativo (snapshot).** Links to live GitHub issues/PRs; not a second source of truth, requirements catalog, or release record. | Repository maintainers |
 | [ROADMAP.md](ROADMAP.md) | Directional shipped, in-validation, and proposed work | **Vigente, directional.** Not a release promise or implementation authorization; links to closed Phase 12 results. | Repository maintainers |
 | [WORKTREES.md](WORKTREES.md) | Worktree setup and use | **Vigente.** Operational guidance; related retrospective behavior is recorded under `specs/`. | Repository maintainers |
-| [WORKFLOWS.md](WORKFLOWS.md) | Examples, team overview, modes, and practical operator limits | **Vigente.** Extended user guide linked from the concise README; Olympus Core remains the canonical source for policy. | Repository maintainers |
+| [WORKFLOWS.md](WORKFLOWS.md) | Examples, task commands, and practical operator limits | **Vigente.** Extended user guide linked from both README files; Olympus Core remains the canonical source for policy. | Repository maintainers |
 | [RELEASE-v0.4.8.md](RELEASE-v0.4.8.md) | v0.4.8 release record | **Histórico.** Preserved release facts; superseded as current-version guidance by later release records. | Release maintainer (proposed role) |
 | [RELEASE-v0.4.9.md](RELEASE-v0.4.9.md) | v0.4.9 release record | **Histórico.** Preserved release facts; remains linked from the constitution as a dated example. | Release maintainer (proposed role) |
 | [RELEASE-v0.5.0.md](RELEASE-v0.5.0.md) | Bounded CLI qualification snapshot and support matrix | **Historical pre-publication evidence.** Preserved as recorded alongside the [historical stable v0.5.0 Release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.5.0). | Release maintainer (proposed role) |

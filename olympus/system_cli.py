@@ -39,13 +39,17 @@ def update(source: Path) -> int:
             command, cwd=source, env=environment, check=False, timeout=1200, shell=False,
         )
     except subprocess.TimeoutExpired:
-        print("Update timed out; inspect olympus doctor before retrying.", file=sys.stderr)
+        print("Update timed out; effects are unconfirmed. Inspect olympus doctor before retrying.", file=sys.stderr)
+        return 4
+    except KeyboardInterrupt:
+        print("Update interrupted; effects are unconfirmed. Inspect olympus doctor before retrying.", file=sys.stderr)
         return 4
     except OSError as error:
         print(f"Could not start the immutable-release updater: {error}", file=sys.stderr)
         return 3
     if completed.returncode == 0:
-        print("Olympus update completed or is already current; previous and selected versions are reported above.")
+        print("Update command succeeded; review the native output above to see whether a release was applied.")
         return 0
-    print("Olympus update did not complete; no success is assumed.", file=sys.stderr)
+    print(f"Update did not complete (native exit {completed.returncode}); effects may be unconfirmed. "
+          "Review native output and inspect olympus doctor before retrying.", file=sys.stderr)
     return completed.returncode

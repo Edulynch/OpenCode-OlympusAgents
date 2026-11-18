@@ -221,22 +221,6 @@ def _parallel_guidance(children: int) -> str:
     )
 
 
-def _balanced_shards(items: int, workers: int) -> str:
-    quotient, remainder = divmod(items, workers)
-    return "/".join(str(quotient + (index < remainder)) for index in range(workers))
-
-
-def _sharding_examples(children: int) -> str:
-    if children == 4:
-        return "20 items / 4 workers = 5/5/5/5; 7 / 4 = 2/2/2/1;\n100 / 4 ≈ 25 each"
-    seven_workers = min(7, children)
-    return (
-        f"20 items / {children} workers = {_balanced_shards(20, children)}; "
-        f"7 / {seven_workers} = {_balanced_shards(7, seven_workers)}; "
-        f"100 / {children} ≈ {round(100 / children)} each"
-    )
-
-
 def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[str, str],
                      roles: set[str], max_children: int | None = None) -> dict[Path, str]:
     adapter = root / "olympus" / "harnesses" / "opencode"
@@ -282,7 +266,6 @@ def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[
                 "max_children_s": "" if children == 1 else "s",
                 "max_children_title": word.title(),
                 "normal_parallelism_guidance": _parallel_guidance(children),
-                "sharding_examples": _sharding_examples(children),
                 "display_identity": identities[role],
                 "tfr_policy": tfr_policy if role == "kael" else "",
                 "maintenance_context_policy": maintenance_policy if role == "kael" else "",
@@ -316,6 +299,13 @@ def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[
         output[output_path] = add_markdown_comment(body, GENERATED) if source_name.endswith(".md") else comment + body
     setup_source = adapter / "worktree-setup.ps1"
     output[root / ".opencode" / "scripts" / "worktree-setup.ps1"] = f"# {GENERATED}\n" + read_text(setup_source)
+    commands_dir = adapter / "commands"
+    for command in ("olympus.ultra", "olympus.performance"):
+        source_path = commands_dir / f"{command}.md"
+        command_text = read_text(source_path)
+        if not command_text.startswith("---\n"):
+            raise RenderError(f"OpenCode command metadata must be a YAML frontmatter block: {source_path}")
+        output[root / ".opencode" / "commands" / f"{command}.md"] = add_markdown_comment(command_text, GENERATED)
     return output
 
 

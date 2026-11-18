@@ -46,7 +46,7 @@ outputs**.
 
 | Adapter | Managed/generated outputs |
 |---|---|
-| OpenCode | `.opencode/agents/**`, `.opencode/plugins/olympus-activity/**`, `opencode.jsonc` |
+| OpenCode | `.opencode/agents/**`, `.opencode/commands/olympus.ultra.md`, `.opencode/commands/olympus.performance.md`, `.opencode/plugins/olympus-activity/**`, `opencode.jsonc` |
 | Shared contract presentation | `docs/HARNESS-CAPABILITIES.md` |
 
 Public install/update/uninstall supports **global OpenCode only**, without
@@ -70,11 +70,14 @@ global manifest requires `scope=global`, exactly OpenCode,
 `installed_version=local` or a release tag, nonempty `installed_from_commit`,
 and a valid `default_agent_receipt`.
 
-When an existing user-owned global config passes the permission guard, the 13
+When an existing user-owned global config passes the permission guard, the 15
 base resources are managed and the config itself remains unowned; its
 `default_agent` field is reconciled using the receipt while preserving other
 bytes. If neither config file exists, Olympus creates a managed config and
-manages 14 resources. Both counts are current formats, not legacy inventories.
+manages 16 resources. Both counts are current formats. The two command files are
+global-only; project inventories remain at 15 paths. Only the exact, hash-verified
+v0.10.0 global 13/14-path inventories are recognized for installer upgrade or
+uninstall; they require an update before current verification or config apply.
 An existing `opencode.json` or `opencode.jsonc` must have a valid ordered V2
 `permissions` array with an effective `external_directory * ASK` or `DENY`
 fallback. Unsafe, malformed, or ambiguous config blocks before writes; Olympus

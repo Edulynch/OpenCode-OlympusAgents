@@ -644,8 +644,28 @@ def _build_set_role_candidate(source_root: str | Path, role: str, *,
     )
 
 
-def _format_preview_human(preview: dict[str, Any]) -> str:
+def _format_preview_human(preview: dict[str, Any], *, verbose: bool = False,
+                          executing: bool = False) -> str:
     """Human view of the same JSON-serializable preview object."""
+    if not verbose:
+        lines = [f"{preview['operation']}: {preview['result']}",
+                 f"Source: {preview['context']['source']}"]
+        for row in preview["data"]["roles"]:
+            lines.append(
+                f"{row['role']}: family {row['family']['old']} -> {row['family']['new']}; "
+                f"effort {row['effort']['old']} -> {row['effort']['new']}; "
+                f"OpenCode {row['models']['opencode']['old']} -> {row['models']['opencode']['new']}"
+            )
+        paths = preview["data"]["write_set"]
+        lines.append(f"Files to update ({len(paths)}):")
+        lines.extend(f"  {path}" for path in paths)
+        if not paths:
+            lines.append("  (none)")
+            lines.append("Next step: none; there are no changes to apply.")
+        elif not executing:
+            lines.append("Next step: rerun without --dry-run to apply this source edit.")
+        return "\n".join(lines)
+
     lines = [f"{preview['operation']}: {preview['result']}", f"source: {preview['context']['source']}"]
     for row in preview["data"]["roles"]:
         lines.append(

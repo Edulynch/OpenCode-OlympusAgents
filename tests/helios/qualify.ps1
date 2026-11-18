@@ -69,7 +69,7 @@ function Simulate([string]$case) {
     if ($case -eq 'regression') { $state = 'VALIDATION_FAILED' }
     [pscustomobject]@{ Status=$state; Sessions=[int]$intent; Calls=$calls; Worker=$worker; WorkerParent=$workerParent; SameSession=$same; Implemented=$implementation }
 }
-$expected = @{ kael='gpt-6.1-sol#high'; atlas='gpt-6.1-sol#high'; argus='gpt-6.1-sol#high'; talos='gpt-6.1-sol#high'; helios='gpt-6.1-sol#high'; thales='gpt-6.1-sol#xhigh'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
+$expected = @{ kael='gpt-6.2-sol#high'; atlas='gpt-6.2-sol#high'; argus='gpt-6.2-sol#high'; talos='gpt-6.2-sol#high'; helios='gpt-6.2-sol#high'; thales='gpt-6.2-sol#xhigh'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
     if ($QualificationSlice -ne 'Runtime') {
@@ -84,7 +84,7 @@ try {
         $h -match $headingPattern -and $h -match 'mode: subagent' -and
         (Test-Path -LiteralPath (Join-Path $source 'olympus/roles/helios.md') -PathType Leaf) -and
         (Test-OpenCodeGeneratedAgentManaged $b $renderer $source 'helios'))
-    Check HE2 ($h -match 'model: openai/gpt-6.1-sol#high')
+    Check HE2 ($h -match 'model: openai/gpt-6.2-sol#high')
     Check HE3 ($k -match '(?s)action: subagent\s+resource: helios\s+effect: allow' -and $k -match 'and helios are valid child role IDs')
     foreach ($pair in @(@('HE4','shell'),@('HE5','edit'),@('HE6','subagent'))) { Check $pair[0] ($h -match ('(?s)action: ' + $pair[1] + '\s+resource: "\*"\s+effect: deny')) }
     Check HE7 (@('read','glob','grep','list','lsp' | Where-Object { $h -notmatch ('(?s)action: ' + $_ + '\s+resource: "\*"\s+effect: deny') }).Count -eq 0)
@@ -112,7 +112,7 @@ try {
     Check HE29 ($k -match 'MISSING OUTPUT != WORKER FAILURE' -and $h -match 'reconciles that original')
     Check HE32 ($k -match 'Kael retains all routing, reconciliation and root completion' -and $h -match 'Kael retains routing, reconciliation and root completion')
     Check HE33 (@($expected.Keys | Where-Object { ([IO.File]::ReadAllText((Join-Path $source ".opencode/agents/$_.md"))) -notmatch ('(?m)^model: "?openai/' + [regex]::Escape($expected[$_]) + '"?\r?$') }).Count -eq 0)
-    Check HE34 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'fan out up to four useful children')
+    Check HE34 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'Four is a ceiling, never a target')
     Check HE35 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and
         $b.Contains("'.opencode/agents/sorin.md'") -and
         $b.Contains('foreach ($retiredPath in $RetiredOpenCodeResources)') -and
@@ -139,7 +139,7 @@ try {
     try { $agents=((& opencode debug agents 2>$null | Out-String) | ConvertFrom-Json -Depth 100) }
     finally { Pop-Location }
     $effective=@($agents | Where-Object id -eq 'helios')
-    Check F_FRESH ($freshResult.Code -eq 0 -and @($effective | Where-Object { $_.model.id -eq 'gpt-6.1-sol' -and $_.model.variant -eq 'high' -and $_.mode -eq 'subagent' }).Count -eq 1 -and @($agents | Where-Object id -eq 'sorin').Count -eq 0)
+    Check F_FRESH ($freshResult.Code -eq 0 -and @($effective | Where-Object { $_.model.id -eq 'gpt-6.2-sol' -and $_.model.variant -eq 'high' -and $_.mode -eq 'subagent' }).Count -eq 1 -and @($agents | Where-Object id -eq 'sorin').Count -eq 0)
     Check F_EFFECTIVE_DENY ($effective.Count -eq 1 -and @('shell','edit','subagent','read','glob','grep','list','lsp' | Where-Object { $action=$_; @($effective[0].permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq 'deny' }).Count -lt 1 -or @($effective[0].permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq 'allow' }).Count -gt 0 }).Count -eq 0)
     Check F_ROSTER (@($expected.Keys | Where-Object { $id=$_; $want=$expected[$id].Split('#'); @($agents | Where-Object { $_.id -eq $id -and $_.model.id -eq $want[0] -and $_.model.variant -eq $want[1] }).Count -ne 1 }).Count -eq 0)
     }

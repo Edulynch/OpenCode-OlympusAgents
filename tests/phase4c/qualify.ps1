@@ -12,6 +12,7 @@ $RunId = [Guid]::NewGuid().ToString('N')
 $RunRoot = Join-Path $WorkRoot ('run-' + $RunId)
 $Results = [System.Collections.Generic.List[object]]::new()
 $OriginalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
+$OriginalOlympusConfig = [Environment]::GetEnvironmentVariable('OLYMPUS_CONFIG_FILE','Process')
 $MockBin = $null
 $ManagedPaths = @(
     'opencode.jsonc',
@@ -220,8 +221,8 @@ function Get-OpenCodeDiagnostics([string]$Repo) {
 
 function Assert-ModelMapping($Agents) {
     $expected = [ordered]@{
-        'kael' = @('gpt-6.1-sol', 'high', 'primary')
-        'thales' = @('gpt-6.1-sol', 'xhigh', 'subagent')
+        'kael' = @('gpt-6.2-sol', 'high', 'primary')
+        'thales' = @('gpt-6.2-sol', 'xhigh', 'subagent')
         'veyra' = @('gpt-6-luna', 'max', 'subagent')
         'orin' = @('gpt-6-luna', 'max', 'subagent')
         'kovan' = @('gpt-6-luna', 'max', 'subagent')
@@ -290,6 +291,7 @@ try {
     Assert-Descendant $WorkRoot $RepoRoot
     [IO.Directory]::CreateDirectory($RunRoot) | Out-Null
     Assert-Descendant $RunRoot $WorkRoot
+    $env:OLYMPUS_CONFIG_FILE = Join-Path $RunRoot 'isolated-user-config.json'
     if ($QualificationSlice -eq 'Offline') { Enable-OfflineOpenCodeStub }
 
     Run-Scenario 'P4C-1' {
@@ -536,8 +538,8 @@ try {
         $scenarioDir = New-ScenarioHome 'contextual-maintenance'
         $repo = New-CleanRepo $scenarioDir 'target' ([ordered]@{ 'README.md' = 'contextual maintenance fixture' + [Environment]::NewLine })
         $diagnostics = Assert-Installed $repo 'READY'
-        $policy = [IO.File]::ReadAllText((Join-Path $RepoRoot 'olympus/policies/maintenance-context.md'))
-        $kaelPrompt = [IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/kael.md'))
+        $policy = [IO.File]::ReadAllText((Join-Path $RepoRoot 'olympus/policies/maintenance-context.md')).Replace("`r`n", "`n")
+        $kaelPrompt = [IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/kael.md')).Replace("`r`n", "`n")
         $manifest = [IO.File]::ReadAllText((Join-Path $repo '.opencode/orchestrator-install.json')) | ConvertFrom-Json -Depth 100
         Assert-Condition ($policy -match 'Kael is the only root orchestrator' -and
             $policy -match 'There is no separate maintenance role, command' -and
@@ -584,4 +586,5 @@ try {
     exit 1
 } finally {
     [Environment]::SetEnvironmentVariable('PATH',$OriginalPath,'Process')
+    [Environment]::SetEnvironmentVariable('OLYMPUS_CONFIG_FILE',$OriginalOlympusConfig,'Process')
 }

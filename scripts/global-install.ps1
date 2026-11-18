@@ -19,6 +19,7 @@ $OpenCodeConfigRelative = 'opencode.jsonc'
 $DefaultAgentReceiptProperty = 'default_agent_receipt'
 $OpenCodeGuardIntentRelative = 'olympus/opencode-guard-pending.json'
 $GlobalApplyScratch = '.olympus-cli-config-apply'
+$script:CompactUpdateOutput = ($Update -and ($env:OLYMPUS_UPDATE_COMPACT -ceq '1'))
 . (Join-Path $PSScriptRoot 'target-writer-lock.ps1')
 $script:ProjectOverrideDetected = $false
 $script:ModifiedManagedAgents = @()
@@ -1400,7 +1401,9 @@ function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]
     }
     Get-ProjectOverride $SourceVersion
     $status = if (-not ($create.Count -or $update.Count -or $remove.Count -or $manifestChanged)) { 'NO_CHANGES' } else { 'READY' }
-    Write-Output "OLYMPUS_GLOBAL_INSTALL: OPENCODE $SourceVersion $status ($($outputs.Count) managed resources; root=$root)"
+    if (-not $script:CompactUpdateOutput) {
+        Write-Output "OLYMPUS_GLOBAL_INSTALL: OPENCODE $SourceVersion $status ($($outputs.Count) managed resources; root=$root)"
+    }
     if ($script:ProjectOverrideDetected) { Write-Output 'OLYMPUS_GLOBAL_MIGRATION: GLOBAL_INSTALLED PROJECT_LOCAL_REMAINS_AS_OVERRIDE' }
     Write-Output 'GLOBAL_DEFAULT_AGENT: kael selected on first install; later user choices and deletions preserved.'
 }

@@ -11,7 +11,7 @@ from pathlib import Path
 from . import install_routing
 
 
-def update(source: Path) -> int:
+def update(source: Path, *, verbose: bool = False) -> int:
     if sys.platform != "win32":
         print("olympus update is qualified only for Windows; no update was started.", file=sys.stderr)
         return 3
@@ -32,8 +32,15 @@ def update(source: Path) -> int:
         executable, "-NoProfile", "-File", str(launcher),
         "-Action", "install", "-Update",
     ]
+    if verbose:
+        command.append("-Verbose")
     environment = os.environ.copy()
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    if verbose:
+        environment.pop("OLYMPUS_UPDATE_COMPACT", None)
+    else:
+        environment["OLYMPUS_UPDATE_COMPACT"] = "1"
+    print("Checking for updates...", flush=True)
     try:
         completed = subprocess.run(
             command, cwd=source, env=environment, check=False, timeout=1200, shell=False,
@@ -47,9 +54,7 @@ def update(source: Path) -> int:
     except OSError as error:
         print(f"Could not start the immutable-release updater: {error}", file=sys.stderr)
         return 3
-    if completed.returncode == 0:
-        print("Update command succeeded; review the native output above to see whether a release was applied.")
-        return 0
-    print(f"Update did not complete (native exit {completed.returncode}); effects may be unconfirmed. "
-          "Review native output and inspect olympus doctor before retrying.", file=sys.stderr)
+    if completed.returncode != 0:
+        print(f"Update did not complete (native exit {completed.returncode}); review native output above. "
+              "No automatic retry was attempted.", file=sys.stderr)
     return completed.returncode

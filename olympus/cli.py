@@ -21,109 +21,201 @@ class Parser(argparse.ArgumentParser):
         raise CLIError(f"{message}. See olympus --help.", 2)
 
 
+_ROLE_NAMES = ("kael", "veyra", "orin", "atlas", "kovan", "argus", "nox", "vera",
+               "talos", "thales", "helios")
+
+
+class RootParser(Parser):
+    def format_usage(self) -> str:
+        return "usage: olympus [--source CHECKOUT] [--version] [--verbose] COMMAND [ARGS ...]\n"
+
+    def format_help(self) -> str:
+        return (
+            self.format_usage() + "\n"
+            "Olympus global CLI. Manage your OpenCode installation and team.\n"
+            "\n"
+            "Examples:\n"
+            "  olympus version                Show the release version\n"
+            "  olympus update                 Check for a newer release\n"
+            "  olympus agents list            See your team's models and settings\n"
+            "  olympus doctor --scope global  Check your global installation\n"
+            "\n"
+            "More commands:\n"
+            "  install, uninstall          Manage the global installation (upgrade = update)\n"
+            "  agents, models, config      View or configure models and settings\n"
+            "  status, completion, help    Read metadata, set up completion, or see help\n"
+            "  olympus nox set-effort high  Change an agent's reasoning effort\n"
+            "\n"
+            "Options:\n"
+            "  --source CHECKOUT  use an absolute trusted source checkout (before command)\n"
+            "  --version          show the source release version\n"
+            "  --verbose          show technical response details\n"
+            "  -h, --help         show help for this command\n"
+            "\n"
+            "Advanced: config check, config apply, config recover, models set-family, agents set-model.\n"
+            "Run 'olympus <command> --help' for scope, mode, and an example.\n"
+        )
+
+
+def _set_help(parser: argparse.ArgumentParser, description: str, example: str) -> None:
+    parser.description = description
+    parser.epilog = f"Example: {example}"
+
+
 def parser() -> Parser:
-    help_notes = (
-        "Model IDs use the exact provider/model-id form listed at https://models.dev. "
-        "Olympus validates declared catalog capabilities but never verifies model access, credentials, or subscriptions. "
-        "Use 'olympus config list' for absolute configuration paths and precedence. "
-        "Use 'olympus install' or 'olympus update' for the global OpenCode installation; "
-        "then run 'olympus doctor', which only verifies configuration. "
-        "Human output is concise by default; add --verbose for technical details. --json remains machine-readable."
-    )
-    root = Parser(
+    root = RootParser(
         prog="olympus",
-        description="Olympus global CLI. Python 3.11+ is used internally; no model-provider calls are made.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=("Examples:\n"
-                "  olympus version\n"
-                "  olympus update\n"
-                "  olympus agents list\n"
-                "  olympus nox set-model openai/gpt-6-luna\n"
-                "  olympus nox set-effort high\n"
-                "  olympus config list\n"
-                "  olympus doctor\n"
-                "  olympus install\n"
-                "  olympus uninstall\n"
-                "  olympus models list --json\n"
-                "  olympus models set-family sol --opencode openai/new-sol --dry-run --json\n"
-                "  olympus agents set-model veyra --effort high --dry-run\n"
-                "  olympus config recover\n"
-                "  olympus config check\n"
-                "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --dry-run\n"
-                "  olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --execute\n"
-                "  olympus config apply --scope global --harness opencode --execute\n"
-                "  olympus config recover --scope global --harness opencode\n"
-                 "  olympus doctor --scope project --target <absolute-worktree-root> --harness opencode [--json]\n"
-                 "  olympus doctor --scope global --harness opencode [--json]\n"
-                 "  olympus status --scope project --target <absolute-worktree-root>\n"
-                 "Source-edit and project-apply commands are advanced checkout operations.\n"
-                 "Config apply writes only with --execute; global execution currently supports OpenCode only.\n"
-                 "Doctor performs static configuration checks; it never probes a model provider.\n"
-                 + help_notes),
         allow_abbrev=False,
     )
-    root.add_argument("--source", type=Path, help="absolute trusted source checkout (before command)")
+    root.add_argument("--source", type=Path, metavar="CHECKOUT",
+                      help="use an absolute trusted source checkout (before command)")
     root.add_argument("--version", action="store_true", help="show the source release version")
     root.add_argument("--verbose", action="store_true", help="show technical response details")
     commands = root.add_subparsers(dest="command", parser_class=Parser)
-    commands.add_parser("help", help="show Olympus commands and model configuration guidance", allow_abbrev=False)
-    commands.add_parser("version", help="show the installed Olympus product version", allow_abbrev=False)
-    commands.add_parser("update", aliases=["upgrade"], help="update the global OpenCode installation",
-                        allow_abbrev=False).set_defaults(command="update")
+    help_command = commands.add_parser(
+        "help", help="show the command map and examples", allow_abbrev=False,
+        description="Show common commands and how to find detailed command help. No files are changed.",
+    )
+    _set_help(help_command, help_command.description, "olympus --help")
+    version = commands.add_parser(
+        "version", help="print the source release version", allow_abbrev=False,
+        description="Print the source-declared Olympus release version. No files are changed.",
+    )
+    _set_help(version, version.description, "olympus version")
+    update = commands.add_parser(
+        "update", aliases=["upgrade"], help="update the global OpenCode installation",
+        allow_abbrev=False,
+        description="Update the fixed global OpenCode installation. This can change global files.",
+    )
+    _set_help(update, update.description, "olympus update --verbose")
+    update.set_defaults(command="update")
     completion = commands.add_parser("completion", help="print session-local shell completion registration",
-                                    allow_abbrev=False)
+                                     allow_abbrev=False,
+                                     description="Print optional shell completion code; no profile or config is changed.")
     completion.add_argument("shell", choices=("powershell", "bash"))
-    models = commands.add_parser("models", help="query or explicitly edit canonical model assignments", allow_abbrev=False)
+    _set_help(completion, completion.description, "olympus completion powershell")
+    models = commands.add_parser(
+        "models", help="query or explicitly edit canonical model assignments", allow_abbrev=False,
+        description="Inspect canonical model assignments or explicitly edit source model intent.",
+    )
+    _set_help(models, models.description, "olympus models list --json")
     model_commands = models.add_subparsers(dest="action", required=True, parser_class=Parser)
-    listing = model_commands.add_parser("list", help="list all eleven OpenCode role assignments", allow_abbrev=False)
+    listing = model_commands.add_parser(
+        "list", help="list all eleven OpenCode role assignments", allow_abbrev=False,
+        description="Read the canonical OpenCode role assignments without writing files.",
+    )
     listing.add_argument("--json", action="store_true")
-    set_family = model_commands.add_parser("set-family", help="explicitly edit an existing family", allow_abbrev=False)
+    _set_help(listing, listing.description, "olympus models list --json")
+    set_family = model_commands.add_parser(
+        "set-family", help="explicitly edit an existing family", allow_abbrev=False,
+        description="Edit canonical model intent in the selected source checkout. --dry-run previews; otherwise this writes.",
+    )
     set_family.add_argument("family")
     set_family.add_argument("--opencode", required=True)
     set_family.add_argument("--dry-run", action="store_true")
     set_family.add_argument("--json", action="store_true", help="JSON preview; requires --dry-run")
-    agents = commands.add_parser("agents", help="list effective agents or edit canonical role model intent", allow_abbrev=False)
+    _set_help(set_family, set_family.description,
+              "olympus models set-family sol --opencode openai/new-sol --dry-run")
+    agents = commands.add_parser(
+        "agents", help="list effective agents or edit canonical role model intent", allow_abbrev=False,
+        description="List effective assignments or explicitly edit canonical role model intent.",
+    )
+    _set_help(agents, agents.description, "olympus agents list")
     agent_commands = agents.add_subparsers(dest="action", required=True, parser_class=Parser)
-    agent_list = agent_commands.add_parser("list", help="list effective models, efforts, and sources", allow_abbrev=False)
+    agent_list = agent_commands.add_parser(
+        "list", help="list effective models, efforts, and sources", allow_abbrev=False,
+        description="Read effective values and their sources. Scope defaults to the effective project or global config.",
+    )
     agent_list.add_argument("--json", action="store_true")
     agent_list.add_argument("--scope", choices=("project", "global"), help="select scope (default: effective scope)")
     agent_list.add_argument("--target", type=Path, help="absolute managed project worktree root; project scope only")
-    set_model = agent_commands.add_parser("set-model", help="explicitly edit an existing role", allow_abbrev=False)
+    _set_help(agent_list, agent_list.description, "olympus agents list --scope global")
+    set_model = agent_commands.add_parser(
+        "set-model", help="explicitly edit an existing role", allow_abbrev=False,
+        description=(
+            "Edit canonical role model intent in the selected source checkout; supply --family and/or --effort. "
+            "--dry-run previews; otherwise this writes."
+        ),
+    )
     set_model.add_argument("role")
     set_model.add_argument("--family")
     set_model.add_argument("--effort")
     set_model.add_argument("--dry-run", action="store_true")
     set_model.add_argument("--json", action="store_true", help="JSON preview; requires --dry-run")
-    roles = ("kael", "veyra", "orin", "atlas", "kovan", "argus", "nox", "vera", "talos", "thales", "helios")
-    for role in roles:
-        role_parser = commands.add_parser(role, help=f"configure the global {role} agent", allow_abbrev=False)
+    _set_help(set_model, set_model.description,
+              "olympus agents set-model veyra --effort high --dry-run")
+    for role in _ROLE_NAMES:
+        role_parser = commands.add_parser(
+            role, help=f"configure the {role} model or effort override", allow_abbrev=False,
+            description=(
+                f"Set a per-user {role} override; this writes Olympus user configuration. "
+                "Scope defaults to the effective project or global config; project scope needs --target."
+            ),
+        )
+        _set_help(role_parser, role_parser.description,
+                  f"olympus {role} set-model openai/gpt-6-luna --scope global")
         role_commands = role_parser.add_subparsers(dest="role_action", required=True, parser_class=Parser)
-        model = role_commands.add_parser("set-model", help="set the exact provider/model-id", allow_abbrev=False,
-                                         description=help_notes)
+        model = role_commands.add_parser(
+            "set-model", help="set the exact provider/model-id", allow_abbrev=False,
+            description=(
+                f"Write the {role} model override to Olympus user configuration. "
+                "Scope defaults to the effective project or global config; project scope needs --target. "
+                "Known model IDs use the offline catalog; access is not verified."
+            ),
+        )
         model.add_argument("model_id", help="exact provider/model-id, for example openai/gpt-6-luna")
         effort = role_commands.add_parser("set-effort", help="set a catalog-declared reasoning effort", allow_abbrev=False,
-                                          description=help_notes)
+                                          description=(
+                                              f"Write the {role} effort override to Olympus user configuration. "
+                                              "Scope defaults to the effective project or global config; "
+                                              "project scope needs --target."
+                                          ))
         effort.add_argument("effort", help="effort declared for this model by Models.dev")
         for scoped in (model, effort):
             scoped.add_argument("--scope", choices=("project", "global"), help="select scope (default: effective scope)")
             scoped.add_argument("--target", type=Path, help="absolute managed project worktree root; project scope only")
+        _set_help(model, model.description,
+                  f"olympus {role} set-model openai/gpt-6-luna --scope global")
+        _set_help(effort, effort.description,
+                  f"olympus {role} set-effort high --scope global")
 
     config = commands.add_parser("config", help="list effective configuration or check generated outputs", allow_abbrev=False,
-                                 description=help_notes)
+                                 description=(
+                                     "List effective configuration, check generated outputs, or explicitly apply/recover "
+                                     "a matching configuration transaction."
+                                 ))
+    _set_help(config, config.description, "olympus config list --scope global")
     config_commands = config.add_subparsers(dest="action", required=True, parser_class=Parser)
-    config_list = config_commands.add_parser("list", help="list effective values, absolute source paths, and precedence", allow_abbrev=False)
+    config_list = config_commands.add_parser(
+        "list", help="list effective values, absolute source paths, and precedence", allow_abbrev=False,
+        description="Read effective settings, their precedence, and absolute source paths. No files are changed.",
+    )
     config_list.add_argument("--scope", choices=("project", "global"), help="select scope (default: effective scope)")
     config_list.add_argument("--target", type=Path, help="absolute managed project worktree root; project scope only")
+    _set_help(config_list, config_list.description, "olympus config list --scope global")
     max_parallel = config_commands.add_parser(
         "set-max-parallel", help="set the global Kael child ceiling (default: 4; prompt policy only)",
         allow_abbrev=False,
+        description=(
+            "Write the global prompt-level child ceiling (1-8); update the installed global Kael prompt when present. "
+            "This does not change the native scheduler or existing project installations."
+        ),
     )
     max_parallel.add_argument("value", type=int, metavar="N", help="integer from 1 to 8")
-    check = config_commands.add_parser("check", help="compare renderer outputs without writing", allow_abbrev=False)
+    _set_help(max_parallel, max_parallel.description, "olympus config set-max-parallel 2")
+    check = config_commands.add_parser(
+        "check", help="compare renderer outputs without writing", allow_abbrev=False,
+        description="Read the selected source and compare generated OpenCode outputs. No writes or provider checks.",
+    )
     check.add_argument("--harness", choices=("opencode",), default="opencode")
     check.add_argument("--json", action="store_true")
+    _set_help(check, check.description, "olympus config check --json")
     apply = config_commands.add_parser(
         "apply", help="preview an existing project/global installation; execute explicitly", allow_abbrev=False,
+        description=(
+            "Select an existing managed OpenCode installation. --dry-run is read-only; --execute applies the plan. "
+            "Project scope needs an absolute Git worktree --target; global scope forbids --target."
+        ),
     )
     apply.add_argument("--scope", choices=("project", "global"), required=True)
     apply.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
@@ -132,30 +224,69 @@ def parser() -> Parser:
     mode.add_argument("--dry-run", action="store_true", help="read-only preview; no target writes")
     mode.add_argument("--execute", action="store_true", help="explicitly apply project or OpenCode global configuration")
     apply.add_argument("--json", action="store_true", help="emit a single JSON result")
-    install = commands.add_parser("install", help="install the latest global OpenCode release", allow_abbrev=False)
+    _set_help(apply, apply.description,
+              "olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --dry-run")
+    install = commands.add_parser(
+        "install", help="install the latest global OpenCode release", allow_abbrev=False,
+        description=(
+            "Install the fixed global OpenCode release. --dry-run previews; otherwise the installer executes. "
+            "Preview may leave temporary/cache effects."
+        ),
+    )
     install_mode = install.add_mutually_exclusive_group()
     install_mode.add_argument("--dry-run", action="store_true", help="preview through the official installer")
     install_mode.add_argument("--execute", action="store_true", help="execute the official installer")
     install.add_argument("--json", action="store_true", help="emit one JSON result with captured native output")
-    uninstall = commands.add_parser("uninstall", help="remove the global OpenCode installation", allow_abbrev=False)
+    _set_help(install, install.description, "olympus install --dry-run")
+    uninstall = commands.add_parser(
+        "uninstall", help="remove the global OpenCode installation", allow_abbrev=False,
+        description=(
+            "Remove unchanged manifest-owned global OpenCode resources and the CLI PATH entry. "
+            "--dry-run previews when supported; otherwise the uninstall engine executes."
+        ),
+    )
     uninstall_mode = uninstall.add_mutually_exclusive_group()
     uninstall_mode.add_argument("--dry-run", action="store_true", help="preview when the native engine supports it")
     uninstall_mode.add_argument("--execute", action="store_true", help="execute the existing uninstall engine")
     uninstall.add_argument("--json", action="store_true", help="emit one JSON result with captured native output")
-    doctor = commands.add_parser("doctor", help="read-only managed installation diagnostic", allow_abbrev=False)
+    _set_help(uninstall, uninstall.description, "olympus uninstall --dry-run")
+    doctor = commands.add_parser(
+        "doctor", help="read-only managed installation diagnostic", allow_abbrev=False,
+        description=(
+            "Read-only configuration and managed-installation diagnostics. Scope defaults to effective config; "
+            "project scope needs --target. "
+            "doctor does not repair files or verify model-provider access."
+        ),
+    )
     doctor.add_argument("--scope", choices=("project", "global"), help="select scope (default: effective scope)")
     doctor.add_argument("--target", type=Path, help="absolute existing Git worktree root; project scope only")
     doctor.add_argument("--harness", choices=("opencode",), default="opencode")
     doctor.add_argument("--json", action="store_true")
-    recover = config_commands.add_parser("recover", help="explicitly recover one pending source edit or config apply", allow_abbrev=False)
+    _set_help(doctor, doctor.description, "olympus doctor --scope global")
+    recover = config_commands.add_parser(
+        "recover", help="explicitly recover one pending source edit or config apply", allow_abbrev=False,
+        description=(
+            "Reconcile only the matching pending source edit or project/global apply; recovery may change files. "
+            "Project recovery needs --scope project and --target; global recovery needs --scope global --harness opencode."
+        ),
+    )
     recover.add_argument("--scope", choices=("project", "global"), help="project selects a target apply journal")
     recover.add_argument("--target", type=Path, help="absolute project root for project-apply recovery")
     recover.add_argument("--harness", choices=("opencode",), help="global recovery requires opencode")
-    status = commands.add_parser("status", help="read reported installation metadata; no integrity verification", allow_abbrev=False)
+    _set_help(recover, recover.description,
+              "olympus config recover --scope global --harness opencode")
+    status = commands.add_parser(
+        "status", help="read reported installation metadata; no integrity verification", allow_abbrev=False,
+        description=(
+            "Read reported install metadata without verifying file integrity. Defaults to project scope, which needs "
+            "--target; use global scope without a target for global metadata."
+        ),
+    )
     status.add_argument("--scope", choices=("project", "global"), default="project")
     status.add_argument("--target", type=Path, help="absolute Git worktree root; required for project scope")
     status.add_argument("--harness", choices=("opencode",), default="opencode")
     status.add_argument("--json", action="store_true")
+    _set_help(status, status.description, "olympus status --scope global")
 
     def add_verbose_options(current: argparse.ArgumentParser) -> None:
         for action in current._actions:
@@ -1104,9 +1235,8 @@ def main(argv: list[str] | None = None) -> int:
         if not args.version and not args.command:
             cli_parser.error("a command is required")
         operation = "version" if args.version else " ".join(filter(None, (
-            args.command, getattr(args, "role_action", None) if args.command in {
-                "kael", "veyra", "orin", "atlas", "kovan", "argus", "nox", "vera", "talos", "thales", "helios",
-            } else getattr(args, "action", None),
+            args.command, getattr(args, "role_action", None) if args.command in _ROLE_NAMES
+            else getattr(args, "action", None),
         )))
         response["operation"] = operation
         if operation in ("models set-family", "agents set-model") and args.json and not args.dry_run:
@@ -1131,7 +1261,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "update":
             from . import system_cli
 
-            return system_cli.update(source)
+            return system_cli.update(source, verbose=bool(args.verbose))
         if args.command == "agents" and args.action == "list":
             from . import user_config
 
@@ -1161,9 +1291,7 @@ def main(argv: list[str] | None = None) -> int:
             response["result"] = "ok"
             output(response, False)
             return 0
-        if args.command in {
-            "kael", "veyra", "orin", "atlas", "kovan", "argus", "nox", "vera", "talos", "thales", "helios",
-        } and args.role_action in ("set-model", "set-effort"):
+        if args.command in _ROLE_NAMES and args.role_action in ("set-model", "set-effort"):
             from . import user_config
 
             field = "model" if args.role_action == "set-model" else "effort"

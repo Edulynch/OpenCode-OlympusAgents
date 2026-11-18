@@ -11,6 +11,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $owned = $null
+$script:UpdateNativeStarted = $false
+$script:CompactUpdate = $false
 
 function Get-ReleaseField([object]$Metadata, [string]$Name) {
     if ($null -eq $Metadata) { throw 'LATEST_RELEASE_METADATA_INVALID: GitHub returned no release metadata.' }
@@ -95,23 +97,97 @@ function Get-InstalledGlobalVersion {
     if ($env:OPENCODE_CONFIG_DIR) { $root = [IO.Path]::GetFullPath($env:OPENCODE_CONFIG_DIR) }
     else {
         $commands = @(Get-Command opencode -CommandType Application -ErrorAction SilentlyContinue)
-        if ($commands.Count -eq 0) { return $null }
+        if ($commands.Count -eq 0) {
+            throw 'UPDATE_INSTALLATION_UNKNOWN: OpenCode configuration could not be resolved; set OPENCODE_CONFIG_DIR to the installed global root or run olympus doctor.'
+        }
         $paths = @(& $commands[0].Source debug paths 2>$null | ForEach-Object {
             if ($_ -match '^\s*config\s{2,}(.+?)\s*$') { $Matches[1].Trim() }
         })
-        if ($LASTEXITCODE -ne 0 -or $paths.Count -ne 1 -or -not [IO.Path]::IsPathFullyQualified($paths[0])) { return $null }
+        if ($LASTEXITCODE -ne 0 -or $paths.Count -ne 1 -or -not [IO.Path]::IsPathFullyQualified($paths[0])) {
+            throw 'UPDATE_INSTALLATION_UNKNOWN: OpenCode configuration could not be resolved; set OPENCODE_CONFIG_DIR to the installed global root or run olympus doctor.'
+        }
         $root = $paths[0]
     }
+    if (-not $root -or -not [IO.Path]::IsPathFullyQualified($root) -or
+        [IO.Path]::GetFullPath($root) -eq [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($root))) {
+        throw 'UPDATE_INSTALLATION_UNKNOWN: The global OpenCode configuration root is unavailable or unsafe; run olympus doctor before updating.'
+    }
     $manifestPath = Join-Path $root 'olympus/orchestrator-install.json'
-    if (-not (Test-Path -LiteralPath $manifestPath)) { return $null }
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw 'UPDATE_INSTALLATION_UNKNOWN: No managed global Olympus installation was found; run olympus install before updating.'
+    }
     try { $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -Depth 30 -ErrorAction Stop }
-    catch { throw 'UPDATE_MANIFEST_INVALID: The installed Olympus version record is unreadable; no update was started.' }
-    if ($manifest.scope -cne 'global' -or @($manifest.installed_harnesses).Count -ne 1 -or
+    catch { throw 'UPDATE_MANIFEST_INVALID: The installed Olympus version record is unreadable; run olympus doctor before updating.' }
+    if ($null -eq $manifest -or $null -eq $manifest.PSObject.Properties['scope'] -or
+        $null -eq $manifest.PSObject.Properties['installed_harnesses'] -or
+        $null -eq $manifest.PSObject.Properties['installed_version'] -or
+        $manifest.scope -cne 'global' -or @($manifest.installed_harnesses).Count -ne 1 -or
         [string]$manifest.installed_harnesses[0] -cne 'opencode') {
-        throw 'UPDATE_MANIFEST_INVALID: The installed Olympus version record is not a supported global installation.'
+        throw 'UPDATE_MANIFEST_INVALID: The installed Olympus version record is not a supported global installation; run olympus doctor before updating.'
     }
     $installed = [string]$manifest.installed_version
-    if ($installed -ceq 'local' -or $installed -ceq 'unknown' -or $installed -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') { return $null }
+    if (-not [regex]::IsMatch($installed, '\Av(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?\z')) {
+        throw 'UPDATE_VERSION_UNKNOWN: The global installation has no recognized release version; run olympus doctor and reinstall before updating.'
+    }
+
+    $cliRoot = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Programs/Olympus' } else { $null }
+    if (-not $cliRoot -or -not [IO.Path]::IsPathFullyQualified($cliRoot)) {
+        throw 'UPDATE_CLI_VERSION_UNKNOWN: The global CLI installation root is unavailable; run olympus install to repair it before updating.'
+    }
+    $cliRoot = [IO.Path]::GetFullPath($cliRoot)
+    if ($cliRoot -eq [IO.Path]::GetPathRoot($cliRoot)) {
+        throw 'UPDATE_CLI_VERSION_UNKNOWN: The global CLI installation root is unsafe; run olympus install to repair it before updating.'
+    }
+    Write-Verbose "Active global CLI installation path: $cliRoot"
+    $currentPath = Join-Path $cliRoot 'current.txt'
+    if (-not (Test-Path -LiteralPath $currentPath -PathType Leaf)) {
+        throw 'UPDATE_CLI_VERSION_UNKNOWN: The global CLI current.txt pointer is missing; run olympus install to repair it before updating.'
+    }
+    $pointer = [IO.File]::ReadAllText($currentPath)
+    $pointerMatch = [regex]::Match($pointer, '\A(?<version>v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?)(?:\r?\n)?\z')
+    if (-not $pointerMatch.Success) {
+        throw 'UPDATE_CLI_VERSION_UNKNOWN: The global CLI current.txt pointer is malformed; run olympus doctor before updating.'
+    }
+    $cliVersion = $pointerMatch.Groups['version'].Value
+    $versionRoot = Join-Path $cliRoot ("versions/" + $cliVersion)
+    $cliManifestPath = Join-Path $versionRoot 'olympus-cli-manifest.json'
+    if (-not (Test-Path -LiteralPath $versionRoot -PathType Container) -or
+        -not (Test-Path -LiteralPath $cliManifestPath -PathType Leaf)) {
+        throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI release or its ownership marker is missing; run olympus install to repair it before updating.'
+    }
+    try { $cliManifest = [IO.File]::ReadAllText($cliManifestPath) | ConvertFrom-Json -Depth 30 -ErrorAction Stop }
+    catch { throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI ownership marker is unreadable; run olympus doctor before updating.' }
+    if ($null -eq $cliManifest -or $null -eq $cliManifest.PSObject.Properties['schema_version'] -or
+        $null -eq $cliManifest.PSObject.Properties['version'] -or
+        $null -eq $cliManifest.PSObject.Properties['files'] -or
+        $cliManifest.schema_version -ne 1 -or [string]$cliManifest.version -cne $cliVersion -or
+        @($cliManifest.files).Count -eq 0) {
+        throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI ownership marker does not match current.txt; run olympus doctor before updating.'
+    }
+
+    $cliFiles = foreach ($entry in @($cliManifest.files)) {
+        if ($null -eq $entry -or $null -eq $entry.PSObject.Properties['path']) {
+            throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI ownership marker has an incomplete file list; run olympus doctor before updating.'
+        }
+        [string]$entry.path
+    }
+    foreach ($relative in @('install.ps1', 'scripts/olympus_cli.py', 'scripts/launch-latest.ps1')) {
+        if (@($cliFiles | Where-Object { $_ -ceq $relative }).Count -ne 1 -or
+            -not (Test-Path -LiteralPath (Join-Path $versionRoot ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)) -PathType Leaf)) {
+            throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI ownership marker is missing a required release file; run olympus install to repair it before updating.'
+        }
+    }
+    # This is a version decision, not a full integrity check; the installer and doctor retain file-hash validation.
+    $identityText = [IO.File]::ReadAllText((Join-Path $versionRoot 'install.ps1'))
+    $defaultMatch = [regex]::Match($identityText, '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''\s*,?\s*$')
+    $releaseMatch = [regex]::Match($identityText, '(?m)^\s*\$ReleaseVersion\s*=\s*''([^'']+)''\s*(?:#.*)?$')
+    if (-not $defaultMatch.Success -or -not $releaseMatch.Success -or
+        $defaultMatch.Groups[1].Value -cne $cliVersion -or $releaseMatch.Groups[1].Value -cne $cliVersion) {
+        throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI release identity does not match current.txt; run olympus doctor before updating.'
+    }
+    if ($installed -cne $cliVersion) {
+        throw "UPDATE_VERSION_MISMATCH: Global OpenCode is $installed but the active CLI is $cliVersion; run olympus doctor and repair the installation before updating."
+    }
     return $installed
 }
 
@@ -121,6 +197,12 @@ try {
     }
     if ($Update -and ($Action -ne 'install' -or $DryRun)) {
         throw 'UPDATE_MODE_INVALID: -Update is available only for a normal install.'
+    }
+    $installed = $null
+    if ($Update) {
+        $installed = Get-InstalledGlobalVersion
+        $script:CompactUpdate = $env:OLYMPUS_UPDATE_COMPACT -ceq '1'
+        Write-Verbose "Global OpenCode and active CLI version markers match at $installed; update preflight does not verify file integrity."
     }
     $pwsh = @(Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue)
     if ($pwsh.Count -eq 0) {
@@ -159,14 +241,19 @@ try {
     }
 
     if ($Action -eq 'install' -and $Update) {
-        $installed = Get-InstalledGlobalVersion
-        if ($installed -and (Compare-ReleaseTag $tag $installed) -lt 0) {
-            Write-Output "OLYMPUS_UPDATE: NO_DOWNGRADE current=$installed latest=$tag"
-            exit 0
+        $comparison = Compare-ReleaseTag $tag $installed
+        Write-Verbose "Latest stable release tag is $tag."
+        if ($comparison -le 0) {
+            if ($comparison -eq 0) { Write-Output "Already up to date ($installed)." }
+            else { Write-Output "Already up to date ($installed is newer than latest stable $tag)." }
+            $global:LASTEXITCODE = 0
+            return
         }
-        if ($installed) { Write-Output "OLYMPUS_UPDATE: current=$installed latest=$tag" }
+        Write-Output "Updating Olympus from $installed to $tag..."
     }
-    Write-Output "OLYMPUS_RELEASE_SELECTED: tag=$tag immutable=true published_at=$($publishedTimestamp.ToUniversalTime().ToString('o'))"
+    if (-not $script:CompactUpdate) {
+        Write-Output "OLYMPUS_RELEASE_SELECTED: tag=$tag immutable=true published_at=$($publishedTimestamp.ToUniversalTime().ToString('o'))"
+    }
 
     $tempBase = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'olympus'
     [IO.Directory]::CreateDirectory($tempBase) | Out-Null
@@ -200,15 +287,40 @@ try {
     if ($Update) { $args += '-Update' }
     if ($DryRun) { $args += '-DryRun' }
 
-    Write-Output "OLYMPUS_ENTRYPOINT: action=$Action scope=global harness=opencode release=$tag"
-    Write-Output "OLYMPUS_RELEASE_EXECUTING: tag=$tag installer=$installerUrl"
+    if (-not $script:CompactUpdate) {
+        Write-Output "OLYMPUS_ENTRYPOINT: action=$Action scope=global harness=opencode release=$tag"
+        Write-Output "OLYMPUS_RELEASE_EXECUTING: tag=$tag installer=$installerUrl"
+    }
+    if ($Update) { $script:UpdateNativeStarted = $true }
     & $pwsh[0].Source @args
     if ($LASTEXITCODE -ne 0) {
         $installerExitCode = $LASTEXITCODE
+        if ($Update) {
+            Write-Output "Update failed; native installer exited $installerExitCode. Effects may be partial; inspect olympus doctor before retrying."
+            exit $installerExitCode
+        }
         Write-Output "OLYMPUS_ENTRYPOINT_FAILED: release installer exited $installerExitCode."
         exit $installerExitCode
     }
-    Write-Output "OLYMPUS_RELEASE_EXECUTED: tag=$tag exit_code=0"
+    if ($Update) {
+        $installed = Get-InstalledGlobalVersion
+        if ($installed -cne $tag) {
+            throw "UPDATE_RESULT_UNCONFIRMED: The installer returned success, but global OpenCode and CLI are not both $tag."
+        }
+        Write-Output "Updated to $tag."
+    }
+    if (-not $script:CompactUpdate) { Write-Output "OLYMPUS_RELEASE_EXECUTED: tag=$tag exit_code=0" }
+} catch {
+    if ($Update) {
+        Write-Error $_.Exception.Message -ErrorAction Continue
+        if ($script:UpdateNativeStarted) {
+            Write-Output 'Update effects are unconfirmed; inspect olympus doctor before retrying.'
+            exit 4
+        }
+        Write-Output 'Update did not start; no installation changes were made.'
+        exit 3
+    }
+    throw
 } finally {
     if ($owned -and (Test-Path -LiteralPath $owned)) {
         Remove-Item -LiteralPath $owned -Recurse -Force -ErrorAction SilentlyContinue

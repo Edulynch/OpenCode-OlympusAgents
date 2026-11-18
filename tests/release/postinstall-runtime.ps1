@@ -151,14 +151,14 @@ exit 2
     $calls = if (Test-Path -LiteralPath $logPath) { @(Get-Content -LiteralPath $logPath) } else { @() }
     $failureEvidence = @($install.Text -split '\r?\n' | Where-Object { $_ -match 'OPENCODE_VALIDATION_FAILED|BOOTSTRAP_FAILED' } | Select-Object -First 1)
     $cliCreated = Test-Path -LiteralPath (Join-Path $cliRoot 'bin/olympus.cmd') -PathType Leaf
-    Write-Output "DEBUG_CONFIG_RED_CASE: installer_exit=$($install.Code); cli_created=$cliCreated; fixture_log=$($calls -join ','); failure=$($failureEvidence -join '')"
+    Write-Output "MOCKED_CONFIG_FAILURE_CASE: installer_exit=$($install.Code); cli_created=$cliCreated; fixture_log=$($calls -join ','); failure=$($failureEvidence -join '')"
     $warning = "OLYMPUS_RUNTIME_VALIDATION_WARNING: OpenCode runtime configuration and effective agents could not be verified; installation continues. Run 'olympus doctor' for static checks."
-    Check 'P1_RUNTIME_CONFIG_FAILURE_IS_WARNING' ($install.Code -eq 0 -and $install.Text.Contains($warning) -and
+    Check 'RUNTIME_CONFIG_FAILURE_REMAINS_WARNING' ($install.Code -eq 0 -and $install.Text.Contains($warning) -and
         $install.Text -match '(?m)^READY\s*$' -and
         @($calls | Where-Object { $_ -ceq 'debug config exit=23' }).Count -eq 1 -and $cliCreated -and
         $install.Text -notmatch '(?i)runtime[^\r\n]*\bPASS\b')
     $cliBin = Join-Path $cliRoot 'bin'
-    Check 'P2_ISOLATED_GLOBAL_CLI_CREATED' ((Test-Path -LiteralPath (Join-Path $cliBin 'olympus.cmd') -PathType Leaf) -and
+    Check 'ISOLATED_GLOBAL_CLI_INSTALL_CREATED' ((Test-Path -LiteralPath (Join-Path $cliBin 'olympus.cmd') -PathType Leaf) -and
         (Test-Path -LiteralPath (Join-Path (Join-Path $cliRoot 'versions') (Join-Path $candidateVersion 'olympus-cli-manifest.json')) -PathType Leaf) -and
         (Test-Path -LiteralPath $pathStore -PathType Leaf) -and
         [IO.File]::ReadAllText($pathStore).Contains($cliBin))
@@ -166,7 +166,7 @@ exit 2
     $beforeVerifyCalls = @($calls | Where-Object { $_ -match '^debug ' }).Count
     $verify = Invoke-Installer $target $cliRoot $pathStore -VerifyOnly
     $calls = @(Get-Content -LiteralPath $logPath)
-    Check 'P3_VERIFYONLY_STATIC_AND_RUNTIME_READ_ONLY' ($verify.Code -eq 0 -and
+    Check 'VERIFY_ONLY_STATIC_CHECKS_SKIP_RUNTIME_DISCOVERY' ($verify.Code -eq 0 -and
         $verify.Text -match "OLYMPUS_VERIFY: $candidateVersionPattern PASS" -and
         @($calls | Where-Object { $_ -match '^debug ' }).Count -eq $beforeVerifyCalls)
 
@@ -176,7 +176,7 @@ exit 2
     $manifestPath = Join-Path $target '.opencode/orchestrator-install.json'
     $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
     $driftInstall = Invoke-Installer $target $cliRoot $pathStore
-    Check 'P4_HASH_DRIFT_REJECTED_WITHOUT_OVERWRITE' ($driftInstall.Code -ne 0 -and
+    Check 'MANAGED_FILE_DRIFT_REJECTED_WITHOUT_OVERWRITE' ($driftInstall.Code -ne 0 -and
         $driftInstall.Text -match 'MANAGED_FILE_DRIFT' -and
         (Get-FileHash -LiteralPath $agentPath -Algorithm SHA256).Hash -ceq $driftHash -and
         (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -ceq $manifestHash)
@@ -187,7 +187,7 @@ exit 2
     $conflictHash = (Get-FileHash -LiteralPath $conflictPath -Algorithm SHA256).Hash
     $conflictCli = Join-Path $run 'cli-unowned-config'
     $conflictResult = Invoke-Installer $conflict $conflictCli (Join-Path $conflictCli 'path-store.txt')
-    Check 'P5_UNOWNED_DESTINATION_REJECTED_UNCHANGED' ($conflictResult.Code -ne 0 -and
+    Check 'USER_OWNED_DESTINATION_CONFLICT_PRESERVED' ($conflictResult.Code -ne 0 -and
         $conflictResult.Text -match 'INSTALL_CONFLICT' -and
         (Get-FileHash -LiteralPath $conflictPath -Algorithm SHA256).Hash -ceq $conflictHash -and
         -not (Test-Path -LiteralPath (Join-Path $conflict '.opencode/orchestrator-install.json')) -and
@@ -210,16 +210,16 @@ exit 2
         $staticOutput -notmatch 'OLYMPUS_RUNTIME_VALIDATION_WARNING' -and
         @($calls | Where-Object { $_ -match '^debug ' }).Count -eq $debugCallsBeforeStatic
     if (-not $staticPass) {
-        Write-Output "STATIC_SOURCE_CASE: exit=$staticExit; output=$(($staticOutput -replace '\s+',' ').Trim()); debug_calls=$(@($calls | Where-Object { $_ -match '^debug ' }).Count)"
+        Write-Output "INVALID_SOURCE_CASE: exit=$staticExit; output=$(($staticOutput -replace '\s+',' ').Trim()); debug_calls=$(@($calls | Where-Object { $_ -match '^debug ' }).Count)"
     }
-    Check 'P6_STATIC_SOURCE_METADATA_STAYS_MANDATORY' $staticPass
+    Check 'INVALID_SOURCE_METADATA_REJECTED_BEFORE_RUNTIME_DISCOVERY' $staticPass
 
     $agentsTarget = New-Target 'invalid-runtime-agents-json'
     $agentsCli = Join-Path $run 'cli-invalid-runtime-agents'
     $env:OLYMPUS_132_RUNTIME_MODE = 'agents-invalid-json'
     $agentsInstall = Invoke-Installer $agentsTarget $agentsCli (Join-Path $agentsCli 'path-store.txt')
     $calls = @(Get-Content -LiteralPath $logPath)
-    Check 'P7_RUNTIME_AGENT_JSON_FAILURE_IS_WARNING' ($agentsInstall.Code -eq 0 -and
+    Check 'INVALID_AGENT_DISCOVERY_JSON_REMAINS_WARNING' ($agentsInstall.Code -eq 0 -and
         $agentsInstall.Text.Contains($warning) -and
         @($calls | Where-Object { $_ -ceq 'debug agents exit=0 invalid-json' }).Count -eq 1 -and
         (Test-Path -LiteralPath (Join-Path $agentsCli 'bin/olympus.cmd') -PathType Leaf))
@@ -228,12 +228,12 @@ exit 2
         [Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], 'Process')
     }
     # Expand persisted PATH values in the same process environment as the baseline snapshot.
-    Check 'P8_PERSISTENT_PATH_UNCHANGED' ([Environment]::GetEnvironmentVariable('Path','User') -ceq $originalUserPath -and
+    Check 'USER_AND_MACHINE_PATH_UNCHANGED' ([Environment]::GetEnvironmentVariable('Path','User') -ceq $originalUserPath -and
         [Environment]::GetEnvironmentVariable('Path','Machine') -ceq $originalMachinePath)
-    Write-Output 'POST-INSTALL RUNTIME REGRESSION: PASS (isolated Windows fixtures; no real OpenCode runtime or persistent PATH changes)'
+    Write-Output 'INSTALLER POST-INSTALL VALIDATION: PASS (isolated Windows fixtures; mocked OpenCode only; persistent PATH unchanged)'
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
-    Write-Output 'POST-INSTALL RUNTIME REGRESSION: FAIL'
+    Write-Output 'INSTALLER POST-INSTALL VALIDATION: FAIL'
     exit 1
 } finally {
     foreach ($name in $envNames) {

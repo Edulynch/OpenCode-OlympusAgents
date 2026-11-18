@@ -44,15 +44,24 @@ function Get-DeclaredReleaseVersion([string]$Source) {
 }
 
 function Set-UpGlobalCli([string]$Source, [string]$Version, [string]$Action,
-                         [string]$InstallRoot, [string]$PathStorePath) {
+                         [string]$InstallRoot, [string]$PathStorePath, [bool]$CompactUpdate = $false) {
     $cliInstaller = Join-Path $Source 'scripts/install-cli.ps1'
     if (-not (Test-Path -LiteralPath $cliInstaller -PathType Leaf)) { throw 'SOURCE_INVALID: Global CLI installer is missing.' }
     $cliArgs = @('-NoProfile', '-File', $cliInstaller, '-Action', $Action,
         '-Version', $Version, '-SourceRoot', $Source)
     if ($InstallRoot) { $cliArgs += @('-InstallRoot', $InstallRoot) }
     if ($PathStorePath) { $cliArgs += @('-PathStorePath', $PathStorePath) }
-    & $pwsh.Source @cliArgs
-    if ($LASTEXITCODE -ne 0) { throw "GLOBAL_CLI_SETUP_FAILED: global CLI setup exited $LASTEXITCODE." }
+    $previousCompact = [Environment]::GetEnvironmentVariable('OLYMPUS_CLI_UPDATE_COMPACT', 'Process')
+    try {
+        [Environment]::SetEnvironmentVariable(
+            'OLYMPUS_CLI_UPDATE_COMPACT', $(if ($CompactUpdate) { '1' } else { $null }), 'Process'
+        )
+        & $pwsh.Source @cliArgs
+        $cliExitCode = $LASTEXITCODE
+    } finally {
+        [Environment]::SetEnvironmentVariable('OLYMPUS_CLI_UPDATE_COMPACT', $previousCompact, 'Process')
+    }
+    if ($cliExitCode -ne 0) { throw "GLOBAL_CLI_SETUP_FAILED: global CLI setup exited $cliExitCode." }
 }
 
 function Assert-ArchiveTag([string]$RootName, [string]$RequestedVersion) {
@@ -117,7 +126,9 @@ try {
     }
     $bootstrap = Join-Path $source 'scripts/bootstrap.ps1'
     if (-not (Test-Path -LiteralPath $bootstrap -PathType Leaf)) { throw 'SOURCE_INVALID: Release source has no bootstrap script.' }
-    Write-Output "OLYMPUS_SOURCE: requested=$Version resolved=$resolvedVersion origin=$origin"
+    if (-not ($Update -and $env:OLYMPUS_UPDATE_COMPACT -ceq '1')) {
+        Write-Output "OLYMPUS_SOURCE: requested=$Version resolved=$resolvedVersion origin=$origin"
+    }
 
     if ($Uninstall -and $DryRun) { throw 'UNINSTALL_MODE_INVALID: -Uninstall and -DryRun cannot be combined.' }
     $globalScript = Join-Path $source 'scripts/global-install.ps1'
@@ -132,7 +143,8 @@ try {
     if (-not $DryRun -and -not $VerifyOnly) {
         $cliAction = if ($Uninstall) { 'uninstall' } else { 'install' }
         Set-UpGlobalCli -Source $source -Version $resolvedVersion -Action $cliAction `
-            -InstallRoot $CliInstallRoot -PathStorePath $CliPathStorePath
+            -InstallRoot $CliInstallRoot -PathStorePath $CliPathStorePath `
+            -CompactUpdate ($Update -and $env:OLYMPUS_UPDATE_COMPACT -ceq '1')
     }
     exit 0
 } catch {

@@ -348,8 +348,10 @@ try {
         Write-Atomic (Get-PathOwnershipPath) $Utf8NoBom.GetBytes($bin)
     }
     $result = if ($previous -and $previous -cne $Version) { "UPDATED from=$previous to=$Version" } elseif ($previous) { "READY version=$Version" } else { "INSTALLED version=$Version" }
-    Write-Output "OLYMPUS_CLI: $result root=$InstallRoot"
-    Write-Output 'OLYMPUS_CLI_PATH: added to the current user PATH; open a new PowerShell 7 shell to use it from any directory.'
+    if ($env:OLYMPUS_CLI_UPDATE_COMPACT -cne '1') {
+        Write-Output "OLYMPUS_CLI: $result root=$InstallRoot"
+        Write-Output 'OLYMPUS_CLI_PATH: added to the current user PATH; open a new PowerShell 7 shell to use it from any directory.'
+    }
 } catch {
     Write-Error $_.Exception.Message
     exit 1

@@ -122,10 +122,10 @@ try {
     $baseInstall = Run-Script (Join-Path $root 'scripts/bootstrap.ps1') @(
         '-Target',$main,'-Harness','opencode','-SourceVersion',$candidateVersion
     )
-    Check 'CURRENT_MAIN_PROJECT_INSTALL' ($baseInstall.Code -eq 0 -and $baseInstall.Text -match '(?m)^READY\s*$') $baseInstall.Text
+    Check 'MAIN_FIXTURE_BOOTSTRAPPED' ($baseInstall.Code -eq 0 -and $baseInstall.Text -match '(?m)^READY\s*$') $baseInstall.Text
     $sourceManifestPath = Join-Path $main '.opencode/orchestrator-install.json'
     $sourceManifest = Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json
-    Check 'CURRENT_MANIFEST_OWNS_EXACT_15_RESOURCES' ($sourceManifest.schema_version -eq 1 -and
+    Check 'INSTALL_MANIFEST_OWNS_EXPECTED_RESOURCES' ($sourceManifest.schema_version -eq 1 -and
         $sourceManifest.scope -ceq 'project' -and @($sourceManifest.installed_harnesses).Count -eq 1 -and
         $sourceManifest.installed_harnesses[0] -ceq 'opencode' -and $sourceManifest.managed_files.Count -eq 15 -and
         -not [string]::IsNullOrWhiteSpace([string]$sourceManifest.installed_version) -and
@@ -134,41 +134,41 @@ try {
 
     Run-Git $main @('worktree','add','--quiet','-b','worktree-activation-b',$first,'HEAD') | Out-Null
     Run-Git $main @('worktree','add','--quiet','-b','worktree-activation-c',$second,'HEAD') | Out-Null
-    Check 'LINKED_WORKTREE_GIT_FILE' ((Get-Item -LiteralPath (Join-Path $first '.git') -Force).PSIsContainer -eq $false -and
+    Check 'LINKED_WORKTREES_USE_GIT_METADATA_FILES' ((Get-Item -LiteralPath (Join-Path $first '.git') -Force).PSIsContainer -eq $false -and
         (Get-Item -LiteralPath (Join-Path $second '.git') -Force).PSIsContainer -eq $false)
 
-    Check 'CURRENT_WORKTREE_STARTS_WITHOUT_PROJECT_RESOURCES' (-not (Test-Path (Join-Path $first 'opencode.jsonc')) -and
+    Check 'NEW_WORKTREES_START_WITHOUT_PROJECT_RESOURCES' (-not (Test-Path (Join-Path $first 'opencode.jsonc')) -and
         -not (Test-Path (Join-Path $first '.opencode/agents/kael.md')) -and
         -not (Test-Path (Join-Path $first '.opencode/orchestrator-install.json')) -and
         -not (Test-Path (Join-Path $second 'opencode.jsonc')) -and
         -not (Test-Path (Join-Path $second '.opencode/agents/kael.md')) -and
         -not (Test-Path (Join-Path $second '.opencode/orchestrator-install.json')))
-    Check 'MISSING_RESOURCES_MEAN_NO_KAEL_DISCOVERY' (@(Get-Effective-Agent-Ids $first).Count -eq 0)
+    Check 'NO_PROJECT_AGENTS_MEANS_NO_KAEL_DISCOVERY' (@(Get-Effective-Agent-Ids $first).Count -eq 0)
 
     $userOwnedFile = Join-Path $first '.opencode/user-owned.md'
     [IO.Directory]::CreateDirectory((Split-Path -Parent $userOwnedFile)) | Out-Null
     [IO.File]::WriteAllText($userOwnedFile, "Preserve this user-owned file.`n", $utf8)
     $userOwnedHash = Sha-File $userOwnedFile
     $setupB = Invoke-Worktree-Setup $first
-    Check 'WORKTREE_B_PROVISIONED' ($setupB.Code -eq 0 -and $setupB.Text -match 'OLYMPUS_WORKTREE_SETUP: PASS') $setupB.Text
-    Check 'WORKTREE_B_MANIFEST_HASHES_AND_KAEL' ((Assert-InstalledManifest $first) -and
+    Check 'FIRST_WORKTREE_PROVISIONED' ($setupB.Code -eq 0 -and $setupB.Text -match 'OLYMPUS_WORKTREE_SETUP: PASS') $setupB.Text
+    Check 'FIRST_WORKTREE_MANIFEST_AND_KAEL_VALID' ((Assert-InstalledManifest $first) -and
         ((Get-Content -LiteralPath (Join-Path $first 'opencode.jsonc') -Raw) -match '"default_agent":\s*"kael"') -and
         ('kael' -in @(Get-Effective-Agent-Ids $first)))
-    Check 'WORKTREE_B_USER_FILE_PRESERVED' ((Sha-File $userOwnedFile) -ceq $userOwnedHash)
+    Check 'FIRST_WORKTREE_USER_FILE_PRESERVED' ((Sha-File $userOwnedFile) -ceq $userOwnedHash)
 
     [IO.File]::WriteAllText((Join-Path $first 'checkout-only.txt'), 'B', $utf8)
     [IO.File]::WriteAllText((Join-Path $second 'checkout-only.txt'), 'C', $utf8)
     $setupC = Invoke-Worktree-Setup $second
-    Check 'WORKTREE_C_PROVISIONED' ($setupC.Code -eq 0 -and $setupC.Text -match 'OLYMPUS_WORKTREE_SETUP: PASS') $setupC.Text
-    Check 'WORKTREE_C_MANIFEST_HASHES_AND_KAEL' ((Assert-InstalledManifest $second) -and
+    Check 'SECOND_WORKTREE_PROVISIONED' ($setupC.Code -eq 0 -and $setupC.Text -match 'OLYMPUS_WORKTREE_SETUP: PASS') $setupC.Text
+    Check 'SECOND_WORKTREE_MANIFEST_AND_KAEL_VALID' ((Assert-InstalledManifest $second) -and
         ((Get-Content -LiteralPath (Join-Path $second 'opencode.jsonc') -Raw) -match '"default_agent":\s*"kael"') -and
         ('kael' -in @(Get-Effective-Agent-Ids $second)))
-    Check 'WORKTREE_FILES_AND_USER_ASSETS_STAY_ISOLATED' ((Get-Content (Join-Path $first 'checkout-only.txt') -Raw) -ceq 'B' -and
+    Check 'CHECKOUT_FILES_AND_USER_ASSETS_REMAIN_ISOLATED' ((Get-Content (Join-Path $first 'checkout-only.txt') -Raw) -ceq 'B' -and
         (Get-Content (Join-Path $second 'checkout-only.txt') -Raw) -ceq 'C' -and
         -not (Test-Path (Join-Path $second '.opencode/user-owned.md')))
 
     $idempotent = Invoke-Worktree-Setup $first
-    Check 'REPEATED_PROVISIONING_IS_READ_ONLY' ($idempotent.Code -eq 0 -and $idempotent.Text -match 'created=0') $idempotent.Text
+    Check 'REPEATED_PROVISIONING_MAKES_NO_CHANGES' ($idempotent.Code -eq 0 -and $idempotent.Text -match 'created=0') $idempotent.Text
 
     $missingKael = Join-Path $second '.opencode/agents/kael.md'
     [IO.File]::Delete($missingKael)
@@ -176,7 +176,7 @@ try {
     [IO.File]::WriteAllText($conflictConfig, "{`"user_owned`": true}`n", $utf8)
     $conflictHash = Sha-File $conflictConfig
     $conflict = Invoke-Worktree-Setup $second
-    Check 'USER_CONFLICT_BLOCKS_WITHOUT_PARTIAL_COPY' ($conflict.Code -ne 0 -and $conflict.Text -match 'WORKTREE_SETUP_CONFLICT' -and
+    Check 'USER_CONFIG_CONFLICT_BLOCKS_WITHOUT_PARTIAL_COPY' ($conflict.Code -ne 0 -and $conflict.Text -match 'WORKTREE_SETUP_CONFLICT' -and
         -not (Test-Path -LiteralPath $missingKael) -and (Sha-File $conflictConfig) -ceq $conflictHash) $conflict.Text
 
     $firstAgent = Join-Path $main '.opencode/agents/kael.md'
@@ -227,7 +227,7 @@ try {
         $missingManifest.managed_files = @($missingManifest.managed_files | Where-Object { $_.path -ne '.opencode/agents/kael.md' })
         [IO.File]::WriteAllText($sourceManifestPath, ($missingManifest | ConvertTo-Json -Depth 100), $utf8)
         $missing = Invoke-Worktree-Setup $negative
-        Check 'INCOMPLETE_INVENTORY_REJECTED_WITHOUT_WRITES' ($missing.Code -ne 0 -and
+        Check 'MISSING_MANAGED_RESOURCE_REJECTED_WITHOUT_WRITES' ($missing.Code -ne 0 -and
             $missing.Text -match 'WORKTREE_SETUP_MANIFEST_INVALID' -and
             -not (Test-Path -LiteralPath (Join-Path $negative 'opencode.jsonc')) -and
             -not (Test-Path -LiteralPath (Join-Path $negative '.opencode/orchestrator-install.json')) -and
@@ -240,7 +240,7 @@ try {
             @([pscustomobject]@{ path='.opencode/agents/unexpected.md'; sha256=(Sha-File $unexpectedSource) })
         [IO.File]::WriteAllText($sourceManifestPath, ($extraManifest | ConvertTo-Json -Depth 100), $utf8)
         $extra = Invoke-Worktree-Setup $negative
-        Check 'FOREIGN_MANAGED_ENTRY_REJECTED_WITHOUT_WRITES' ($extra.Code -ne 0 -and
+        Check 'UNEXPECTED_MANAGED_RESOURCE_REJECTED_WITHOUT_WRITES' ($extra.Code -ne 0 -and
             $extra.Text -match 'WORKTREE_SETUP_MANIFEST_INVALID' -and
             -not (Test-Path -LiteralPath (Join-Path $negative 'opencode.jsonc')) -and
             -not (Test-Path -LiteralPath (Join-Path $negative '.opencode/orchestrator-install.json')) -and
@@ -274,7 +274,7 @@ try {
     [IO.File]::WriteAllBytes($unownedFile, [IO.File]::ReadAllBytes((Join-Path $main 'opencode.jsonc')))
     $unownedSnapshot = Get-Worktree-Snapshot $negative
     $unownedResult = Invoke-Worktree-Setup $negative
-    Check 'IDENTICAL_UNOWNED_FILE_REJECTED_WITHOUT_WRITES' ($unownedResult.Code -ne 0 -and
+    Check 'PREEXISTING_USER_CONFIG_REJECTED_WITHOUT_WRITES' ($unownedResult.Code -ne 0 -and
         $unownedResult.Text -match 'WORKTREE_SETUP_CONFLICT' -and
         (Get-Worktree-Snapshot $negative) -ceq $unownedSnapshot -and
         -not (Test-Path -LiteralPath (Join-Path $negative '.opencode/orchestrator-install.json'))) $unownedResult.Text
@@ -286,7 +286,7 @@ try {
     $trackedSnapshot = Get-Worktree-Snapshot $negative
     $trackedResult = Invoke-Worktree-Setup $negative
     $trackedFile = (Run-Git $negative @('ls-files','--','opencode.jsonc') | Out-String).Trim()
-    Check 'TRACKED_IDENTICAL_FILE_REJECTED_WITHOUT_WRITES' ($trackedResult.Code -ne 0 -and
+    Check 'GIT_TRACKED_USER_CONFIG_REJECTED_WITHOUT_WRITES' ($trackedResult.Code -ne 0 -and
         $trackedResult.Text -match 'WORKTREE_SETUP_CONFLICT' -and
         $trackedFile -ceq 'opencode.jsonc' -and
         (Get-Worktree-Snapshot $negative) -ceq $trackedSnapshot -and
@@ -296,13 +296,13 @@ try {
     Run-Git $negative @('rm','--quiet','--force','--','opencode.jsonc') | Out-Null
 
     $negativeValid = Invoke-Worktree-Setup $negative
-    Check 'VALID_ROSTER_AFTER_NEGATIVE_PROBES' ($negativeValid.Code -eq 0 -and
+    Check 'VALID_WORKTREE_PROVISIONED_AFTER_REJECTED_PROBES' ($negativeValid.Code -eq 0 -and
         (Assert-InstalledManifest $negative) -and (Sha-File $negativeMarker) -ceq $negativeMarkerHash) $negativeValid.Text
 
-    Write-Output 'WORKTREE ACTIVATION QUALIFICATION: PASS (linked worktrees; strict inventory and config conflicts; no live model request)'
+    Write-Output 'WORKTREE PROVISIONING SAFEGUARDS: PASS (isolated linked worktrees; mock OpenCode CLI; no live provider request)'
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
-    Write-Output 'WORKTREE ACTIVATION QUALIFICATION: FAIL'
+    Write-Output 'WORKTREE PROVISIONING SAFEGUARDS: FAIL'
     exit 1
 } finally {
     [Environment]::SetEnvironmentVariable('PATH',$originalPath,'Process')

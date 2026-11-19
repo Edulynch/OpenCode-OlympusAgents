@@ -15,6 +15,7 @@ $treeRoot = Join-Path $run 'trees'
 $first = Join-Path $treeRoot 'checkout-b'
 $second = Join-Path $treeRoot 'checkout-c'
 $negative = Join-Path $treeRoot 'checkout-negative'
+$recovery = Join-Path $treeRoot 'checkout-recovery'
 $mockBin = Join-Path $run 'mock-bin'
 $originalPath = [Environment]::GetEnvironmentVariable('PATH','Process')
 $originalBase = [Environment]::GetEnvironmentVariable('OPENCODE_WORKTREE_BASE','Process')
@@ -299,6 +300,74 @@ try {
     Check 'VALID_WORKTREE_PROVISIONED_AFTER_REJECTED_PROBES' ($negativeValid.Code -eq 0 -and
         (Assert-InstalledManifest $negative) -and (Sha-File $negativeMarker) -ceq $negativeMarkerHash) $negativeValid.Text
 
+    # Run the scoped source candidate in an isolated fixture, injecting a
+    # one-shot interruption after its first payload write.
+    Run-Git $main @('worktree','add','--quiet','--detach',$recovery,'HEAD') | Out-Null
+    $sourceSetupPath = Join-Path $main '.opencode/scripts/worktree-setup.ps1'
+    $candidateSetup = [IO.File]::ReadAllText((Join-Path $root 'olympus/harnesses/opencode/worktree-setup.ps1'))
+    $faultAnchor = '        Write-New-File $destination $write.Bytes'
+    if ($candidateSetup.Split(@($faultAnchor), [StringSplitOptions]::None).Count -ne 2) {
+        throw 'RECOVERY_FIXTURE_INSTRUMENTATION_ANCHOR_MISSING'
+    }
+    $interruptMarker = Join-Path (Split-Path -Parent $sourceSetupPath) '.worktree-activation-interrupt-once'
+    $faultInjection = @'
+        if (Test-Path -LiteralPath (Join-Path $PSScriptRoot '.worktree-activation-interrupt-once') -PathType Leaf) {
+            [IO.File]::Delete((Join-Path $PSScriptRoot '.worktree-activation-interrupt-once'))
+            Fail 'WORKTREE_SETUP_TEST_INTERRUPTED' 'Injected interruption after one managed payload.'
+        }
+'@.TrimEnd()
+    $instrumentedSetup = $candidateSetup.Replace(
+        $faultAnchor,
+        $faultAnchor + [Environment]::NewLine + $faultInjection
+    )
+    [IO.File]::WriteAllText($sourceSetupPath, $instrumentedSetup, $utf8)
+    $sourceManifest = [IO.File]::ReadAllText($sourceManifestPath) | ConvertFrom-Json -Depth 100
+    $setupEntry = @($sourceManifest.managed_files | Where-Object { $_.path -ceq '.opencode/scripts/worktree-setup.ps1' })
+    if ($setupEntry.Count -ne 1) { throw 'RECOVERY_FIXTURE_SETUP_ENTRY_MISSING' }
+    $setupEntry[0].sha256 = Sha-File $sourceSetupPath
+    [IO.File]::WriteAllText($sourceManifestPath, ($sourceManifest | ConvertTo-Json -Depth 100), $utf8)
+    $sourceSetupHash = Sha-File $sourceSetupPath
+    $sourceManifestHash = Sha-File $sourceManifestPath
+
+    $recoveryUserFile = Join-Path $recovery '.opencode/user-owned.md'
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $recoveryUserFile)) | Out-Null
+    [IO.File]::WriteAllText($recoveryUserFile, "Keep this user-owned file.`n", $utf8)
+    $recoveryUserHash = Sha-File $recoveryUserFile
+    [IO.File]::WriteAllText($interruptMarker, 'interrupt once', $utf8)
+    $interrupted = Invoke-Worktree-Setup $recovery
+    $recoveryManifestPath = Join-Path $recovery '.opencode/orchestrator-install.json'
+    $recoveryPayloadPaths = @($sourceManifest.managed_files | ForEach-Object {
+        Join-Path $recovery ($_.path -replace '/', [IO.Path]::DirectorySeparatorChar)
+    })
+    $presentAfterInterruption = @($recoveryPayloadPaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+    $missingAfterInterruption = @($recoveryPayloadPaths | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
+    $presentCopiesValid = $true
+    foreach ($entry in @($sourceManifest.managed_files)) {
+        $path = Join-Path $recovery ($entry.path -replace '/', [IO.Path]::DirectorySeparatorChar)
+        if ((Test-Path -LiteralPath $path -PathType Leaf) -and (Sha-File $path) -cne ([string]$entry.sha256).ToLowerInvariant()) {
+            $presentCopiesValid = $false
+        }
+    }
+    Check 'INTERRUPTION_LEAVES_EXACT_MANIFEST_AND_PARTIAL_COPY' ($interrupted.Code -ne 0 -and
+        $interrupted.Text -match 'WORKTREE_SETUP_TEST_INTERRUPTED' -and
+        -not (Test-Path -LiteralPath $interruptMarker) -and
+        (Test-Path -LiteralPath $recoveryManifestPath -PathType Leaf) -and
+        (Sha-File $recoveryManifestPath) -ceq $sourceManifestHash -and
+        $presentAfterInterruption.Count -ge 1 -and $missingAfterInterruption.Count -ge 1 -and
+        $presentCopiesValid -and (Sha-File $recoveryUserFile) -ceq $recoveryUserHash) $interrupted.Text
+
+    $retry = Invoke-Worktree-Setup $recovery
+    Check 'INTERRUPTED_SETUP_RESUMES_ONLY_MISSING_FILES' ($retry.Code -eq 0 -and
+        $retry.Text -match "created=$($missingAfterInterruption.Count)" -and
+        (Assert-InstalledManifest $recovery) -and
+        (Sha-File $recoveryManifestPath) -ceq $sourceManifestHash -and
+        (Sha-File $sourceSetupPath) -ceq $sourceSetupHash -and
+        (Sha-File $sourceManifestPath) -ceq $sourceManifestHash -and
+        (Sha-File $recoveryUserFile) -ceq $recoveryUserHash) $retry.Text
+    $recoveryIdempotent = Invoke-Worktree-Setup $recovery
+    Check 'RECOVERY_RETRY_IS_IDEMPOTENT' ($recoveryIdempotent.Code -eq 0 -and
+        $recoveryIdempotent.Text -match 'created=0') $recoveryIdempotent.Text
+
     Write-Output 'WORKTREE PROVISIONING SAFEGUARDS: PASS (isolated linked worktrees; mock OpenCode CLI; no live provider request)'
 } catch {
     Write-Output ('EVIDENCE: ' + $_.Exception.Message)
@@ -312,7 +381,7 @@ try {
     else { [Environment]::SetEnvironmentVariable('OPENCODE_WORKTREE_PATH',$originalTarget,'Process') }
     if ($run -and (Test-Path -LiteralPath $run)) {
         if (Test-Path -LiteralPath $main -PathType Container) {
-            foreach ($tree in @($negative, $second, $first)) {
+            foreach ($tree in @($recovery, $negative, $second, $first)) {
                 if (Test-Path -LiteralPath $tree -PathType Container) {
                     & git -C $main worktree remove --force $tree 2>$null | Out-Null
                 }

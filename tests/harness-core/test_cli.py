@@ -1271,6 +1271,11 @@ test ! -e "{sentinel}"
                                            "--harness", "opencode", code=3)
         self.assertEqual("invalid", invalid_manifest["data"]["manifest_state"])
         self.assertEqual("invalid_manifest", invalid_manifest["issues"][0]["code"])
+        auto_detected = self.json_query("doctor", code=3, entry="module_external")
+        self.assertEqual("project", auto_detected["context"]["scope"])
+        self.assertEqual(str(self.target.resolve()), auto_detected["context"]["target"])
+        self.assertEqual("invalid", auto_detected["data"]["manifest_state"])
+        self.assertEqual("invalid_manifest", auto_detected["issues"][0]["code"])
 
         manifest["scope"] = "project"
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
@@ -1286,6 +1291,38 @@ test ! -e "{sentinel}"
         self.assertEqual(3, code)
         self.assertEqual("verifier_version_unsupported", response["issues"][0]["code"])
         run_verify.assert_not_called()
+
+        real_run = subprocess.run
+        before = self.snapshot()
+        for timed_out_stage in ("version check", "VerifyOnly"):
+            with self.subTest(timed_out_stage=timed_out_stage):
+                probe_calls = []
+
+                def time_out_powershell(command, **options):
+                    if command[0] != "pwsh":
+                        return real_run(command, **options)
+                    stage = "version check" if command[1] == "-Version" else "VerifyOnly"
+                    probe_calls.append(stage)
+                    timeout = options["timeout"]
+                    self.assertGreater(timeout, 0)
+                    if stage == timed_out_stage:
+                        raise subprocess.TimeoutExpired(command, timeout)
+                    return subprocess.CompletedProcess(command, 0, "PowerShell 7.4.0\n", "")
+
+                with mock.patch("olympus.doctor._windows_verifier_supported", return_value=True), \
+                     mock.patch("olympus.doctor.shutil.which", return_value="pwsh"), \
+                     mock.patch("olympus.doctor.subprocess.run", side_effect=time_out_powershell):
+                    timed_out = {}
+                    self.assertEqual(3, doctor.diagnose(self.source, args, timed_out,
+                                                        source_version=self.source_version,
+                                                        source_query=cli_source_query))
+                self.assertEqual("blocked", timed_out["result"])
+                self.assertEqual("unavailable", timed_out["data"]["verification"]["state"])
+                self.assertEqual("verification_unavailable", timed_out["issues"][0]["code"])
+                self.assertIn(f"{timed_out_stage} timed out", timed_out["issues"][0]["message"])
+                self.assertEqual(["version check"] if timed_out_stage == "version check"
+                                 else ["version check", "VerifyOnly"], probe_calls)
+                self.assertEqual(before, self.snapshot())
 
     def test_slice_c4_doctor_classifies_drift_and_invalid_inventory_without_writes(self):
         manifest_path = self.create_managed_install(version=self.source_version)

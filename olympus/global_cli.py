@@ -230,6 +230,44 @@ def _verify_directory(path: Path, identity: tuple[int, int]) -> None:
         raise GlobalCliError(f"Per-user directory identity changed: {path}: {error}", 4) from error
 
 
+def _sync_directory_strict(path: Path, identity: tuple[int, int], lock,
+                           lock_identity: tuple[int, int]) -> None:
+    try:
+        source_edit._lock_identity(lock, lock_identity)
+    except source_edit.LockError as error:
+        raise GlobalCliError(f"Per-user CLI package lock identity is unconfirmed: {error}", 4) from error
+    _verify_directory(path, identity)
+    descriptor = -1
+    try:
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        descriptor = os.open(path, flags)
+        opened = os.fstat(descriptor)
+        if ((opened.st_dev, opened.st_ino) != identity
+                or not stat.S_ISDIR(opened.st_mode) or opened.st_uid != os.geteuid()):
+            raise GlobalCliError(f"Per-user directory identity changed before durable sync: {path}", 4)
+        os.fsync(descriptor)
+        synced = os.fstat(descriptor)
+        placed = os.lstat(path)
+        if ((synced.st_dev, synced.st_ino) != identity
+                or not stat.S_ISDIR(synced.st_mode) or synced.st_uid != os.geteuid()
+                or (placed.st_dev, placed.st_ino) != identity
+                or not stat.S_ISDIR(placed.st_mode) or stat.S_ISLNK(placed.st_mode)):
+            raise GlobalCliError(f"Per-user directory identity changed during durable sync: {path}", 4)
+        try:
+            source_edit._lock_identity(lock, lock_identity)
+        except source_edit.LockError as error:
+            raise GlobalCliError(
+                f"Per-user CLI package lock identity is unconfirmed: {error}", 4,
+            ) from error
+    except GlobalCliError:
+        raise
+    except (OSError, NotImplementedError) as error:
+        raise GlobalCliError(f"Cannot durably sync per-user directory {path}: {error}", 4) from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
 def _safe_read(root: Path, relative: str, *, limit: int = _MAX_FILE_BYTES):
     try:
         raw, metadata = source_edit._safe_read(root, relative)
@@ -563,6 +601,116 @@ def _scan_package_tree(package_root: Path) -> tuple[dict[str, tuple[bytes, os.st
     return files, directories
 
 
+def _durability_signature(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev, metadata.st_ino, metadata.st_mode, metadata.st_uid,
+        metadata.st_nlink, metadata.st_size, metadata.st_mtime_ns, metadata.st_ctime_ns,
+    )
+
+
+def _sync_validated_package_files(
+    package_root: Path, files: dict[str, tuple[bytes, os.stat_result]],
+    lock, lock_identity: tuple[int, int],
+) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    for relative, (_, expected_metadata) in sorted(files.items()):
+        descriptor = -1
+        try:
+            source_edit._lock_identity(lock, lock_identity)
+            path, checked = source_edit._checked_path(package_root, relative, kind="file")
+            if _durability_signature(checked) != _durability_signature(expected_metadata):
+                raise GlobalCliError(f"Reused CLI package file changed before durable sync: {relative}", 4)
+            descriptor = os.open(path, flags)
+            opened = os.fstat(descriptor)
+            if _durability_signature(opened) != _durability_signature(expected_metadata):
+                raise GlobalCliError(f"Reused CLI package file changed while opening: {relative}", 4)
+            try:
+                os.fsync(descriptor)
+            except (OSError, NotImplementedError) as error:
+                raise GlobalCliError(
+                    f"Cannot durably sync reused CLI package file {relative}: {error}", 4,
+                ) from error
+            synced = os.fstat(descriptor)
+            _, placed = source_edit._checked_path(package_root, relative, kind="file")
+            if (_durability_signature(synced) != _durability_signature(expected_metadata)
+                    or _durability_signature(placed) != _durability_signature(expected_metadata)):
+                raise GlobalCliError(f"Reused CLI package file changed during durable sync: {relative}", 4)
+            source_edit._lock_identity(lock, lock_identity)
+        except GlobalCliError:
+            raise
+        except (OSError, source_edit.BatchError, source_edit.LockError) as error:
+            raise GlobalCliError(
+                f"Cannot safely durably sync reused CLI package file {relative}: {error}", 4,
+            ) from error
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+
+
+def _sync_validated_package_directories(
+    package_root: Path, root_identity: tuple[int, int],
+    directories: dict[str, os.stat_result], lock, lock_identity: tuple[int, int],
+) -> None:
+    root_metadata = directories.get("")
+    if (root_metadata is None
+            or (root_metadata.st_dev, root_metadata.st_ino) != root_identity):
+        raise GlobalCliError("Reused CLI package root changed after validation.", 4)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    for relative, expected_metadata in sorted(
+        directories.items(), key=lambda item: (item[0].count("/"), item[0]), reverse=True,
+    ):
+        descriptor = -1
+        try:
+            source_edit._lock_identity(lock, lock_identity)
+            path = package_root
+            if relative:
+                path, checked = source_edit._checked_path(
+                    package_root, relative, kind="directory",
+                )
+            else:
+                _verify_directory(package_root, root_identity)
+                checked = os.lstat(package_root)
+            if _durability_signature(checked) != _durability_signature(expected_metadata):
+                raise GlobalCliError(
+                    f"Reused CLI package directory changed before durable sync: {relative or '.'}", 4,
+                )
+            descriptor = os.open(path, flags)
+            opened = os.fstat(descriptor)
+            if _durability_signature(opened) != _durability_signature(expected_metadata):
+                raise GlobalCliError(
+                    f"Reused CLI package directory changed while opening: {relative or '.'}", 4,
+                )
+            try:
+                os.fsync(descriptor)
+            except (OSError, NotImplementedError) as error:
+                raise GlobalCliError(
+                    f"Cannot durably sync reused CLI package directory {relative or '.'}: {error}", 4,
+                ) from error
+            synced = os.fstat(descriptor)
+            if relative:
+                _, placed = source_edit._checked_path(
+                    package_root, relative, kind="directory",
+                )
+            else:
+                placed = os.lstat(package_root)
+            if (_durability_signature(synced) != _durability_signature(expected_metadata)
+                    or _durability_signature(placed) != _durability_signature(expected_metadata)):
+                raise GlobalCliError(
+                    f"Reused CLI package directory changed during durable sync: {relative or '.'}", 4,
+                )
+            source_edit._lock_identity(lock, lock_identity)
+        except GlobalCliError:
+            raise
+        except (OSError, source_edit.BatchError, source_edit.LockError) as error:
+            raise GlobalCliError(
+                f"Cannot safely durably sync reused CLI package directory "
+                f"{relative or '.'}: {error}", 4,
+            ) from error
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+
+
 def _parse_package_receipt(raw_receipt: bytes, receipt_metadata: os.stat_result, *,
                            version: str | None = None, commit: str | None = None,
                            receipt_sha256: str | None = None) -> tuple[str, str, dict[str, str], str]:
@@ -608,7 +756,9 @@ def _parse_package_receipt(raw_receipt: bytes, receipt_metadata: os.stat_result,
 
 
 def _validate_package(package_root: Path, *, version: str | None = None,
-                      commit: str | None = None, receipt_sha256: str | None = None) -> InstalledIdentity:
+                      commit: str | None = None, receipt_sha256: str | None = None,
+                      sync_durable: bool = False, lock=None,
+                      lock_identity: tuple[int, int] | None = None) -> InstalledIdentity:
     from . import cli
 
     try:
@@ -655,6 +805,13 @@ def _validate_package(package_root: Path, *, version: str | None = None,
         raise GlobalCliError(f"CLI package release provenance is invalid: {error}") from error
     if declared_version != actual_version:
         raise GlobalCliError("CLI package receipt disagrees with its packaged install.ps1 release identity.")
+    if sync_durable:
+        if lock is None or lock_identity is None:
+            raise GlobalCliError("Durable package validation requires the active CLI package lock.", 4)
+        _sync_validated_package_files(package_root, files, lock, lock_identity)
+        _sync_validated_package_directories(
+            package_root, identity, directories, lock, lock_identity,
+        )
     return InstalledIdentity(actual_version, actual_commit, package_root, digest)
 
 
@@ -707,7 +864,9 @@ def _stage_package(data_root: Path, source_payload: dict[str, bytes],
             lock, lock_identity,
         )
         for relative in sorted(directories, key=lambda item: item.count("/"), reverse=True):
-            _set_directory_mode(data_root, relative, 0o555, data_identity, lock, lock_identity)
+            _set_directory_mode(
+                data_root, relative, 0o555, data_identity, lock, lock_identity, sync=True,
+            )
         package_root = data_root / relative_stage
         _validate_package(
             package_root, version=version, commit=commit,
@@ -724,7 +883,7 @@ def _stage_package(data_root: Path, source_payload: dict[str, bytes],
 
 def _set_directory_mode(root: Path, relative: str, mode: int,
                         root_identity: tuple[int, int], lock,
-                        lock_identity: tuple[int, int]) -> None:
+                        lock_identity: tuple[int, int], *, sync: bool = False) -> None:
     path = root / relative
     _verify_directory(root, root_identity)
     source_edit._lock_identity(lock, lock_identity)
@@ -746,6 +905,23 @@ def _set_directory_mode(root: Path, relative: str, mode: int,
                     or (placed.st_dev, placed.st_ino) != (after.st_dev, after.st_ino)
                     or stat.S_IMODE(after.st_mode) != mode):
                 raise GlobalCliError(f"CLI package directory mode or identity is unconfirmed: {relative}", 4)
+            if sync:
+                try:
+                    os.fsync(descriptor)
+                except (OSError, NotImplementedError) as error:
+                    raise GlobalCliError(
+                        f"Cannot durably sync staged CLI package directory {root / relative}: {error}",
+                        4,
+                    ) from error
+                synced = os.fstat(descriptor)
+                placed = os.lstat(path)
+                if ((synced.st_dev, synced.st_ino) != (before.st_dev, before.st_ino)
+                        or (placed.st_dev, placed.st_ino) != (synced.st_dev, synced.st_ino)
+                        or stat.S_IMODE(synced.st_mode) != mode):
+                    raise GlobalCliError(
+                        f"CLI package directory changed during durable sync: {root / relative}", 4,
+                    )
+                source_edit._lock_identity(lock, lock_identity)
         finally:
             os.close(descriptor)
     except GlobalCliError:
@@ -794,6 +970,12 @@ def _publish_package_noreplace(versions_root: Path, staging_name: str, version: 
                 f"Atomic no-replace package publication failed: {os.strerror(error_number)}",
                 4,
             )
+        try:
+            os.fsync(descriptor)
+        except (OSError, NotImplementedError) as error:
+            raise GlobalCliError(
+                f"Cannot durably sync published CLI package directory: {error}", 4,
+            ) from error
 
         published = os.stat(version, dir_fd=descriptor, follow_symlinks=False)
         try:
@@ -957,58 +1139,153 @@ def _stage_and_transition(source: Path, version: str, commit: str, operation: st
                           data_root: Path, data_identity: tuple[int, int],
                           versions_root: Path, versions_identity: tuple[int, int],
                           bin_root: Path, bin_identity: tuple[int, int],
-                          lock, lock_identity: tuple[int, int],
-                          previous: InstalledIdentity | None) -> CliOutcome:
+                           lock, lock_identity: tuple[int, int],
+                           previous: InstalledIdentity | None) -> CliOutcome:
     destination = versions_root / version
-    try:
-        os.lstat(destination)
-    except FileNotFoundError:
-        pass
-    except OSError as error:
-        raise GlobalCliError(f"Cannot inspect CLI package destination: {error}") from error
-    else:
-        raise GlobalCliError(f"Versioned CLI package already exists; refusing adoption or overwrite: {destination}")
-
-    staged = _stage_package(data_root, payload, version, commit, data_identity, lock, lock_identity)
-    _verify_directory(data_root, data_identity)
-    _verify_directory(versions_root, versions_identity)
-
+    package_published = False
     if operation == "install":
-        _, existing_manifest, _, _, _ = _read_global_manifest(staged, version, commit)
-        if existing_manifest is not None:
-            _require_global(staged, version, commit)
-        lifecycle = global_install.install(staged, version=version, commit=commit)
-    else:
-        if previous is None:
-            raise GlobalCliError("Update requires a verified current CLI package.")
-        _require_global(previous.package_root, previous.version, previous.commit)
-        comparison = global_install._version_compare(version, previous.version)
-        if comparison is None or comparison <= 0:
-            raise GlobalCliError("CLI update must be a strictly newer supported release.")
-        lifecycle = global_install.update(staged, version=version, commit=commit)
-
-    try:
-        global_root, _ = _require_global(staged, version, commit)
-    except BaseException as error:
-        raise GlobalCliError(
-            f"Global lifecycle returned {lifecycle.result}, but its version/commit could not be confirmed; "
-            f"preserve staged package {staged}: {error}", 4,
-        ) from error
-
-    try:
-        _verify_directory(versions_root, versions_identity)
         try:
             os.lstat(destination)
         except FileNotFoundError:
             pass
+        except OSError as error:
+            raise GlobalCliError(f"Cannot inspect CLI package destination: {error}") from error
         else:
-            raise GlobalCliError(f"Versioned CLI destination appeared during activation: {destination}", 4)
-        _publish_package_noreplace(
-            versions_root, staged.name, version, versions_identity, lock, lock_identity,
+            raise GlobalCliError(
+                f"Versioned CLI package already exists; refusing adoption or overwrite: {destination}",
+            )
+
+        staged = _stage_package(
+            data_root, payload, version, commit, data_identity, lock, lock_identity,
         )
-        package_identity = _validate_package(
-            destination, version=version, commit=commit,
-        )
+        _verify_directory(data_root, data_identity)
+        _verify_directory(versions_root, versions_identity)
+        _, existing_manifest, _, _, _ = _read_global_manifest(staged, version, commit)
+        if existing_manifest is not None:
+            _require_global(staged, version, commit)
+        lifecycle = global_install.install(staged, version=version, commit=commit)
+        package_identity = None
+        target_already_committed = False
+    else:
+        if previous is None:
+            raise GlobalCliError("Update requires a verified current CLI package.")
+        comparison = global_install._version_compare(version, previous.version)
+        if comparison is None or comparison <= 0:
+            raise GlobalCliError("CLI update must be a strictly newer supported release.")
+
+        previous_pair = (previous.version, previous.commit)
+        target_pair = (version, commit)
+        installed_pair = _global_identity_without_package()
+        if installed_pair == previous_pair:
+            _require_global(previous.package_root, previous.version, previous.commit)
+            target_already_committed = False
+        elif installed_pair == target_pair:
+            target_already_committed = True
+        else:
+            raise GlobalCliError(
+                "Global OpenCode identity is neither the verified current release nor this update target.",
+                4,
+            )
+
+        try:
+            os.lstat(destination)
+        except FileNotFoundError:
+            destination_exists = False
+        except OSError as error:
+            raise GlobalCliError(f"Cannot inspect CLI package destination: {error}") from error
+        else:
+            destination_exists = True
+
+        if target_already_committed and not destination_exists:
+            raise GlobalCliError(
+                "The committed global update has no intact local target package to activate.", 4,
+            )
+        if destination_exists:
+            package_identity = _validate_package(
+                destination, version=version, commit=commit, sync_durable=True,
+                lock=lock, lock_identity=lock_identity,
+            )
+            if not _payload_matches_package(payload, package_identity):
+                raise GlobalCliError(
+                    "Existing CLI update package differs from the verified source payload.",
+                )
+            _sync_directory_strict(
+                versions_root, versions_identity, lock, lock_identity,
+            )
+        else:
+            staged = _stage_package(
+                data_root, payload, version, commit, data_identity, lock, lock_identity,
+            )
+            _verify_directory(data_root, data_identity)
+            _verify_directory(versions_root, versions_identity)
+            _publish_package_noreplace(
+                versions_root, staged.name, version, versions_identity, lock, lock_identity,
+            )
+            package_published = True
+            package_identity = _validate_package(
+                destination, version=version, commit=commit,
+            )
+            if not _payload_matches_package(payload, package_identity):
+                raise GlobalCliError(
+                    "Published CLI update package differs from the verified source payload.", 4,
+                )
+
+        _verify_directory(data_root, data_identity)
+        _verify_directory(versions_root, versions_identity)
+        installed_pair = _global_identity_without_package()
+        if installed_pair == previous_pair:
+            _require_global(previous.package_root, previous.version, previous.commit)
+            lifecycle = global_install.update(destination, version=version, commit=commit)
+            target_already_committed = False
+        elif installed_pair == target_pair:
+            target_already_committed = True
+            lifecycle = None
+        else:
+            raise GlobalCliError(
+                "Global OpenCode identity changed to an unrelated release during update.", 4,
+            )
+
+    try:
+        global_root, _ = _require_global(destination if operation == "update" else staged,
+                                         version, commit)
+    except BaseException as error:
+        if lifecycle is None:
+            raise GlobalCliError(
+                "The target global version/commit could not be confirmed before CLI activation; "
+                f"preserve package evidence at {destination}: {error}", 4,
+            ) from error
+        raise GlobalCliError(
+            f"Global lifecycle returned {lifecycle.result}, but its version/commit could not be confirmed; "
+            f"preserve package evidence at {staged if operation == 'install' else destination}: {error}",
+            4,
+        ) from error
+
+    try:
+        if operation == "install":
+            _verify_directory(versions_root, versions_identity)
+            try:
+                os.lstat(destination)
+            except FileNotFoundError:
+                pass
+            else:
+                raise GlobalCliError(
+                    f"Versioned CLI destination appeared during activation: {destination}", 4,
+                )
+            _publish_package_noreplace(
+                versions_root, staged.name, version, versions_identity, lock, lock_identity,
+            )
+            package_published = True
+            package_identity = _validate_package(
+                destination, version=version, commit=commit,
+            )
+        else:
+            package_identity = _validate_package(
+                destination, version=version, commit=commit,
+            )
+            if not _payload_matches_package(payload, package_identity):
+                raise GlobalCliError(
+                    "CLI update package changed after global verification.", 4,
+                )
         _verify_directory(data_root, data_identity)
         if previous is None:
             try:
@@ -1031,18 +1308,34 @@ def _stage_and_transition(source: Path, version: str, commit: str, operation: st
             raise GlobalCliError("Activated CLI package identity did not verify.", 4)
         _require_global(destination, version, commit)
     except BaseException as error:
+        global_state = (
+            f"Global lifecycle committed as {lifecycle.result}"
+            if lifecycle is not None
+            else "Global update already verified"
+        )
+        package_evidence = (
+            f"{staged} and/or {destination}" if operation == "install" else str(destination)
+        )
         raise GlobalCliError(
-            f"Global lifecycle committed as {lifecycle.result}, but CLI activation is unconfirmed; "
-            f"preserve package evidence at {staged} and/or {destination}, plus the global evidence: {error}", 4,
+            f"{global_state}, but CLI activation is unconfirmed; "
+            f"preserve package evidence at {package_evidence}, plus the global evidence: {error}", 4,
         ) from error
 
-    changed = [str(destination), str(data_root / _CURRENT)]
+    changed = [str(data_root / _CURRENT)]
+    if package_published:
+        changed.insert(0, str(destination))
     if previous is None:
         changed.append(str(bin_root / "olympus"))
-    changed.extend(lifecycle.changed_paths)
+    if lifecycle is not None:
+        changed.extend(lifecycle.changed_paths)
+    detail = (
+        "The previously committed global update and per-user CLI package identities verified."
+        if target_already_committed
+        else "Global and per-user CLI package identities verified."
+    )
     return CliOutcome(
         operation, "committed", version, commit, str(destination), str(global_root),
-        tuple(changed), "Global and per-user CLI package identities verified.",
+        tuple(changed), detail,
     )
 
 
@@ -1084,6 +1377,7 @@ def _activate_current(data_root: Path, data_identity: tuple[int, int],
     if (written != payload or (written_meta.st_dev, written_meta.st_ino)
             != (staged_meta.st_dev, staged_meta.st_ino)):
         raise GlobalCliError("Atomic current CLI marker activation could not be verified.", 4)
+    _sync_directory_strict(data_root, data_identity, lock, lock_identity)
 
 
 def _inspect_cleanup_package(data_root: Path, record: _CleanupRecord):
@@ -1297,6 +1591,78 @@ def _outcome(operation: str, result: str, identity: InstalledIdentity,
     )
 
 
+def _ensure_current_durable(*, version: str, commit: str) -> InstalledIdentity:
+    """Confirm the active package/global pair and durably sync its current marker directory."""
+    _require_linux()
+    version, commit = _identity(version, commit)
+    data_root, bin_root = _user_paths()
+    global_root = _configured_global_root()
+    _check_path_separation(None, data_root, bin_root, global_root)
+    if _ensure_directory(data_root, create=False) is None:
+        raise GlobalCliError("No installed per-user Olympus CLI package exists.")
+
+    lock, lock_identity = _acquire_package_lock(data_root, create=False)
+    try:
+        current = _read_state(data_root, bin_root)
+        if current is None:
+            raise GlobalCliError("No installed per-user Olympus CLI package exists.")
+        if (current.version, current.commit) != (version, commit):
+            raise GlobalCliError(
+                "Installed per-user CLI version/commit differs from the selected release.",
+            )
+        data_info = _ensure_directory(data_root, create=False)
+        if data_info is None:
+            raise GlobalCliError("Per-user CLI data directory disappeared before durable sync.", 4)
+        data_root, data_identity = data_info
+        _check_path_separation(None, data_root, bin_root, global_root)
+        _require_global(current.package_root, current.version, current.commit)
+        _sync_directory_strict(data_root, data_identity, lock, lock_identity)
+        if _read_state(data_root, bin_root) != current:
+            raise GlobalCliError("Per-user CLI identity changed during current-marker durable sync.", 4)
+        return current
+    finally:
+        _release_package_lock(lock)
+
+
+def _update_recovery_identity() -> InstalledIdentity | None:
+    """Read-only recognition of an exact package/global split from an interrupted update."""
+    _require_linux()
+    data_root, bin_root = _user_paths()
+    global_root = _configured_global_root()
+    _check_path_separation(None, data_root, bin_root, global_root)
+    if _ensure_directory(data_root, create=False) is None:
+        _read_state(data_root, bin_root)
+        return None
+
+    lock, _ = _acquire_package_lock(data_root, create=False)
+    try:
+        current = _read_state(data_root, bin_root)
+        if current is None:
+            return None
+        if current.package_root != data_root / "versions" / current.version:
+            raise GlobalCliError("Verified CLI package is not the exact installed version directory.")
+
+        installed = _global_identity_without_package()
+        if installed is None or installed == (current.version, current.commit):
+            return None
+        comparison = global_install._version_compare(installed[0], current.version)
+        if comparison is None or comparison <= 0:
+            raise GlobalCliError(
+                "The split global identity is not a strictly newer recoverable update.", 4,
+            )
+
+        target = _validate_package(
+            data_root / "versions" / installed[0],
+            version=installed[0], commit=installed[1],
+        )
+        _require_global(target.package_root, target.version, target.commit)
+        if _read_state(data_root, bin_root) != current:
+            raise GlobalCliError("Per-user CLI identity changed during update recovery inspection.", 4)
+        return target
+    finally:
+        _release_package_lock(lock)
+
+
 def recorded_identity() -> InstalledIdentity | None:
     """Return the verified local/global version+commit pair without creating paths."""
     _require_linux()
@@ -1420,8 +1786,8 @@ def update(source: Path, *, version: str, commit: str) -> CliOutcome:
             if not _payload_matches_package(payload, previous):
                 raise GlobalCliError("Same-version CLI source differs from the installed package; refusing repair.")
             _require_global(previous.package_root, version, commit)
+            _sync_directory_strict(data_root, data_identity, lock, lock_identity)
             return _outcome("update", "no_changes", previous, global_root)
-        _require_global(previous.package_root, previous.version, previous.commit)
         comparison = global_install._version_compare(version, previous.version)
         if comparison is None or comparison <= 0:
             raise GlobalCliError("CLI update must be a strictly newer supported release.")

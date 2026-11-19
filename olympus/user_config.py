@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -53,7 +54,8 @@ def config_path(scope: str = "global", target: Path | None = None) -> Path:
     return root / "config.json"
 
 
-def _managed_project(source: Path, cwd: Path | None = None) -> Path | None:
+def _managed_project(source: Path, cwd: Path | None = None, *,
+                     for_diagnostics: bool = False) -> Path | None:
     from . import config_apply, install_manifest, install_routing
 
     directory = (cwd or Path.cwd()).resolve()
@@ -81,6 +83,8 @@ def _managed_project(source: Path, cwd: Path | None = None) -> Path | None:
     if blockers:
         if all(item.get("code") == "manifest_missing" for item in blockers):
             return None
+        if for_diagnostics:
+            return target
         raise UserConfigError("The current project's Olympus installation manifest is invalid; no configuration was changed.")
     if record is None or "opencode" not in record.installed_harnesses:
         return None
@@ -156,6 +160,10 @@ def read_config(source: Path, scope: str = "global", target: Path | None = None)
         raise
     except (OSError, UnicodeError, ValueError) as error:
         raise UserConfigError(f"Olympus configuration is not valid JSON: {path}: {error}") from error
+    return _validate_config_value(source, scope, path, value)
+
+
+def _validate_config_value(source: Path, scope: str, path: Path, value: dict) -> dict:
     rows = _canonical_rows(source)
     roles = {row["role"] for row in rows}
     allowed = {"schema_version", "overrides"}
@@ -226,13 +234,11 @@ def _replace_agent_model(content: bytes, model: str, effort: str, role: str) -> 
     return updated.encode("utf-8")
 
 
-def apply_to_expected(source: Path, expected: dict[str, bytes]) -> None:
-    """Make read-only verification compare installed agents with user overrides."""
+def _apply_config_to_expected(source: Path, expected: dict[str, bytes], config: dict) -> None:
     rows = {row["role"]: row for row in _canonical_rows(source)}
-    config = read_config(source)
     for role, override in config["overrides"].items():
         if role not in rows:
-            raise UserConfigError(f"Unknown Olympus role '{role}' in {config_path()}.")
+            raise UserConfigError(f"Unknown Olympus role '{role}'.")
         model = override.get("model", rows[role]["models"]["opencode"])
         effort = override.get("effort", rows[role]["effort"])
         models_catalog.validate_assignment(model, effort, source)
@@ -242,7 +248,12 @@ def apply_to_expected(source: Path, expected: dict[str, bytes]) -> None:
         expected[relative] = _replace_agent_model(expected[relative], model, effort, role)
 
 
-def _write_atomic(path: Path, content: bytes) -> None:
+def apply_to_expected(source: Path, expected: dict[str, bytes]) -> None:
+    """Make read-only verification compare installed agents with user overrides."""
+    _apply_config_to_expected(source, expected, read_config(source))
+
+
+def _write_atomic(path: Path, content: bytes, *, mode: int | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}-", suffix=".tmp", dir=path.parent)
     try:
@@ -250,6 +261,10 @@ def _write_atomic(path: Path, content: bytes) -> None:
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
+        if mode is not None:
+            os.chmod(temporary, mode)
+            if stat.S_IMODE(os.stat(temporary).st_mode) != mode:
+                raise OSError("temporary user configuration mode could not be verified")
         os.replace(temporary, path)
     finally:
         try:
@@ -387,41 +402,52 @@ def _config_bytes(path: Path, scope: str, target: Path | None) -> bytes | None:
 
 
 def _commit_override(path: Path, encoded: bytes, scope: str, target: Path | None, installed,
-                     *, root_check=None) -> None:
-    changes: list[tuple[Path, bytes | None]] = []
+                     *, root_check=None, source: Path, lock, change: dict,
+                     project_fallback: dict | None = None) -> None:
     config_before = _config_bytes(path, scope, target)
-    try:
-        if installed is not None:
-            agent_path, current, updated, manifest_path, manifest_before, manifest_after = installed
-            if updated != current:
-                if root_check is not None:
-                    root_check()
-                _write_atomic(agent_path, updated)
-                changes.append((agent_path, current))
-                if manifest_after != manifest_before:
-                    if root_check is not None:
-                        root_check()
-                    _write_atomic(manifest_path, manifest_after)
-                    changes.append((manifest_path, manifest_before))
+    destinations = []
+    if installed is not None:
+        agent_path, current, updated, manifest_path, manifest_before, manifest_after = installed
+        if updated != current:
+            destinations.extend(((agent_path, current, updated), (manifest_path, manifest_before, manifest_after)))
+    if config_before != encoded:
+        destinations.append((path, config_before, encoded))
+    if not destinations:
+        return
+
+    if len(destinations) == 1:
         if root_check is not None:
             root_check()
-        _write_atomic(path, encoded)
-        changes.append((path, config_before))
-    except BaseException as error:
-        rollback_errors = []
-        for changed_path, old in reversed(changes):
+        destination, _, content = destinations[0]
+        if scope == "global" and destination == path:
+            from . import config_apply_transaction
+
             try:
-                if root_check is not None:
-                    root_check()
-                if old is None:
-                    changed_path.unlink(missing_ok=True)
-                else:
-                    _write_atomic(changed_path, old)
-            except (OSError, UserConfigError) as rollback_error:
-                rollback_errors.append(str(rollback_error))
-        if rollback_errors:
-            raise UserConfigError("Configuration update failed and rollback could not be confirmed; inspect the affected files.") from error
-        raise
+                descriptor = config_apply_transaction._settings_preference_descriptor(
+                    scope, target, path, create_parent=True,
+                )
+                parent = descriptor["parent_identity"]
+                current, _ = config_apply_transaction._settings_external_read(
+                    path, (parent["st_dev"], parent["st_ino"]),
+                )
+            except config_apply_transaction.TransactionError as error:
+                raise UserConfigError(str(error)) from error
+            if current != config_before:
+                raise UserConfigError("Global preferences changed before their atomic write.")
+        _write_atomic(destination, content)
+        return
+    if installed is None:
+        raise UserConfigError("A coordinated configuration update has no managed installation.")
+    from . import config_apply_transaction
+
+    try:
+        config_apply_transaction.commit_user_config(
+            target if scope == "project" else installed[0].parents[1],
+            source, lock, scope, path, config_before, encoded, installed, change,
+            root_check=root_check, project_fallback=project_fallback,
+        )
+    except config_apply_transaction.TransactionError as error:
+        raise UserConfigError(str(error)) from error
 
 
 def set_override(source: Path, role: str, field: str, value: str,
@@ -482,8 +508,18 @@ def set_override(source: Path, role: str, field: str, value: str,
         override = dict(config["overrides"].get(role, {}))
         override[field] = value
         global_override = read_config(source, "global")["overrides"].get(role, {}) if scope == "project" else {}
-        effective_model = override.get("model", global_override.get("model", rows[role]["models"]["opencode"]))
-        effective_effort = override.get("effort", global_override.get("effort", rows[role]["effort"]))
+        project_fallback = None
+        if scope == "project":
+            project_fallback = {
+                "model": global_override.get("model", rows[role]["models"]["opencode"]),
+                "effort": global_override.get("effort", rows[role]["effort"]),
+            }
+        effective_model = override.get("model", (project_fallback or {}).get(
+            "model", rows[role]["models"]["opencode"],
+        ))
+        effective_effort = override.get("effort", (project_fallback or {}).get(
+            "effort", rows[role]["effort"],
+        ))
         try:
             models_catalog.validate_assignment(effective_model, effective_effort, source)
         except models_catalog.CatalogError as error:
@@ -499,7 +535,11 @@ def set_override(source: Path, role: str, field: str, value: str,
             (lambda: _verify_global_root(global_readonly, global_root, global_root_identity))
             if scope != "project" and global_root_identity is not None else None
         )
-        _commit_override(path, encoded, scope, target, installed, root_check=root_check)
+        _commit_override(
+            path, encoded, scope, target, installed, root_check=root_check, source=source, lock=lock,
+            change={"kind": "override", "role": role, "field": field, "value": value},
+            project_fallback=project_fallback,
+        )
     finally:
         if lock is not None:
             from . import source_edit
@@ -550,7 +590,10 @@ def set_max_children(source: Path, value: int) -> tuple[Path, bool]:
             (lambda: _verify_global_root(global_readonly, global_root, global_root_identity))
             if global_root_identity is not None else None
         )
-        _commit_override(config_path(), encoded, "global", None, installed, root_check=root_check)
+        _commit_override(
+            config_path(), encoded, "global", None, installed, root_check=root_check, source=source, lock=lock,
+            change={"kind": "max_children", "value": value},
+        )
     finally:
         source_edit._release_lock(lock)
     return config_path().resolve(), installed is not None

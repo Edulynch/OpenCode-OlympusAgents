@@ -6,6 +6,7 @@ import errno
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -432,5 +433,264 @@ class LinuxGlobalCli(unittest.TestCase):
                          (manifest["installed_version"], manifest["installed_from_commit"]))
         with self.assertRaises(global_cli.GlobalCliError):
             global_cli.recorded_identity()
+
+        before_recovery = self._scope_snapshot(
+            self.data / "olympus", self.home / ".local/bin", self.global_root,
+        )
+        recovered = global_cli._update_recovery_identity()
+        self.assertEqual((self.v2, self.commit2), (recovered.version, recovered.commit))
+        self.assertEqual(
+            before_recovery,
+            self._scope_snapshot(
+                self.data / "olympus", self.home / ".local/bin", self.global_root,
+            ),
+        )
+        with mock.patch(
+            "olympus.global_cli.global_install.update",
+            side_effect=AssertionError("a committed global update must not be repeated"),
+        ) as global_update:
+            outcome = global_cli.update(second, version=self.v2, commit=self.commit2)
+            global_update.assert_not_called()
+        self.assertEqual(("committed", self.v2, self.commit2),
+                         (outcome.result, outcome.version, outcome.commit))
+        self.assertEqual((self.v2, self.commit2),
+                         (global_cli.recorded_identity().version,
+                          global_cli.recorded_identity().commit))
+        self.assertEqual("verified", global_cli.verify(
+            version=self.v2, commit=self.commit2,
+        ).result)
+
+    def test_package_publication_failure_keeps_global_old_and_retry_completes(self):
+        first = self._source("source-v1", self.v1)
+        second = self._source("source-v2", self.v2, change_kael=True)
+        self._run(first, self.v1, self.commit1)
+        data_root = self.data / "olympus"
+
+        with (
+            mock.patch(
+                "olympus.global_cli._publish_package_noreplace",
+                side_effect=global_cli.GlobalCliError("fixture publication interruption", 4),
+            ),
+            mock.patch("olympus.global_cli.global_install.update") as global_update,
+        ):
+            with self.assertRaisesRegex(global_cli.GlobalCliError, "publication interruption"):
+                global_cli.update(second, version=self.v2, commit=self.commit2)
+            global_update.assert_not_called()
+
+        current = global_cli.recorded_identity()
+        self.assertEqual((self.v1, self.commit1), (current.version, current.commit))
+        manifest = json.loads(
+            (self.global_root / "olympus/orchestrator-install.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual((self.v1, self.commit1),
+                         (manifest["installed_version"], manifest["installed_from_commit"]))
+        self.assertFalse((data_root / "versions" / self.v2).exists())
+
+        outcome = global_cli.update(second, version=self.v2, commit=self.commit2)
+        self.assertEqual(("committed", self.v2, self.commit2),
+                         (outcome.result, outcome.version, outcome.commit))
+        self.assertEqual((self.v2, self.commit2),
+                         (global_cli.recorded_identity().version,
+                          global_cli.recorded_identity().commit))
+
+    def test_published_package_directory_sync_failure_blocks_global_update_and_retry_resyncs(self):
+        first = self._source("source-v1", self.v1)
+        second = self._source("source-v2", self.v2, change_kael=True)
+        self._run(first, self.v1, self.commit1)
+        data_root = self.data / "olympus"
+        versions_root = data_root / "versions"
+        versions_metadata = versions_root.stat()
+        versions_identity = (versions_metadata.st_dev, versions_metadata.st_ino)
+        real_fsync = os.fsync
+        failed = False
+
+        def fail_versions_sync(descriptor):
+            nonlocal failed
+            metadata = os.fstat(descriptor)
+            if ((metadata.st_dev, metadata.st_ino) == versions_identity and not failed):
+                failed = True
+                raise OSError("fixture versions directory fsync failure")
+            return real_fsync(descriptor)
+
+        with (
+            mock.patch("olympus.global_cli.os.fsync", side_effect=fail_versions_sync),
+            mock.patch("olympus.global_cli.global_install.update") as global_update,
+        ):
+            with self.assertRaisesRegex(global_cli.GlobalCliError, "durably sync published"):
+                global_cli.update(second, version=self.v2, commit=self.commit2)
+            global_update.assert_not_called()
+
+        self.assertTrue(failed)
+        self.assertTrue((versions_root / self.v2 / global_cli._RECEIPT).is_file())
+        current = global_cli.recorded_identity()
+        self.assertEqual((self.v1, self.commit1), (current.version, current.commit))
+
+        nested_directory = versions_root / self.v2 / "olympus"
+        nested_metadata = nested_directory.stat()
+        nested_identity = (nested_metadata.st_dev, nested_metadata.st_ino)
+        reused_file = nested_directory / "global_cli.py"
+        reused_file_metadata = reused_file.stat()
+        reused_file_identity = (reused_file_metadata.st_dev, reused_file_metadata.st_ino)
+        real_fsync = os.fsync
+        nested_failed = False
+
+        def fail_nested_sync(descriptor):
+            nonlocal nested_failed
+            metadata = os.fstat(descriptor)
+            if ((metadata.st_dev, metadata.st_ino) == nested_identity and not nested_failed):
+                nested_failed = True
+                raise OSError("fixture reused nested package directory fsync failure")
+            return real_fsync(descriptor)
+
+        with (
+            mock.patch("olympus.global_cli.os.fsync", side_effect=fail_nested_sync),
+            mock.patch("olympus.global_cli.global_install.update") as global_update,
+        ):
+            with self.assertRaisesRegex(global_cli.GlobalCliError, "reused CLI package directory olympus"):
+                global_cli.update(second, version=self.v2, commit=self.commit2)
+            global_update.assert_not_called()
+        self.assertTrue(nested_failed)
+        current = global_cli.recorded_identity()
+        self.assertEqual((self.v1, self.commit1), (current.version, current.commit))
+
+        events = []
+        real_update = global_cli.global_install.update
+
+        def record_versions_sync(descriptor):
+            metadata = os.fstat(descriptor)
+            if (metadata.st_dev, metadata.st_ino) == reused_file_identity:
+                events.append("package-file-fsync")
+            if (metadata.st_dev, metadata.st_ino) == nested_identity:
+                events.append("nested-package-fsync")
+            if (metadata.st_dev, metadata.st_ino) == versions_identity:
+                events.append("versions-fsync")
+            return real_fsync(descriptor)
+
+        def record_global_update(*args, **kwargs):
+            events.append("global-update")
+            return real_update(*args, **kwargs)
+
+        with (
+            mock.patch("olympus.global_cli.os.fsync", side_effect=record_versions_sync),
+            mock.patch.object(
+                global_cli, "_publish_package_noreplace",
+                wraps=global_cli._publish_package_noreplace,
+            ) as publish,
+            mock.patch.object(
+                global_cli.global_install, "update", side_effect=record_global_update,
+            ),
+        ):
+            outcome = global_cli.update(second, version=self.v2, commit=self.commit2)
+        publish.assert_not_called()
+        self.assertLess(events.index("package-file-fsync"), events.index("nested-package-fsync"))
+        self.assertLess(events.index("nested-package-fsync"), events.index("versions-fsync"))
+        self.assertLess(events.index("versions-fsync"), events.index("global-update"))
+        self.assertEqual(("committed", self.v2, self.commit2),
+                         (outcome.result, outcome.version, outcome.commit))
+        self.assertNotIn(str(versions_root / self.v2), outcome.changed_paths)
+
+    def test_staged_package_directory_sync_failure_prevents_global_update(self):
+        first = self._source("source-v1", self.v1)
+        second = self._source("source-v2", self.v2, change_kael=True)
+        self._run(first, self.v1, self.commit1)
+        real_fsync = os.fsync
+        failed = False
+
+        def fail_staged_directory_sync(descriptor):
+            nonlocal failed
+            if stat.S_ISDIR(os.fstat(descriptor).st_mode) and not failed:
+                failed = True
+                raise OSError("fixture staged directory fsync failure")
+            return real_fsync(descriptor)
+
+        with (
+            mock.patch("olympus.global_cli.os.fsync", side_effect=fail_staged_directory_sync),
+            mock.patch("olympus.global_cli.global_install.update") as global_update,
+        ):
+            with self.assertRaisesRegex(global_cli.GlobalCliError, "durably sync staged"):
+                global_cli.update(second, version=self.v2, commit=self.commit2)
+            global_update.assert_not_called()
+
+        self.assertTrue(failed)
+        current = global_cli.recorded_identity()
+        self.assertEqual((self.v1, self.commit1), (current.version, current.commit))
+        self.assertFalse((self.data / "olympus" / "versions" / self.v2).exists())
+
+    def test_current_marker_directory_sync_failure_is_repaired_by_same_version_retry(self):
+        first = self._source("source-v1", self.v1)
+        second = self._source("source-v2", self.v2, change_kael=True)
+        self._run(first, self.v1, self.commit1)
+        data_root = self.data / "olympus"
+        data_metadata = data_root.stat()
+        data_identity = (data_metadata.st_dev, data_metadata.st_ino)
+        real_fsync = os.fsync
+        failed = False
+
+        def fail_data_root_sync(descriptor):
+            nonlocal failed
+            metadata = os.fstat(descriptor)
+            if (metadata.st_dev, metadata.st_ino) == data_identity and not failed:
+                failed = True
+                raise OSError("fixture current marker directory fsync failure")
+            return real_fsync(descriptor)
+
+        with mock.patch("olympus.global_cli.os.fsync", side_effect=fail_data_root_sync):
+            with self.assertRaisesRegex(global_cli.GlobalCliError, "activation is unconfirmed"):
+                global_cli.update(second, version=self.v2, commit=self.commit2)
+
+        self.assertTrue(failed)
+        current_marker = (data_root / "current").read_text(encoding="ascii").splitlines()
+        self.assertEqual([self.v2, self.commit2], current_marker[:2])
+
+        synced = []
+
+        def observe_data_root_sync(descriptor):
+            metadata = os.fstat(descriptor)
+            if (metadata.st_dev, metadata.st_ino) == data_identity:
+                synced.append(True)
+            return real_fsync(descriptor)
+
+        with mock.patch("olympus.global_cli.os.fsync", side_effect=observe_data_root_sync):
+            outcome = global_cli.update(second, version=self.v2, commit=self.commit2)
+        self.assertEqual("no_changes", outcome.result)
+        self.assertTrue(synced, "same-version retry must durably sync the active current marker")
+        self.assertEqual("verified", global_cli.verify(
+            version=self.v2, commit=self.commit2,
+        ).result)
+
+    def test_current_durable_sync_rejects_wrong_selected_identity_before_sync(self):
+        first = self._source("source-v1", self.v1)
+        self._run(first, self.v1, self.commit1)
+
+        with mock.patch("olympus.global_cli.os.fsync", wraps=os.fsync) as fsync:
+            with self.assertRaisesRegex(
+                global_cli.GlobalCliError, "differs from the selected release",
+            ):
+                global_cli._ensure_current_durable(
+                    version=self.v2, commit=self.commit2,
+                )
+        fsync.assert_not_called()
+
+    def test_update_recovery_rejects_source_drift_without_touching_split_state(self):
+        first = self._source("source-v1", self.v1)
+        second = self._source("source-v2", self.v2, change_kael=True)
+        drifted = self._source("source-v2-drifted", self.v2)
+        self._run(first, self.v1, self.commit1)
+        with mock.patch("olympus.global_cli._activate_current",
+                        side_effect=OSError("fixture interruption")):
+            with self.assertRaises(global_cli.GlobalCliError):
+                global_cli.update(second, version=self.v2, commit=self.commit2)
+
+        before = self._scope_snapshot(
+            self.data / "olympus", self.home / ".local/bin", self.global_root,
+        )
+        with self.assertRaisesRegex(global_cli.GlobalCliError, "differs from the verified source"):
+            global_cli.update(drifted, version=self.v2, commit=self.commit2)
+        self.assertEqual(
+            before,
+            self._scope_snapshot(
+                self.data / "olympus", self.home / ".local/bin", self.global_root,
+            ),
+        )
 if __name__ == "__main__":
     unittest.main()

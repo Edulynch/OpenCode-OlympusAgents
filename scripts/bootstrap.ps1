@@ -47,6 +47,18 @@ function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
 function Rel([string]$Path) { ($Path -replace "\\", "/").TrimStart([char[]]@('/')) }
 function Has-Cmd([string]$Name) { $null -ne (Get-Command $Name -ErrorAction SilentlyContinue) }
 
+function Assert-No-Config-Recovery([string]$Repo) {
+    $pendingPath = Join-Path $Repo '.olympus-cli-config-apply'
+    try { $pending = Get-Item -LiteralPath $pendingPath -Force -ErrorAction Stop }
+    catch {
+        if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { return }
+        Fail 'CONFIG_RECOVERY_PENDING' "Cannot safely inspect project recovery state: $($_.Exception.Message)"
+    }
+    if ($null -ne $pending) {
+        Fail 'CONFIG_RECOVERY_PENDING' 'A project config/settings transaction is pending; recover it explicitly before installing or updating.'
+    }
+}
+
 $ReparseTagCache = @{}
 
 function Normalize-Path([string]$Path) {
@@ -905,6 +917,7 @@ try {
     # stable lock. Re-read critical target state under the lock before writing.
     . (Join-Path $PSScriptRoot 'target-writer-lock.ps1')
     $writerLock = Enter-OlympusTargetWriterLock $Repo
+    Assert-No-Config-Recovery $Repo
     $revalidatedManifest = Read-Manifest $Repo
     if ($CurrentManifestRel -cne $manifestPathSnapshot) {
         Fail 'TARGET_CHANGED' 'Project manifest location changed after preflight.'

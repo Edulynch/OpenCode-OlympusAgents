@@ -36,38 +36,76 @@ if (-not $paths) {
 }
 
 # Ensure the feature directory exists
-New-Item -ItemType Directory -Path $paths.FEATURE_DIR -Force | Out-Null
+[System.IO.Directory]::CreateDirectory($paths.FEATURE_DIR) | Out-Null
 
 # Copy plan template if plan doesn't already exist
-if (Test-Path $paths.IMPL_PLAN -PathType Leaf) {
+$planAlreadyExists = Test-Path -LiteralPath $paths.IMPL_PLAN -PathType Leaf
+$templateMissing = $false
+if (-not $planAlreadyExists) {
+    $content = Resolve-TemplateContent -TemplateName 'plan-template' -RepoRoot $paths.REPO_ROOT
+    $templateMissing = $null -eq $content
+    if ($templateMissing) {
+        $content = ''
+    }
+
+    # Stage beside the target, then move without replacement so a concurrent
+    # plan creation cannot be overwritten or observed partially written.
+    $temporaryPlan = Join-Path $paths.FEATURE_DIR (".plan.md.$([Guid]::NewGuid().ToString('N')).tmp")
+    $temporaryPlanOwned = $false
+    try {
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        $bytes = $utf8NoBom.GetBytes($content)
+        $stream = [System.IO.File]::Open(
+            $temporaryPlan,
+            [System.IO.FileMode]::CreateNew,
+            [System.IO.FileAccess]::Write,
+            [System.IO.FileShare]::None
+        )
+        $temporaryPlanOwned = $true
+        try {
+            $stream.Write($bytes, 0, $bytes.Length)
+        } finally {
+            $stream.Dispose()
+        }
+
+        try {
+            [System.IO.File]::Move($temporaryPlan, $paths.IMPL_PLAN)
+            $temporaryPlan = $null
+        } catch [System.IO.IOException] {
+            $errorCode = $_.Exception.HResult -band 0xFFFF
+            if (($errorCode -in @(80, 183)) -and [System.IO.File]::Exists($paths.IMPL_PLAN)) {
+                $planAlreadyExists = $true
+            } else {
+                throw
+            }
+        }
+    } finally {
+        if ($temporaryPlanOwned -and $temporaryPlan -and [System.IO.File]::Exists($temporaryPlan)) {
+            [System.IO.File]::Delete($temporaryPlan)
+        }
+    }
+}
+
+if ($planAlreadyExists) {
     if ($Json) {
         [Console]::Error.WriteLine("Plan already exists at $($paths.IMPL_PLAN), skipping template copy")
     } else {
         Write-Output "Plan already exists at $($paths.IMPL_PLAN), skipping template copy"
     }
-} else {
-    $content = Resolve-TemplateContent -TemplateName 'plan-template' -RepoRoot $paths.REPO_ROOT
-    if ($null -ne $content) {
-        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText($paths.IMPL_PLAN, $content, $utf8NoBom)
-        # Emit the copy status like the bash twin (setup-plan.sh); route to stderr
-        # in -Json mode so stdout stays pure JSON, matching the sibling messages.
-        if ($Json) {
-            [Console]::Error.WriteLine("Copied plan template to $($paths.IMPL_PLAN)")
-        } else {
-            Write-Output "Copied plan template to $($paths.IMPL_PLAN)"
-        }
+} elseif (-not $templateMissing) {
+    # Emit the copy status like the bash twin (setup-plan.sh); route to stderr
+    # in -Json mode so stdout stays pure JSON, matching the sibling messages.
+    if ($Json) {
+        [Console]::Error.WriteLine("Copied plan template to $($paths.IMPL_PLAN)")
     } else {
-        # Match the bash twin's wording and stream routing (stderr in -Json so
-        # stdout stays pure JSON, stdout otherwise), consistent with the sibling
-        # "Copied plan template" message above.
-        if ($Json) {
-            [Console]::Error.WriteLine("Warning: Plan template not found")
-        } else {
-            Write-Output "Warning: Plan template not found"
-        }
-        # Create a basic plan file if template doesn't exist
-        New-Item -ItemType File -Path $paths.IMPL_PLAN -Force | Out-Null
+        Write-Output "Copied plan template to $($paths.IMPL_PLAN)"
+    }
+} else {
+    # Keep JSON stdout pure and leave the fallback plan empty when no template exists.
+    if ($Json) {
+        [Console]::Error.WriteLine("Warning: Plan template not found")
+    } else {
+        Write-Output "Warning: Plan template not found"
     }
 }
 

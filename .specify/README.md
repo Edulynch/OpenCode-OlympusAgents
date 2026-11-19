@@ -87,6 +87,8 @@ La constitución enlaza los documentos técnicos canónicos en lugar de duplicar
 
 ## Uso de las plantillas
 
+El puntero guardado en `.specify/feature.json` debe permanecer dentro del checkout y no puede atravesar enlaces o junctions. Para trabajar deliberadamente con una feature externa o enlazada, establece `SPECIFY_FEATURE_DIRECTORY` con una ruta absoluta: ese override sólo se usa en la invocación actual y no reemplaza el puntero local guardado.
+
 - **Existing (retrospective)**: documenta el comportamiento observado con rutas, revisiones o evidencias citadas. Mantén desconocidos y límites como tales. No conviertas huecos en requisitos o trabajo de implementación.
 - **New** y **Change**: limita el contenido a la solicitud autorizada. Separa estado actual y cambio; registra alcance, criterios observables, dependencias, riesgos y verificaciones enfocadas.
 - En la especificación, define sólo historias, requisitos y resultados que correspondan. No inventes métricas ni completes secciones con supuestos genéricos.

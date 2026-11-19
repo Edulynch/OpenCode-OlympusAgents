@@ -35,11 +35,11 @@ python tests/harness-core/qualify.py
 ```
 
 `render` is deterministic and idempotent. `check` is read-only: it compares
-expected bytes in memory, reports missing/drifted outputs and known retired
-OpenCode outputs, creates no temporary repository files, and exits nonzero on
-drift. Rendering refuses to overwrite stale retired paths; remove only verified
-generated outputs first. Generated files contain
-a parser-safe generated marker; **edit Core/adapter source, not generated
+the current generated inventory, reports missing or changed outputs, creates
+no temporary repository files, and exits nonzero on a mismatch. Neither
+command reports or removes retired outputs outside that inventory. Before
+removing an old file by hand, verify that Olympus generated it. Generated
+files contain a parser-safe marker; **edit Core/adapter source, not generated
 outputs**.
 
 ## Generated outputs

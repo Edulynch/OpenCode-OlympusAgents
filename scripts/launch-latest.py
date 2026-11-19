@@ -979,13 +979,14 @@ def run_action(action: str, *, dry_run: bool = False, source_root: Path | None =
     effects_started = False
     preserve_stage = False
     release: Release | None = None
+    release_selection_tag = bootstrap[0] if pinned_bootstrap else None
     try:
         if bootstrap is not None or action in ("install", "update") or (
             action in ("verify", "uninstall") and source_root is None
         ):
             release = (
-                _select_tag(transport, bootstrap[0])
-                if pinned_bootstrap else _select_latest(transport)
+                _select_tag(transport, release_selection_tag)
+                if release_selection_tag is not None else _select_latest(transport)
             )
         if bootstrap is not None:
             if release is None:
@@ -1025,10 +1026,28 @@ def run_action(action: str, *, dry_run: bool = False, source_root: Path | None =
         current = None
         if action in ("install", "update") and local_lifecycle is not None:
             local_cli = local_lifecycle[0]
-            current = _check_local_install(local_cli, release, action=action)
-            if current is not None and (current.version, current.commit) == (
+            recovery = None
+            if action == "update" and not dry_run:
+                recovery = local_cli._update_recovery_identity()
+            if recovery is not None:
+                if (release.version, release.commit) != (recovery.version, recovery.commit):
+                    release_selection_tag = recovery.version
+                    release = _select_tag(transport, release_selection_tag)
+                if (release.version, release.commit) != (recovery.version, recovery.commit):
+                    raise ReleaseError(
+                        "The immutable release does not match the recorded interrupted update.",
+                        kind="lifecycle_blocked",
+                    )
+                current = recovery
+            else:
+                current = _check_local_install(local_cli, release, action=action)
+            if recovery is None and current is not None and (current.version, current.commit) == (
                 release.version, release.commit,
             ):
+                if action == "update" and not dry_run:
+                    local_cli._ensure_current_durable(
+                        version=release.version, commit=release.commit,
+                    )
                 response, code = _success(
                     response, release, dry_run=dry_run, result="preview" if dry_run else "ok",
                     plan=[] if dry_run else None,
@@ -1049,8 +1068,8 @@ def run_action(action: str, *, dry_run: bool = False, source_root: Path | None =
         lifecycle = _load_lifecycle(staged_source, isolated_name=uuid.uuid4().hex)
         _validate_source(staged_source, lifecycle, release)
         selected = (
-            _select_tag(transport, bootstrap[0])
-            if pinned_bootstrap else _select_latest(transport)
+            _select_tag(transport, release_selection_tag)
+            if release_selection_tag is not None else _select_latest(transport)
         )
         if selected != release:
             raise ReleaseError("Selected immutable release changed during acquisition; no lifecycle was started.")

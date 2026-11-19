@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## v0.12.1
+
+### Highlights
+
+- Make Linux release updates safely repeatable after interruption by recovering only an exact recorded tag and commit.
+- Contain Windows CLI uninstall to verified Olympus paths and refuse reparse-point redirects before local changes.
+- Clarify command-specific permissions and worktree boundaries; journal coordinated settings and managed-agent updates for matching recovery after interruption.
+- Harden Spec Kit feature paths against checkout escapes and links, and create implementation plans without overwriting existing files.
+- Bound doctor subprocess checks with timeouts and clearer diagnostics; correct renderer-check documentation without implying runtime qualification.
+
+### Capability limits
+
+- Public installation remains per-user/global and OpenCode-only. Focused regressions, disposable Windows installer fixtures, and loaded-rule checks are local evidence, not full release qualification.
+- Hosted CI, real user installation, and public-endpoint install/VerifyOnly/uninstall results remain separate; no new runtime or platform support is claimed.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.12.1 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.1/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.1/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+
 ## v0.12.0
 
 ### Highlights

@@ -56,7 +56,7 @@ The worktree must already exist and belong to the same Git repository.
 | Copies | Only exact Olympus-managed paths listed in the verified source manifest |
 | Checks | SHA-256 hashes, repository identity, source/destination containment |
 | Ownership | Writes a separate project manifest into each linked worktree |
-| Re-running | Idempotent when the managed installation is unchanged |
+| Re-running | Idempotent when unchanged; resumes missing files after interruption against the unchanged base |
 | Conflicts | Refuses unowned, tracked, modified, or conflicting destinations |
 | Side effects | No remote downloads, Git staging, commits, or history changes |
 | Scope | Project-local; does not rely on OpenCode global agent discovery |

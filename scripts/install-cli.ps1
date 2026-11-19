@@ -19,6 +19,80 @@ $script:CliGeneratedCommandFiles = @(
 
 function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
 
+function Get-ExistingCliItem([string]$Path) {
+    try { return Get-Item -LiteralPath $Path -Force -ErrorAction Stop }
+    catch {
+        if ($_.Exception -is [Management.Automation.ItemNotFoundException] -and
+            $_.FullyQualifiedErrorId -like 'PathNotFound,*') { return $null }
+        Fail 'CLI_PATH_INSPECTION_FAILED' "Cannot inspect path '$Path': $($_.Exception.Message)"
+    }
+}
+
+function Assert-SafeCliPath([string]$Path, [string]$Expected = 'Any') {
+    if (-not [IO.Path]::IsPathFullyQualified($Path)) { Fail 'CLI_PATH_INVALID' "CLI path is not absolute: $Path" }
+    $full = [IO.Path]::GetFullPath($Path)
+    $volume = [IO.Path]::GetPathRoot($full)
+    if (-not $volume) { Fail 'CLI_PATH_INVALID' "CLI path has no filesystem root: $Path" }
+    $item = Get-ExistingCliItem $volume
+    if ($null -eq $item -or -not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        Fail 'CLI_PATH_UNSAFE' "CLI path traverses an unsafe filesystem root: $Path"
+    }
+    $parts = @($full.Substring($volume.Length) -split '[\\/]' | Where-Object { $_ })
+    $cursor = $volume
+    for ($index = 0; $index -lt $parts.Count; $index++) {
+        $cursor = Join-Path $cursor $parts[$index]
+        $item = Get-ExistingCliItem $cursor
+        if ($null -eq $item) { break }
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            Fail 'CLI_PATH_UNSAFE' "CLI path traverses a reparse point: $Path"
+        }
+        $isLeaf = $index -eq ($parts.Count - 1)
+        if ((-not $isLeaf -or $Expected -eq 'Container') -and -not $item.PSIsContainer) {
+            Fail 'CLI_PATH_UNSAFE' "CLI path has a non-directory component: $Path"
+        }
+        if ($isLeaf -and $Expected -eq 'Leaf' -and $item.PSIsContainer) {
+            Fail 'CLI_PATH_UNSAFE' "CLI file path is a directory: $Path"
+        }
+    }
+    return [IO.Path]::GetFullPath($Path)
+}
+
+function Get-CliDirectoryItems([string]$Path) {
+    try { return @(Get-ChildItem -LiteralPath $Path -Directory -Force -ErrorAction Stop) }
+    catch { Fail 'CLI_PATH_INSPECTION_FAILED' "Cannot enumerate path '$Path': $($_.Exception.Message)" }
+}
+
+function Get-CliCleanupDirectories([string]$Root) {
+    $directories = [System.Collections.Generic.List[string]]::new()
+    $pending = [System.Collections.Generic.Stack[string]]::new()
+    $pending.Push($Root)
+    while ($pending.Count -gt 0) {
+        $parent = $pending.Pop()
+        [void](Assert-SafeCliPath $parent 'Container')
+        foreach ($child in (Get-CliDirectoryItems $parent)) {
+            $item = Get-ExistingCliItem $child.FullName
+            if ($null -eq $item -or -not $item.PSIsContainer -or
+                ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
+            $path = Assert-SafeCliPath $item.FullName 'Container'
+            $directories.Add($path)
+            $pending.Push($path)
+        }
+    }
+    return $directories.ToArray()
+}
+
+function Remove-EmptyCliDirectory([string]$Path) {
+    $item = Get-ExistingCliItem $Path
+    if ($null -eq $item) { return }
+    [void](Assert-SafeCliPath $Path 'Container')
+    try { $children = @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop) }
+    catch { Fail 'CLI_PATH_INSPECTION_FAILED' "Cannot enumerate path '$Path': $($_.Exception.Message)" }
+    if ($children.Count -eq 0) {
+        [void](Assert-SafeCliPath $Path 'Container')
+        [IO.Directory]::Delete($Path)
+    }
+}
+
 function Get-ReleaseIdentity([string]$Root) {
     $path = Join-Path $Root 'install.ps1'
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { Fail 'SOURCE_INVALID' 'The Olympus release identity is missing.' }
@@ -78,6 +152,7 @@ function Write-Atomic([string]$Path, [byte[]]$Bytes) {
 
 function Get-PathValue {
     if ($PathStorePath) {
+        if ($Action -eq 'uninstall') { [void](Assert-SafeCliPath $PathStorePath 'Leaf') }
         if (Test-Path -LiteralPath $PathStorePath -PathType Leaf) { return [IO.File]::ReadAllText($PathStorePath) }
         return ''
     }
@@ -88,6 +163,7 @@ function Get-PathOwnershipPath { return Join-Path $InstallRoot 'path-entry.txt' 
 
 function Test-OwnsPathEntry([string]$Entry) {
     $ownershipPath = Get-PathOwnershipPath
+    if ($Action -eq 'uninstall') { [void](Assert-SafeCliPath $ownershipPath) }
     if (-not (Test-Path -LiteralPath $ownershipPath)) { return $false }
     if (-not (Test-Path -LiteralPath $ownershipPath -PathType Leaf) -or
         -not [string]::Equals((Normalize-PathEntry ([IO.File]::ReadAllText($ownershipPath).Trim())),
@@ -99,6 +175,7 @@ function Test-OwnsPathEntry([string]$Entry) {
 
 function Set-PathValue([string]$Value) {
     if ($PathStorePath) {
+        if ($Action -eq 'uninstall') { [void](Assert-SafeCliPath $PathStorePath 'Leaf') }
         Write-Atomic $PathStorePath $Utf8NoBom.GetBytes($Value)
     } else {
         [Environment]::SetEnvironmentVariable('Path', $Value, 'User')
@@ -203,6 +280,7 @@ function Get-SourceFiles([string]$Root) {
 
 function Get-VersionManifest([string]$Path) {
     $manifestPath = Join-Path $Path 'olympus-cli-manifest.json'
+    if ($Action -eq 'uninstall') { [void](Assert-SafeCliPath $manifestPath) }
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return $null }
     try { $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -Depth 30 -ErrorAction Stop }
     catch { Fail 'CLI_VERSION_CONFLICT' "A version directory has an unreadable ownership marker: $Path" }
@@ -226,27 +304,76 @@ function Assert-VersionFiles([string]$Path, $Manifest) {
 
 function Remove-ManagedVersions([string]$VersionsRoot) {
     $known = [System.Collections.Generic.List[string]]::new()
+    [void](Assert-SafeCliPath $VersionsRoot 'Container')
     if (-not (Test-Path -LiteralPath $VersionsRoot -PathType Container)) { return @() }
-    foreach ($directory in @(Get-ChildItem -LiteralPath $VersionsRoot -Directory)) {
+    foreach ($directory in (Get-CliDirectoryItems $VersionsRoot)) {
+        $item = Get-ExistingCliItem $directory.FullName
+        if ($null -eq $item) { continue }
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            if ($item.Name -match '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') {
+                Fail 'CLI_PATH_UNSAFE' "A managed CLI version path is a reparse point: $($item.FullName)"
+            }
+            continue
+        }
+        [void](Assert-SafeCliPath $item.FullName 'Container')
         $manifest = Get-VersionManifest $directory.FullName
         if ($null -eq $manifest -or [string]$manifest.version -cne $directory.Name) { continue }
         $known.Add($directory.Name)
         foreach ($entry in @($manifest.files)) {
             $relative = ([string]$entry.path).Replace('\','/')
+            if (Test-ManagedRelative $relative) {
+                $file = Join-Path $directory.FullName ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+                [void](Assert-SafeCliPath $file)
+            }
+        }
+        $cleanupDirectories = @(Get-CliCleanupDirectories $directory.FullName)
+        foreach ($entry in @($manifest.files)) {
+            $relative = ([string]$entry.path).Replace('\','/')
             if (-not (Test-ManagedRelative $relative)) { continue }
             $file = Join-Path $directory.FullName ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+            [void](Assert-SafeCliPath $file)
             if (Test-Path -LiteralPath $file -PathType Leaf) {
                 if ((Get-FileSha256 $file) -ceq ([string]$entry.sha256).ToLowerInvariant()) { [IO.File]::Delete($file) }
             }
         }
-        [IO.File]::Delete((Join-Path $directory.FullName 'olympus-cli-manifest.json'))
-        foreach ($child in @(Get-ChildItem -LiteralPath $directory.FullName -Directory -Recurse | Sort-Object FullName -Descending)) {
-            if (@(Get-ChildItem -LiteralPath $child.FullName -Force).Count -eq 0) { [IO.Directory]::Delete($child.FullName) }
+        $manifestPath = Join-Path $directory.FullName 'olympus-cli-manifest.json'
+        [void](Assert-SafeCliPath $manifestPath)
+        [IO.File]::Delete($manifestPath)
+        foreach ($child in ($cleanupDirectories | Sort-Object Length -Descending)) {
+            Remove-EmptyCliDirectory $child
         }
-        if (@(Get-ChildItem -LiteralPath $directory.FullName -Force).Count -eq 0) { [IO.Directory]::Delete($directory.FullName) }
+        Remove-EmptyCliDirectory $directory.FullName
     }
-    if (@(Get-ChildItem -LiteralPath $VersionsRoot -Force).Count -eq 0) { [IO.Directory]::Delete($VersionsRoot) }
+    Remove-EmptyCliDirectory $VersionsRoot
     return $known.ToArray()
+}
+
+function Assert-SafeCliUninstallPaths([string]$VersionsRoot) {
+    foreach ($path in @($InstallRoot, $VersionsRoot, $bin, $wrapper, (Get-PathOwnershipPath), $currentPath)) {
+        [void](Assert-SafeCliPath $path)
+    }
+    if ($PathStorePath) { [void](Assert-SafeCliPath $PathStorePath 'Leaf') }
+    if (-not (Test-Path -LiteralPath $VersionsRoot -PathType Container)) { return }
+    foreach ($directory in (Get-CliDirectoryItems $VersionsRoot)) {
+        $item = Get-ExistingCliItem $directory.FullName
+        if ($null -eq $item) { continue }
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            if ($item.Name -match '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') {
+                Fail 'CLI_PATH_UNSAFE' "A managed CLI version path is a reparse point: $($item.FullName)"
+            }
+            continue
+        }
+        [void](Assert-SafeCliPath $item.FullName 'Container')
+        $manifest = Get-VersionManifest $item.FullName
+        if ($null -eq $manifest -or [string]$manifest.version -cne $item.Name) { continue }
+        foreach ($entry in @($manifest.files)) {
+            $relative = ([string]$entry.path).Replace('\','/')
+            if (Test-ManagedRelative $relative) {
+                [void](Assert-SafeCliPath (Join-Path $item.FullName ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)))
+            }
+        }
+        [void](Get-CliCleanupDirectories $item.FullName)
+    }
 }
 
 try {
@@ -269,29 +396,39 @@ try {
     $versionsRoot = Join-Path $InstallRoot 'versions'
     $currentPath = Join-Path $InstallRoot 'current.txt'
     $source = if ($SourceRoot) { [IO.Path]::GetFullPath($SourceRoot) } else { [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')) }
-    if (-not (Test-Path -LiteralPath $source -PathType Container)) { Fail 'SOURCE_INVALID' 'The CLI release source is unavailable.' }
 
     if ($Action -eq 'uninstall') {
+        Assert-SafeCliUninstallPaths $versionsRoot
+        if (-not (Test-Path -LiteralPath $source -PathType Container)) { Fail 'SOURCE_INVALID' 'The CLI release source is unavailable.' }
         $ownsPath = Test-OwnsPathEntry $bin
         $sourceWrapper = Join-Path $source 'scripts/olympus.cmd'
         $wrapperContent = if (Test-Path -LiteralPath $sourceWrapper -PathType Leaf) { [IO.File]::ReadAllText($sourceWrapper) } else { $null }
         $knownVersions = @(Remove-ManagedVersions $versionsRoot)
         if ($ownsPath) {
             Set-UserPathEntry $bin $false | Out-Null
-            [IO.File]::Delete((Get-PathOwnershipPath))
+            $ownershipPath = Get-PathOwnershipPath
+            [void](Assert-SafeCliPath $ownershipPath)
+            [IO.File]::Delete($ownershipPath)
         }
+        [void](Assert-SafeCliPath $wrapper)
         if ((Test-Path -LiteralPath $wrapper -PathType Leaf) -and $null -ne $wrapperContent -and
-            ([IO.File]::ReadAllText($wrapper) -ceq $wrapperContent)) { [IO.File]::Delete($wrapper) }
-        if ((Test-Path -LiteralPath $currentPath -PathType Leaf) -and
-            [IO.File]::ReadAllText($currentPath).Trim() -in $knownVersions) { [IO.File]::Delete($currentPath) }
-        if ($ownsPath -and (Test-Path -LiteralPath $bin -PathType Container) -and @(Get-ChildItem -LiteralPath $bin -Force).Count -eq 0) { [IO.Directory]::Delete($bin) }
-        foreach ($directory in @($versionsRoot, $InstallRoot)) {
-            if ((Test-Path -LiteralPath $directory -PathType Container) -and @(Get-ChildItem -LiteralPath $directory -Force).Count -eq 0) { [IO.Directory]::Delete($directory) }
+            ([IO.File]::ReadAllText($wrapper) -ceq $wrapperContent)) {
+            [void](Assert-SafeCliPath $wrapper 'Leaf')
+            [IO.File]::Delete($wrapper)
         }
+        [void](Assert-SafeCliPath $currentPath)
+        if ((Test-Path -LiteralPath $currentPath -PathType Leaf) -and
+            [IO.File]::ReadAllText($currentPath).Trim() -in $knownVersions) {
+            [void](Assert-SafeCliPath $currentPath 'Leaf')
+            [IO.File]::Delete($currentPath)
+        }
+        if ($ownsPath) { Remove-EmptyCliDirectory $bin }
+        foreach ($directory in @($versionsRoot, $InstallRoot)) { Remove-EmptyCliDirectory $directory }
         Write-Output 'OLYMPUS_CLI: UNINSTALLED managed launcher and unchanged version files; user configuration and unmanaged files were preserved.'
         exit 0
     }
 
+    if (-not (Test-Path -LiteralPath $source -PathType Container)) { Fail 'SOURCE_INVALID' 'The CLI release source is unavailable.' }
     $sourceVersion = Get-ReleaseIdentity $source
     if (-not $Version) { $Version = $sourceVersion }
     if ($Version -cne $sourceVersion) { Fail 'SOURCE_VERSION_MISMATCH' "Requested $Version but source identifies as $sourceVersion." }

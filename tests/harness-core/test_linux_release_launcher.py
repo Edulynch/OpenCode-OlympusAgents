@@ -760,7 +760,7 @@ class LinuxReleaseLauncher(unittest.TestCase):
         self.assertEqual("blocked", response["result"])
         global_cli._update_recovery_identity.assert_not_called()
         global_cli.update.assert_not_called()
-        self.assertFalse(any("/git/trees/" in url or "codeload.github.com" in url
+        self.assertFalse(any("/git/trees/" in url or urlsplit(url).hostname == "codeload.github.com"
                              for url in transport.urls))
 
     def test_public_bootstrap_install_current_verified_identity_skips_archive(self):

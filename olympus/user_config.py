@@ -359,7 +359,8 @@ def _prepare_installed_update(source: Path, role: str, model: str, effort: str,
         generated = expected.get(relative)
         if generated is None:
             raise UserConfigError(f"The OpenCode renderer does not manage expected agent {role}.")
-        updated = _replace_agent_model(generated, model, effort, role)
+        _apply_config_to_expected(source, expected, read_config(source, scope, target))
+        updated = expected[relative]
     entries[0]["sha256"] = hashlib.sha256(updated).hexdigest()
     manifest_bytes = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     agent_path = root / (f".opencode/{relative}" if scope == "project" else relative)

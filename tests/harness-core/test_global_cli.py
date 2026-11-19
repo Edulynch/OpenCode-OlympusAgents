@@ -184,6 +184,31 @@ class GlobalCli(unittest.TestCase):
     def _manifest(self):
         return json.loads(self.manifest_path.read_text(encoding="utf-8"))
 
+    def _force_global_kael_crlf(self):
+        agent = self._agent("kael")
+        content = agent.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        agent.write_bytes(content)
+        manifest = self._manifest()
+        entry = next(item for item in manifest["managed_files"] if item["path"] == "agents/kael.md")
+        entry["sha256"] = hashlib.sha256(content).hexdigest()
+        self.manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+        )
+
+        expected = global_readonly._expected
+
+        def crlf_expected(*args, **kwargs):
+            outputs = expected(*args, **kwargs)
+            relative = "agents/kael.md"
+            outputs["opencode"][relative] = (
+                outputs["opencode"][relative].replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+            )
+            return outputs
+
+        patcher = mock.patch.object(global_readonly, "_expected", side_effect=crlf_expected)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _cli_installer(self, action: str, install_root: Path, path_store: Path, *, source_root: Path = ROOT):
         source = install_root / "versions" / RELEASE_VERSION if action == "uninstall" else source_root
         return subprocess.run(
@@ -571,11 +596,18 @@ class GlobalCli(unittest.TestCase):
 
     def test_project_override_persists_with_field_precedence_and_rejects_drift_before_config_write(self):
         project = self._create_project()
+        original_project_agent = (project / ".opencode/agents/nox.md").read_bytes()
         env_patch = {"APPDATA": str(self.appdata), "LOCALAPPDATA": str(self.localappdata),
-                     "USERPROFILE": str(self.profile), "OPENCODE_CONFIG_DIR": str(self.root)}
+                     "USERPROFILE": str(self.profile), "OPENCODE_CONFIG_DIR": str(self.root),
+                     "OLYMPUS_CONFIG_FILE": str(self.appdata / "Olympus/config.json")}
         with mock.patch.dict(os.environ, env_patch):
             self.assertEqual(0, main(["--source", str(ROOT), "nox", "set-model", "openai/gpt-6.1-sol", "--scope", "global"]))
             self.assertEqual(0, main(["--source", str(ROOT), "nox", "set-effort", "high", "--scope", "global"]))
+            global_nox = next(row for row in user_config.effective_roles(ROOT) if row["role"] == "nox")
+            self.assertNotIn(
+                f'model: "{global_nox["model"]}#{global_nox["effort"]}"',
+                original_project_agent.decode("utf-8"),
+            )
             pending_marker = project / "olympus/opencode-guard-pending.json"
             pending_marker.parent.mkdir(parents=True, exist_ok=True)
             pending_marker.write_bytes(b"unrelated project-local marker")
@@ -617,6 +649,26 @@ class GlobalCli(unittest.TestCase):
         self.assertFalse((drifted / ".opencode/olympus-config.json").exists())
         self.assertEqual(before, drifted_agent.read_bytes())
         self.assertEqual(original_manifest, (drifted / ".opencode/orchestrator-install.json").read_bytes())
+
+        inconsistent = self._create_project()
+        inconsistent_agent = inconsistent / ".opencode/agents/nox.md"
+        inconsistent_manifest = inconsistent / ".opencode/orchestrator-install.json"
+        inconsistent_preferences = inconsistent / ".opencode/olympus-config.json"
+        inconsistent_preferences.write_text(json.dumps({
+            "schema_version": 1, "overrides": {"nox": {"model": "openai/gpt-6.1-sol"}},
+        }) + "\n", encoding="utf-8")
+        inconsistent_before = (
+            inconsistent_preferences.read_bytes(), inconsistent_agent.read_bytes(),
+            inconsistent_manifest.read_bytes(),
+        )
+        with mock.patch.dict(os.environ, env_patch), contextlib.redirect_stdout(io.StringIO()):
+            code = main(["--source", str(ROOT), "nox", "set-effort", "high",
+                         "--scope", "project", "--target", str(inconsistent)])
+        self.assertNotEqual(0, code)
+        self.assertEqual(inconsistent_before, (
+            inconsistent_preferences.read_bytes(), inconsistent_agent.read_bytes(),
+            inconsistent_manifest.read_bytes(),
+        ))
 
         # The fixture renderer normalizes source newlines; VerifyOnly compares
         # the installed bytes with the PowerShell installer's raw source text.
@@ -845,6 +897,7 @@ class GlobalCli(unittest.TestCase):
         self.assertFalse((self.root / ".olympus-cli-config-apply").exists())
 
     def test_global_max_parallel_recovery_and_config_only_stays_atomic(self):
+        self._force_global_kael_crlf()
         settings = self.appdata / "Olympus/config.json"
         before_agent = self._agent("kael").read_bytes()
         before_manifest = self.manifest_path.read_bytes()
@@ -1015,6 +1068,7 @@ class GlobalCli(unittest.TestCase):
         self.assertFalse((project / ".olympus-cli-config-apply").exists())
 
     def test_user_settings_recovery_handles_unchanged_preferences_by_record_state(self):
+        self._force_global_kael_crlf()
         settings = self.appdata / "Olympus/config.json"
         settings.parent.mkdir(parents=True, exist_ok=True)
         encoded = (json.dumps({

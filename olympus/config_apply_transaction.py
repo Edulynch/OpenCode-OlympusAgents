@@ -1716,7 +1716,17 @@ def _settings_agent_binding(source: Path, record: dict, old_config: dict, new_co
             (matches[0].group(1) or matches[0].group(2).strip()) if len(matches) == 1 else None
         )
         derived_new = user_config._replace_agent_model(old_agent, new_model, new_effort, role)
-        if ((not unchanged_preferences and old_assignment != f"{old_model}#{old_effort}")
+        if scope == "project":
+            old_overrides = old_config["overrides"].get(role, {})
+            old_parts = old_assignment.split("#", 1) if old_assignment is not None else []
+            old_preferences_match = (
+                len(old_parts) == 2
+                and ("model" not in old_overrides or old_parts[0] == old_overrides["model"])
+                and ("effort" not in old_overrides or old_parts[1] == old_overrides["effort"])
+            )
+        else:
+            old_preferences_match = old_assignment == f"{old_model}#{old_effort}"
+        if ((not unchanged_preferences and not old_preferences_match)
                 or _hash(derived_new) != record["files"][0]["new_sha256"]
                 or new_agent is not None and derived_new != new_agent):
             raise TransactionError("User-settings old agent is not bound to the exact old/new preferences", 4)

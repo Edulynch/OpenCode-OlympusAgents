@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## v0.12.0
+
+### Highlights
+
+- Add a PowerShell-free POSIX `sh`/Python entrypoint for per-user Linux install, update, and uninstall, with stable latest-release selection and exact-tag installs; preserve the existing Windows PowerShell 7 installer and CLI behavior.
+
+### Capability limits
+
+- Linux checks (17 tests) and Windows installer fixtures passed; a two-version lifecycle was simulated. Real OpenCode runtime discovery was observed only on Ubuntu 24.04 under WSL 2 with OpenCode V2.3.2.
+- This does not qualify native Linux or macOS, other OpenCode versions, provider inference, or a public-endpoint install/VerifyOnly/uninstall smoke.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.12.0 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.0/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.0/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+
 ## v0.11.1
 
 ### Highlights

@@ -61,7 +61,8 @@ class SliceA(unittest.TestCase):
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         (self.source / "scripts").mkdir()
         for name in ("render_harnesses.py", "olympus_cli.py", "olympus", "olympus.cmd", "bootstrap.ps1",
-                     "launch-latest.ps1", "project-uninstall.ps1", "global-install.ps1", "target-writer-lock.ps1"):
+                     "launch-latest.ps1", "launch-latest.py", "project-uninstall.ps1", "global-install.ps1",
+                     "target-writer-lock.ps1"):
             shutil.copy2(ROOT / "scripts" / name, self.source / "scripts" / name)
         launcher = self.source / "scripts" / "olympus"
         launcher.write_bytes(launcher.read_bytes().replace(b"\r\n", b"\n"))
@@ -1591,7 +1592,7 @@ test ! -e "{sentinel}"
 
     def test_slice_c5_platform_and_missing_pwsh_block_without_engine(self):
         arguments = ("uninstall", "--dry-run", "--json")
-        for platform in ("linux", "darwin"):
+        for platform in ("darwin",):
             with self.subTest(platform=platform), \
                  mock.patch("olympus.install_routing.sys.platform", platform), \
                  mock.patch("olympus.install_routing.subprocess.run") as run_process, \
@@ -1600,8 +1601,8 @@ test ! -e "{sentinel}"
                 response = json.loads(stdout)
                 self.assertEqual(3, code)
                 self.assertEqual("platform_unqualified", response["issues"][0]["code"])
-                run_process.assert_not_called()
-                find_pwsh.assert_not_called()
+            run_process.assert_not_called()
+            find_pwsh.assert_not_called()
 
         with mock.patch("olympus.install_routing.sys.platform", "win32"), \
              mock.patch("olympus.install_routing.shutil.which", return_value=None), \
@@ -1610,6 +1611,93 @@ test ! -e "{sentinel}"
             self.assertEqual(3, code)
             self.assertEqual("powershell_unavailable", json.loads(stdout)["issues"][0]["code"])
             run_process.assert_not_called()
+
+    def test_slice_c5_linux_install_route_uses_isolated_python_launcher_and_captures_json(self):
+        native = {
+            "schema_version": 1, "operation": "uninstall", "result": "preview",
+            "context": {"kind": "native_install_routing"},
+            "data": {"engine": "scripts/launch-latest.py", "native_stdout": "", "native_stderr": ""},
+            "issues": [],
+        }
+        emitted = []
+        args = argparse.Namespace(command="uninstall", dry_run=True)
+        with mock.patch("olympus.install_routing.sys.platform", "linux"), \
+             mock.patch("olympus.install_routing.os.name", "posix"), \
+             mock.patch(
+                 "olympus.install_routing.subprocess.run",
+                 return_value=subprocess.CompletedProcess([], 0, json.dumps(native), ""),
+             ) as run_process, \
+             mock.patch("olympus.install_routing.shutil.which") as find_pwsh:
+            code = install_routing.run(
+                self.source, args, {}, emit=lambda response, as_json: emitted.append((response, as_json)),
+                as_json=True,
+            )
+        self.assertEqual(0, code)
+        self.assertEqual("preview", emitted[0][0]["result"])
+        self.assertTrue(emitted[0][1])
+        command = run_process.call_args.args[0]
+        self.assertEqual(sys.executable, command[0])
+        self.assertEqual(["-I", "-S", "-B"], command[1:4])
+        self.assertEqual(str(self.source / "scripts/launch-latest.py"), command[4])
+        self.assertEqual(["uninstall", "--_response", "--dry-run"], command[5:])
+        self.assertEqual(1200, run_process.call_args.kwargs["timeout"])
+        self.assertTrue(run_process.call_args.kwargs["capture_output"])
+        self.assertFalse(run_process.call_args.kwargs["shell"])
+        find_pwsh.assert_not_called()
+
+    def test_slice_c5_linux_release_unconfirmed_exit_is_preserved(self):
+        native = {
+            "schema_version": 1, "operation": "install", "result": "unconfirmed",
+            "context": {"kind": "native_install_routing"},
+            "data": {
+                "engine": "scripts/launch-latest.py", "native_stdout": "",
+                "native_stderr": "cleanup is pending", "state": "unconfirmed",
+            },
+            "issues": [{"code": "lifecycle_unconfirmed", "message": "cleanup is pending"}],
+        }
+        emitted = []
+        with mock.patch("olympus.install_routing.sys.platform", "linux"), \
+             mock.patch("olympus.install_routing.os.name", "posix"), \
+             mock.patch(
+                 "olympus.install_routing.subprocess.run",
+                 return_value=subprocess.CompletedProcess([], 4, json.dumps(native), ""),
+             ):
+            code = install_routing.run(
+                self.source, argparse.Namespace(command="install", dry_run=False), {},
+                emit=lambda response, as_json: emitted.append(response), as_json=True,
+            )
+        self.assertEqual(4, code)
+        self.assertEqual("unconfirmed", emitted[0]["result"])
+        self.assertEqual("cleanup is pending", emitted[0]["data"]["native_stderr"])
+
+    def test_slice_c5_linux_update_routes_through_release_coordinator(self):
+        from olympus import system_cli
+
+        native = {
+            "schema_version": 1, "operation": "update", "result": "ok",
+            "context": {"kind": "native_install_routing"},
+            "data": {
+                "engine": "scripts/launch-latest.py", "native_stdout": "",
+                "native_stderr": "", "effects": "native_engine_confirmed_success",
+            },
+            "issues": [],
+        }
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch("olympus.system_cli.sys.platform", "linux"), \
+             mock.patch("olympus.system_cli.os.name", "posix"), \
+             mock.patch(
+                 "olympus.install_routing.subprocess.run",
+                 return_value=subprocess.CompletedProcess([], 0, json.dumps(native), ""),
+             ) as run_process, \
+             mock.patch("olympus.install_routing.shutil.which") as find_pwsh, \
+             redirect_stdout(stdout), redirect_stderr(stderr):
+            code = system_cli.update(self.source)
+        self.assertEqual(0, code)
+        self.assertIn("olympus update: ok", stdout.getvalue())
+        self.assertEqual("", stderr.getvalue())
+        self.assertEqual("update", run_process.call_args.args[0][5])
+        self.assertIn("--_response", run_process.call_args.args[0])
+        find_pwsh.assert_not_called()
 
     def test_slice_c5_powershell_probe_is_bounded_and_requires_v7(self):
         with mock.patch("olympus.install_routing.subprocess.run",
@@ -2656,9 +2744,10 @@ test ! -e "{sentinel}"
 
     def test_slice_c7_global_doctor_native_gate_is_explicit(self):
         self.create_global_managed_install()
+        supported = os.name == "nt" or sys.platform.startswith("linux")
         response = self.json_query("doctor", "--scope", "global", "--harness", "opencode",
-                                   code=3 if os.name != "nt" else 0)
-        if os.name == "nt":
+                                   code=0 if supported else 3)
+        if supported:
             self.assertEqual("ok", response["result"])
             self.assertEqual("verified", response["data"]["harnesses"]["opencode"]["state"])
         else:
@@ -2711,7 +2800,7 @@ test ! -e "{sentinel}"
     def test_slice_c7_global_doctor_version_mismatch_is_explicit(self):
         self.create_global_managed_install(version="v0.0.1")
         response = self.json_query("doctor", "--scope", "global", "--harness", "opencode", code=3)
-        if os.name == "nt":
+        if os.name == "nt" or sys.platform.startswith("linux"):
             self.assertEqual("version_mismatch", response["data"]["harnesses"]["opencode"]["state"])
             self.assertEqual("version_mismatch", response["issues"][0]["code"])
         else:

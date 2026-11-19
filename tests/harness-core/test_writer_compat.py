@@ -27,6 +27,8 @@ from olympus.install_manifest import (
     read_project_manifest,
 )
 
+_WINDOWS_POWERSHELL_AVAILABLE = os.name == "nt" and shutil.which("pwsh") is not None
+
 
 class SliceC2_3WriterCompatibility(unittest.TestCase):
     _PYTHON_LOCK_HOLDER = r'''
@@ -267,7 +269,7 @@ try {
         if not abrupt and process.returncode != 0:
             raise AssertionError(f"Lock owner failed: {stdout!r} {stderr!r}")
 
-    def test_slice_c2_3_manifest_schema_1_provenance_is_optional_opaque_metadata(self):
+    def test_slice_c2_3_portable_manifest_schema_1_provenance_is_optional_opaque_metadata(self):
         manifest_path = self.create_managed_install()
         base = json.loads(manifest_path.read_text(encoding="utf-8"))
         parsed_without_provenance = parse_project_manifest(
@@ -296,7 +298,7 @@ try {
                     self.target, manifest_path,
                     json.dumps({**base, "harness_provenance": invalid}).encode("utf-8"))
 
-    def test_slice_c2_3_manifest_provenance_accepts_canonical_target_alias(self):
+    def test_slice_c2_3_portable_manifest_provenance_accepts_canonical_target_alias(self):
         if os.name == "nt":
             alias_target = self.windows_short_path_alias(self.target)
             if alias_target is None:
@@ -331,7 +333,7 @@ try {
         provenance = {"opencode": {"kind": "custom", "source_digest": "a" * 64}}
         self.assert_manifest_provenance_via_target(alias_target, provenance)
 
-    def test_slice_c2_3_project_manifest_rejects_codex_and_missing_current_metadata_read_only(self):
+    def test_slice_c2_3_portable_project_manifest_rejects_codex_and_missing_current_metadata_read_only(self):
         manifest_path = self.create_managed_install()
         original = json.loads(manifest_path.read_text(encoding="utf-8"))
         before = self.snapshot_target()
@@ -351,7 +353,7 @@ try {
                     parse_project_manifest(self.target, manifest_path, payload)
                 self.assertEqual(before, self.snapshot_target())
 
-    def test_slice_c2_3_manifest_rejects_symlink_escape(self):
+    def test_slice_c2_3_portable_manifest_rejects_symlink_escape(self):
         manifest_path = self.target / MANIFEST_PATHS[0]
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         outside_manifest = self.sandbox / "outside-manifest.json"
@@ -384,8 +386,11 @@ try {
         finally:
             manifest_path.unlink(missing_ok=True)
 
-    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
-    def test_slice_c2_3_python_powershell_lock_interoperability_and_crash_release(self):
+    @unittest.skipUnless(
+        _WINDOWS_POWERSHELL_AVAILABLE,
+        "Windows-only PowerShell integration; qualified by FAST / Windows.",
+    )
+    def test_slice_c2_3_windows_powershell_lock_interoperability_and_crash_release(self):
         # Both implementations contend on source_edit's stable OS-native lock.
         lock_path = self.target / ".olympus-cli-edit.lock"
         self.assertFalse(lock_path.exists())
@@ -461,8 +466,11 @@ try {
         finally:
             source_edit._release_lock(python_after_powershell_crash)
 
-    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
-    def test_slice_c2_3_bootstrap_verify_only_is_read_only_with_opaque_provenance(self):
+    @unittest.skipUnless(
+        _WINDOWS_POWERSHELL_AVAILABLE,
+        "Windows-only PowerShell integration; qualified by FAST / Windows.",
+    )
+    def test_slice_c2_3_windows_powershell_bootstrap_verify_only_is_read_only_with_opaque_provenance(self):
         provenance = {
             "opencode": {"kind": "custom", "source_digest": "b" * 64},
             "codex": {"historical": True},
@@ -480,7 +488,7 @@ try {
         self.assertEqual(before, self.snapshot_target())
         self.assertEqual(provenance, json.loads(manifest_path.read_text(encoding="utf-8"))["harness_provenance"])
 
-    def test_slice_c2_3_manifest_rejects_malformed_provenance_without_writes(self):
+    def test_slice_c2_3_portable_manifest_rejects_malformed_provenance_without_writes(self):
         manifest_path = self.create_managed_install()
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["harness_provenance"] = {"historical": "not-an-object"}
@@ -492,8 +500,11 @@ try {
         self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
         self.assertEqual(before, self.snapshot_target())
 
-    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
-    def test_slice_c2_3_uninstall_removes_only_managed_resources(self):
+    @unittest.skipUnless(
+        _WINDOWS_POWERSHELL_AVAILABLE,
+        "Windows-only PowerShell integration; qualified by FAST / Windows.",
+    )
+    def test_slice_c2_3_windows_powershell_uninstall_removes_only_managed_resources(self):
         old_manifest = self.create_managed_install()
         sentinel = self.target / "unmanaged.txt"
         sentinel.write_text("user-owned\n", encoding="utf-8")
@@ -514,8 +525,11 @@ try {
         self.assertTrue((self.target / ".olympus-cli-edit.lock").is_file())
         self.assertEqual(0, (self.target / ".olympus-cli-edit.lock").stat().st_size)
 
-    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
-    def test_slice_c2_3_existing_project_writers_block_before_target_writes(self):
+    @unittest.skipUnless(
+        _WINDOWS_POWERSHELL_AVAILABLE,
+        "Windows-only PowerShell integration; qualified by FAST / Windows.",
+    )
+    def test_slice_c2_3_windows_powershell_existing_project_writers_block_before_target_writes(self):
         self.create_managed_install()
         mock_environment = self.mock_opencode_environment()
         owner = self.start_python_owner()
@@ -533,7 +547,7 @@ try {
         finally:
             self.stop_owner(owner)
 
-    def test_slice_c3_project_apply_uses_existing_target_writer_lock(self):
+    def test_slice_c3_portable_project_apply_uses_existing_target_writer_lock(self):
         self.create_managed_install({"opencode": {"kind": "custom"}})
         owner = self.start_python_owner()
         try:
@@ -551,8 +565,11 @@ try {
         finally:
             self.stop_owner(owner)
 
-    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
-    def test_slice_c2_3_rejected_bootstrap_is_target_read_only_and_does_not_create_lock(self):
+    @unittest.skipUnless(
+        _WINDOWS_POWERSHELL_AVAILABLE,
+        "Windows-only PowerShell integration; qualified by FAST / Windows.",
+    )
+    def test_slice_c2_3_windows_powershell_rejected_bootstrap_is_target_read_only_and_does_not_create_lock(self):
         self.create_managed_install()
         managed = self.target / ".opencode/agents/veyra.md"
         managed.write_text("user-modified content\n", encoding="utf-8")
@@ -566,8 +583,11 @@ try {
         self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
         self.assertEqual(before, self.snapshot_target())
 
-    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
-    def test_slice_c2_3_rejected_uninstall_is_target_read_only_and_does_not_create_lock(self):
+    @unittest.skipUnless(
+        _WINDOWS_POWERSHELL_AVAILABLE,
+        "Windows-only PowerShell integration; qualified by FAST / Windows.",
+    )
+    def test_slice_c2_3_windows_powershell_rejected_uninstall_is_target_read_only_and_does_not_create_lock(self):
         obsolete = self.target / ".codex/orchestrator-install.json"
         obsolete.parent.mkdir(parents=True, exist_ok=True)
         obsolete.write_text(json.dumps({
@@ -585,8 +605,11 @@ try {
         self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
         self.assertEqual(before, self.snapshot_target())
 
-    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
-    def test_slice_c2_3_bootstrap_noop_does_not_modify_target(self):
+    @unittest.skipUnless(
+        _WINDOWS_POWERSHELL_AVAILABLE,
+        "Windows-only PowerShell integration; qualified by FAST / Windows.",
+    )
+    def test_slice_c2_3_windows_powershell_bootstrap_noop_does_not_modify_target(self):
         self.create_managed_install()
         mock_environment = self.mock_opencode_environment()
         first = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
@@ -607,8 +630,11 @@ try {
         self.assertFalse(lock_path.exists())
         self.assertEqual(before, self.snapshot_target())
 
-    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
-    def test_slice_c2_3_writer_lock_rejects_symlink_lockfile(self):
+    @unittest.skipUnless(
+        _WINDOWS_POWERSHELL_AVAILABLE,
+        "Windows-only PowerShell integration; qualified by FAST / Windows.",
+    )
+    def test_slice_c2_3_windows_powershell_writer_lock_rejects_symlink_lockfile(self):
         lock_path = self.target / ".olympus-cli-edit.lock"
         external = self.sandbox / "outside-lock-target"
         external.write_text("outside\n", encoding="utf-8")
@@ -625,8 +651,11 @@ try {
         self.assertEqual(before, external.read_bytes())
         self.assertTrue(lock_path.is_symlink())
 
-    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell 7 is unavailable")
-    def test_slice_c2_3_writer_lock_rejects_hardlinked_lockfile(self):
+    @unittest.skipUnless(
+        _WINDOWS_POWERSHELL_AVAILABLE,
+        "Windows-only PowerShell integration; qualified by FAST / Windows.",
+    )
+    def test_slice_c2_3_windows_powershell_writer_lock_rejects_hardlinked_lockfile(self):
         lock_path = self.target / ".olympus-cli-edit.lock"
         external = self.sandbox / "outside-lock-target"
         external.write_bytes(b"")

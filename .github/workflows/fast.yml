@@ -174,8 +174,6 @@ jobs:
             runner: windows-2025
           - platform: Linux
             runner: ubuntu-24.04
-          - platform: macOS
-            runner: macos-15-intel
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHONUTF8: '1'
@@ -192,6 +190,7 @@ jobs:
           python-version: '3.12'
 
       - name: Verify actual Python and PowerShell versions
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -211,7 +210,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot locate the native temporary filesystem.' }
           New-Item -ItemType Directory -Force -Path (Join-Path $tempRoot 'opencode') | Out-Null
 
+      - name: Verify actual Python and POSIX shell versions (no PowerShell dependency)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B -c 'import sys; assert sys.version_info >= (3, 11)'
+          sh -n scripts/olympus
+          test -x scripts/olympus
+
       - name: Project manifest and writer-lock compatibility (native filesystem)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -223,19 +232,13 @@ jobs:
           if ($transcript -notmatch '(?m)^Ran 15 tests in ') {
             throw 'Project manifest and writer-lock qualification did not execute all 15 required tests.'
           }
-          if ($env:RUNNER_OS -eq 'Windows') {
-            if ($transcript -match 'skipped' -and
-                ($transcript -notmatch 'test_slice_c2_3_writer_lock_rejects_symlink_lockfile.*skipped' -or
-                 $transcript -notmatch '(?m)^OK \(skipped=1\)$')) {
-              throw 'Windows may skip only the symlink fixture when host privileges prohibit creating it.'
-            }
-            if ($transcript -notmatch '(?m)^OK(?: \(skipped=1\))?$') {
-              throw 'Project manifest and writer-lock Windows results are incomplete.'
-            }
-          } else {
-            if ($transcript -match 'skipped' -or $transcript -notmatch '(?m)^OK$') {
-              throw 'Linux and macOS must execute every project manifest and writer-lock case without skips.'
-            }
+          if ($transcript -match 'skipped' -and
+              ($transcript -notmatch 'test_slice_c2_3_windows_powershell_writer_lock_rejects_symlink_lockfile.*skipped' -or
+               $transcript -notmatch '(?m)^OK \(skipped=1\)$')) {
+            throw 'Windows may skip only the symlink fixture when host privileges prohibit creating it.'
+          }
+          if ($transcript -notmatch '(?m)^OK(?: \(skipped=1\))?$') {
+            throw 'Project manifest and writer-lock Windows results are incomplete.'
           }
 
           $previewOutput = @(& python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_c2_3 -v 2>&1)
@@ -247,6 +250,70 @@ jobs:
               $previewTranscript -notmatch '(?m)^OK$') {
             throw 'CLI preview and disabled --execute safety regression did not pass.'
           }
+
+      - name: Project manifest and writer-lock compatibility (portable Python; no PowerShell)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test_output=$(python -B -m unittest discover -s tests/harness-core -p test_writer_compat.py -k portable -v 2>&1); then
+            printf '%s\n' "$test_output"
+          else
+            status=$?
+            printf '%s\n' "$test_output"
+            exit "$status"
+          fi
+          grep -Eq '^Ran 6 tests in ' <<<"$test_output"
+          grep -qx 'OK' <<<"$test_output"
+          if preview_output=$(python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_c2_3 -v 2>&1); then
+            printf '%s\n' "$preview_output"
+          else
+            status=$?
+            printf '%s\n' "$preview_output"
+            exit "$status"
+          fi
+          grep -Eq '^Ran 1 test in ' <<<"$preview_output"
+          grep -qx 'OK' <<<"$preview_output"
+
+      - name: Linux global installer backend lifecycle (Python fixtures)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B -m unittest discover -s tests/harness-core -p test_global_linux.py -v
+
+      - name: Linux installer routing and release coordinator (Python fixtures; no PowerShell)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test_output=$(python -B -m unittest discover -s tests/harness-core -p test_cli.py -k slice_c5 -v 2>&1); then
+            printf '%s\n' "$test_output"
+          else
+            status=$?
+            printf '%s\n' "$test_output"
+            exit "$status"
+          fi
+          grep -Eq '^Ran 13 tests in ' <<<"$test_output"
+          grep -q 'test_slice_c5_windows_project_uninstall_preserves_unmanaged_and_blocks_drift.*skipped' <<<"$test_output"
+          grep -qx 'OK (skipped=1)' <<<"$test_output"
+
+      - name: Linux global CLI package lifecycle (Python fixtures)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B -m unittest discover -s tests/harness-core -p test_global_cli_linux.py -v
+
+      - name: Linux release transport and launcher gates (Python fixtures)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B -m unittest discover -s tests/harness-core -p test_linux_release_launcher.py -v
+          sh -n scripts/olympus
+          sh -n install-olympus.sh
+          test -x scripts/olympus
 
       - name: Windows project doctor (read-only)
         if: runner.os == 'Windows'
@@ -273,7 +340,7 @@ jobs:
           $testOutput | Out-Host
           if ($testExitCode -ne 0) { exit $testExitCode }
           $transcript = $testOutput -join "`n"
-          if ($transcript -notmatch '(?m)^Ran 10 tests in ' -or
+          if ($transcript -notmatch '(?m)^Ran 13 tests in ' -or
               $transcript -notmatch '(?m)^OK$') {
             throw 'Windows install, update, and uninstall routing tests did not all pass without skips.'
           }
@@ -295,6 +362,7 @@ jobs:
           }
 
       - name: Confirm source checkout unchanged
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $changes = @(git status --porcelain --untracked-files=all)
@@ -303,3 +371,14 @@ jobs:
             $changes | Out-Host
             throw 'Project manifest and writer-lock qualification modified the source checkout'
           }
+
+      - name: Confirm source checkout unchanged
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          changes=$(git -c core.filemode=true status --porcelain --untracked-files=all --ignored)
+          if [ -n "$changes" ]; then
+            printf '%s\n' "$changes"
+            exit 1
+          fi

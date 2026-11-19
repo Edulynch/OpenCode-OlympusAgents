@@ -12,6 +12,22 @@ from . import install_routing
 
 
 def update(source: Path, *, verbose: bool = False) -> int:
+    if sys.platform.startswith("linux") and os.name == "posix":
+        from . import cli
+
+        response, code = install_routing._run_linux_launcher(
+            source, "update", dry_run=False,
+        )
+        if verbose:
+            cli.emit(response, False, verbose=True)
+            return code
+        print("Checking for updates...", flush=True)
+        print(f"olympus update: {response.get('result', 'unknown')}")
+        cli._emit_native_output_summary(response.get("data", {}))
+        cli._emit_issues(response)
+        if code == 4:
+            print("Update effects are unconfirmed; inspect olympus doctor before retrying.", file=sys.stderr)
+        return code
     if sys.platform != "win32":
         print("olympus update is qualified only for Windows; no update was started.", file=sys.stderr)
         return 3

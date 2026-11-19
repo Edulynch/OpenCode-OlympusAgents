@@ -2,4 +2,9 @@
 # OLYMPUS_PYTHON is an optional interpreter path, not a command with arguments.
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 3
 export PYTHONDONTWRITEBYTECODE=1
-exec "${OLYMPUS_PYTHON:-python3.11}" -B "$script_dir/olympus_cli.py" "$@"
+python=${OLYMPUS_PYTHON:-python3}
+if ! "$python" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
+  printf '%s\n' "Olympus requires Python 3.11 or newer (selected interpreter: $python)." >&2
+  exit 3
+fi
+exec "$python" -B "$script_dir/olympus_cli.py" "$@"

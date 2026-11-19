@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 import shutil
 import subprocess
@@ -18,6 +19,7 @@ _RELEASE_TAG = re.compile(
 _POWERSHELL_VERSION = re.compile(r"(?m)^PowerShell ([0-9]+)\.")
 _VERSION_TIMEOUT = 10
 _ENGINE_TIMEOUT = 300
+_LINUX_ENGINE_TIMEOUT = 1200
 
 
 def _finish(response: dict, emit, as_json: bool, code: int, result: str,
@@ -80,6 +82,162 @@ def _timeout_output(value) -> str:
     return str(value)
 
 
+def _run_linux_launcher(source: Path, operation: str, *, dry_run: bool) -> tuple[dict, int]:
+    from .cli import CLIError
+
+    launcher = source / "scripts" / "launch-latest.py"
+    if not launcher.is_file():
+        raise CLIError(f"The immutable-release Linux launcher is missing: {launcher}", 3)
+    command = [
+        sys.executable, "-I", "-S", "-B", str(launcher), operation, "--_response",
+    ]
+    if dry_run:
+        command.append("--dry-run")
+    environment = os.environ.copy()
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    try:
+        completed = subprocess.run(
+            command, cwd=source, env=environment, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", check=False,
+            timeout=_LINUX_ENGINE_TIMEOUT, shell=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        message = (
+            "Linux release operation timed out; effects are unconfirmed. "
+            "Inspect the selected installation before retrying."
+            if not dry_run else "Linux release preview timed out; no target execution was requested."
+        )
+        response = {
+            "schema_version": 1, "operation": operation,
+            "result": "unconfirmed" if not dry_run else "failed",
+            "context": {"source": str(source), "kind": "native_install_routing",
+                        "scope": "global", "harness": "opencode",
+                        "mode": "dry-run" if dry_run else "execute"},
+            "data": {
+                "mode": "dry-run" if dry_run else "execute",
+                "engine": "scripts/launch-latest.py",
+                "state": "unconfirmed" if not dry_run else "failed",
+                "native_exit_code": None,
+                "native_stdout": _timeout_output(error.stdout),
+                "native_stderr": _timeout_output(error.stderr),
+                "effects": "unconfirmed_after_native_failure" if not dry_run
+                else "target_read_only_preview; temporary/cache effects may remain",
+                "cwd_role": "ignored_for_global_target_resolution",
+            },
+            "issues": [{"code": "linux_launcher_timeout", "message": message}],
+        }
+        return response, 4 if not dry_run else 1
+    except KeyboardInterrupt:
+        code = 4 if not dry_run else 1
+        result = "unconfirmed" if not dry_run else "failed"
+        response = {
+            "schema_version": 1, "operation": operation, "result": result,
+            "context": {"source": str(source), "kind": "native_install_routing",
+                        "scope": "global", "harness": "opencode",
+                        "mode": "dry-run" if dry_run else "execute"},
+            "data": {
+                "mode": "dry-run" if dry_run else "execute",
+                "engine": "scripts/launch-latest.py", "state": result,
+                "native_exit_code": None, "native_stdout": "", "native_stderr": "",
+                "effects": "unconfirmed_after_native_failure" if not dry_run
+                else "target_read_only_preview; temporary/cache effects may remain",
+                "cwd_role": "ignored_for_global_target_resolution",
+            },
+            "issues": [{
+                "code": "linux_launcher_interrupted",
+                "message": "Linux release operation was interrupted; inspect before retrying."
+                if not dry_run else "Linux release preview was interrupted; no target execution was requested.",
+            }],
+        }
+        return response, code
+    except OSError as error:
+        response = {
+            "schema_version": 1, "operation": operation, "result": "blocked",
+            "context": {"source": str(source), "kind": "native_install_routing",
+                        "scope": "global", "harness": "opencode",
+                        "mode": "dry-run" if dry_run else "execute"},
+            "data": {
+                "mode": "dry-run" if dry_run else "execute",
+                "engine": "scripts/launch-latest.py", "state": "not_started",
+                "native_exit_code": None, "native_stdout": "", "native_stderr": str(error),
+                "effects": "none_confirmed",
+                "cwd_role": "ignored_for_global_target_resolution",
+            },
+            "issues": [{"code": "linux_launcher_start_failed", "message": str(error)}],
+        }
+        return response, 3
+
+    try:
+        response = json.loads(completed.stdout)
+        if (not isinstance(response, dict)
+                or set(response) != {"schema_version", "operation", "result", "context", "data", "issues"}
+                or response["schema_version"] != 1 or response["operation"] != operation
+                or not isinstance(response["context"], dict)
+                or not isinstance(response["data"], dict)
+                or not isinstance(response["issues"], list)):
+            raise ValueError("Linux release coordinator returned an invalid response.")
+    except (json.JSONDecodeError, ValueError, TypeError) as error:
+        response = {
+            "schema_version": 1, "operation": operation,
+            "result": "unconfirmed" if completed.returncode != 0 else "failed",
+            "context": {"source": str(source), "kind": "native_install_routing",
+                        "scope": "global", "harness": "opencode",
+                        "mode": "dry-run" if dry_run else "execute"},
+            "data": {
+                "mode": "dry-run" if dry_run else "execute",
+                "engine": "scripts/launch-latest.py",
+                "state": "unconfirmed" if completed.returncode != 0 else "failed",
+                "native_exit_code": completed.returncode,
+                "native_stdout": completed.stdout or "",
+                "native_stderr": completed.stderr or "",
+                "effects": "unconfirmed_after_native_failure" if completed.returncode != 0
+                else "none_confirmed",
+                "cwd_role": "ignored_for_global_target_resolution",
+            },
+            "issues": [{"code": "linux_launcher_response_invalid", "message": str(error)}],
+        }
+        return response, 4 if completed.returncode != 0 else 1
+    expected_codes = {
+        "preview": 0, "ok": 0, "failed": 1, "blocked": 3, "unconfirmed": 4,
+    }
+    matched = (
+        expected_codes.get(response["result"]) == completed.returncode
+        or response["result"] == "failed" and completed.returncode == 2
+    )
+    if not matched:
+        response["result"] = "unconfirmed"
+        response["data"].update({
+            "state": "unconfirmed",
+            "effects": "unconfirmed_after_native_failure",
+            "native_exit_code": completed.returncode,
+        })
+        response["issues"].append({
+            "code": "linux_launcher_result_mismatch",
+            "message": "Linux release coordinator response and process exit code disagree.",
+        })
+        return response, 4
+    response["context"]["source"] = str(source)
+    response["data"]["native_exit_code"] = completed.returncode
+    if completed.stderr:
+        response["data"]["native_stderr"] = (
+            response["data"].get("native_stderr", "") + completed.stderr
+        )
+    if completed.returncode == 0:
+        return response, 0
+    if completed.returncode in (1, 2, 3, 4):
+        return response, completed.returncode
+    response["result"] = "unconfirmed"
+    response["data"].update({
+        "state": "unconfirmed",
+        "effects": "unconfirmed_after_native_failure",
+    })
+    response["issues"].append({
+        "code": "linux_launcher_exit_unknown",
+        "message": f"Linux release coordinator exited with unrecognized code {completed.returncode}.",
+    })
+    return response, 4
+
+
 def run(source: Path, args, response: dict, *, emit, as_json: bool) -> int:
     operation = args.command
     dry_run = args.dry_run
@@ -97,7 +255,11 @@ def run(source: Path, args, response: dict, *, emit, as_json: bool) -> int:
     if operation == "install":
         response["data"]["release_version"] = "latest stable"
 
-    if operation == "install":
+    linux = sys.platform.startswith("linux") and os.name == "posix"
+    if linux:
+        script = source / "scripts" / "launch-latest.py"
+        engine = "scripts/launch-latest.py"
+    elif operation == "install":
         script = source / "scripts" / "launch-latest.ps1"
         engine = "scripts/launch-latest.ps1"
     else:
@@ -106,6 +268,14 @@ def run(source: Path, args, response: dict, *, emit, as_json: bool) -> int:
     if not script.is_file():
         return _finish(response, emit, as_json, 3, "blocked", "native_engine_missing",
                        f"The existing native engine is missing: {script}")
+
+    if linux:
+        try:
+            routed, code = _run_linux_launcher(source, operation, dry_run=dry_run)
+        except Exception as error:
+            return _finish(response, emit, as_json, 3, "blocked", "linux_launcher_blocked", str(error))
+        emit(routed, as_json)
+        return code
 
     if sys.platform != "win32":
         return _finish(response, emit, as_json, 3, "blocked", "platform_unqualified",

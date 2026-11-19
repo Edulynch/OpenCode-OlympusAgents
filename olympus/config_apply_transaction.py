@@ -8,6 +8,7 @@ import json
 import os
 import re
 import stat
+import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -1201,6 +1202,38 @@ def commit_global(target: Path, source: Path, changes: tuple[GlobalChange, ...],
             raise TransactionError(f"Global target lock identity became unconfirmed during apply: {error}", 4) from error
 
 
+def _is_linux_lifecycle_journal(target: Path) -> bool:
+    scratch = target / _SCRATCH
+    try:
+        scratch_metadata = os.lstat(scratch)
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise TransactionError(f"Cannot inspect global recovery scratch: {error}", 4) from error
+    if (not stat.S_ISDIR(scratch_metadata.st_mode) or stat.S_ISLNK(scratch_metadata.st_mode)
+            or getattr(scratch_metadata, "st_file_attributes", 0) & _REPARSE_POINT):
+        raise TransactionError("Global recovery scratch is linked or not a directory; preserve its evidence", 4)
+    record_path = scratch / _RECORD
+    try:
+        record_metadata = os.lstat(record_path)
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise TransactionError(f"Cannot inspect global recovery record: {error}", 4) from error
+    if (not stat.S_ISREG(record_metadata.st_mode) or stat.S_ISLNK(record_metadata.st_mode)
+            or getattr(record_metadata, "st_file_attributes", 0) & _REPARSE_POINT
+            or record_metadata.st_size > 6_000_000):
+        raise TransactionError("Global recovery record is unsafe or oversized; preserve its evidence", 4)
+    raw, _ = _bounded_read(target, f"{_SCRATCH}/{_RECORD}", 6_000_000)
+    try:
+        record = json.loads(
+            raw.decode("utf-8"), object_pairs_hook=source_edit._json_object_no_duplicates,
+        )
+    except (UnicodeError, ValueError, TypeError):
+        return False
+    return isinstance(record, dict) and record.get("kind") == "linux_global_lifecycle"
+
+
 def recover_global(target: Path, source: Path, *, load_renderer) -> str:
     """Explicitly roll back one PREPARED global apply or clean a COMMITTED journal."""
     from . import global_readonly
@@ -1208,6 +1241,24 @@ def recover_global(target: Path, source: Path, *, load_renderer) -> str:
     target = global_readonly._root(target)
     if target.is_dir():
         target = target.resolve(strict=True)
+    if sys.platform.startswith("linux") and _is_linux_lifecycle_journal(target):
+        from . import global_install
+
+        try:
+            configured = global_readonly.resolve_roots(("opencode",))["opencode"]
+            if configured.is_dir():
+                configured = configured.resolve(strict=True)
+            if configured != target:
+                raise TransactionError(
+                    "Lifecycle recovery target differs from the configured global OpenCode root", 4,
+                )
+            return global_install.recover(source).result
+        except global_install.GlobalInstallError as error:
+            raise TransactionError(str(error), error.code) from error
+        except global_readonly.GlobalFault as error:
+            raise TransactionError(str(error), error.code) from error
+        except (OSError, RuntimeError) as error:
+            raise TransactionError(f"Cannot resolve lifecycle recovery target: {error}", 4) from error
     try:
         lock = source_edit._acquire_lock(target, create=False)
     except source_edit.LockError as error:

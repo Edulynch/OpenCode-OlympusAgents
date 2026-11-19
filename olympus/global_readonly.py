@@ -84,6 +84,133 @@ def _root(path: Path) -> Path:
     return path
 
 
+def _ensure_linux_directory(path: Path, *, create: bool, mode: int = 0o700) -> tuple[Path, tuple[int, int]]:
+    """Walk/create an absolute Linux directory through no-follow directory descriptors."""
+    if not sys.platform.startswith("linux") or not isinstance(path, Path):
+        raise GlobalFault("unsafe_global_root", "Descriptor-based root creation is available only on Linux.")
+    path = _root(path)
+    if path.anchor != "/" or not path.parts[1:]:
+        raise GlobalFault("unsafe_global_root", "A global configuration root must be below the trusted filesystem anchor.")
+    if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "geteuid"):
+        raise GlobalFault("unsafe_global_root", "Linux directory identity primitives are unavailable.")
+
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    effective_uid = os.geteuid()
+
+    def fail(detail: str) -> GlobalFault:
+        return GlobalFault("unsafe_global_root", detail)
+
+    def check_directory(metadata: os.stat_result, label: str, *, final: bool = False) -> None:
+        if (not stat.S_ISDIR(metadata.st_mode)
+                or getattr(metadata, "st_file_attributes", 0) & _REPARSE):
+            raise fail(f"Global path component is not a plain directory: {label}")
+        permissions = stat.S_IMODE(metadata.st_mode)
+        if metadata.st_uid not in (0, effective_uid):
+            raise fail(f"Global path component has an untrusted owner: {label}")
+        if metadata.st_uid == 0 and permissions & 0o022 and not permissions & stat.S_ISVTX:
+            raise fail(f"Root-owned global path component is writable by other users: {label}")
+        if metadata.st_uid == effective_uid and permissions & 0o022:
+            raise fail(f"User-owned global path component is writable by other users: {label}")
+        if final and metadata.st_uid != effective_uid:
+            raise fail(f"Global configuration root is not owned by the current user: {label}")
+
+    components = path.parts[1:]
+    identities: list[tuple[int, int]] = []
+    descriptors: list[int] = []
+
+    def reopen_chain(expected: list[tuple[int, int]]) -> None:
+        current = os.open("/", flags)
+        try:
+            os.set_inheritable(current, False)
+            anchor = os.fstat(current)
+            check_directory(anchor, "/")
+            if not expected or (anchor.st_dev, anchor.st_ino) != expected[0]:
+                raise fail("Trusted filesystem anchor changed during global-root traversal.")
+            for index, component in enumerate(components[:len(expected) - 1]):
+                before = os.stat(component, dir_fd=current, follow_symlinks=False)
+                check_directory(before, component, final=index == len(components) - 1)
+                child = os.open(component, flags, dir_fd=current)
+                try:
+                    os.set_inheritable(child, False)
+                    opened = os.fstat(child)
+                    if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+                        raise fail(f"Global path placement changed while reopening: {component}")
+                    if (opened.st_dev, opened.st_ino) != expected[index + 1]:
+                        raise fail(f"Global path identity changed while reopening: {component}")
+                except BaseException:
+                    os.close(child)
+                    raise
+                previous = current
+                current = child
+                os.close(previous)
+        finally:
+            os.close(current)
+
+    try:
+        anchor_fd = os.open("/", flags)
+        descriptors.append(anchor_fd)
+        os.set_inheritable(anchor_fd, False)
+        anchor_metadata = os.fstat(anchor_fd)
+        check_directory(anchor_metadata, "/")
+        if anchor_metadata.st_uid != 0:
+            raise fail("Filesystem root is not owned by the trusted root account.")
+        identities.append((anchor_metadata.st_dev, anchor_metadata.st_ino))
+
+        for index, component in enumerate(components):
+            parent_fd = descriptors[-1]
+            try:
+                before = os.stat(component, dir_fd=parent_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                if not create:
+                    raise fail(f"Global configuration root is missing: {path}")
+                parent_metadata = os.fstat(parent_fd)
+                parent_identity = (parent_metadata.st_dev, parent_metadata.st_ino)
+                if parent_identity != identities[-1]:
+                    raise fail(f"Global parent descriptor changed before directory creation: {component}")
+                reopen_chain(identities)
+                parent_after = os.fstat(parent_fd)
+                if (parent_after.st_dev, parent_after.st_ino) != identities[-1]:
+                    raise fail(f"Global parent descriptor changed before directory creation: {component}")
+                try:
+                    os.mkdir(component, mode, dir_fd=parent_fd)
+                except FileExistsError:
+                    pass
+                before = os.stat(component, dir_fd=parent_fd, follow_symlinks=False)
+            check_directory(before, component, final=index == len(components) - 1)
+            child_fd = os.open(component, flags, dir_fd=parent_fd)
+            descriptors.append(child_fd)
+            os.set_inheritable(child_fd, False)
+            opened = os.fstat(child_fd)
+            if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+                raise fail(f"Global path placement changed while opening: {component}")
+            check_directory(opened, component, final=index == len(components) - 1)
+            identities.append((opened.st_dev, opened.st_ino))
+            reopen_chain(identities)
+
+        final_metadata = os.fstat(descriptors[-1])
+        check_directory(final_metadata, str(path), final=True)
+        final_identity = (final_metadata.st_dev, final_metadata.st_ino)
+        if final_identity != identities[-1]:
+            raise fail("Global configuration root changed before handoff.")
+        return path, final_identity
+    except GlobalFault:
+        raise
+    except OSError as error:
+        raise fail(f"Cannot securely traverse or create global configuration root {path}: {error}") from error
+    finally:
+        for descriptor in reversed(descriptors):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
+
+def _verify_linux_directory(path: Path, expected_identity: tuple[int, int]) -> None:
+    _, identity = _ensure_linux_directory(path, create=False)
+    if identity != expected_identity:
+        raise GlobalFault("unsafe_global_root", "Global configuration root identity changed before use.")
+
+
 def _opencode_root() -> Path:
     override = os.environ.get("OPENCODE_CONFIG_DIR")
     if override:
@@ -392,7 +519,11 @@ def _unowned_opencode_guard(root: Path) -> str:
     jsonc_file = _read(root, "opencode.jsonc")
     if json_file is not None and jsonc_file is not None:
         raise GlobalFault("global_external_guard_unsafe", "Both global OpenCode config formats exist; precedence is ambiguous.")
-    raw = json_file if json_file is not None else jsonc_file
+    return _unowned_opencode_guard_bytes(json_file if json_file is not None else jsonc_file)
+
+
+def _unowned_opencode_guard_bytes(raw: bytes | None) -> str:
+    """Validate the external-directory fallback in one config snapshot."""
     if raw is None:
         return "missing"
     try:
@@ -490,9 +621,62 @@ def _native_failure_reason(stdout: str, harness: str) -> tuple[str, str, int]:
     return "unavailable", "native_verify_unavailable", 3
 
 
-def _native_verify(source: Path, root: Path, version: str) -> tuple[str, str, str | None, int]:
+def _python_verify(source: Path, root: Path, version: str,
+                   expected: dict[str, bytes] | None) -> tuple[str, str, str | None, int]:
+    from . import config_apply_transaction
+
+    try:
+        if config_apply_transaction.pending(root):
+            raise GlobalFault("global_apply_recovery_pending",
+                              "A global lifecycle/apply or source-edit journal is pending.")
+        manifest, entries, _, _ = _manifest(root, "opencode", expected)
+        if manifest is None:
+            raise GlobalFault("global_install_absent", "No Olympus global OpenCode manifest exists.")
+        if manifest["installed_version"] != version:
+            raise GlobalFault("version_mismatch",
+                              f"Global manifest records '{manifest['installed_version']}'; requested '{version}'.")
+        if _is_legacy_inventory(manifest, entries):
+            raise GlobalFault("global_upgrade_required",
+                              "The verified v0.10.0 global inventory requires an explicit update.")
+        current = _verified_files(root, entries)
+        if expected is not None:
+            for relative, raw in current.items():
+                if relative not in expected or raw != expected[relative]:
+                    raise GlobalFault("global_managed_file_drift",
+                                      f"Global managed resource differs from this staged source: {relative}", 1)
+        _default_agent_status(root, manifest)
+        if "opencode.jsonc" not in entries:
+            _unowned_opencode_guard(root)
+        return "verified", "Python global content, version, and receipt checks passed.", None, 0
+    except GlobalFault as error:
+        states = {
+            "global_managed_file_drift": ("drift", "global_managed_file_drift", 1),
+            "invalid_global_manifest": ("invalid_manifest", "invalid_global_manifest", 3),
+            "global_install_conflict": ("conflict", "global_install_conflict", 3),
+            "global_default_agent_receipt_missing": (
+                "default_agent_unmanaged", "global_default_agent_receipt_missing", 3,
+            ),
+            "global_default_agent_recovery_pending": (
+                "recovery_pending", "global_default_agent_recovery_pending", 3,
+            ),
+            "global_default_agent_drift": ("default_agent_drift", "global_default_agent_drift", 1),
+            "global_apply_recovery_pending": ("recovery_pending", "global_apply_recovery_pending", 3),
+            "global_upgrade_required": ("upgrade_required", "global_upgrade_required", 3),
+            "version_mismatch": ("version_mismatch", "version_mismatch", 3),
+            "global_install_absent": ("absent", "global_install_absent", 3),
+            "global_default_agent_config_invalid": ("config_invalid", "global_default_agent_config_invalid", 3),
+            "global_external_guard_unsafe": ("unsafe", "global_external_guard_unsafe", 3),
+        }
+        state, code, exit_code = states.get(error.reason, ("unsafe", error.reason, error.code))
+        return state, str(error), code, exit_code
+
+
+def _native_verify(source: Path, root: Path, version: str,
+                   expected: dict[str, bytes] | None = None) -> tuple[str, str, str | None, int]:
+    if sys.platform.startswith("linux"):
+        return _python_verify(source, root, version, expected)
     if sys.platform != "win32":
-        return "unavailable", "Global native VerifyOnly is qualified only on Windows.", "native_verify_unavailable", 3
+        return "unavailable", "Global native VerifyOnly is not qualified on this platform.", "native_verify_unavailable", 3
     executable = shutil.which("pwsh")
     if executable is None or not (source / "scripts/global-install.ps1").is_file():
         return "unavailable", "PowerShell 7 or the official global verifier is unavailable.", "native_verify_unavailable", 3
@@ -542,6 +726,15 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
         if args.harness != "opencode":
             raise GlobalFault("global_harness_unsupported", "Only the OpenCode global installation is supported.")
         roots = resolve_roots(selected)
+        if (sys.platform.startswith("linux") and operation in ("config apply", "doctor")
+                and "opencode" in roots):
+            from . import config_apply_transaction
+
+            if config_apply_transaction.pending(roots["opencode"]):
+                raise GlobalFault(
+                    "global_apply_recovery_pending",
+                    "A global apply, lifecycle, or source-edit journal is pending; recover it explicitly first.",
+                )
         if operation in ("config apply", "doctor") and "opencode" in roots:
             try:
                 os.lstat(roots["opencode"] / _GLOBAL_APPLY_SCRATCH)
@@ -621,7 +814,9 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                     }
                 if operation == "doctor":
                     version = "local" if manifest["installed_version"] == "local" else release_version(source)
-                    state, detail, issue_code, exit_code = _native_verify(source, root, version)
+                    state, detail, issue_code, exit_code = _native_verify(
+                        source, root, version, expected=expected[harness],
+                    )
                     item.update({"state": state, "verification": detail})
                     if state != "verified":
                         blocked.append(harness)

@@ -3,6 +3,10 @@ param([ValidateSet('Both','Offline','Runtime')][string]$QualificationSlice = 'Bo
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$exactManagedCommandPaths = @(
+    '.opencode/commands/olympus.ultra.md',
+    '.opencode/commands/olympus.performance.md'
+)
 function Text([string]$path) { [IO.File]::ReadAllText((Join-Path $root $path)) }
 function Check([string]$id, [bool]$ok) {
     if (-not $ok) { throw "$id FAIL" }
@@ -24,6 +28,7 @@ function Is-OlympusOwned([string]$path, [string[]]$manifestPaths = @(),
         '.opencode/orchestrator-install.json',
         '.opencode/opencode.json', '.opencode/opencode.jsonc', '.codex/', 'CODEX.md',
         'olympus/', 'scripts/render_harnesses.py', 'opencode.jsonc', 'opencode.json')
+    if ($p -in $exactManagedCommandPaths) { return $true }
     # Canonical source is editable only when OlympusAgents is the proven task
     # target; installed runtime resources stay protected in every repository.
     $canonicalSource = $canonicalSourceTarget -and ($p.StartsWith('olympus/') -or $p -eq 'scripts/render_harnesses.py')
@@ -198,17 +203,27 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
         $failures.Add("json_root=$runtimeJsonRootType (expected array)")
     }
 
+    $kaelMatches = [Collections.Generic.List[object]]::new()
     $kovanMatches = [Collections.Generic.List[object]]::new()
     if ($runtimeJsonRootIsArray) {
         foreach ($candidate in $runtimeAgents) {
             if ($null -eq $candidate) { continue }
             $idProperty = $candidate.PSObject.Properties['id']
-            if ($null -ne $idProperty -and $idProperty.Value -eq 'kovan') {
+            if ($null -eq $idProperty) { continue }
+            if ($idProperty.Value -eq 'kael') {
+                $kaelMatches.Add($candidate)
+            } elseif ($idProperty.Value -eq 'kovan') {
                 $kovanMatches.Add($candidate)
             }
         }
     }
+    $kaelCount = $kaelMatches.Count
     $kovanCount = $kovanMatches.Count
+    if ($kaelCount -eq 0) {
+        $failures.Add('kael=missing (matches=0)')
+    } elseif ($kaelCount -gt 1) {
+        $failures.Add("kael=duplicated (matches=$kaelCount)")
+    }
     if ($kovanCount -eq 0) {
         $failures.Add('kovan=missing (matches=0)')
     } elseif ($kovanCount -gt 1) {
@@ -252,9 +267,47 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
         }
     }
 
+    $commandDecisionEvidence = [Collections.Generic.List[string]]::new()
+    foreach ($roleName in @('kael','kovan')) {
+        if ($roleName -eq 'kael') { $roleMatches = $kaelMatches } else { $roleMatches = $kovanMatches }
+        if ($roleMatches.Count -ne 1) { continue }
+        $effectiveRole = $roleMatches[0]
+        $permissionsProperty = $effectiveRole.PSObject.Properties['permissions']
+        if ($null -eq $permissionsProperty) {
+            $failures.Add("${roleName}_permissions=missing")
+            continue
+        }
+        try {
+            $permissions = @($permissionsProperty.Value)
+            foreach ($path in $exactManagedCommandPaths) {
+                $decision = Native-Decision $permissions 'edit' $path
+                $commandDecisionEvidence.Add("${roleName}:$path=$decision")
+                if ($decision -ne 'DENY') {
+                    $failures.Add("${roleName}_managed_command_decision=${path}:$decision (expected DENY)")
+                }
+            }
+            $expectedControl = if ($roleName -eq 'kael') { 'ALLOW' } else { 'ASK' }
+            $controls = @(
+                '.opencode/commands/project-owned.md',
+                '.opencode/commands/speckit.plan.md',
+                ($exactManagedCommandPaths[0] + '.backup')
+            )
+            foreach ($path in $controls) {
+                $decision = Native-Decision $permissions 'edit' $path
+                $commandDecisionEvidence.Add("${roleName}:$path=$decision")
+                if ($decision -ne $expectedControl) {
+                    $failures.Add("${roleName}_unrelated_command_decision=${path}:$decision (expected $expectedControl)")
+                }
+            }
+        } catch {
+            $commandDecisionEvidence.Add("$roleName=evaluation_error")
+            $failures.Add("${roleName}_command_permission_evaluation_error=" + (Compact-Evidence $_.Exception.Message))
+        }
+    }
+
     $runtimeExitEvidence = if ($null -eq $runtimeExit) { '<unavailable>' } else { [string]$runtimeExit }
     $failureEvidence = if ($failures.Count -eq 0) { 'none' } else { $failures -join ', ' }
-    $evidence = "runtime_exit=$runtimeExitEvidence; json_parseable=$runtimeJsonParseable; json_root=$runtimeJsonRootType; kovan_matches=$kovanCount; permission_rules=$permissionEvidence; stderr=$(Compact-Evidence $runtimeStderr); failures=$failureEvidence"
+    $evidence = "runtime_exit=$runtimeExitEvidence; json_parseable=$runtimeJsonParseable; json_root=$runtimeJsonRootType; kael_matches=$kaelCount; kovan_matches=$kovanCount; permission_rules=$permissionEvidence; command_decisions=$($commandDecisionEvidence -join ','); stderr=$(Compact-Evidence $runtimeStderr); failures=$failureEvidence"
     [pscustomobject]@{ passed=($failures.Count -eq 0); evidence=$evidence }
 }
 
@@ -1103,8 +1156,7 @@ try {
     })
     $managedPaths += @('.opencode/plugins/olympus-activity/activity.ts',
         '.opencode/plugins/olympus-activity/tui.tsx', '.opencode/scripts/worktree-setup.ps1')
-    $managedPaths += @('.opencode/plugins/olympus-activity/activity.ts',
-        '.opencode/plugins/olympus-activity/tui.tsx', '.opencode/scripts/worktree-setup.ps1')
+    $managedPaths += $exactManagedCommandPaths
     # Verify Windows paths really became repository-relative forward-slash
     # paths; a malformed path must never make the DENY assertion meaningless.
     Check 'AUTH9B_WINDOWS_MANAGED_PATH_NORMALIZED' (
@@ -1120,6 +1172,33 @@ try {
     Check 'AUTH9B_FOREIGN_SPECKIT_EXCLUDED_AND_NATIVE_ASK' (
         $specKitProjectCommand -notin $managedPaths -and -not (Is-OlympusOwned $specKitProjectCommand) -and
         $specKitPermission -eq 'ASK' -and (Classify-NewScope $specKitPermission $true) -eq 'NATIVE_ASK'
+    )
+    $commandRuleFailures = [Collections.Generic.List[string]]::new()
+    foreach ($path in $exactManagedCommandPaths) {
+        $kaelExactDeny = @($kaelNativeRules | Where-Object {
+            $_.action -eq 'edit' -and $_.resource -ceq $path -and $_.effect -eq 'deny'
+        }).Count
+        $kovanExactDeny = @($nativeRules | Where-Object {
+            $_.action -eq 'edit' -and $_.resource -ceq $path -and $_.effect -eq 'deny'
+        }).Count
+        if ($kaelExactDeny -ne 1 -or $kovanExactDeny -ne 1 -or
+            (Native-Decision $kaelNativeRules 'edit' $path) -ne 'DENY' -or
+            (Native-Decision $nativeRules 'edit' $path) -ne 'DENY') {
+            $commandRuleFailures.Add($path)
+        }
+    }
+    $projectOwnedCommand = '.opencode/commands/project-owned.md'
+    $commandPrefixNeighbor = $exactManagedCommandPaths[0] + '.backup'
+    $unrelatedCommandControls = @($projectOwnedCommand, $specKitProjectCommand, $commandPrefixNeighbor)
+    $unrelatedCommandControlMismatch = @($unrelatedCommandControls | Where-Object {
+        (Is-OlympusOwned $_) -or
+        (Native-Decision $kaelNativeRules 'edit' $_) -ne 'ALLOW' -or
+        (Native-Decision $nativeRules 'edit' $_) -ne 'ASK'
+    })
+    Check 'AUTH9D_MANAGED_COMMANDS_EXACT_DENY_AND_UNRELATED_CONTROLS' (
+        $commandRuleFailures.Count -eq 0 -and
+        @($exactManagedCommandPaths | Where-Object { $_ -notin $managedPaths }).Count -eq 0 -and
+        $unrelatedCommandControlMismatch.Count -eq 0
     )
     $missingAgentDenyRule = @($nativeRules | Where-Object {
         $_.action -eq 'edit' -and $_.resource -eq '.opencode/agents/**' -and $_.effect -eq 'deny'
@@ -1301,7 +1380,25 @@ try {
         -not $prohibitionFlow.attempted -and $prohibited.reason -eq 'USER_PROHIBITION' -and
         (Classify-NewScope 'ASK' $true $true) -eq 'DENY')
 
-    $validRuntimeFixture = '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"allow"},{"action":"edit","resource":".opencode/plugins/**","effect":"ask"},{"action":"edit","resource":".opencode/plugins/olympus-activity/**","effect":"deny"}]}]'
+    $runtimeCommandDenies = @($exactManagedCommandPaths | ForEach-Object {
+        [pscustomobject]@{ action='edit'; resource=$_; effect='deny' }
+    })
+    $runtimeAgentFixture = @(
+        [pscustomobject]@{
+            id='kael'
+            permissions=@([pscustomobject]@{ action='edit'; resource='*'; effect='allow' }) + $runtimeCommandDenies
+        }
+        [pscustomobject]@{
+            id='kovan'
+            permissions=@(
+                [pscustomobject]@{ action='edit'; resource='*'; effect='allow' }
+                [pscustomobject]@{ action='edit'; resource='.opencode/**'; effect='ask' }
+                [pscustomobject]@{ action='edit'; resource='.opencode/plugins/**'; effect='ask' }
+                [pscustomobject]@{ action='edit'; resource='.opencode/plugins/olympus-activity/**'; effect='deny' }
+            ) + $runtimeCommandDenies
+        }
+    )
+    $validRuntimeFixture = ConvertTo-Json -InputObject $runtimeAgentFixture -Compress -Depth 10
     $failedRuntimeProbe = Inspect-EffectiveRules 17 $validRuntimeFixture 'fixture runtime error'
     Check 'AUTH14_RUNTIME_COMMAND_FAILURE_HAS_EVIDENCE' (-not $failedRuntimeProbe.passed -and
         $failedRuntimeProbe.evidence -match 'runtime_exit=17' -and $failedRuntimeProbe.evidence -match 'stderr=fixture runtime error')
@@ -1316,7 +1413,10 @@ try {
         $duplicateKovanProbe.evidence -match 'kovan=duplicated \(matches=2\)')
     $singleKovanProbe = Inspect-EffectiveRules 0 $validRuntimeFixture
     Check 'AUTH14_SINGLE_KOVAN_EVALUATES_EFFECTIVE_RULES' ($singleKovanProbe.passed -and
-        $singleKovanProbe.evidence -match 'kovan_matches=1' -and $singleKovanProbe.evidence -match 'edit_plugins_ask=1/1')
+        $singleKovanProbe.evidence -match 'kael_matches=1' -and $singleKovanProbe.evidence -match 'kovan_matches=1' -and
+        $singleKovanProbe.evidence -match 'edit_plugins_ask=1/1' -and
+        $singleKovanProbe.evidence -match 'kael:\.opencode/commands/olympus\.ultra\.md=DENY' -and
+        $singleKovanProbe.evidence -match 'kovan:\.opencode/commands/project-owned\.md=ASK')
     $badPermissionProbe = Inspect-EffectiveRules 0 '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"deny"}]}]'
     Check 'AUTH14_SINGLE_KOVAN_RULE_MISMATCH_FAILS' (-not $badPermissionProbe.passed -and
         $badPermissionProbe.evidence -match 'edit_\*_deny=1/0')

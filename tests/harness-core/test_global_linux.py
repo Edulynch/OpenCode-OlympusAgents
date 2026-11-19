@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -18,7 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from olympus import config_apply_transaction, global_install, global_readonly, source_edit, user_config
-from olympus.cli import load_renderer
+from olympus.cli import load_renderer, main
 
 
 class LinuxGlobalBackend(unittest.TestCase):
@@ -484,6 +486,73 @@ class LinuxGlobalBackend(unittest.TestCase):
             sum(call.kwargs.get("create") is True for call in secured.call_args_list), 2,
         )
         self.assertTrue((self.root / source_edit._LOCK_NAME).is_file())
+        self.assertFalse((self.root / ".olympus-cli-config-apply").exists())
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux global settings recovery requires Linux.")
+    def test_global_user_settings_recovery_rolls_back_interrupted_setters(self):
+        self.assertEqual("committed", global_install.install(ROOT, version="local", commit="fixture-local").result)
+        settings = user_config.config_path()
+        nox = self.root / "agents/nox.md"
+        manifest = self.root / "olympus/orchestrator-install.json"
+        publish = config_apply_transaction._settings_publish
+
+        for change, stop_path, role_path, commit_point in (
+            ("override", "agents/nox.md", nox, False),
+            ("max_children", "@global-user-config", self.root / "agents/kael.md", True),
+        ):
+            with self.subTest(change=change):
+                before_agent = role_path.read_bytes()
+                before_manifest = manifest.read_bytes()
+
+                if commit_point:
+                    commit = config_apply_transaction._settings_commit_preferences
+
+                    def stop_after_publish(*args, **kwargs):
+                        commit(*args, **kwargs)
+                        raise KeyboardInterrupt("fixture interruption after preference commit")
+
+                    attempt = mock.patch(
+                        "olympus.config_apply_transaction._settings_commit_preferences",
+                        side_effect=stop_after_publish,
+                    )
+                else:
+                    def stop_after_publish(*args, **kwargs):
+                        result = publish(*args, **kwargs)
+                        if args[4] == stop_path:
+                            raise KeyboardInterrupt("fixture process interruption")
+                        return result
+
+                    attempt = mock.patch(
+                        "olympus.config_apply_transaction._settings_publish",
+                        side_effect=stop_after_publish,
+                    )
+                with attempt:
+                    with self.assertRaises(KeyboardInterrupt):
+                        if change == "override":
+                            user_config.set_override(ROOT, "nox", "effort", "high")
+                        else:
+                            user_config.set_max_children(ROOT, 3)
+
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    code = main([
+                        "--source", str(ROOT), "config", "recover", "--scope", "global",
+                        "--harness", "opencode",
+                    ])
+                self.assertEqual(0, code, output.getvalue())
+                if commit_point:
+                    self.assertIn("Recovery: committed_cleanup", output.getvalue())
+                    self.assertNotEqual(before_agent, role_path.read_bytes())
+                    self.assertIn(b"MAX_ACTIVE_CHILDREN = 3", role_path.read_bytes())
+                    self.assertTrue(settings.exists())
+                    self.assertNotEqual(before_manifest, manifest.read_bytes())
+                else:
+                    self.assertIn("Recovery: rolled_back", output.getvalue())
+                    self.assertEqual(before_agent, role_path.read_bytes())
+                    self.assertEqual(before_manifest, manifest.read_bytes())
+                    self.assertFalse(settings.exists())
+                self.assertFalse((self.root / ".olympus-cli-config-apply").exists())
+
 
     @unittest.skipUnless(os.name == "posix" and shutil.which("sh"), "POSIX launcher checks require sh.")
     def test_posix_launcher_python_default_minimum_missing_and_override(self):

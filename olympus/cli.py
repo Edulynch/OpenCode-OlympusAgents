@@ -1363,19 +1363,19 @@ def main(argv: list[str] | None = None) -> int:
             from . import user_config
             from .models_catalog import CatalogError
 
-            project_request = args.scope == "project" or (args.scope is None and args.target is not None)
-            check_user_configuration = args.scope == "global" or (args.scope is None and args.target is None)
             if args.scope == "global" and args.target is not None:
                 raise CLIError("--target is available only with project scope.", 2)
-            if args.scope is None and not project_request:
+            if args.scope is None and args.target is None:
                 try:
-                    args.scope, args.target = user_config.select_scope(source, args.scope, args.target)
+                    args.target = user_config._managed_project(source, for_diagnostics=True)
                 except user_config.UserConfigError as error:
                     response["result"] = "failed"
                     response["issues"] = [{"code": "invalid_user_configuration", "message": str(error)}]
                     output(response, as_json)
                     return 1
-            elif project_request:
+                args.scope = "project" if args.target is not None else "global"
+            check_user_configuration = args.scope == "global"
+            if not check_user_configuration:
                 args.scope = "project"
                 if args.target is not None:
                     from . import config_apply

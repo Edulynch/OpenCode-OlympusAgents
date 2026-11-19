@@ -158,6 +158,100 @@ function Save-FeatureJson {
     [System.IO.File]::WriteAllText($fjPath, $json, $utf8NoBom)
 }
 
+# Resolve a feature directory lexically against the selected checkout. A fully
+# qualified override may be used for this invocation outside the checkout, but
+# only a contained, non-linked result can replace the per-checkout pointer.
+function Resolve-FeatureDirectoryPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$FeatureDirectory,
+        [switch]$AllowExplicitExternal
+    )
+
+    if ([string]::IsNullOrWhiteSpace($FeatureDirectory)) {
+        throw 'the path is empty'
+    }
+    if ($FeatureDirectory -match '^[A-Za-z]:(?![\\/])') {
+        throw 'drive-relative paths are not supported; use a checkout-relative path or a fully qualified override'
+    }
+
+    $isFullyQualified = $FeatureDirectory -match '^[A-Za-z]:[\\/]' -or $FeatureDirectory -match '^[\\/]{2}[^\\/]+[\\/][^\\/]+'
+    if ([System.IO.Path]::DirectorySeparatorChar -ne '\') {
+        $isFullyQualified = $FeatureDirectory.StartsWith('/')
+    }
+    if (-not $isFullyQualified -and [System.IO.Path]::IsPathRooted($FeatureDirectory)) {
+        throw 'rooted paths must be fully qualified'
+    }
+
+    $rootPath = [System.IO.Path]::GetFullPath($RepoRoot)
+    $featurePath = if ($isFullyQualified) {
+        [System.IO.Path]::GetFullPath($FeatureDirectory)
+    } else {
+        [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($rootPath, $FeatureDirectory))
+    }
+    $separators = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $rootOfRoot = [System.IO.Path]::GetPathRoot($rootPath)
+    $rootPath = $rootPath.TrimEnd($separators)
+    if ($rootPath.Length -lt $rootOfRoot.Length) { $rootPath = $rootOfRoot }
+    $featureRoot = [System.IO.Path]::GetPathRoot($featurePath)
+    $featurePath = $featurePath.TrimEnd($separators)
+    if ($featurePath.Length -lt $featureRoot.Length) { $featurePath = $featureRoot }
+
+    if ([System.IO.Path]::DirectorySeparatorChar -eq '\') {
+        $comparison = [System.StringComparison]::OrdinalIgnoreCase
+    } else {
+        $comparison = [System.StringComparison]::Ordinal
+    }
+    if ($featurePath.Equals($rootPath, $comparison)) {
+        throw 'the project root cannot be used as a feature directory'
+    }
+
+    $rootPrefix = if ($rootPath.EndsWith([string][System.IO.Path]::DirectorySeparatorChar)) {
+        $rootPath
+    } else {
+        $rootPath + [System.IO.Path]::DirectorySeparatorChar
+    }
+    if (-not $featurePath.StartsWith($rootPrefix, $comparison)) {
+        if ($AllowExplicitExternal -and $isFullyQualified) {
+            return [PSCustomObject]@{
+                Path = $featurePath
+                RelativePath = $null
+                Persistable = $false
+            }
+        }
+        throw 'the saved feature directory must remain inside the selected project'
+    }
+
+    $relativePath = $featurePath.Substring($rootPrefix.Length)
+    $cursor = $rootPath
+    foreach ($component in $relativePath.Split($separators, [System.StringSplitOptions]::RemoveEmptyEntries)) {
+        $cursor = [System.IO.Path]::Combine($cursor, $component)
+        try {
+            $attributes = [System.IO.File]::GetAttributes($cursor)
+        } catch [System.IO.FileNotFoundException] {
+            continue
+        } catch [System.IO.DirectoryNotFoundException] {
+            continue
+        }
+        if (($attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            if ($AllowExplicitExternal -and $isFullyQualified) {
+                return [PSCustomObject]@{
+                    Path = $featurePath
+                    RelativePath = $relativePath
+                    Persistable = $false
+                }
+            }
+            throw "path component '$component' is a symbolic link or junction"
+        }
+    }
+
+    return [PSCustomObject]@{
+        Path = $featurePath
+        RelativePath = $relativePath
+        Persistable = $true
+    }
+}
+
 function Get-FeaturePathsEnv {
     # Read-only callers (e.g. check-prerequisites.ps1 -PathsOnly) pass -NoPersist
     # so pure path resolution never writes .specify/feature.json, which would
@@ -182,18 +276,12 @@ function Get-FeaturePathsEnv {
     #   2. .specify/feature.json "feature_directory" key (persisted by specify command)
     #   3. Error - no feature context available
     $featureJson = Join-Path $repoRoot '.specify/feature.json'
+    $explicitOverride = $false
+    $featureDirectoryValue = $null
     if ($env:SPECIFY_FEATURE_DIRECTORY) {
-        $featureDir = $env:SPECIFY_FEATURE_DIRECTORY
-        # Normalize relative paths to absolute under repo root
-        if (-not [System.IO.Path]::IsPathRooted($featureDir)) {
-            $featureDir = Join-Path $repoRoot $featureDir
-        }
-        # Persist to feature.json so future sessions without the env var still
-        # work - unless the caller opted out for read-only resolution (#3025).
-        if (-not $noPersist) {
-            Save-FeatureJson -RepoRoot $repoRoot -FeatureDirectory $env:SPECIFY_FEATURE_DIRECTORY
-        }
-    } elseif (Test-Path $featureJson) {
+        $explicitOverride = $true
+        $featureDirectoryValue = $env:SPECIFY_FEATURE_DIRECTORY
+    } elseif (Test-Path -LiteralPath $featureJson) {
         $featureJsonRaw = [System.IO.File]::ReadAllText($featureJson, [System.Text.Encoding]::UTF8)
         try {
             $featureConfig = $featureJsonRaw | ConvertFrom-Json
@@ -202,14 +290,10 @@ function Get-FeaturePathsEnv {
             if ($ReturnNullOnError) { return $null }
             exit 1
         }
-        if ($featureConfig.feature_directory) {
-            $featureDir = $featureConfig.feature_directory
-            # Normalize relative paths to absolute under repo root
-            if (-not [System.IO.Path]::IsPathRooted($featureDir)) {
-                $featureDir = Join-Path $repoRoot $featureDir
-            }
+        if ($featureConfig.feature_directory -is [string] -and -not [string]::IsNullOrWhiteSpace($featureConfig.feature_directory)) {
+            $featureDirectoryValue = $featureConfig.feature_directory
         } else {
-            [Console]::Error.WriteLine("ERROR: Feature directory not found. Set SPECIFY_FEATURE_DIRECTORY or ensure .specify/feature.json contains feature_directory.")
+            [Console]::Error.WriteLine("ERROR: .specify/feature.json must contain a non-empty string feature_directory. Set SPECIFY_FEATURE_DIRECTORY or repair the saved pointer.")
             if ($ReturnNullOnError) { return $null }
             exit 1
         }
@@ -217,6 +301,19 @@ function Get-FeaturePathsEnv {
         [Console]::Error.WriteLine("ERROR: Feature directory not found. Set SPECIFY_FEATURE_DIRECTORY or run the specify command to create .specify/feature.json.")
         if ($ReturnNullOnError) { return $null }
         exit 1
+    }
+
+    try {
+        $featureResolution = Resolve-FeatureDirectoryPath -RepoRoot $repoRoot -FeatureDirectory $featureDirectoryValue -AllowExplicitExternal:$explicitOverride
+    } catch {
+        $source = if ($explicitOverride) { 'SPECIFY_FEATURE_DIRECTORY' } else { '.specify/feature.json feature_directory' }
+        [Console]::Error.WriteLine("ERROR: Refusing $source '$featureDirectoryValue': $($_.Exception.Message)")
+        if ($ReturnNullOnError) { return $null }
+        exit 1
+    }
+    $featureDir = $featureResolution.Path
+    if ($explicitOverride -and -not $noPersist -and $featureResolution.Persistable) {
+        Save-FeatureJson -RepoRoot $repoRoot -FeatureDirectory $featureResolution.RelativePath
     }
 
     # When no branch context exists (no SPECIFY_FEATURE, feature resolved via
@@ -417,7 +514,7 @@ function Get-SortedExtensionIds {
         }
     }
 
-    foreach ($directory in Get-ChildItem -Path $ExtensionsDir -Directory -ErrorAction SilentlyContinue) {
+    foreach ($directory in Get-ChildItem -LiteralPath $ExtensionsDir -Directory -ErrorAction SilentlyContinue) {
         if ($directory.Name -cmatch '^[a-z0-9-]+$' -and $directory.Name -cnotin $registeredNames) {
             $ranked += [PSCustomObject]@{ Priority = 10; Id = $directory.Name }
         }
@@ -547,7 +644,7 @@ function Resolve-TemplateContent {
 
     # Priority 1: Project overrides (always "replace")
     $override = Join-Path $base "overrides/$TemplateName.md"
-    if (Test-Path $override) {
+    if (Test-Path -LiteralPath $override) {
         return [System.IO.File]::ReadAllText(
             $override,
             [System.Text.Encoding]::UTF8
@@ -558,11 +655,11 @@ function Resolve-TemplateContent {
 
     # Priority 2: Installed presets (sorted by priority from .registry)
     $presetsDir = Join-Path $RepoRoot '.specify/presets'
-    if (Test-Path $presetsDir) {
+    if (Test-Path -LiteralPath $presetsDir) {
         $registryFile = Join-Path $presetsDir '.registry'
         $sortedPresets = @()
         $registryParsed = $false
-        if (Test-Path $registryFile) {
+        if (Test-Path -LiteralPath $registryFile) {
             try {
                 $registryData = [System.IO.File]::ReadAllText($registryFile, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
                 if ($null -eq $registryData -or $registryData -isnot [PSCustomObject]) {
@@ -602,7 +699,7 @@ function Resolve-TemplateContent {
         }
 
         if (-not $registryParsed) {
-            $sortedPresets = Get-ChildItem -Path $presetsDir -Directory -ErrorAction SilentlyContinue |
+            $sortedPresets = Get-ChildItem -LiteralPath $presetsDir -Directory -ErrorAction SilentlyContinue |
                 Where-Object { $_.Name -cmatch '^[a-z0-9-]+$' } |
                 Sort-Object Name |
                 ForEach-Object { $_.Name }
@@ -615,10 +712,10 @@ function Resolve-TemplateContent {
                 $manifestFilePath = ''
                 $manifestDeclared = $false
                 $manifest = Join-Path $presetsDir "$presetId/preset.yml"
-                if ((Test-Path $manifest) -and -not $pyCmd) {
+                if ((Test-Path -LiteralPath $manifest) -and -not $pyCmd) {
                     throw "Python 3 and PyYAML are required to resolve preset template composition"
                 }
-                if (Test-Path $manifest) {
+                if (Test-Path -LiteralPath $manifest) {
                     try {
                         # Use Python to parse YAML manifest for strategy and file path
                         $pyArgs = if ($pyCmd.Count -gt 1) { $pyCmd[1..($pyCmd.Count-1)] } else { @() }
@@ -706,14 +803,14 @@ except Exception as exc:
                 }
                 if ($manifestFilePath) {
                     $mf = Join-Path $presetsDir "$presetId/$manifestFilePath"
-                    if (Test-Path $mf) { $candidate = $mf }
+                    if (Test-Path -LiteralPath $mf) { $candidate = $mf }
                 }
                 if (-not $candidate -and -not $manifestDeclared) {
                     $cf = Join-Path $presetsDir "$presetId/templates/$TemplateName.md"
-                    if (Test-Path $cf) { $candidate = $cf }
+                    if (Test-Path -LiteralPath $cf) { $candidate = $cf }
                     if (-not $candidate) {
                         $cf = Join-Path $presetsDir "$presetId/$TemplateName.md"
-                        if (Test-Path $cf) { $candidate = $cf }
+                        if (Test-Path -LiteralPath $cf) { $candidate = $cf }
                     }
                 }
                 if ($candidate) {
@@ -729,13 +826,13 @@ except Exception as exc:
 
     # Priority 3: Extension-provided templates (always "replace")
     $extDir = Join-Path $RepoRoot '.specify/extensions'
-    if (-not $effectiveBaseFound -and (Test-Path $extDir)) {
+    if (-not $effectiveBaseFound -and (Test-Path -LiteralPath $extDir)) {
         foreach ($extensionId in Get-SortedExtensionIds -ExtensionsDir $extDir) {
             $candidate = Join-Path $extDir "$extensionId/templates/$TemplateName.md"
-            if (-not (Test-Path $candidate)) {
+            if (-not (Test-Path -LiteralPath $candidate)) {
                 $candidate = Join-Path $extDir "$extensionId/$TemplateName.md"
             }
-            if (Test-Path $candidate) {
+            if (Test-Path -LiteralPath $candidate) {
                 $layerPaths += $candidate
                 $layerStrategies += 'replace'
                 $effectiveBaseFound = $true
@@ -746,7 +843,7 @@ except Exception as exc:
 
     # Priority 4: Core templates (always "replace")
     $core = Join-Path $base "$TemplateName.md"
-    if (-not $effectiveBaseFound -and (Test-Path $core)) {
+    if (-not $effectiveBaseFound -and (Test-Path -LiteralPath $core)) {
         $layerPaths += $core
         $layerStrategies += 'replace'
     }

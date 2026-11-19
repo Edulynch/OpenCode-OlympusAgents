@@ -78,6 +78,18 @@ function Get-FileHashText([string]$Path) {
     }
 }
 
+function Assert-No-Config-Recovery([string]$Repo) {
+    $pendingPath = Join-Path $Repo '.olympus-cli-config-apply'
+    try { $pending = Get-Item -LiteralPath $pendingPath -Force -ErrorAction Stop }
+    catch {
+        if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { return }
+        Fail 'CONFIG_RECOVERY_PENDING' "Cannot safely inspect project recovery state: $($_.Exception.Message)"
+    }
+    if ($null -ne $pending) {
+        Fail 'CONFIG_RECOVERY_PENDING' 'A project config/settings transaction is pending; recover it explicitly before uninstalling.'
+    }
+}
+
 function Get-ManifestPropertyNames($Manifest) {
     if ($Manifest -is [System.Collections.IDictionary]) {
         return @($Manifest.Keys | ForEach-Object { [string]$_ })
@@ -262,6 +274,7 @@ try {
     # Revalidate the manifest and managed bytes under that lock before writing.
     . (Join-Path $PSScriptRoot 'target-writer-lock.ps1')
     $writerLock = Enter-OlympusTargetWriterLock $repo
+    Assert-No-Config-Recovery $repo
     $revalidatedState = Read-ProjectManifest $repo
     if (-not [string]::Equals($revalidatedState.Path, $state.Path, $pathComparison) -or
         (Get-FileHashText $revalidatedState.Path) -cne $manifestHashSnapshot) {

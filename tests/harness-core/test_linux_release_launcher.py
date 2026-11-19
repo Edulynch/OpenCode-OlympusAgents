@@ -79,6 +79,7 @@ class LinuxReleaseLauncher(unittest.TestCase):
             "tag_name": version, "published_at": "2020-01-01T00:00:00Z",
         }
         release_value.update(release_changes or {})
+        version = release_value["tag_name"]
         commit_value = {
             "sha": commit or self.commit,
             "commit": {"tree": {"sha": self.tree_sha}},
@@ -590,6 +591,8 @@ class LinuxReleaseLauncher(unittest.TestCase):
         identity = SimpleNamespace(version=version, commit=commit, package_root=ROOT)
         with (
             mock.patch.object(global_cli, "recorded_identity", return_value=identity),
+            mock.patch.object(global_cli, "_update_recovery_identity", return_value=None),
+            mock.patch.object(global_cli, "_ensure_current_durable") as ensure_durable,
             mock.patch.object(global_cli, "verify") as verify,
         ):
             response, code = LAUNCHER.run_action(
@@ -600,6 +603,165 @@ class LinuxReleaseLauncher(unittest.TestCase):
         self.assertEqual([f"{LAUNCHER._API}/releases/latest",
                           f"{LAUNCHER._API}/commits/{version}"], transport.urls)
         verify.assert_called_once_with(version=version, commit=commit)
+        ensure_durable.assert_called_once_with(version=version, commit=commit)
+
+    def test_update_recovery_uses_exact_tag_when_latest_has_advanced_then_public_verify(self):
+        from olympus import global_cli
+
+        target_commit = self.commit
+        latest_version = "v1.2.4"
+        latest_commit = "c" * 40
+        documents = self._documents(
+            release_changes={"tag_name": latest_version}, commit=latest_commit,
+        )
+        documents.update(self._documents(tag=self.version))
+        tag_url = f"{LAUNCHER._API}/releases/tags/{self.version}"
+        tree_url = f"{LAUNCHER._API}/git/trees/{self.tree_sha}?recursive=1"
+        _, archive_url = LAUNCHER._archive_root_name(target_commit)
+        transport = FakeTransport(
+            {
+                **documents,
+                tree_url: self._tree_document(),
+            },
+            {archive_url: self._archive()},
+        )
+        target = SimpleNamespace(
+            version=self.version, commit=target_commit, package_root=Path("/fixture/target"),
+        )
+        outcome = SimpleNamespace(
+            operation="update", result="committed", version=self.version,
+            commit=target_commit, package_root=str(target.package_root),
+            global_root="/fixture/global", changed_paths=(), detail="recovered",
+        )
+        global_cli = SimpleNamespace(
+            _update_recovery_identity=mock.Mock(return_value=target),
+            recorded_identity=mock.Mock(side_effect=AssertionError(
+                "strict current/global preflight must be bypassed only for recognized recovery",
+            )),
+            update=mock.Mock(return_value=outcome),
+            verify=mock.Mock(return_value=outcome),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            launcher_path = self._public_script_path(temporary_path)
+
+            with (
+                mock.patch.object(Path, "home", return_value=temporary_path / "home"),
+                mock.patch.dict(os.environ, {
+                    "XDG_DATA_HOME": str(temporary_path / "data"),
+                    "OPENCODE_CONFIG_DIR": str(temporary_path / "global"),
+                }),
+                mock.patch.object(LAUNCHER, "__file__", str(launcher_path)),
+                mock.patch.object(
+                    LAUNCHER, "_load_lifecycle",
+                    return_value=(global_cli, SimpleNamespace(), None),
+                ),
+                mock.patch.object(LAUNCHER, "_validate_source"),
+            ):
+                response, code = LAUNCHER.run_action(
+                    "update", source_root=ROOT, transport=transport,
+                    temp_parent=temporary_path,
+                )
+                self.assertEqual(0, code, response["data"]["native_stderr"])
+                self.assertEqual("ok", response["result"])
+                staged_source = global_cli.update.call_args.args[0]
+                self.assertEqual("source", staged_source.name)
+                global_cli.update.assert_called_once_with(
+                    staged_source,
+                    version=self.version, commit=target_commit,
+                )
+                global_cli.verify.assert_called_once_with(
+                    version=self.version, commit=target_commit,
+                )
+
+                global_cli.recorded_identity.side_effect = None
+                global_cli.recorded_identity.return_value = target
+                verify_response, verify_code = LAUNCHER.run_action(
+                    "verify", source_root=ROOT, transport=transport,
+                )
+                self.assertEqual(0, verify_code, verify_response["data"]["native_stderr"])
+                self.assertEqual("ok", verify_response["result"])
+
+        global_cli._update_recovery_identity.assert_called_once_with()
+        global_cli.recorded_identity.assert_called_once_with()
+        self.assertEqual(2, transport.urls.count(tag_url))
+        self.assertEqual(1, transport.urls.count(f"{LAUNCHER._API}/releases/latest"))
+        self.assertIn(f"{LAUNCHER._API}/commits/{latest_version}", transport.urls)
+        self.assertEqual(2, transport.urls.count(f"{LAUNCHER._API}/commits/{self.version}"))
+        self.assertIn(tree_url, transport.urls)
+        self.assertIn(archive_url, transport.urls)
+        self.assertEqual(2, global_cli.verify.call_count)
+
+    def test_update_recovery_rejects_tag_commit_mismatch_before_source_acquisition(self):
+        from olympus import global_cli
+
+        latest_version = "v1.2.4"
+        latest_commit = "c" * 40
+        documents = self._documents(
+            release_changes={"tag_name": latest_version}, commit=latest_commit,
+        )
+        documents.update(self._documents(tag=self.version, commit=latest_commit))
+        transport = FakeTransport(documents)
+        target = SimpleNamespace(
+            version=self.version, commit=self.commit, package_root=Path("/fixture/target"),
+        )
+        global_cli = SimpleNamespace(
+            _update_recovery_identity=mock.Mock(return_value=target),
+            recorded_identity=mock.Mock(side_effect=AssertionError("ordinary preflight ran")),
+            update=mock.Mock(),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            with (
+                mock.patch.object(
+                    LAUNCHER, "_load_lifecycle",
+                    return_value=(global_cli, SimpleNamespace(), None),
+                ),
+                mock.patch.object(LAUNCHER, "_download_source") as download,
+            ):
+                response, code = LAUNCHER.run_action(
+                    "update", source_root=ROOT, transport=transport,
+                    temp_parent=temporary_path,
+                )
+        self.assertEqual(3, code)
+        self.assertEqual("blocked", response["result"])
+        self.assertIn("does not match the recorded interrupted update",
+                      response["data"]["native_stderr"])
+        global_cli._update_recovery_identity.assert_called_once_with()
+        global_cli.recorded_identity.assert_not_called()
+        global_cli.update.assert_not_called()
+        download.assert_not_called()
+        self.assertNotIn(f"{LAUNCHER._API}/git/trees/{self.tree_sha}?recursive=1",
+                         transport.urls)
+
+    def test_update_dry_run_does_not_attempt_split_recovery(self):
+        from olympus import global_cli
+
+        version = "v1.2.4"
+        commit = "c" * 40
+        transport = FakeTransport(self._documents(
+            release_changes={"tag_name": version}, commit=commit,
+        ))
+        global_cli = SimpleNamespace(
+            _update_recovery_identity=mock.Mock(
+                side_effect=AssertionError("dry-run must not inspect recovery state"),
+            ),
+            recorded_identity=mock.Mock(side_effect=RuntimeError("split state is not verified")),
+            update=mock.Mock(),
+        )
+        with mock.patch.object(
+            LAUNCHER, "_load_lifecycle",
+            return_value=(global_cli, SimpleNamespace(), None),
+        ):
+            response, code = LAUNCHER.run_action(
+                "update", dry_run=True, source_root=ROOT, transport=transport,
+            )
+        self.assertEqual(3, code)
+        self.assertEqual("blocked", response["result"])
+        global_cli._update_recovery_identity.assert_not_called()
+        global_cli.update.assert_not_called()
+        self.assertFalse(any("/git/trees/" in url or urlsplit(url).hostname == "codeload.github.com"
+                             for url in transport.urls))
 
     def test_public_bootstrap_install_current_verified_identity_skips_archive(self):
         for dry_run in (False, True):

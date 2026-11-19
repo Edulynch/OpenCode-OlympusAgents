@@ -60,6 +60,12 @@ function Normalize-Managed-Path([string]$Path) {
     return $relative
 }
 
+function Get-Literal-Attributes([string]$Path) {
+    try { return [IO.File]::GetAttributes($Path) }
+    catch [IO.FileNotFoundException] { return $null }
+    catch [IO.DirectoryNotFoundException] { return $null }
+}
+
 function Get-Contained-Path([string]$Root, [string]$Relative) {
     $rootPath = Full-Path $Root
     $segments = $Relative -split '/'
@@ -72,12 +78,12 @@ function Get-Contained-Path([string]$Root, [string]$Relative) {
     $cursor = $rootPath
     for ($index = 0; $index -lt $segments.Count; $index++) {
         $cursor = Join-Path $cursor $segments[$index]
-        $item = Get-Item -LiteralPath $cursor -Force -ErrorAction SilentlyContinue
-        if ($null -eq $item) { continue }
-        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        $attributes = Get-Literal-Attributes $cursor
+        if ($null -eq $attributes) { continue }
+        if ($attributes -band [IO.FileAttributes]::ReparsePoint) {
             Fail 'WORKTREE_SETUP_PATH_UNSAFE' "Managed path traverses a reparse point: $Relative"
         }
-        if ($index -lt ($segments.Count - 1) -and -not $item.PSIsContainer) {
+        if ($index -lt ($segments.Count - 1) -and -not ($attributes -band [IO.FileAttributes]::Directory)) {
             Fail 'WORKTREE_SETUP_PATH_UNSAFE' "Managed parent is not a directory: $Relative"
         }
     }
@@ -137,7 +143,7 @@ try {
     # Reject the same foreign OpenCode config locations as the bootstrap
     # installer, before calculating or applying any worktree writes.
     foreach ($alternative in @('opencode.json', '.opencode/opencode.json', '.opencode/opencode.jsonc')) {
-        if (Test-Path -LiteralPath (Get-Contained-Path $target $alternative)) {
+        if ($null -ne (Get-Literal-Attributes (Get-Contained-Path $target $alternative))) {
             Fail 'WORKTREE_SETUP_CONFLICT' "Foreign OpenCode config exists: $alternative"
         }
     }
@@ -145,13 +151,17 @@ try {
     $manifestRelative = '.opencode/orchestrator-install.json'
     foreach ($checkout in @($base, $target)) {
         $codexManifestPath = Get-Contained-Path $checkout '.codex/orchestrator-install.json'
-        if (Test-Path -LiteralPath $codexManifestPath) {
+        if ($null -ne (Get-Literal-Attributes $codexManifestPath)) {
             Fail 'WORKTREE_SETUP_MANIFEST_INVALID' "Codex project manifests are unsupported and will not be migrated: $checkout"
         }
     }
     $sourceManifestPath = Get-Contained-Path $base $manifestRelative
-    if (-not (Test-Path -LiteralPath $sourceManifestPath -PathType Leaf)) {
+    $sourceManifestAttributes = Get-Literal-Attributes $sourceManifestPath
+    if ($null -eq $sourceManifestAttributes) {
         Fail 'WORKTREE_SETUP_MANIFEST_MISSING' 'The source checkout has no Olympus project install manifest.'
+    }
+    if ($sourceManifestAttributes -band [IO.FileAttributes]::Directory) {
+        Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'The source Olympus project install manifest is not a file.'
     }
     try { $manifestText = [IO.File]::ReadAllText($sourceManifestPath); $manifest = $manifestText | ConvertFrom-Json -Depth 100 }
     catch { Fail 'WORKTREE_SETUP_MANIFEST_INVALID' 'The source checkout has an invalid Olympus install manifest.' }
@@ -201,7 +211,8 @@ try {
         $expectedHash = ([string]$entry.sha256).ToLowerInvariant()
         if ($expectedHash -notmatch '^[0-9a-f]{64}$') { Fail 'WORKTREE_SETUP_MANIFEST_INVALID' "Invalid SHA-256 for $relative" }
         $sourcePath = Get-Contained-Path $base $relative
-        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+        $sourceAttributes = Get-Literal-Attributes $sourcePath
+        if ($null -eq $sourceAttributes -or $sourceAttributes -band [IO.FileAttributes]::Directory) {
             Fail 'WORKTREE_SETUP_SOURCE_MISSING' "Managed source file is missing: $relative"
         }
         $bytes = [IO.File]::ReadAllBytes($sourcePath)
@@ -225,13 +236,14 @@ try {
     $manifestBytes = [Text.UTF8Encoding]::new($false).GetBytes($manifestText)
     $manifestHash = Sha-Bytes $manifestBytes
     $destinationManifest = Get-Contained-Path $target $manifestRelative
-    $destinationOwned = Test-Path -LiteralPath $destinationManifest
+    $destinationManifestAttributes = Get-Literal-Attributes $destinationManifest
+    $destinationOwned = $null -ne $destinationManifestAttributes
 
     # An existing, byte-identical file is not automatically Olympus-owned.
     # Only a matching manifest already present in this worktree proves ownership.
     if ($destinationOwned) {
-        $item = Get-Item -LiteralPath $destinationManifest -Force
-        if ($item.PSIsContainer -or (Sha-Bytes ([IO.File]::ReadAllBytes($destinationManifest))) -cne $manifestHash) {
+        if (($destinationManifestAttributes -band [IO.FileAttributes]::Directory) -or
+            (Sha-Bytes ([IO.File]::ReadAllBytes($destinationManifest))) -cne $manifestHash) {
             Fail 'WORKTREE_SETUP_CONFLICT' 'Refusing to use an existing or drifted Olympus manifest.'
         }
     }
@@ -239,33 +251,41 @@ try {
     $writes = [Collections.Generic.List[object]]::new()
     foreach ($payload in $payloads) {
         $destination = Get-Contained-Path $target $payload.Relative
-        if (Test-Path -LiteralPath $destination) {
+        $destinationAttributes = Get-Literal-Attributes $destination
+        if ($null -ne $destinationAttributes) {
             if (-not $destinationOwned) {
                 Fail 'WORKTREE_SETUP_CONFLICT' "Refusing to adopt an existing file without Olympus ownership: $($payload.Relative)"
             }
-            $item = Get-Item -LiteralPath $destination -Force
-            if ($item.PSIsContainer -or (Sha-Bytes ([IO.File]::ReadAllBytes($destination))) -cne $payload.Hash) {
+            if (($destinationAttributes -band [IO.FileAttributes]::Directory) -or
+                (Sha-Bytes ([IO.File]::ReadAllBytes($destination))) -cne $payload.Hash) {
                 Fail 'WORKTREE_SETUP_CONFLICT' "Refusing to replace an existing user or drifted file: $($payload.Relative)"
             }
         } else {
             $null = $writes.Add([pscustomobject]@{ Path=$destination; Bytes=$payload.Bytes; Relative=$payload.Relative })
         }
     }
-    if (-not $destinationOwned) {
-        $null = $writes.Add([pscustomobject]@{ Path=$destinationManifest; Bytes=$manifestBytes; Relative=$manifestRelative })
-    }
 
+    $created = 0
+    if (-not $destinationOwned) {
+        # Reserve the fully preflighted inventory before publishing any payload.
+        if ($null -ne (Get-Literal-Attributes $destinationManifest)) {
+            Fail 'WORKTREE_SETUP_CONFLICT' 'Destination appeared during setup: .opencode/orchestrator-install.json'
+        }
+        Write-New-File $destinationManifest $manifestBytes
+        $created++
+    }
     foreach ($write in $writes) {
         # A file appearing after preflight has no verified ownership, even when
         # its bytes match. File.Move independently prevents overwrites.
         $destination = Get-Contained-Path $target $write.Relative
-        if (Test-Path -LiteralPath $destination) {
+        if ($null -ne (Get-Literal-Attributes $destination)) {
             Fail 'WORKTREE_SETUP_CONFLICT' "Destination appeared during setup: $($write.Relative)"
         }
         Write-New-File $destination $write.Bytes
+        $created++
     }
 
-    Write-Output "OLYMPUS_WORKTREE_SETUP: PASS (source=$base; target=$target; created=$($writes.Count))"
+    Write-Output "OLYMPUS_WORKTREE_SETUP: PASS (source=$base; target=$target; created=$created)"
     exit 0
 } catch {
     Write-Error $_.Exception.Message

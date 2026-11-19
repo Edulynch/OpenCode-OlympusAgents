@@ -65,7 +65,7 @@ curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/do
 #### Windows
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.12.0/install.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.12.1/install.ps1')))
 ```
 
 The tagged `install.ps1` defaults to its embedded version and downloads the exact tag archive, so no extra `-Version` argument is needed. This bypasses `latest` selection. A versioned URL for `install-olympus.ps1` would not pin the installed version: that bootstrap still selects the latest release.
@@ -139,6 +139,19 @@ known but absent, Olympus creates only its directory hierarchy and stable lock;
 without a managed manifest, the setter writes only the requested user override
 configuration.
 
+When a setter must update both preferences and a managed agent/manifest, it
+records exact recovery evidence under the same writer lock. If the process is
+interrupted, use the matching `olympus config recover` command before retrying.
+The atomic preference replacement is the commit point: if preferences still
+match their old bytes (or remain absent), recovery restores only transaction-owned
+managed files; if they match the exact new bytes, recovery keeps the committed
+preferences and managed outputs and only cleans the journal. Recovery never
+rewrites or removes preferences. Changed preference bytes, managed files, paths,
+or modes leave the evidence untouched for inspection. Keep the recorded global
+`OLYMPUS_CONFIG_FILE` selection in place until recovery finishes. Preference-only
+or single-file updates continue to use one atomic replacement without a journal.
+This covers process interruption, not power loss or hardware durability.
+
 An incomplete or unsupported format is rejected without automatic conversion,
 adoption, or deletion. A complete current-format installation remains valid
 regardless of which release created it. If an older unsupported installation
@@ -157,7 +170,7 @@ Maintainers may run `install.ps1` directly against a trusted local checkout inst
 ```powershell
 $source = (Resolve-Path '.').Path
 pwsh -NoProfile -File (Join-Path $source 'install.ps1') `
-    -Version 'v0.12.0' -SourceRoot $source -DryRun
+    -Version 'v0.12.1' -SourceRoot $source -DryRun
 ```
 
 Use the version actually declared by the checkout; do not copy the example version blindly. Local-source installation is for advanced, trusted-checkout use and is not evidence that the corresponding release is published or immutable.
@@ -209,7 +222,7 @@ below do not inherit that rule.
 | `olympus models set-family <family> --opencode <id>` / `olympus agents set-model <role> [--family <family>] [--effort <value>]` (at least one option required) | Canonical checkout selected by `--source`, or this CLI's bundled source | Edits canonical model intent. `--dry-run` previews; omitting it executes the source edit. JSON output for these edits requires `--dry-run`. |
 | `olympus config list` / `olympus config check` | List uses auto-detection or explicit scope/target; check reads the selected source and OpenCode harness | Both are read-only. List shows effective values, precedence, and paths; check compares renderer output without writing. |
 | `olympus config apply --scope project\|global --harness opencode` | Project requires an absolute existing worktree `--target`; global forbids `--target` | Exactly one of `--dry-run` or `--execute` is required. Preview does not write target resources; execution applies the selected managed OpenCode configuration. |
-| `olympus config recover` | No scope recovers a pending canonical source edit; project recovery requires `--scope project --target`; global recovery uses `--scope global --harness opencode` | Explicitly reconciles pending transaction state and may change files. Use only for the matching pending operation. |
+| `olympus config recover` | No scope recovers a pending canonical source edit; project recovery requires `--scope project --target`; global recovery uses `--scope global --harness opencode` | Explicitly reconciles pending source edits, config applies, or coordinated user-settings updates and may change files. Use only for the matching pending operation. |
 | `olympus status` | Defaults to project and requires `--target`; use `--scope global` without a target for global metadata | Read-only reported manifest/install metadata; it does not verify file integrity. |
 | `olympus doctor` | Auto-detects or accepts explicit scope/target; project scope requires `--target`; `--harness opencode` is the supported harness | Read-only configuration and managed-installation diagnostics. It does not apply repairs or check provider access. |
 | `olympus completion powershell` / `olympus completion bash` | Current shell only: PowerShell 7 on Windows or Bash on Linux | Prints optional native registration code. Load it explicitly in the current shell; completion uses local CLI commands/options/choices only and does not inspect files, providers, networks, or configuration. No profile is edited. |

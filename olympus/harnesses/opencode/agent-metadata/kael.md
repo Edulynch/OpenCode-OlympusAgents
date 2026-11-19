@@ -85,6 +85,12 @@ permissions:
     resource: ".opencode/plugins/olympus-activity/**"
     effect: deny
   - action: edit
+    resource: ".opencode/commands/olympus.ultra.md"
+    effect: deny
+  - action: edit
+    resource: ".opencode/commands/olympus.performance.md"
+    effect: deny
+  - action: edit
     resource: ".opencode/scripts/worktree-setup.ps1"
     effect: deny
   - action: edit

@@ -14,6 +14,8 @@ from pathlib import Path
 _REASON = re.compile(r"(?m)^OLYMPUS_VERIFY_REASON: ([A-Z][A-Z0-9_]*)\s*$")
 _DETAIL = re.compile(r"(?m)^OLYMPUS_VERIFY_DETAIL: (.*)$")
 _POWERSHELL_VERSION = re.compile(r"(?m)^PowerShell ([0-9]+)\.")
+_VERSION_TIMEOUT = 10
+_VERIFY_TIMEOUT = 60
 _DRIFT_REASONS = {"MANAGED_FILE_DRIFT", "MANAGED_FILE_MISSING", "MANAGED_FILE_MISMATCH", "ROSTER_MISMATCH"}
 _INVALID_MANIFEST_REASONS = {"INSTALL_CONFLICT", "INSTALL_MANIFEST_INCOMPATIBLE"}
 
@@ -35,6 +37,7 @@ def _powershell_7(executable: str) -> bool:
         "encoding": "utf-8",
         "errors": "replace",
         "check": False,
+        "timeout": _VERSION_TIMEOUT,
     }
     if os.name == "nt":
         options["creationflags"] = subprocess.CREATE_NO_WINDOW
@@ -67,6 +70,7 @@ def _run_verify_only(executable: str, source: Path, target: Path, harness: str,
         "encoding": "utf-8",
         "errors": "replace",
         "check": False,
+        "timeout": _VERIFY_TIMEOUT,
     }
     if os.name == "nt":
         options["creationflags"] = subprocess.CREATE_NO_WINDOW
@@ -189,6 +193,9 @@ def diagnose(source: Path, args, response: dict, *, source_version: str,
         if not _powershell_7(executable):
             return _unavailable(response, "verifier_version_unsupported",
                                  "PowerShell 7 or later is required; no verification was claimed.")
+    except subprocess.TimeoutExpired:
+        return _unavailable(response, "verification_unavailable",
+                            f"The PowerShell version check timed out after {_VERSION_TIMEOUT} seconds.")
     except OSError as error:
         return _unavailable(response, "verifier_unavailable", f"Could not query PowerShell version: {error}")
 
@@ -196,6 +203,9 @@ def diagnose(source: Path, args, response: dict, *, source_version: str,
     data["verification"]["source_version"] = verification_version
     try:
         completed = _run_verify_only(executable, source, target, verify_harness, verification_version)
+    except subprocess.TimeoutExpired:
+        return _unavailable(response, "verification_unavailable",
+                            f"PowerShell VerifyOnly timed out after {_VERIFY_TIMEOUT} seconds.")
     except OSError as error:
         return _unavailable(response, "verifier_unavailable", f"Could not start PowerShell VerifyOnly: {error}")
 

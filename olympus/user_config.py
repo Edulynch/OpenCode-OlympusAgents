@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import tomllib
 from pathlib import Path
@@ -41,7 +42,7 @@ def config_path(scope: str = "global", target: Path | None = None) -> Path:
     config_home = os.environ.get("OLYMPUS_CONFIG_HOME")
     if config_home:
         root = Path(config_home)
-    elif os.environ.get("APPDATA"):
+    elif os.name == "nt" and os.environ.get("APPDATA"):
         root = Path(os.environ["APPDATA"]) / "Olympus"
     elif os.environ.get("XDG_CONFIG_HOME"):
         root = Path(os.environ["XDG_CONFIG_HOME"]) / "olympus"
@@ -257,6 +258,32 @@ def _write_atomic(path: Path, content: bytes) -> None:
             pass
 
 
+def _ensure_global_root(root: Path):
+    from . import global_readonly
+
+    try:
+        if sys.platform.startswith("linux"):
+            return global_readonly._ensure_linux_directory(root, create=True)
+        root.mkdir(parents=True, exist_ok=True)
+        global_readonly._root(root)
+        return global_readonly._root(root.resolve(strict=True)), None
+    except (global_readonly.GlobalFault, OSError, RuntimeError) as error:
+        raise UserConfigError(
+            f"Cannot safely create the global OpenCode root; no configuration was changed: {error}"
+        ) from error
+
+
+def _verify_global_root(global_readonly, root: Path, identity: tuple[int, int] | None) -> None:
+    if identity is None:
+        return
+    try:
+        global_readonly._verify_linux_directory(root, identity)
+    except global_readonly.GlobalFault as error:
+        raise UserConfigError(
+            f"Global OpenCode root changed before configuration write; no configuration was changed: {error}"
+        ) from error
+
+
 def _prepare_installed_update(source: Path, role: str, model: str, effort: str,
                               scope: str, target: Path | None, *, global_root: Path | None = None,
                               max_children: int | None = None):
@@ -359,29 +386,38 @@ def _config_bytes(path: Path, scope: str, target: Path | None) -> bytes | None:
     return path.read_bytes()
 
 
-def _commit_override(path: Path, encoded: bytes, scope: str, target: Path | None, installed) -> None:
+def _commit_override(path: Path, encoded: bytes, scope: str, target: Path | None, installed,
+                     *, root_check=None) -> None:
     changes: list[tuple[Path, bytes | None]] = []
     config_before = _config_bytes(path, scope, target)
     try:
         if installed is not None:
             agent_path, current, updated, manifest_path, manifest_before, manifest_after = installed
             if updated != current:
+                if root_check is not None:
+                    root_check()
                 _write_atomic(agent_path, updated)
                 changes.append((agent_path, current))
                 if manifest_after != manifest_before:
+                    if root_check is not None:
+                        root_check()
                     _write_atomic(manifest_path, manifest_after)
                     changes.append((manifest_path, manifest_before))
+        if root_check is not None:
+            root_check()
         _write_atomic(path, encoded)
         changes.append((path, config_before))
     except BaseException as error:
         rollback_errors = []
         for changed_path, old in reversed(changes):
             try:
+                if root_check is not None:
+                    root_check()
                 if old is None:
                     changed_path.unlink(missing_ok=True)
                 else:
                     _write_atomic(changed_path, old)
-            except OSError as rollback_error:
+            except (OSError, UserConfigError) as rollback_error:
                 rollback_errors.append(str(rollback_error))
         if rollback_errors:
             raise UserConfigError("Configuration update failed and rollback could not be confirmed; inspect the affected files.") from error
@@ -398,6 +434,7 @@ def set_override(source: Path, role: str, field: str, value: str,
     path = config_path(scope, target)
     lock = None
     global_root = None
+    global_root_identity = None
     if scope == "project":
         from . import config_apply, install_routing, source_edit
 
@@ -425,10 +462,10 @@ def set_override(source: Path, role: str, field: str, value: str,
                 f"Cannot safely resolve the global OpenCode root; no configuration was changed: {error}"
             ) from error
         try:
-            global_root.mkdir(parents=True, exist_ok=True)
-            global_readonly._root(global_root)
-            global_root = global_readonly._root(global_root.resolve(strict=True))
+            global_root, global_root_identity = _ensure_global_root(global_root)
+            _verify_global_root(global_readonly, global_root, global_root_identity)
             lock = source_edit._acquire_lock(global_root, create=True)
+            _verify_global_root(global_readonly, global_root, global_root_identity)
         except (global_readonly.GlobalFault, source_edit.LockError, OSError, RuntimeError) as error:
             raise UserConfigError(
                 f"Cannot safely lock the global OpenCode root; no configuration was changed: {error}"
@@ -458,7 +495,11 @@ def set_override(source: Path, role: str, field: str, value: str,
         )
         if scope == "project" and installed is None:
             raise UserConfigError("The project-managed OpenCode agent is unavailable; no configuration was changed.")
-        _commit_override(path, encoded, scope, target, installed)
+        root_check = (
+            (lambda: _verify_global_root(global_readonly, global_root, global_root_identity))
+            if scope != "project" and global_root_identity is not None else None
+        )
+        _commit_override(path, encoded, scope, target, installed, root_check=root_check)
     finally:
         if lock is not None:
             from . import source_edit
@@ -480,10 +521,10 @@ def set_max_children(source: Path, value: int) -> tuple[Path, bool]:
             f"Cannot safely resolve the global OpenCode root; no configuration was changed: {error}"
         ) from error
     try:
-        global_root.mkdir(parents=True, exist_ok=True)
-        global_readonly._root(global_root)
-        global_root = global_readonly._root(global_root.resolve(strict=True))
+        global_root, global_root_identity = _ensure_global_root(global_root)
+        _verify_global_root(global_readonly, global_root, global_root_identity)
         lock = source_edit._acquire_lock(global_root, create=True)
+        _verify_global_root(global_readonly, global_root, global_root_identity)
     except (global_readonly.GlobalFault, source_edit.LockError, OSError, RuntimeError) as error:
         raise UserConfigError(
             f"Cannot safely lock the global OpenCode root; no configuration was changed: {error}"
@@ -505,7 +546,11 @@ def set_max_children(source: Path, value: int) -> tuple[Path, bool]:
             source, "kael", model, effort, "global", None,
             global_root=global_root, max_children=value,
         )
-        _commit_override(config_path(), encoded, "global", None, installed)
+        root_check = (
+            (lambda: _verify_global_root(global_readonly, global_root, global_root_identity))
+            if global_root_identity is not None else None
+        )
+        _commit_override(config_path(), encoded, "global", None, installed, root_check=root_check)
     finally:
         source_edit._release_lock(lock)
     return config_path().resolve(), installed is not None

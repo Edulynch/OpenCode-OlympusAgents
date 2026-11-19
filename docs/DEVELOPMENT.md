@@ -371,7 +371,7 @@ retained as evidence, not executed as current contract tests by these profiles.
 | --- | --- |
 | [`FAST / Windows`](../.github/workflows/fast.yml) | Required for `master`. Runs offline FAST, authority checks, the packaged CLI lifecycle with mocked release downloads, native PowerShell completion, and isolated installer and worktree fixtures. The post-install fixture uses mocked OpenCode. |
 | [`Read-only and integrated CLI coverage / Linux`](../.github/workflows/fast.yml) | Read-only CLI without TOML Kit, followed by integrated CLI tests in a dedicated environment. |
-| [`Project manifest, writer-lock, and CLI safety`](../.github/workflows/fast.yml) | Native filesystem tests on Windows, Linux, and macOS. Windows also checks project diagnostics, installer routing, global diagnostics, and project inventory isolation. |
+| [`Project manifest, writer-lock, and CLI safety`](../.github/workflows/fast.yml) | Shared Python manifest and lock tests on Windows and Linux. Windows retains PowerShell-specific coverage; Linux checks the POSIX launcher, global install, packaged CLI, and release routing without PowerShell. No macOS runner. |
 | [`Secret and link gates`](../.github/workflows/secrets.yml) | Secret scanning and documentation links on Windows and Linux. |
 | [`Global-only ASK/DENY / Windows V2 API`](../.github/workflows/native-permission-api.yml) | Real OpenCode V2 permission handling with a local model stub. The assertion rejects ASK through the API; it does not test the interactive permission UI or a hosted model. |
 
@@ -631,6 +631,10 @@ Use this state machine for each release:
 4. **If PASS, create the GitHub Release.** Use the same tag and validated notes,
    then run `pwsh -NoProfile -File ./tests/release/github-release-notes.ps1
    -Version <tag>` to check the actual published Release body.
+   For Linux-enabled releases, include the exact tagged `install-olympus.sh`
+   asset alongside `install-olympus.ps1`. Verify both assets against the tag
+   before making the draft immutable. After publishing, check the public `sh`
+   entrypoint in an isolated Ubuntu 24.04 WSL 2 environment without PowerShell.
 5. **If FAIL, keep the tag immutable and advance the patch version.** Do not
    move, delete, or recreate the failed tag; make corrections on `master`,
    validate the next patch candidate, and repeat the state machine. A failed

@@ -4,20 +4,20 @@
 
 Quick guides: [English](../README.md) · [Español](../README.ES.md).
 
-The [Fast Install](../README.md#fast-install) is global and OpenCode-only. It has no project/harness selectors or menus, and the current directory never selects the installation target. It sets up the per-user `olympus` command and its user PATH entry; open a new PowerShell 7 shell afterward. It also installs exactly `/olympus.ultra` and `/olympus.performance` as global OpenCode commands; bare aliases are not provided.
+The [Fast Install](../README.md#fast-install) is per-user, global, and OpenCode-only. It has no project/harness selectors or menus, and the current directory never selects the installation target. It installs the `olympus` CLI and exactly `/olympus.ultra` and `/olympus.performance` as global OpenCode commands; bare aliases are not provided.
 
 Choose the latest release below or [install a specific version](#install-a-specific-version). Do not execute installers from a mutable `master` URL.
 
 Then use `olympus version` and `olympus update` from any directory. The public [Fast Uninstall](../README.md#fast-uninstall) entrypoint and `olympus uninstall` remove only managed resources and Olympus's PATH entry.
 
-The public PowerShell entrypoints are executable code. They select an immutable stable release and validate the tag/installer identity before use; GitHub's immutability assertion is not independent cryptographic signature verification.
+The public entrypoints are executable code. They select an immutable stable release and validate the tag/installer identity before use; GitHub's immutability assertion is not independent cryptographic signature verification.
 
 ## Requirements and platform limits
 
-- Windows; this is the only currently qualified installer platform. Linux and macOS are not qualified.
-- PowerShell 7 (`pwsh`) installed and available on `PATH`. Windows PowerShell 5.1 may start an entrypoint only when PowerShell 7 is also available; 5.1 alone is insufficient.
-- Python 3.11+ is used internally by the global CLI; users invoke `olympus`, not `python -m olympus`.
-- OpenCode V2. This does not establish runtime discovery for every version.
+- **Windows:** PowerShell 7 (`pwsh`) on `PATH`. Windows PowerShell 5.1 alone is insufficient. `v0.11.1` is Windows-only.
+- **Linux:** use a release that provides `install-olympus.sh`. The lifecycle and runtime discovery were validated on Ubuntu 24.04 in WSL 2 with OpenCode V2.3.2. This does not qualify native Linux. The launcher uses POSIX `sh`; Bash, PowerShell, and `sudo` are not required.
+- **macOS:** no CI coverage and not qualified.
+- **All supported installs:** OpenCode V2 and Python 3.11+. Runtime discovery on every OpenCode version is not implied.
 
 OpenCode is the only currently supported Olympus runtime. See the [OpenCode capability contract](HARNESS-CAPABILITIES.md).
 
@@ -32,7 +32,21 @@ Invoke the downloaded script block with `&` as shown.
 
 Both source entrypoints, `install-olympus.ps1` and `uninstall-olympus.ps1`, are fixed to global OpenCode. Install accepts `-DryRun` or `-Update`; uninstall has no selection arguments. No interactive selection is required.
 
+## Linux `sh` entrypoint
+
+Download `install-olympus.sh` from an [official release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) that includes it. Review the script, then run:
+
+```sh
+sh ./install-olympus.sh --dry-run
+sh ./install-olympus.sh
+~/.local/bin/olympus doctor --scope global
+```
+
+On Linux, the launcher is `~/.local/bin/olympus` and packages live under `$XDG_DATA_HOME/olympus` (default `~/.local/share/olympus`). Use the full launcher path if `~/.local/bin` is not on `PATH`. The installer does not edit your `PATH` or shell profiles. Run `olympus uninstall` to remove the active package, or `sh ./install-olympus.sh uninstall` to resume that operation if the launcher was already removed.
+
 ### Install a specific version
+
+These pinned examples use the Windows installer.
 
 ```powershell
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.11.1/install.ps1')))
@@ -160,9 +174,9 @@ below do not inherit that rule.
 | Command | Scope and target | Effect |
 |---|---|---|
 | `olympus version` (`--version`) | The release selected by the CLI, or by `--source` if supplied | Prints one version line. Does not verify the OpenCode installation. |
-| `olympus update` (`upgrade`) | Fixed global OpenCode; CWD does not select a project | Installs a newer immutable stable release; Windows/PowerShell 7 only. When both installed versions match the latest, it reports that Olympus is up to date without downloading or running the installer. There is no preview mode. |
+| `olympus update` (`upgrade`) | Fixed global OpenCode; CWD does not select a project | Installs a newer immutable stable release. When both installed versions match the latest, it reports that Olympus is up to date without downloading the release archive or running the installer. There is no preview mode. |
 | `olympus install` | Fixed global OpenCode; no scope/harness/target/version selectors | `--dry-run` previews. Otherwise the installer executes; `--execute` makes that intent explicit. `--json` captures native output. |
-| `olympus uninstall` | Fixed global OpenCode | `--dry-run` previews; otherwise removes unchanged manifest-owned resources, reverses the still-owned default field, and uninstalls the global CLI/PATH entry. |
+| `olympus uninstall` | Fixed global OpenCode | `--dry-run` previews; otherwise removes unchanged manifest-owned resources, reverses the still-owned default field, and removes the active CLI. PATH entry cleanup applies only to Windows. |
 | `olympus <role> set-model <id>` / `set-effort <value>` | `<role>`: `kael`, `veyra`, `orin`, `atlas`, `kovan`, `argus`, `nox`, `vera`, `talos`, `thales`, or `helios`; auto-detects or accepts scope/target | Writes the user override immediately and updates a managed installed OpenCode agent when applicable. Global setters require a safely resolved root and honor the shared lock and pending-recovery controls above. This is not a canonical source edit and has no dry-run flag. |
 | `olympus config set-max-parallel N` | Global user configuration; `N` is an integer from 1 to 8 | Updates Kael's prompt-level direct-child ceiling and the managed global Kael prompt when installed. Default is 4. It does not control the native scheduler, combine separate root sessions into one quota, cancel active children, or update existing project installations implicitly. |
 | `olympus models list`, `olympus agents list` | Canonical source for models; agents list uses auto-detection or explicit scope/target | Read-only lists. `models list` is offline; `agents list` shows effective values and their sources. |
@@ -303,15 +317,15 @@ declaration with an inferred default.
 
 Public installation, update, and uninstall remain global/OpenCode-only. This does not remove project-scoped configuration: model overrides, `config list`/`check`/`apply`, matching `config recover`, `status`, and read-only `doctor` remain separate CLI operations for OpenCode. They do not install missing resources or turn project configuration into project installation. Existing local overrides are not automatically cleaned.
 
-`--dry-run` may use temporary acquisition/cache locations but does not write global resources. The official engine resolves the global root. The CLI and update are qualified on Windows with PowerShell 7.
+`--dry-run` may use temporary acquisition/cache locations but does not write global resources. The official engine resolves the global root; the current project is not the installation target.
 
 ## Installation safety
 
 - Execute installers only from trusted official release sources or an explicitly trusted local checkout.
 - Installation uses ownership manifests and managed-file hashes; unrelated user files are preserved, and conflicting or drifted managed resources are not silently overwritten.
 - Uninstall removes only unchanged, manifest-owned resources. Review any ownership or drift error; do not bypass it.
-- `-VerifyOnly` is read-only; it verifies the global OpenCode resources and rejects pending default-agent receipts.
-- Static installation does not establish runtime discovery on every runtime/version. Global installation is Windows-qualified only.
+- Windows `-VerifyOnly` and `olympus doctor --scope global` are read-only; they check global OpenCode resources without approving pending default-agent receipts.
+- Static installation does not establish runtime discovery on every OpenCode version. See the [platform limits](#requirements-and-platform-limits).
 
 ## Troubleshooting
 

@@ -10,7 +10,7 @@
 
 [![Latest release](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) [![Windows qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](docs/HARNESSES.md) [![MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
 
-**[🎯 Try it](#your-first-task) · [⚡ Install](#fast-install) · [👥 Team](#the-team) · [🧭 Commands](#task-parallelism) · [🛠️ CLI](#portable-cli) · [📚 Guides](#guides)**
+**[🎯 Try it](#your-first-task) · [⚡ Install](#fast-install) · [🧩 Team](#the-team) · [🧭 Commands](#task-parallelism) · [🛠️ CLI](#portable-cli) · [📚 Guides](#guides)**
 
 </div>
 
@@ -72,7 +72,7 @@ curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/do
 
 <a id="the-team"></a>
 
-## 👥 Meet the team
+## 🧩 Meet the team
 
 | Agent | When it helps |
 | --- | --- |

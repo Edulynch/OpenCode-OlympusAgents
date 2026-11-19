@@ -14,7 +14,7 @@ The public entrypoints are executable code. They select an immutable stable rele
 
 ## Requirements and platform limits
 
-- **Windows:** PowerShell 7 (`pwsh`) on `PATH`. Windows PowerShell 5.1 alone is insufficient. `v0.11.1` is Windows-only.
+- **Windows:** PowerShell 7 (`pwsh`) on `PATH`. Windows PowerShell 5.1 alone is insufficient. The previously published `v0.11.1` release is Windows-only.
 - **Linux:** POSIX `sh` and `curl` for the one-line command. The candidate's lifecycle and runtime discovery were validated on Ubuntu 24.04 in WSL 2 with OpenCode V2.3.2. This does not qualify native Linux.
 - **macOS:** no CI coverage and not qualified.
 - **All supported installs:** OpenCode V2 and Python 3.11+. Runtime discovery on every OpenCode version is not implied.
@@ -65,7 +65,7 @@ curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/do
 #### Windows
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.11.1/install.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.12.0/install.ps1')))
 ```
 
 The tagged `install.ps1` defaults to its embedded version and downloads the exact tag archive, so no extra `-Version` argument is needed. This bypasses `latest` selection. A versioned URL for `install-olympus.ps1` would not pin the installed version: that bootstrap still selects the latest release.
@@ -157,7 +157,7 @@ Maintainers may run `install.ps1` directly against a trusted local checkout inst
 ```powershell
 $source = (Resolve-Path '.').Path
 pwsh -NoProfile -File (Join-Path $source 'install.ps1') `
-    -Version 'v0.11.1' -SourceRoot $source -DryRun
+    -Version 'v0.12.0' -SourceRoot $source -DryRun
 ```
 
 Use the version actually declared by the checkout; do not copy the example version blindly. Local-source installation is for advanced, trusted-checkout use and is not evidence that the corresponding release is published or immutable.

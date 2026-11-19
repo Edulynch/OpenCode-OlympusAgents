@@ -60,10 +60,10 @@ Validado en Ubuntu 24.04 con WSL 2. [Configuración y verificación en Linux (en
 
 ## 📌 Instala una versión específica
 
-**Windows:** instala `v0.11.1` en lugar de la versión más reciente:
+**Windows:** instala la versión fijada `v0.12.0`:
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.11.1/install.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.12.0/install.ps1')))
 ```
 
 **Linux:** cuando la última versión incluya el instalador de Linux, sustituye `vX.Y.Z` por el tag de una versión estable que admita la instalación en Linux:

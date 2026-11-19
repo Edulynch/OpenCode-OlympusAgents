@@ -13,46 +13,35 @@ Start with the quick guide in [English](../README.md) or [Español](../README.ES
 | Feature requirements and evidence | [`specs/`](../specs/README.md) | Keep implemented and retrospective contracts there. `specs/future/` is a proposal register, not implementation authority. |
 | Spec Kit setup and local customizations | [Spec Kit audit](../.specify/README.md), [constitution](../.specify/memory/constitution.md), and [template overrides](../.specify/templates/overrides/) | Spec Kit stays the specification workflow. The local audit records its version and update decision. |
 | Release history | [Changelog](../CHANGELOG.md) and the dated release records below | Release documents preserve what shipped and the evidence known at that time; they do not describe a newer release. |
-| Issue triage, decisions, gates, and WIP | [Issue decision ledger](ISSUE-LEDGER.md) and [GitHub issues](https://github.com/Edulynch/OpenCode-OlympusAgents/issues) | Operational snapshot; GitHub and canonical specs remain authoritative. Follow #92 for mission/cleanup policy. |
+| Issue triage, decisions, gates, and WIP | [GitHub issues](https://github.com/Edulynch/OpenCode-OlympusAgents/issues) | GitHub and canonical specs remain authoritative. Follow #92 for mission/cleanup policy. |
 
 Issue #91 keeps documentation versioned in this repository. Enabling or publishing a Wiki remains outside this change and subject to #67; any future Wiki navigation should point back here rather than become a second copy of contracts. Installation UX work in #66 remains a separate scope; this index only links to the existing guide.
 
-## Current guidance and release records
+## User guides
 
-This index covers current guidance, dated release records, and the operator workflow guide. No per-document names or CODEOWNERS rules were recorded; the owner column assigns a maintainer area as a proposed responsibility, not a named person.
+- [Installation](INSTALLATION.md) — install and remove Olympus, check requirements, and troubleshoot.
+- [Workflows](WORKFLOWS.md) — use Olympus commands and follow task examples.
+- [Worktrees](WORKTREES.md) — set up Olympus in an OpenCode Git worktree.
 
-| Document | Purpose and audience | State, relationship, and incoming references | Proposed owner |
-| --- | --- | --- | --- |
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Architecture, contribution, installation details, qualification, and release process | **Vigente.** Canonical contributor and development guide; links the Issue #8 historical evidence. | Repository maintainers |
-| [HARNESS-CAPABILITIES.md](HARNESS-CAPABILITIES.md) | Operator-facing capability matrix | **Vigente, generated.** Rendered from `olympus/harnesses/capabilities.toml`; edit the source and use the existing renderer. | Core maintainers (source); renderer-owned output |
-| [HARNESSES.md](HARNESSES.md) | Harness map and installation/output reference | **Vigente.** Maintainer and contributor reference; Core and the renderer define behavior. Historical evaluations link to this page. | Repository maintainers |
-| [INSTALLATION.md](INSTALLATION.md) | Detailed public install, removal, scope, and recovery guide | **Vigente.** Canonical extended installer guide; the README remains the first-run entrypoint. | Repository maintainers |
-| [ISSUE-LEDGER.md](ISSUE-LEDGER.md) | Maintainer-facing snapshot of issue decisions, evidence limits, next gates, and Git/WIP lifecycle | **Vigente, operativo (snapshot).** Links to live GitHub issues/PRs; not a second source of truth, requirements catalog, or release record. | Repository maintainers |
-| [ROADMAP.md](ROADMAP.md) | Directional shipped, in-validation, and proposed work | **Vigente, directional.** Not a release promise or implementation authorization; links to closed Phase 12 results. | Repository maintainers |
-| [WORKTREES.md](WORKTREES.md) | Worktree setup and use | **Vigente.** Operational guidance; related retrospective behavior is recorded under `specs/`. | Repository maintainers |
-| [WORKFLOWS.md](WORKFLOWS.md) | Examples, task commands, and practical operator limits | **Vigente.** Extended user guide linked from both README files; Olympus Core remains the canonical source for policy. | Repository maintainers |
-| [RELEASE-v0.4.8.md](RELEASE-v0.4.8.md) | v0.4.8 release record | **Histórico.** Preserved release facts; superseded as current-version guidance by later release records. | Release maintainer (proposed role) |
-| [RELEASE-v0.4.9.md](RELEASE-v0.4.9.md) | v0.4.9 release record | **Histórico.** Preserved release facts; remains linked from the constitution as a dated example. | Release maintainer (proposed role) |
-| [RELEASE-v0.5.0.md](RELEASE-v0.5.0.md) | Bounded CLI qualification snapshot and support matrix | **Historical pre-publication evidence.** Preserved as recorded alongside the [historical stable v0.5.0 Release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.5.0). | Release maintainer (proposed role) |
-| [RELEASE-v0.6.0.md](RELEASE-v0.6.0.md) | Original global CLI release highlights and installation guidance | **Historical v0.6.0 release notes.** Preserved exact-tag installation and verification evidence. | Release maintainer (proposed role) |
-| [RELEASE-v0.6.1.md](RELEASE-v0.6.1.md) | Post-install runtime warning and maintenance boundaries | **v0.6.1 release notes.** Exact-tag installation, verification and known limitations. | Release maintainer (proposed role) |
-| [RELEASE-v0.7.0.md](RELEASE-v0.7.0.md) | Safe configuration apply/recovery, diagnostics, and lifecycle updates | **v0.7.0 release record.** Installation, verification and evidence boundaries. | Release maintainer (proposed role) |
+## Technical reference
+
+- [Harnesses](HARNESSES.md) — source layout, renderer, generated outputs, and managed installation contract.
+- [Harness capabilities](HARNESS-CAPABILITIES.md) — generated support matrix; edit the [capability source](../olympus/harnesses/capabilities.toml), not the generated page.
+
+## Contributing and project status
+
+- [Development](DEVELOPMENT.md) — architecture, qualification, and release procedures.
+- [Roadmap](ROADMAP.md) — shipped, in-validation, and proposed work; not a release promise or implementation authorization.
+- [Documentation organization](AGENTS.md) — where to put new pages and how to check them. See the conventions for [guides](guide/AGENTS.md), [reference](reference/AGENTS.md), and [assets](assets/AGENTS.md).
 
 ## Historical records
 
-These 7 pages moved from `docs/` to `docs/history/`. Their decisions, status statements, and evidence remain unchanged; only relative links were adjusted. The historical evidence acquisition snapshot under `specs/001-portable-olympus-cli/evidence/` retains the original paths as provenance.
+- [v0.4.9 release record](RELEASE-v0.4.9.md) — preserved release facts and the dated example linked from the constitution.
+- [v0.5.0 qualification snapshot](RELEASE-v0.5.0.md) — pre-publication evidence preserved alongside the [stable v0.5.0 release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/tag/v0.5.0).
 
-| Move mapping: `docs/<name>` → `docs/history/<name>` | Purpose, state, and relationship | Incoming references | Proposed owner |
-| --- | --- | --- | --- |
-| [CODEX-EXPERIMENT.md](history/CODEX-EXPERIMENT.md) | **Histórico.** Original harness-comparison notes and the evidence recorded at that time. | Evidence acquisition snapshot | Repository maintainers |
-| [CODEX-EXPERIMENT-STATUS.md](history/CODEX-EXPERIMENT-STATUS.md) | **Histórico.** Experiment status snapshot, preserved as recorded. | Evidence acquisition snapshot | Repository maintainers |
-| [HARNESS-EVALUATION.md](history/HARNESS-EVALUATION.md) | **Histórico.** Earlier evidence ledger, retained with its original qualifications; it is not the completed Phase 12 results ledger. | Evidence acquisition snapshot | Repository maintainers |
-| [DEFECT-PHASE11-CASE-E-ROUTING.md](history/DEFECT-PHASE11-CASE-E-ROUTING.md) | **Histórico, cerrado.** Bounded Case E diagnosis and correction; original fixture instructions remain at the immutable baseline. | Immutable Phase 11 baseline; evidence acquisition snapshot | Repository maintainers |
-| [ISSUE-8-CHECKPOINT-RESUME.md](history/ISSUE-8-CHECKPOINT-RESUME.md) | **Histórico.** Evidence for the exact same-session continuation; it does not resolve the later open compaction report. | DEVELOPMENT; evidence acquisition snapshot | Repository maintainers |
-| [PHASE12-CROSS-HARNESS-PLAN.md](history/PHASE12-CROSS-HARNESS-PLAN.md) | **Histórico, cerrado.** Frozen plan and constraints; the results ledger supersedes its earlier no-trial status. | Phase 12 results ledger | Repository maintainers |
-| [PHASE12-CROSS-HARNESS-RESULTS.md](history/PHASE12-CROSS-HARNESS-RESULTS.md) | **Histórico, cerrado.** Six-execution Phase 12 results and limits; authoritative for that evaluation. | Changelog, roadmap, Phase 12 plan | Repository maintainers |
+The seven removed pages from `docs/history/` remain reviewable in the [pre-cleanup tree](https://github.com/Edulynch/OpenCode-OlympusAgents/tree/5e9bec1a5eb51d9bfcac93931f0d165a48b4a53c/docs/history).
 
-The experiment and evaluation records retain distinct historical evidence. The roadmap remains a status summary; it does not replace specifications or release records.
+The roadmap remains a status summary; it does not replace specifications or release records.
 
 ## Related repository documentation
 

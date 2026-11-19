@@ -221,8 +221,8 @@ live Case A (`ses_f21e09d97ffeiyjqAvmZuDRxa9`) confirmed Kael-mediated,
 role-pure one-round evidence and the same Sorin session continuing twice;
 Case B (`ses_f21dad776ffevU6A5qKcenexjh`) confirmed zero Sorin consultations
 on a simple deterministic defect. Both families completed with zero unknown or
-unresolved work. Phase 3 evidence class: USER_EXECUTED_LIVE_EVIDENCE; see
-`tests/role-purity/RUNME.md` for the historical manual fixture instructions.
+unresolved work. Phase 3 evidence class: USER_EXECUTED_LIVE_EVIDENCE; see the
+[historical manual fixture instructions](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/5e9bec1a5eb51d9bfcac93931f0d165a48b4a53c/tests/role-purity/RUNME.md).
 
 ## Local/bootstrap installation
 

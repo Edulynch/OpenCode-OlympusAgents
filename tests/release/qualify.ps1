@@ -3,7 +3,8 @@ param(
     [switch]$MockOpenCode,
     [switch]$ResumeAtR1,
     [switch]$ResumeAtPermissions,
-    [string]$RecoveryRunId = ''
+    [string]$RecoveryRunId = '',
+    [string]$ExpectedVersion
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -19,6 +20,12 @@ if (-not $defaultVersionMatch.Success -or -not $releaseVersionMatch.Success -or
 $script:CandidateVersion = $defaultVersionMatch.Groups[1].Value
 $script:CandidateRegex = [regex]::Escape($script:CandidateVersion)
 $script:CandidateHeading = "## $($script:CandidateVersion)"
+if ($PSBoundParameters.ContainsKey('ExpectedVersion')) {
+    if ($ExpectedVersion -cne $script:CandidateVersion) {
+        throw "EXPECTED_VERSION_MISMATCH: expected '$ExpectedVersion' but validated candidate is '$($script:CandidateVersion)'."
+    }
+    Write-Output "R0_EXPECTED_TARGET_VERSION PASS: expected '$ExpectedVersion' exactly matches candidate '$($script:CandidateVersion)'."
+}
 $tempOpencode = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode'
 if (-not $RecoveryRunId) { $RecoveryRunId = [guid]::NewGuid().ToString('N') }
 if ($RecoveryRunId -notmatch '^[A-Za-z0-9-]{8,80}$') { throw 'RECOVERY_RUN_ID_INVALID' }
@@ -305,7 +312,6 @@ try {
     $acceptedSyntax = @('v1.2.3','v0.3.0-alpha.1',$script:CandidateVersion,'v2.4.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 4
     if (-not ($ResumeAtR1 -or $ResumeAtPermissions)) {
         Check 'R0_RELEASE_IDENTITY' $releaseIdentityValid
-        Check 'R0_TARGET_IDENTITY_V0111' ($script:CandidateVersion -ceq 'v0.11.1')
         Check 'R0_STABLE_CANDIDATE_VERSION' ($script:CandidateVersion -match '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$')
         Check 'R0_SEMVER_VALIDATOR' ($acceptedSyntax -and 'v1.2.3-preview.1' -notmatch $versionPattern)
         Check 'R23_ALPHA_RC_PARSING' (@('v0.3.0-alpha.1','v0.3.0-rc.12' | Where-Object { $_ -match $versionPattern }).Count -eq 2)
@@ -557,6 +563,15 @@ try {
         $historicalStart + $historicalHeading.Length + $nextHistoricalRelease.Index
     } else { $changelog.Length }
     $historicalNotes = $changelog.Substring($historicalStart, $historicalEnd - $historicalStart)
+    $historicalV0111Heading = [regex]::Match($changelog, '(?m)^## v0\.11\.1\r?$')
+    if (-not $historicalV0111Heading.Success) { throw 'Historical v0.11.1 release notes are missing.' }
+    $historicalV0111Start = $historicalV0111Heading.Index
+    $afterHistoricalV0111 = $changelog.Substring($historicalV0111Start + $historicalV0111Heading.Length)
+    $nextHistoricalV0111Release = [regex]::Match($afterHistoricalV0111, '(?m)^##[ \t]+v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?(?:[ \t]+[^\r\n]*)?\r?$')
+    $historicalV0111End = if ($nextHistoricalV0111Release.Success) {
+        $historicalV0111Start + $historicalV0111Heading.Length + $nextHistoricalV0111Release.Index
+    } else { $changelog.Length }
+    $historicalV0111Notes = $changelog.Substring($historicalV0111Start, $historicalV0111End - $historicalV0111Start)
     $installGuideUrl = "https://github.com/Edulynch/OpenCode-OlympusAgents/blob/$($script:CandidateVersion)/docs/INSTALLATION.md"
     $installGuide = [IO.File]::ReadAllText((Join-Path $source 'docs/INSTALLATION.md'))
     $verifyGuideUrl = "$installGuideUrl#release-selection-identity-and-executable-source"
@@ -600,15 +615,22 @@ try {
     $activeHighlights = if ($activeHighlightsMatch.Success) { $activeHighlightsMatch.Groups['body'].Value } else { '' }
     $activeCapabilityMatch = [regex]::Match($releaseNotes, '(?ims)^### Capability limits\r?\n(?<body>.*?)(?=^### |^## |\z)')
     $activeCapabilityLimits = if ($activeCapabilityMatch.Success) { $activeCapabilityMatch.Groups['body'].Value } else { '' }
+    $historicalV0111HighlightsMatch = [regex]::Match($historicalV0111Notes, '(?ims)^### Highlights\r?\n(?<body>.*?)(?=^### |^## |\z)')
+    $historicalV0111Highlights = if ($historicalV0111HighlightsMatch.Success) { $historicalV0111HighlightsMatch.Groups['body'].Value } else { '' }
+    $historicalV0111CapabilityMatch = [regex]::Match($historicalV0111Notes, '(?ims)^### Capability limits\r?\n(?<body>.*?)(?=^### |^## |\z)')
+    $historicalV0111CapabilityLimits = if ($historicalV0111CapabilityMatch.Success) { $historicalV0111CapabilityMatch.Groups['body'].Value } else { '' }
+    Check 'R25_ACTIVE_RELEASE_NOTES_REQUIRED_SECTIONS' (
+        -not [string]::IsNullOrWhiteSpace($activeHighlights) -and
+        -not [string]::IsNullOrWhiteSpace($activeCapabilityLimits))
     Check 'R25_V0111_RELEASE_HIGHLIGHTS_AND_LIMITS' (
-        $activeHighlights -match '(?i)24-line overview' -and
-        $activeHighlights -match '(?i)54 CLI command/subcommand routes' -and
-        $activeHighlights -match '(?i)without downloading or running the installer' -and
-        $activeHighlights -match '(?i)without changing which checks run' -and
-        $activeCapabilityLimits -match '(?i)recorded versions only; it is not an integrity check' -and
-        $activeCapabilityLimits -match '(?i)Windows with PowerShell 7' -and
-        $activeCapabilityLimits -match '(?i)Python 3\.11\+' -and
-        $activeCapabilityLimits -match '(?i)OpenCode V2')
+        $historicalV0111Highlights -match '(?i)24-line overview' -and
+        $historicalV0111Highlights -match '(?i)54 CLI command/subcommand routes' -and
+        $historicalV0111Highlights -match '(?i)without downloading or running the installer' -and
+        $historicalV0111Highlights -match '(?i)without changing which checks run' -and
+        $historicalV0111CapabilityLimits -match '(?i)recorded versions only; it is not an integrity check' -and
+        $historicalV0111CapabilityLimits -match '(?i)Windows with PowerShell 7' -and
+        $historicalV0111CapabilityLimits -match '(?i)Python 3\.11\+' -and
+        $historicalV0111CapabilityLimits -match '(?i)OpenCode V2')
     $mutableExecutableUrl = '(?i)(?:raw\.githubusercontent\.com/Edulynch/OpenCode-OlympusAgents/(?:master|main|refs/heads/(?:master|main))/[^\s]+?\.ps1|github\.com/Edulynch/OpenCode-OlympusAgents/(?:raw|blob)/(?:master|main)/[^\s]+?\.ps1)'
     Check 'R25_RELEASE_NO_MUTABLE_EXECUTABLE_SOURCE' ($releaseNotes -notmatch $mutableExecutableUrl -and
         $versionText -match 'archive/refs/tags/\$Version\.zip')

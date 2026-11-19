@@ -617,6 +617,9 @@ Use this state machine for each release:
    qualifications on the exact `master` commit. Review capability gaps and
    static-versus-interactive limits; release notes must include `Installation`
    and `Verify installation` sections with commands pinned to the same version.
+   For an exact local mock target, run
+   `pwsh -NoProfile -File ./tests/release/qualify.ps1 -MockOpenCode -ExpectedVersion <tag>`
+   and replace `<tag>` with the exact release version.
 2. **Tag candidate.** Create the candidate tag from the validated commit. A
    beta/prerelease must not use mutable `master` as its installer source.
 3. **Validate the immutable remote tag.** Fetch/inspect that exact tag and run

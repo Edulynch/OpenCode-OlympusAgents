@@ -2,6 +2,8 @@
 
 # 🏛️ Olympus Agents
 
+<img src="docs/assets/olympus-cover.png" alt="El equipo de Olympus Agents en el monte Olimpo" width="100%">
+
 **Tu equipo de programación con IA. Una instrucción, once roles. Tú tienes el control.**
 
 🌐 **[English](README.md) · Español**
@@ -40,30 +42,34 @@ Después de [instalar Olympus](#fast-install), abre OpenCode en tu proyecto y di
 
 ✅ **Después de instalar:** abre una nueva ventana de PowerShell 7 y ejecuta `olympus version`.
 
-### Ubuntu 24.04 en WSL 2
+### Linux
 
-**Requisitos:** `sh`, OpenCode V2 y Python 3.11+. No necesitas PowerShell ni `sudo`.
+**Requisitos:** `curl`, `sh`, OpenCode V2 y Python 3.11+.
 
-Si la [versión publicada](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) incluye `install-olympus.sh`, descarga ese archivo y ejecuta:
+Cuando la [última versión publicada](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) incluya `install-olympus.sh`, ejecuta:
 
 ```sh
-sh ./install-olympus.sh --dry-run
-sh ./install-olympus.sh
-~/.local/bin/olympus doctor --scope global
+curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh
 ```
 
-`v0.11.1` solo admite Windows. La validación de Linux cubre Ubuntu 24.04 en WSL 2 con OpenCode V2.3.2, no Linux nativo. macOS no tiene cobertura de CI ni está certificado.
+Validado en Ubuntu 24.04 con WSL 2. [Configuración y verificación en Linux (en inglés) →](docs/INSTALLATION.md#linux-sh-entrypoint)
 
 🔄 **¿Ya lo tienes instalado?** Ejecuta `olympus update` y luego `olympus doctor --scope global`.
 
-🛡️ **Alcance:** la instalación es **global para tu usuario y solo para OpenCode**. Selecciona una versión publicada e inmutable y configura a Kael como agente global predeterminado. Windows agrega `olympus` al PATH; Linux no modifica el PATH ni los perfiles de shell. [Detalles de instalación y seguridad (en inglés) →](docs/INSTALLATION.md)
+🛡️ **Alcance:** la instalación es **global para tu usuario y solo para OpenCode**. Selecciona una versión publicada e inmutable y configura a Kael como agente global predeterminado. [Detalles de instalación y seguridad (en inglés) →](docs/INSTALLATION.md)
 
 ## 📌 Instala una versión específica
 
-En Windows, para instalar `v0.11.1` en lugar de la versión más reciente:
+**Windows:** instala `v0.11.1` en lugar de la versión más reciente:
 
 ```powershell
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.11.1/install.ps1')))
+```
+
+**Linux:** cuando la última versión incluya el instalador de Linux, sustituye `vX.Y.Z` por el tag de una versión estable que admita la instalación en Linux:
+
+```sh
+curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh -s -- vX.Y.Z
 ```
 
 <a id="the-team"></a>
@@ -118,7 +124,7 @@ En Windows, para instalar `v0.11.1` en lugar de la versión más reciente:
 
 ## 🗑️ Desinstala
 
-```text
+```powershell
 olympus uninstall
 ```
 

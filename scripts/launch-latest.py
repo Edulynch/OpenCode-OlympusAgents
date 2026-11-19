@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+# Olympus pinned-install protocol: 1
+# Keep this exact column-zero line to advertise support for bootstrap --_pinned.
+
 import argparse
 import base64
 import datetime as dt
@@ -195,33 +198,36 @@ def _json(transport, url: str, *, limit: int = _MAX_JSON) -> dict:
     return value
 
 
-def _published_timestamp(value: object) -> dt.datetime:
+def _published_timestamp(value: object, *, label: str = "Latest") -> dt.datetime:
     if not isinstance(value, str) or re.fullmatch(
         r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})",
         value,
     ) is None:
-        raise ReleaseError("Latest stable release has no timezone-aware published_at timestamp.")
+        raise ReleaseError(f"{label} stable release has no timezone-aware published_at timestamp.")
     try:
         parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as error:
-        raise ReleaseError("Latest stable release published_at timestamp is invalid.") from error
+        raise ReleaseError(f"{label} stable release published_at timestamp is invalid.") from error
     if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ReleaseError("Latest stable release published_at timestamp has no timezone.")
+        raise ReleaseError(f"{label} stable release published_at timestamp has no timezone.")
     if parsed > dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5):
-        raise ReleaseError("Latest stable release published_at timestamp is in the future.")
+        raise ReleaseError(f"{label} stable release published_at timestamp is in the future.")
     return parsed.astimezone(dt.timezone.utc)
 
 
-def _select_latest(transport=None) -> Release:
-    transport = transport or _HTTPTransport()
-    metadata = _json(transport, f"{_API}/releases/latest")
+def _select_release(transport, url: str, expected_tag: str | None = None) -> Release:
+    metadata = _json(transport, url)
+    label = "Latest" if expected_tag is None else "Selected"
     for key, expected in (("immutable", True), ("draft", False), ("prerelease", False)):
         if type(metadata.get(key)) is not bool or metadata[key] is not expected:
-            raise ReleaseError(f"Latest release metadata does not assert {key}={str(expected).lower()}.")
+            raise ReleaseError(f"{label} release metadata does not assert {key}={str(expected).lower()}.")
     version = metadata.get("tag_name")
     if not isinstance(version, str) or _RELEASE_TAG.fullmatch(version) is None:
-        raise ReleaseError("GitHub latest release is not a supported stable Olympus version.")
-    timestamp = _published_timestamp(metadata.get("published_at"))
+        label = "latest" if expected_tag is None else "selected"
+        raise ReleaseError(f"GitHub {label} release is not a supported stable Olympus version.")
+    if expected_tag is not None and version != expected_tag:
+        raise ReleaseError("GitHub release tag does not match the requested stable Olympus version.")
+    timestamp = _published_timestamp(metadata.get("published_at"), label=label)
     commit_info = _json(transport, f"{_API}/commits/{version}")
     commit = commit_info.get("sha")
     tree = commit_info.get("commit", {}).get("tree", {}).get("sha")
@@ -230,6 +236,17 @@ def _select_latest(transport=None) -> Release:
     if not isinstance(tree, str) or _SHA.fullmatch(tree) is None:
         raise ReleaseError("The selected immutable release has no valid Git tree identity.")
     return Release(version, commit, tree, timestamp.isoformat().replace("+00:00", "Z"))
+
+
+def _select_latest(transport=None) -> Release:
+    transport = transport or _HTTPTransport()
+    return _select_release(transport, f"{_API}/releases/latest")
+
+
+def _select_tag(transport, tag: str) -> Release:
+    if not isinstance(tag, str) or _RELEASE_TAG.fullmatch(tag) is None:
+        raise ReleaseError("Requested release is not a supported stable Olympus version.")
+    return _select_release(transport, f"{_API}/releases/tags/{tag}", expected_tag=tag)
 
 
 def _git_blob_sha(raw: bytes) -> str:
@@ -267,7 +284,7 @@ def _verify_bootstrap(transport, release: Release, expected: tuple[str, str, str
                       launcher_path: Path) -> None:
     version, commit, blob_sha = expected
     if (release.version, release.commit) != (version, commit):
-        raise ReleaseError("Latest immutable release changed after the public bootstrap selected it.")
+        raise ReleaseError("Selected immutable release changed after the public bootstrap selected it.")
     try:
         running = launcher_path.read_bytes()
     except OSError as error:
@@ -944,12 +961,17 @@ def _local_uninstall(global_cli, *, dry_run: bool, lifecycle) -> tuple[dict | No
 
 def run_action(action: str, *, dry_run: bool = False, source_root: Path | None = None,
                bootstrap: tuple[str, str, str] | None = None, transport=None,
-               temp_parent: Path | None = None) -> tuple[dict, int]:
+               temp_parent: Path | None = None, pinned_bootstrap: bool = False) -> tuple[dict, int]:
     """Execute one route; tests inject a trusted transport directly, never endpoint flags."""
     if action not in ("install", "update", "verify", "uninstall"):
         raise ReleaseError("Unsupported Linux lifecycle operation.")
     if bootstrap is not None and len(bootstrap) != 3:
         raise ReleaseError("Bootstrap identity is incomplete.")
+    if pinned_bootstrap and (
+        action != "install" or bootstrap is None or not isinstance(bootstrap[0], str)
+        or _RELEASE_TAG.fullmatch(bootstrap[0]) is None
+    ):
+        raise ReleaseError("Pinned release selection requires a stable bootstrap install identity.")
     transport = transport or _HTTPTransport()
     source_root = source_root or _local_source_root()
     response = _response(action, dry_run, source_root)
@@ -961,7 +983,10 @@ def run_action(action: str, *, dry_run: bool = False, source_root: Path | None =
         if bootstrap is not None or action in ("install", "update") or (
             action in ("verify", "uninstall") and source_root is None
         ):
-            release = _select_latest(transport)
+            release = (
+                _select_tag(transport, bootstrap[0])
+                if pinned_bootstrap else _select_latest(transport)
+            )
         if bootstrap is not None:
             if release is None:
                 raise ReleaseError("Bootstrap release identity could not be resolved.")
@@ -1023,8 +1048,12 @@ def run_action(action: str, *, dry_run: bool = False, source_root: Path | None =
         staged_source = _download_source(transport, release, tree, stage_root)
         lifecycle = _load_lifecycle(staged_source, isolated_name=uuid.uuid4().hex)
         _validate_source(staged_source, lifecycle, release)
-        if _select_latest(transport) != release:
-            raise ReleaseError("Latest immutable release changed during acquisition; no lifecycle was started.")
+        selected = (
+            _select_tag(transport, bootstrap[0])
+            if pinned_bootstrap else _select_latest(transport)
+        )
+        if selected != release:
+            raise ReleaseError("Selected immutable release changed during acquisition; no lifecycle was started.")
 
         global_cli, global_install, _ = lifecycle
         if action in ("install", "update"):
@@ -1117,15 +1146,19 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--_response", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--_bootstrap", nargs=3, metavar=("VERSION", "COMMIT", "BLOB_SHA"),
                         help=argparse.SUPPRESS)
+    parser.add_argument("--_pinned", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    if args._pinned and (args.action != "install" or args._bootstrap is None):
+        _parser().error("--_pinned is only valid for a bootstrap install.")
     response, code = run_action(
         args.action,
         dry_run=args.dry_run,
         bootstrap=tuple(args._bootstrap) if args._bootstrap else None,
+        pinned_bootstrap=args._pinned,
     )
     if args._response:
         print(json.dumps(response, ensure_ascii=False, separators=(",", ":")))

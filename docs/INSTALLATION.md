@@ -8,14 +8,14 @@ The [Fast Install](../README.md#fast-install) is per-user, global, and OpenCode-
 
 Choose the latest release below or [install a specific version](#install-a-specific-version). Do not execute installers from a mutable `master` URL.
 
-Then use `olympus version` and `olympus update` from any directory. The public [Fast Uninstall](../README.md#fast-uninstall) entrypoint and `olympus uninstall` remove only managed resources and Olympus's PATH entry.
+Then use `olympus version` and `olympus update` from any directory. [Fast Uninstall](../README.md#fast-uninstall) removes managed resources and, on Windows, Olympus's PATH entry.
 
 The public entrypoints are executable code. They select an immutable stable release and validate the tag/installer identity before use; GitHub's immutability assertion is not independent cryptographic signature verification.
 
 ## Requirements and platform limits
 
 - **Windows:** PowerShell 7 (`pwsh`) on `PATH`. Windows PowerShell 5.1 alone is insufficient. `v0.11.1` is Windows-only.
-- **Linux:** use a release that provides `install-olympus.sh`. The lifecycle and runtime discovery were validated on Ubuntu 24.04 in WSL 2 with OpenCode V2.3.2. This does not qualify native Linux. The launcher uses POSIX `sh`; Bash, PowerShell, and `sudo` are not required.
+- **Linux:** POSIX `sh` and `curl` for the one-line command. The candidate's lifecycle and runtime discovery were validated on Ubuntu 24.04 in WSL 2 with OpenCode V2.3.2. This does not qualify native Linux.
 - **macOS:** no CI coverage and not qualified.
 - **All supported installs:** OpenCode V2 and Python 3.11+. Runtime discovery on every OpenCode version is not implied.
 
@@ -34,25 +34,51 @@ Both source entrypoints, `install-olympus.ps1` and `uninstall-olympus.ps1`, are 
 
 ## Linux `sh` entrypoint
 
-Download `install-olympus.sh` from an [official release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) that includes it. Review the script, then run:
+When the [latest release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) includes `install-olympus.sh`, run:
 
 ```sh
-sh ./install-olympus.sh --dry-run
-sh ./install-olympus.sh
+curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh
+```
+
+To preview the install without writing global resources, pass `--dry-run`:
+
+```sh
+curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh -s -- --dry-run
+```
+
+After installing, run:
+
+```sh
 ~/.local/bin/olympus doctor --scope global
 ```
 
-On Linux, the launcher is `~/.local/bin/olympus` and packages live under `$XDG_DATA_HOME/olympus` (default `~/.local/share/olympus`). Use the full launcher path if `~/.local/bin` is not on `PATH`. The installer does not edit your `PATH` or shell profiles. Run `olympus uninstall` to remove the active package, or `sh ./install-olympus.sh uninstall` to resume that operation if the launcher was already removed.
+On Linux, the launcher is `~/.local/bin/olympus` and packages live under `$XDG_DATA_HOME/olympus` (default `~/.local/share/olympus`). Use the full launcher path if `~/.local/bin` is not on `PATH`. The installer leaves `PATH` and shell profiles unchanged.
+
+Run `~/.local/bin/olympus uninstall` to remove the active package. If cleanup was interrupted after the launcher was removed, pass `uninstall` to the bootstrap:
+
+```sh
+curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh -s -- uninstall
+```
 
 ### Install a specific version
 
-These pinned examples use the Windows installer.
+#### Windows
 
 ```powershell
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.11.1/install.ps1')))
 ```
 
 The tagged `install.ps1` defaults to its embedded version and downloads the exact tag archive, so no extra `-Version` argument is needed. This bypasses `latest` selection. A versioned URL for `install-olympus.ps1` would not pin the installed version: that bootstrap still selects the latest release.
+
+#### Linux
+
+Once the latest release includes the Linux bootstrap, pass the exact tag of a stable, immutable release that supports installation by tag:
+
+```sh
+curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh -s -- vX.Y.Z
+```
+
+Replace `vX.Y.Z` with the release tag. Add `--dry-run` after the tag to preview. The bootstrap stops if the tag is unavailable, the selected launcher does not support installation by tag, or a different installation is already present. It never falls back to another release or replaces an existing installation with an older one. Use `olympus update` to upgrade to the latest eligible release.
 
 ### Supported route and selector validation
 

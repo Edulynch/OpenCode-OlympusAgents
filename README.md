@@ -2,6 +2,8 @@
 
 # 🏛️ Olympus Agents
 
+<img src="docs/assets/olympus-cover.png" alt="Olympus Agents team on Mount Olympus" width="100%">
+
 **Your AI coding team. One prompt. Eleven roles. You stay in control.**
 
 🌐 **English · [Español](README.ES.md)**
@@ -38,30 +40,34 @@ Need parallel work or a performance review? See [OpenCode commands](#task-parall
 
 ✅ **After installing:** open a new PowerShell 7 window and run `olympus version`.
 
-### Ubuntu 24.04 on WSL 2
+### Linux
 
-**Requirements:** `sh`, OpenCode V2, and Python 3.11+. No PowerShell or `sudo`.
+**Requirements:** `curl`, `sh`, OpenCode V2, and Python 3.11+.
 
-For a [release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) that includes `install-olympus.sh`, download the asset and run:
+When the [latest release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) includes `install-olympus.sh`, run:
 
 ```sh
-sh ./install-olympus.sh --dry-run
-sh ./install-olympus.sh
-~/.local/bin/olympus doctor --scope global
+curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh
 ```
 
-`v0.11.1` is Windows-only. Linux validation covers Ubuntu 24.04 on WSL 2 with OpenCode V2.3.2, not native Linux. macOS has no CI coverage and is not qualified.
+Validated on Ubuntu 24.04 with WSL 2. [Linux setup and verification →](docs/INSTALLATION.md#linux-sh-entrypoint)
 
 🔄 **Already installed?** Run `olympus update`, then `olympus doctor --scope global`.
 
-🛡️ **Scope:** installation is **global for your user and OpenCode-only**. It selects a published, immutable release and sets Kael as the global default. Windows adds `olympus` to your PATH; Linux leaves PATH and shell profiles unchanged. [Installation safeguards →](docs/INSTALLATION.md)
+🛡️ **Scope:** installation is **global and OpenCode-only** for your user. It selects a published, immutable release and sets Kael as the global default. [Installation safeguards →](docs/INSTALLATION.md)
 
 ## Install a specific version
 
-On Windows, to install `v0.11.1` instead of the latest release:
+**Windows:** install `v0.11.1` instead of the latest release:
 
 ```powershell
 & ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.11.1/install.ps1')))
+```
+
+**Linux:** when the latest release includes the Linux installer, replace `vX.Y.Z` with the tag of a stable release that supports Linux installation:
+
+```sh
+curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh -s -- vX.Y.Z
 ```
 
 <a id="the-team"></a>
@@ -114,7 +120,7 @@ On Windows, to install `v0.11.1` instead of the latest release:
 
 ## Fast Uninstall
 
-```text
+```powershell
 olympus uninstall
 ```
 

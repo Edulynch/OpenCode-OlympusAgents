@@ -6,10 +6,11 @@ case " $* " in
     cat <<'HELP'
 Olympus Linux installer
 
-Usage: sh install-olympus.sh [install|uninstall] [--dry-run] [--execute] [--json]
+Usage: sh install-olympus.sh [install|uninstall|vX.Y.Z] [--dry-run] [--execute] [--json]
 
 Uses Python 3.11 or newer and official immutable GitHub release metadata.
 Install is the default action. Uninstall is safe to repeat after an interrupted cleanup.
+An optional stable vX.Y.Z tag selects that exact release for installation.
 No administrator privileges, Bash, PowerShell, curl, or package installation is used.
 HELP
     exit 0
@@ -50,6 +51,7 @@ API = f"https://api.github.com/repos/{OWNER}/{REPOSITORY}"
 OFFICIAL_HOSTS = {"api.github.com", "github.com", "codeload.github.com"}
 RELEASE_TAG = re.compile(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
+PINNED_INSTALL_MARKER = b"# Olympus pinned-install protocol: 1"
 
 
 class OfficialRedirect(urllib.request.HTTPRedirectHandler):
@@ -103,26 +105,38 @@ def json_object(url: str, limit: int = 4 * 1024 * 1024) -> dict:
     return value
 
 
-def selected_release():
-    release = json_object(f"{API}/releases/latest")
+def selected_release(requested_version=None):
+    if requested_version is not None and (
+        not isinstance(requested_version, str) or RELEASE_TAG.fullmatch(requested_version) is None
+    ):
+        raise ValueError("Requested release is not a supported stable Olympus version.")
+    label = "Selected" if requested_version is not None else "Latest"
+    endpoint = (
+        f"{API}/releases/tags/{requested_version}"
+        if requested_version is not None else f"{API}/releases/latest"
+    )
+    release = json_object(endpoint)
     for key, expected in (("immutable", True), ("draft", False), ("prerelease", False)):
         if type(release.get(key)) is not bool or release[key] is not expected:
-            raise ValueError(f"Latest release metadata does not assert {key}={str(expected).lower()}.")
+            raise ValueError(f"{label} release metadata does not assert {key}={str(expected).lower()}.")
     version = release.get("tag_name")
     if not isinstance(version, str) or not RELEASE_TAG.fullmatch(version):
-        raise ValueError("GitHub latest release is not a supported stable Olympus version.")
+        label = "selected" if requested_version is not None else "latest"
+        raise ValueError(f"GitHub {label} release is not a supported stable Olympus version.")
+    if requested_version is not None and version != requested_version:
+        raise ValueError("GitHub release tag does not match the requested stable Olympus version.")
     published = release.get("published_at")
     if not isinstance(published, str) or re.fullmatch(
         r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})",
         published,
     ) is None:
-        raise ValueError("Latest release has no timezone-aware published_at timestamp.")
+        raise ValueError(f"{label} release has no timezone-aware published_at timestamp.")
     timestamp = dt.datetime.fromisoformat(published.replace("Z", "+00:00"))
     if timestamp.tzinfo is None or timestamp > dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5):
-        raise ValueError("Latest release published_at timestamp is invalid or in the future.")
+        raise ValueError(f"{label} release published_at timestamp is invalid or in the future.")
     commit = json_object(f"{API}/commits/{version}").get("sha")
     if not isinstance(commit, str) or not SHA.fullmatch(commit):
-        raise ValueError("Latest stable release does not resolve to a full commit SHA.")
+        raise ValueError(f"{label} stable release does not resolve to a full commit SHA.")
 
     path = "scripts/launch-latest.py"
     contents = json_object(
@@ -204,16 +218,33 @@ def main() -> int:
         prog="install-olympus.sh",
         description="Install or uninstall the verified Olympus Linux CLI and global OpenCode resources.",
     )
-    parser.add_argument("action", nargs="?", choices=("install", "uninstall"), default="install")
+    parser.add_argument(
+        "target", nargs="?", default="install", metavar="install|uninstall|vX.Y.Z",
+    )
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--dry-run", action="store_true", help="validate and print a read-only plan")
     modes.add_argument("--execute", action="store_true", help="explicitly execute the lifecycle operation")
     parser.add_argument("--json", action="store_true", help="emit one JSON result")
     args = parser.parse_args()
+    if args.target in ("install", "uninstall"):
+        action = args.target
+        requested_version = None
+    elif isinstance(args.target, str) and RELEASE_TAG.fullmatch(args.target):
+        action = "install"
+        requested_version = args.target
+    else:
+        parser.error("expected install, uninstall, or an exact stable vX.Y.Z tag")
     try:
-        version, commit, blob_sha, launcher = selected_release()
+        version, commit, blob_sha, launcher = selected_release(requested_version)
     except (OSError, ValueError, urllib.error.URLError, urllib.error.HTTPError) as error:
-        return emit_error(args.action, str(error), args.json)
+        return emit_error(action, str(error), args.json)
+    if requested_version is not None and PINNED_INSTALL_MARKER not in launcher.splitlines():
+        return emit_error(
+            action,
+            "pinned-install-not-supported: selected release launcher lacks protocol marker "
+            "'# Olympus pinned-install protocol: 1'.",
+            args.json,
+        )
 
     try:
         with tempfile.TemporaryDirectory(prefix="olympus-bootstrap-") as folder:
@@ -224,9 +255,11 @@ def main() -> int:
                 os.fsync(stream.fileno())
             os.chmod(path, 0o600)
             command = [
-                sys.executable, "-I", "-S", "-B", str(path), args.action,
+                sys.executable, "-I", "-S", "-B", str(path), action,
                 "--_response", "--_bootstrap", version, commit, blob_sha,
             ]
+            if requested_version is not None:
+                command.append("--_pinned")
             if args.dry_run:
                 command.append("--dry-run")
             try:
@@ -236,14 +269,14 @@ def main() -> int:
                 )
             except subprocess.TimeoutExpired:
                 return emit_error(
-                    args.action,
+                    action,
                     "Official release operation timed out; effects are unconfirmed. Inspect the installation before retrying.",
                     args.json,
                     4,
                 )
             except KeyboardInterrupt:
                 return emit_error(
-                    args.action,
+                    action,
                     "Official release operation was interrupted; effects are unconfirmed. Inspect before retrying.",
                     args.json,
                     4,
@@ -251,18 +284,18 @@ def main() -> int:
         try:
             response = json.loads(completed.stdout)
             if (not isinstance(response, dict) or response.get("schema_version") != 1
-                    or response.get("operation") != args.action):
+                    or response.get("operation") != action):
                 raise ValueError("Release coordinator returned an invalid response.")
         except (ValueError, json.JSONDecodeError):
             message = completed.stderr.strip() or completed.stdout.strip() or "Release coordinator returned no result."
-            return emit_error(args.action, message, args.json, 4 if completed.returncode else 1)
+            return emit_error(action, message, args.json, 4 if completed.returncode else 1)
         if args.json:
             print(json.dumps(response, ensure_ascii=False, separators=(",", ":")))
         else:
             render_human(response)
         return completed.returncode
     except (OSError, ValueError) as error:
-        return emit_error(args.action, str(error), args.json)
+        return emit_error(action, str(error), args.json)
 
 
 raise SystemExit(main())

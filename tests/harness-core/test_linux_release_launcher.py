@@ -17,6 +17,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+from urllib.parse import urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -390,7 +391,7 @@ class LinuxReleaseLauncher(unittest.TestCase):
                 self.assertEqual("preview" if dry_run else "ok", response["result"])
                 self.assertEqual("installed", response["data"]["installation_state"])
                 self.assertIn(f"{LAUNCHER._API}/git/trees/{self.tree_sha}?recursive=1", transport.urls)
-                self.assertFalse(any("codeload.github.com" in url for url in transport.urls))
+                self.assertFalse(any(urlsplit(url).hostname == "codeload.github.com" for url in transport.urls))
                 global_cli.recorded_identity.assert_called_once_with()
                 global_cli.verify.assert_called_once_with(version=self.version, commit=self.commit)
 
@@ -424,7 +425,7 @@ class LinuxReleaseLauncher(unittest.TestCase):
                 )
         self.assertNotEqual(0, code)
         self.assertEqual("blocked", response["result"])
-        self.assertFalse(any("/git/trees/" in url or "codeload.github.com" in url
+        self.assertFalse(any("/git/trees/" in url or urlsplit(url).hostname == "codeload.github.com"
                              for url in transport.urls))
         download.assert_not_called()
 
@@ -456,7 +457,7 @@ class LinuxReleaseLauncher(unittest.TestCase):
         self.assertNotEqual(0, code)
         self.assertEqual("blocked", response["result"])
         self.assertIn("pinned Git tree", response["data"]["native_stderr"])
-        self.assertFalse(any("codeload.github.com" in url for url in transport.urls))
+        self.assertFalse(any(urlsplit(url).hostname == "codeload.github.com" for url in transport.urls))
         load_lifecycle.assert_not_called()
         download.assert_not_called()
 
@@ -482,7 +483,7 @@ class LinuxReleaseLauncher(unittest.TestCase):
                 )
         self.assertNotEqual(0, code)
         self.assertEqual("blocked", response["result"])
-        self.assertFalse(any("/git/trees/" in url or "codeload.github.com" in url
+        self.assertFalse(any("/git/trees/" in url or urlsplit(url).hostname == "codeload.github.com"
                              for url in transport.urls))
 
     def test_public_bootstrap_install_clean_absence_keeps_staged_dry_run(self):
@@ -524,7 +525,7 @@ class LinuxReleaseLauncher(unittest.TestCase):
         self.assertEqual(0, code, response["data"]["native_stderr"])
         self.assertEqual("preview", response["result"])
         self.assertIn(f"{LAUNCHER._API}/git/trees/{self.tree_sha}?recursive=1", transport.urls)
-        self.assertTrue(any("codeload.github.com" in url for url in transport.urls))
+        self.assertIn(LAUNCHER._archive_root_name(self.commit)[1], transport.urls)
 
 
 if __name__ == "__main__":

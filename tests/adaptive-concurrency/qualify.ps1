@@ -43,7 +43,8 @@ try {
     Check AC9 ($kael -match '## Diagnostic Gate' -and $kael -match 'default limit is one Thales consultation' -and
         $kael -match 'materially new evidence' -and $ultra -match 'Do not.*bypass.*gates')
     Check AC10 ($hud -match 'active\(\)\.slice\(0, 4\)' -and $hud -match 'context\.data\.session\.status' -and $activity -match 'current\.parentID != null' -and $activity -match 'status\(session\.id\) === "running"' -and $hud -notmatch 'setInterval|setTimeout|spawn|schedule')
-    Check 'DOC' ($readme -match '(?s)## 🧭 Task Parallelism.*?/olympus\.ultra <prompt>.*?configured prompt ceiling.*?/olympus\.performance <prompt>' -and
+    $commandDocs = [regex]::Match($readme, '(?ms)^<a id="task-parallelism"></a>\s+^## [^\r\n]+\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
+    Check 'DOC' ($commandDocs -match '(?s)/olympus\.ultra <prompt>.*?configured prompt ceiling.*?/olympus\.performance <prompt>' -and
         $readme -match 'no bare `/ultra` or `/performance` aliases' -and
         $workflows -match 'There are no bare `/ultra` or `/performance` aliases')
     Check 'COMMAND_DOCS_STATE_PROMPT_LEVEL_ARGUMENT_GUARD' (

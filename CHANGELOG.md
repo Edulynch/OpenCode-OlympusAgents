@@ -8,6 +8,7 @@
 
 - Add attributed, focused guidance and status-first localized operational reporting without changing the user/worker result schema.
 - Separate the repository-root probe from scoped reads in preflight without widening permissions.
+- Keep the original Nox shell run when it moves to the background; Kael reports an unresolved result without assuming the command is still running.
 - Add the opt-in Prompt Book, which blocks when a required file is missing.
 
 ### Capability limits

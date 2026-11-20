@@ -50,6 +50,7 @@ $units = [Collections.Generic.List[object]]::new()
 try {
     if (-not $ProcessesOnly) {
     $kael = Text '.opencode/agents/kael.md'
+    $nox = [regex]::Replace((Text '.opencode/agents/nox.md'), '\s+', ' ')
     $docs = Text 'docs/DEVELOPMENT.md'
     Check 'KAEL_FOREGROUND_OWNERSHIP' ($kael -match 'Kael owns every process, controller, build/test job, and native child session' -and
         $kael -match 'Keep the task pending from launch through tracking,\s*wait/join, collection, validation, and finalization' -and
@@ -60,6 +61,12 @@ try {
         $docs -match 'otherwise report BLOCKED without starting it')
     Check 'LIFECYCLE_AND_TERMINAL' ($kael -match 'Never declare final completion while a required direct child is non-terminal' -and
         $kael -match 'COMPLETION_UNCONFIRMED' -and $kael -match 'PARTIAL or\s+COMPLETION_UNCONFIRMED')
+    Check 'NOX_PENDING_SHELL_RESUMPTION' (
+        $nox -match 'original background job/shell ID.*execution is pending/running, that command has already started.*not a failure or permission to call shell again' -and
+        $nox -match 'Preserve the exact original ID when exposed.*never retry, duplicate, or poll the command' -and
+        $nox -match 'send only a progress update and yield so native completion can resume this same session' -and
+        $nox -match 'match and consume that original execution.s terminal result once' -and
+        $nox -match 'report output/exit only when exposed, otherwise report missing terminal evidence without retrying')
     Check 'PROCESS_OWNERSHIP' ($kael -match 'Missing output is not failure' -and
         $kael -match 'never blindly retry' -and
         $kael -match 'If exact ownership, safe cleanup, or lifecycle\s+completion cannot be established')

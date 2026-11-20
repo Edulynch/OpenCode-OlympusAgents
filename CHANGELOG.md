@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## v0.12.2
+
+### Highlights
+
+- Add attributed, focused guidance and status-first localized operational reporting without changing the user/worker result schema.
+- Separate the repository-root probe from scoped reads in preflight without widening permissions.
+- Add the opt-in Prompt Book, which blocks when a required file is missing.
+
+### Capability limits
+
+- Prompt Book runtime evidence covers three read-only scenarios on OpenCode V2.3.2, including the missing-required-file block; it does not qualify write chains, native permission prompts, or user approval.
+- Public installation remains per-user/global and OpenCode-only; no public-endpoint installation result is claimed here.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.12.2 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.2/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.2/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+
 ## v0.12.1
 
 ### Highlights

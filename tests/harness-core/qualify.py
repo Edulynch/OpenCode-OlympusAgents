@@ -154,6 +154,36 @@ def kael_compact_contract_checks(prompt_text: str) -> dict[str, bool]:
     }
 
 
+def workflow_kovan_result_matches_contract(workflows_text: str, kovan_prompt: str) -> bool:
+    match = re.search(
+        r"(?ms)^### Kovan result example[ \t]*\n"
+        r".*?^```text[ \t]*\n(.*?)^```[ \t]*(?:\n|$)",
+        workflows_text,
+    )
+    result_contract = re.search(r"(?ms)^## Result contract\n(.*)\Z", kovan_prompt)
+    if match is None or result_contract is None:
+        return False
+
+    contract = result_contract.group(1)
+    result_fields = [line.partition(":") for line in match.group(1).splitlines()]
+    field_names = re.findall(r"(?m)^([A-Z_]+):", contract)
+    values = {name: value.strip() for name, separator, value in result_fields if separator}
+    allowed = {
+        name: {value.strip() for value in re.search(rf"(?m)^{name}: (.+)$", contract).group(1).split("|")}
+        for name in ("STATUS", "RECOMMENDATION", "SCOPE_COMPLIANCE")
+    }
+    return (
+        [name for name, separator, value in result_fields] == field_names
+        and all(separator and value.strip() for name, separator, value in result_fields)
+        and all(values[name] in allowed[name] for name in allowed)
+        and values.get("SCOPE_COMPLIANCE") == "PASS"
+        and values.get("OUT_OF_SCOPE_CHANGES") == "none"
+        and "src/task_summary.py" in values.get("FILES", "")
+        and "test_status_precedes_details" in values.get("TESTS", "")
+        and "optional CLI smoke not run" in values.get("TESTS", "")
+    )
+
+
 def main() -> int:
     check("PYTHON_311_PLUS", sys.version_info >= (3, 11))
     with (ROOT / "olympus" / "core" / "models.toml").open("rb") as stream:
@@ -228,6 +258,10 @@ def main() -> int:
     kael_prompt = opencode_files["kael"].read_text(encoding="utf-8")
     for name, result in kael_compact_contract_checks(kael_prompt).items():
         check(name, result)
+    workflows = (ROOT / "docs" / "WORKFLOWS.md").read_text(encoding="utf-8")
+    kovan_template = (ROOT / "olympus" / "harnesses" / "opencode" / "agent-prompts" / "kovan.md").read_text(encoding="utf-8")
+    check("WORKFLOW_KOVAN_RESULT_MATCHES_DECLARED_CONTRACT",
+          workflow_kovan_result_matches_contract(workflows, kovan_template))
     check("RETIRED_USER_MODIFIERS_REMOVED", all(marker not in kael_prompt for marker in (
         "FAST:", "FAST is an explicit user-selected", "fast-mode", "long-mode", "surgical-mode",
     )) and "TRIVIAL FAST-PATH CHANGE" in kael_prompt)
@@ -329,6 +363,18 @@ def main() -> int:
     renderer = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(renderer)
     root_config = (ROOT / "opencode.jsonc").read_text(encoding="utf-8")
+    kael_lifecycle = " ".join(renderer.markdown_section(
+        kael_prompt, "## User-facing lifecycle communication", ROOT / ".opencode" / "agents" / "kael.md"
+    ).split())
+    check("KAEL_LOCALIZED_REPORT_LABELS_AND_EXISTING_STATES", all(term in kael_lifecycle for term in (
+        "localized equivalents of **Status** followed by a concrete **Result**", "**Verification/Evidence**",
+        "**Blocker** only when one exists", "finish with a useful **Next** action",
+        "Exact `EXPECTED_OUTPUT` takes precedence", "ordinary conversation and direct answers stay natural",
+        "Required validation pending after implementation is PARTIAL", "required work actively running is IN PROGRESS",
+        "required checks unavailable because of a blocker are BLOCKED", "observed required execution failure is FAILED",
+        "optional check is skipped", "report COMPLETE", "Say idle only when you know no work remains active",
+        "COMPLETION_UNCONFIRMED", "if either is unknown, say so",
+    )))
     root_agent = re.search(r'(?m)^\s*"default_agent"\s*:\s*"([^"]+)"', root_config)
     root_model = re.search(r'(?m)^\s*"model"\s*:\s*"([^"]+)"', root_config)
     kael_model = renderer.role_model(models, "kael")[0]
@@ -391,6 +437,19 @@ def main() -> int:
     check("TFR_OPENCODE_ADAPTER_FROM_CORE",
           tfr_section in outputs[ROOT / ".opencode/agents/kael.md"] and
           kael_prompt.count(tfr_section) == 1)
+    coding_section = renderer.coding_behavior_policy(ROOT)
+    check("CODING_BEHAVIOR_CANONICAL_ONCE",
+          routing.count("## Coding behavior") == 1 and coding_section.startswith("## Coding behavior\n"))
+    coding_roles = {"kael", "kovan"}
+    check("CODING_BEHAVIOR_POLICY_RENDERED_ONCE_TO_KAEL_KOVAN_ONLY",
+          all(outputs[ROOT / ".opencode" / "agents" / f"{role}.md"].count(coding_section) == 1
+              for role in coding_roles)
+          and all(coding_section not in outputs[ROOT / ".opencode" / "agents" / f"{role}.md"]
+                  for role in canonical_roles - coding_roles)
+          and all(opencode_files[role].read_text(encoding="utf-8").count(coding_section) == 1
+                  for role in coding_roles)
+          and all(coding_section not in opencode_files[role].read_text(encoding="utf-8")
+                  for role in canonical_roles - coding_roles))
     check("CAPABILITY_DOC_MATCHES_RENDERER",
           renderer.capability_doc(capabilities) ==
           (ROOT / "docs/HARNESS-CAPABILITIES.md").read_text(encoding="utf-8"))

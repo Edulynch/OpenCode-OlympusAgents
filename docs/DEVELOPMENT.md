@@ -425,6 +425,10 @@ execution, native ASK UI or human approval/rejection, the question race, or
 Activity TUI rendering; those remain separately observed/manual
 evidence.
 
+Use the [Prompt Book](../tests/prompt-book/README.md) for an opt-in automated
+read-only smoke against real Kael and Nox sessions, and for separate manual
+scenarios covering role boundaries, write delegation, and blocked verification.
+
 The profile runner uses a locally available Python 3.11+ interpreter, PowerShell
 7, and Git; it does not download packages or choose an environment manager.
 RUNTIME's external-process slice uses `ConvertFrom-Json -DateKind String` and

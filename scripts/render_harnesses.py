@@ -147,6 +147,16 @@ def focused_testing_policy(root: Path) -> str:
     return markdown_section(canonical, heading, source)
 
 
+def coding_behavior_policy(root: Path) -> str:
+    """Share the canonical coding behavior only with Kael and Kovan."""
+    source = root / "olympus" / "policies" / "routing.md"
+    canonical = read_text(source)
+    heading = "## Coding behavior"
+    if canonical.count(heading) != 1:
+        raise RenderError("coding behavior must have exactly one canonical routing-policy section")
+    return markdown_section(canonical, heading, source)
+
+
 def add_yaml_comment(header: str, message: str) -> str:
     if not header.startswith("---\n") or not header.endswith("\n---\n"):
         raise RenderError("OpenCode agent metadata must be a YAML frontmatter block")
@@ -227,6 +237,8 @@ def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[
     maintenance_policy_path = root / "olympus" / "policies" / "maintenance-context.md"
     maintenance_policy = read_text(maintenance_policy_path).strip()
     tfr_policy = focused_testing_policy(root)
+    coding_policy = coding_behavior_policy(root)
+    coding_roles = {"kael", "kovan"}
     metadata_dir = adapter / "agent-metadata"
     prompts_dir = adapter / "agent-prompts"
     metadata_roles = {path.stem for path in metadata_dir.glob("*.md") if path.is_file()}
@@ -257,6 +269,10 @@ def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[
             raise RenderError("OpenCode Kael prompt must contain one TFR policy token")
         if role != "kael" and "{{tfr_policy}}" in prompt_source:
             raise RenderError("TFR root policy token is reserved for OpenCode Kael")
+        if role in coding_roles and prompt_source.count("{{coding_behavior_policy}}") != 1:
+            raise RenderError(f"OpenCode {role.title()} prompt must contain one coding behavior policy token")
+        if role not in coding_roles and "{{coding_behavior_policy}}" in prompt_source:
+            raise RenderError("coding behavior policy token is reserved for OpenCode Kael and Kovan")
         prompt = replace_tokens(
             prompt_source,
             {
@@ -268,6 +284,7 @@ def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[
                 "normal_parallelism_guidance": _parallel_guidance(children),
                 "display_identity": identities[role],
                 "tfr_policy": tfr_policy if role == "kael" else "",
+                "coding_behavior_policy": coding_policy if role in coding_roles else "",
                 "maintenance_context_policy": maintenance_policy if role == "kael" else "",
             },
             prompt_path,

@@ -84,6 +84,17 @@ def main() -> int:
     check("KAEL_PROMPT_USES_CANONICAL_POLICY", policy.strip() in prompt
           and "project-identity evidence" in policy
           and "ordinary Kael workflow" in policy)
+    preflight = " ".join(prompt.partition("### OpenCode repository preflight\n")[2].split("\n## ", 1)[0].split())
+    check("KAEL_SCOPED_REPOSITORY_PREFLIGHT_WITHOUT_EXPANDED_AUTHORITY", all(
+        marker in preflight for marker in (
+            "Reuse an explicitly identified Git worktree root",
+            "`git rev-parse --show-toplevel` alone",
+            "Use scoped reads for the Core markers, independent project identity",
+            "positive ownership evidence",
+            "install-manifest check when applicable",
+            "no-approval constraint, stop before delegation or writing",
+        )
+    ))
     check("KAEL_DIRECT_TOOLS_ARE_SCOPE_BOUND", "native `edit`" in source_prompt
           and "native `shell`" in source_prompt
           and "effective permission and exact task scope allow" in source_prompt
@@ -144,6 +155,7 @@ def main() -> int:
             ("git status --short", "allow"),
             ("git branch --show-current", "allow"),
             ("git rev-parse --show-toplevel", "allow"),
+            ("git ls-files -- olympus/core/models.toml", "ask"),
             ("git diff --check", "allow"),
             ("git diff --stat", "allow"),
             ("python scripts/check_docs.py", "ask"),

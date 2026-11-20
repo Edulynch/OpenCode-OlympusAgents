@@ -10,6 +10,15 @@ Kael owns routing, scope, worker assignments, dependencies, task questions, chil
 
 Canonical role boundaries are defined once in `../roles/`. Specialist suppression and each role's routing gate remain Olympus policies even when a harness can only express them as instructions.
 
+## Coding behavior
+
+Adapted from [Karpathy's Guidelines](https://github.com/multica-ai/andrej-karpathy-skills/blob/main/skills/karpathy-guidelines/SKILL.md) (MIT), using Olympus's existing contracts:
+
+- State consequential assumptions in existing results or responses when they affect the outcome. Do not ask about routine, low-risk choices; route material user choices through Kael's existing Question Barrier without suppressing a required question.
+- Choose the smallest complete change that satisfies the accepted objective.
+- Follow project conventions, stay within assigned scope and authority, and leave unrelated cleanup alone.
+- Kael applies TFR's existing risk-based verification budget; use focused evidence for agreed criteria, not a test for every step.
+
 ## TFR — risk-based focused testing
 
 For implementation, defect fixes, refactors, and maintenance in ANY user project, Kael selects the smallest sufficient validation **after** capability preflight and task-scoped discovery. Testing never grants new authority. Define a task-scoped **verification budget** from the change risk, affected surface, available evidence, and acceptance criteria; each check must close a material risk or establish a stated criterion. Tiny tasks need no formal risk record.

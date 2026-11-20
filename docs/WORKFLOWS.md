@@ -24,6 +24,61 @@ The command asks Kael to maximize useful, safe concurrency within the configured
 
 Kael coordinates the [eleven-agent team](../README.md#the-team) ([Español](../README.ES.md#the-team)). [Olympus Core](../olympus/README.md) defines the role boundaries.
 
+## Task results and handoffs
+
+For operational updates, use localized human-facing **Status** followed by a
+concrete **Result** (one concise line may combine them, status first). Add
+**Verification/Evidence** when checks materially matter, naming each relevant
+check and its state, including checks not run. Include **Blocker** only when
+one exists; finish with **Next** only when useful. These labels are for people,
+not internal handoff fields. Exact `EXPECTED_OUTPUT` takes precedence, while
+ordinary conversation and direct answers stay natural. Say IN PROGRESS when
+required work is active and FAILED only for an observed failure. Describe
+unknown execution in prose; never say idle unless that state is known.
+
+The examples use one small change: move the status text before details in
+`src/task_summary.py`.
+
+**Required checks passed; optional smoke skipped**
+
+> Status: Complete and idle — Result: `src/task_summary.py` now puts status before details.\
+> Verification: `tests/test_task_summary.py::test_status_precedes_details` passed; optional CLI smoke was not run.
+
+**Required check pending**
+
+> Status: Partial — Result: the status-first change is implemented.\
+> Verification: required `tests/test_task_summary.py::test_status_precedes_details` has not run; no test process is active.\
+> Next: run `python -m unittest discover -s tests -p test_task_summary.py`.
+
+**Required check blocked**
+
+> Status: Blocked — Result: the change is implemented, but acceptance is not verified.\
+> Verification: required `tests/test_task_summary.py::test_status_precedes_details` could not start; no pass/fail result exists.\
+> Blocker: Python is unavailable in the test environment.\
+> Next: restore the test environment and run the required test.
+
+### Kovan result example
+
+After the same small code change, Kovan reports through its existing result contract:
+
+```text
+STATUS: SUCCESS
+SUMMARY: Put task status before its details.
+CHANGES: Updated the existing task-summary formatter.
+FILES: src/task_summary.py
+TESTS: tests/test_task_summary.py::test_status_precedes_details — PASS; optional CLI smoke not run.
+ACCEPTANCE: Status leads; existing details remain.
+RISKS: None identified.
+BLOCKERS: None.
+RECOMMENDATION: ACCEPT
+SCOPE_COMPLIANCE: PASS
+OUT_OF_SCOPE_CHANGES: none
+```
+
+The human labels do not change internal handoff fields, existing authority or
+completion gates. Nox retains independent validation; Kael retains root
+completion.
+
 ## Parallelism
 
 | Policy | Selection | What changes |

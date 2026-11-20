@@ -58,10 +58,10 @@ Validated on Ubuntu 24.04 with WSL 2. [Linux setup and verification →](docs/IN
 
 ## Install a specific version
 
-**Windows:** install the pinned `v0.12.1` release:
+**Windows:** install the pinned `v0.12.2` release:
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.12.1/install.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.12.2/install.ps1')))
 ```
 
 **Linux:** when the latest release includes the Linux installer, replace `vX.Y.Z` with the tag of a stable release that supports Linux installation:

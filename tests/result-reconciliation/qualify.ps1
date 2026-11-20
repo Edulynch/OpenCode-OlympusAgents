@@ -32,7 +32,9 @@ function Reconcile($assignment, [string]$event, [bool]$childKnown, [bool]$termin
             correctiveEligible=($firstConsumption -and $acceptanceFailed); action=$action }
     }
     if ($childKnown) {
-        return [pscustomobject]@{ state='PENDING_OR_RUNNING'; retryEligible=$false; correctiveEligible=$false; action='WAIT_ORIGINAL' }
+        $activity = if ($event -eq 'child-still-running') { 'OBSERVED_RUNNING' } else { 'UNCONFIRMED' }
+        return [pscustomobject]@{ state='PENDING_OR_RUNNING'; activity=$activity;
+            retryEligible=$false; correctiveEligible=$false; action='WAIT_ORIGINAL' }
     }
     [pscustomobject]@{ state='COMPLETION_UNCONFIRMED'; retryEligible=$false; correctiveEligible=$false; action='NO_RETRY' }
 }
@@ -124,6 +126,8 @@ try {
         $lifecycle -match 'repetition must be safe and duplication ruled out' -and
         $lifecycle -match 'Preserve collected results and repeat only the affected or lost gate' -and
         $lifecycle -match 'Destructive or high-impact repetition needs proportionate explicit authorization')
+    Check 'RR26_STALE_RUNNING_IS_NOT_CURRENT_ACTIVITY' ($kael -match 'earlier running report and no new native evidence,\s+say that the result is pending and current activity is unconfirmed' -and
+        $kael -match 'Do not\s+infer a terminal outcome, release ownership, retry, or advance dependent work')
     Check 'NO_THALES_ON_ERROR' ($kael -match 'not by itself a reason to invoke Thales')
     Check 'PHASE3_INHERITS' ($kael -match 'Kael-mediated iterative evidence loops reconcile the original worker')
 
@@ -132,6 +136,11 @@ try {
     $a = New-Assignment 'original-nox' $false
     $t1 = Reconcile $a 'parent-output-missing' $true $false $false $false ''
     $t2 = Reconcile $a 'child-still-running' $true $false $false $false ''
+    $followUp = Reconcile $a 'later-turn-without-new-native-evidence' $true $false $false $false ''
+    Check 'CASE_FOLLOWUP_WITHOUT_FRESH_ACTIVITY_EVIDENCE' ($t2.activity -eq 'OBSERVED_RUNNING' -and
+        $followUp.state -eq 'PENDING_OR_RUNNING' -and $followUp.activity -eq 'UNCONFIRMED' -and
+        $followUp.action -eq 'WAIT_ORIGINAL' -and -not $followUp.retryEligible -and
+        -not $followUp.correctiveEligible -and $a.consumedCount -eq 0)
     $t3 = Reconcile $a 'original-terminal-result' $true $true $true $false 'succeeded'
     Check 'CASE_A_HISTORICAL_ORDER' ($t1.state -eq 'PENDING_OR_RUNNING' -and
         $t2.action -eq 'WAIT_ORIGINAL' -and -not $t1.retryEligible -and

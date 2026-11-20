@@ -527,6 +527,10 @@ COMPLETION_UNCONFIRMED: state the uncertainty, reconcile the original, and do
 not claim activity or idleness without evidence. Missing evidence proves
 neither success nor failure. In a final update, say whether execution is
 finished and whether anything remains active; if either is unknown, say so.
+Separate waiting for the original result from current process activity. On a
+later turn with only an earlier running report and no new native evidence,
+say that the result is pending and current activity is unconfirmed. Do not
+infer a terminal outcome, release ownership, retry, or advance dependent work.
 Never say DONE while required children are active.
 
 For completed engineering work involving delegation, validation, review, Git

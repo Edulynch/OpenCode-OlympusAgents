@@ -60,15 +60,15 @@ try {
         $maintenancePolicy -match 'There is no separate maintenance role, command' -and
         $maintenancePolicy -match 'canonical Olympus Core files' -and
         $maintenancePolicy -match 'independent project-identity evidence identifies OlympusAgents' -and
-        $maintenancePolicy -match 'A directory name, a request mentioning Olympus, or an isolated matching file is not sufficient evidence' -and
-        $maintenancePolicy -match 'If identity or target is unclear, do not perform dependent writes' -and
+        $maintenancePolicy -match 'A directory name, a request mentioning Olympus, or an isolated matching file is not sufficient' -and
+        $maintenancePolicy -match 'If identity, ownership, or target is unclear or conflicting, stop before dependent work' -and
         $maintenancePolicy -match 'different user project' -and
         $maintenancePolicy -match 'do not reach into a separate OlympusAgents checkout' -and
         $maintenancePolicy -match 'manifest-owned files' -and
         $kael -match '## Identify the target repository' -and
         $kael -match '## Preserve the external-project boundary' -and
         $kael -match 'independent project-identity evidence identifies OlympusAgents' -and
-        $kael -match 'do not perform dependent writes' -and
+        $kael -match 'stop before dependent work' -and
         $kael -match 'manifest-owned files')
     $good = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='succeeded'; validated=$true}
     $bad = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='failed'; validated=$false}
@@ -95,11 +95,11 @@ try {
     $kaelSource = Text 'olympus/harnesses/opencode/agent-prompts/kael.md'
     Check 'TFR_NORMAL_GATE_CONDITIONAL' (
         $gate -match 'NORMAL CHANGE: one scoped implementer' -and
-        $gate -match 'use Nox only when' -and $gate -match 'use Vera only when' -and
+        $gate -match 'uses Nox only when' -and $gate -match 'uses Vera only when' -and
         $gate -match 'fast-path exclusion alone does\s+not require a separate tester or reviewer' -and
         $gate -notmatch 'NORMAL CHANGE:\s*implementer,\s*tester,\s*reviewer' -and
         $core -match 'Assign Nox only for distinct needed test/runtime validation' -and
-        $kaelSource -match 'use Nox only when')
+        $kaelSource -match 'uses Nox only when')
     Check 'TFR_MANDATORY_GATES_PRESERVED' (
         $gate -match 'CRITICAL CHANGE: researcher, architect, implementer, tester/reviewer' -and
         $gate -match 'mandatory project, CI,\s+runtime, migration, release, or critical-change gates remain required' -and
@@ -108,11 +108,11 @@ try {
         $gate -match 'NO UNRESOLVED BLOCKING OR MATERIAL REVIEW FINDINGS')
     Check 'TFR_OPENCODE_NORMAL_GATE_PARITY' (
         $gate -match 'NORMAL CHANGE: one scoped implementer and the smallest sufficient focused\s+validation' -and
-        $gate -match 'use Nox only when\s+distinct test/runtime evidence is needed' -and
-        $gate -match 'use Vera only when independent\s+review is justified or explicitly required' -and
+        $gate -match 'uses Nox only when distinct\s+test/runtime evidence is needed' -and
+        $gate -match 'uses Vera only when independent review\s+is justified or explicitly required' -and
         $gate -match 'fast-path exclusion alone does\s+not require a separate tester or reviewer' -and
         $gate -match 'explicit user-requested independent review and mandatory project, CI,\s+runtime, migration, release, or critical-change gates remain required' -and
-        $gate -match 'Master Orchestrator\s+reconciles all required evidence' -and
+        $gate -match 'Master Orchestrator reconciles all\s+required evidence' -and
         $gate -match 'Completion is DONE only when all required conditions hold')
     Check 'PROGRESS_NOT_FINAL' ($kael -match 'Progress\s+messages must explicitly say IN PROGRESS / waiting' -and
         $kael -match 'Never declare final completion while a required direct child is non-terminal')
@@ -121,15 +121,22 @@ try {
     foreach ($prompt in @($kaelSource, $kael)) {
         Check 'NATIVE_PARENT_YIELD' (
             $prompt -match 'keep the logical task pending, not the\s+model turn active' -and
-            $prompt -match 'When no independent work remains, send one IN PROGRESS update and end the current\s+turn; native child notifications resume the parent' -and
+            $prompt -match 'When no such assignment remains, send at most one IN PROGRESS update, end the\s+turn, and await native notification' -and
             $prompt -match 'Yielding is not completion,\s+cancellation, or permission to release ownership' -and
             $prompt -match 'results remain pending and no independent work is available, yield again' -and
             $prompt -notmatch 'Keep the turn open|or end the root turn after a progress message')
         Check 'NO_ACTIVE_CHILD_WAIT' (
-            $prompt -match 'Do not repeat unchanged progress\s+updates' -and
-            $prompt -match 'Never use repeated reasoning, no-op tools, unrelated skill loads, sleeps,\s+or polling solely to wait for children' -and
-            $prompt -match 'Do not launch replacement children')
+            $prompt -match 'Do\s+not repeat unchanged progress\s+updates' -and
+            $prompt -match 'Never use repeated reasoning, no-op tools,\s+unrelated skill loads, sleeps, or polling solely to wait for children' -and
+            $prompt -match 'Do not\s+launch replacement children')
     }
+    Check 'PENDING_WORK_LIMITED_TO_READY_NECESSARY_ASSIGNMENTS' (
+        $nativeSessions -match 'dispatch only assignments already necessary for the\s+objective, ready, and independent under existing dependencies and concurrency\s+ceilings' -and
+        $nativeSessions -match 'Do not start opportunistic research, verification, or unrelated work' -and
+        $nativeSessions -match 'send at most one IN PROGRESS update' -and
+        $nativeSessions -match 'await native notification; reconcile the original result on resume' -and
+        $nativeSessions -match 'Treat earlier running/partial status as stale until new native evidence arrives'
+    )
     Check 'NATIVE_BACKGROUND_SCHEMA_NEUTRAL' (
         $nativeSessions -match 'OpenCode 2\.3 and later always runs child sessions in\s+the background' -and
         $nativeSessions -match 'On earlier versions,\s+use background behavior only when the currently exposed schema provides it' -and

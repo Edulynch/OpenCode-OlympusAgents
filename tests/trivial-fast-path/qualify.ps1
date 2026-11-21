@@ -85,18 +85,28 @@ try {
     $section = [regex]::Match($kael, '(?ms)^## Trivial task / authority fast path\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
 
     Check 'FAST_POLICY_SPECIALIST_VALUE' ($section -match 'Specialist value must exceed orchestration cost' -and
-        $section -match '(?is)Do not launch Veyra to rediscover established ownership,\s*Nox\s+for an outcome Kael can observe,\s*or another specialist without a gate-based need')
+        $section -match 'Do\s+not add Veyra when ownership is already established or Nox unless distinct')
+    Check 'FAST_POLICY_SINGLE_KOVAN_AND_EVIDENCE' ($section -match 'Every known exact small source edit uses\s+\*\*one Kovan writer\*\*' -and
+        $section -match 'one Kovan writer\*\*, who may run focused checks as part of implementation' -and
+        $section -match 'Kael does not implement,\s+explore,\s+research,\s+or run tests' -and
+        $section -notmatch 'Kael directly implements|Kael may act directly')
     Check 'FAST_POLICY_ELIGIBILITY' ($section -match 'one operation or a small' -and
-        $section -match 'exact target/scope is known' -and $section -match 'ownership is\s+already sufficiently established' -and
+        $section -match 'exact target/scope is known' -and $section -match 'ownership is already\s+sufficiently established' -and
         $section -match 'no new architecture' -and $section -match 'uncertain diagnosis/root cause' -and
         $section -match 'cross-cutting or\s+cross-subsystem' -and $section -match 'not destructive, high-risk, security-sensitive' -and
-        $section -match 'explicit request for independent review' -and $section -match 'checked directly and cheaply')
-    Check 'FAST_POLICY_NATIVE_ASK' ($section -match 'exact operation, `WRITE_SCOPE`, canonical\s+repository root' -and
-        $section -match 'positive project-ownership evidence, protected-path exclusions,\s+and current task grant before the tool attempt' -and
-        $section -match 'selected writer attempts only that native tool operation' -and
+        $section -match 'explicit request for independent review' -and $section -match 'assessed cheaply from supplied evidence')
+    Check 'FAST_POLICY_NATIVE_ASK' ($section -match 'exact operation,\s+`WRITE_SCOPE`, canonical repository root' -and
+        $section -match 'positive project-ownership evidence,\s+protected-path exclusions, and current task grant before assigning one Kovan\s+writer' -and
+        $section -match 'The writer attempts only that native tool operation' -and
         $section -match 'rejection or\s+cancellation stops it without fallback' -and
         $section -match 'requested target was written within exact scope' -and
-        $section -match 'no Olympus-owned\s+resource was modified')
+        $section -match 'no\s+Olympus-owned resource was modified')
+    Check 'FAST_POLICY_WRITER_ACCEPTANCE_FACTS' ($section -match 'Put every exact, cheaply verifiable acceptance fact in the original Kovan\s+contract' -and
+        $section -match 'smallest focused test/read needed when materially\s+requested' -and
+        $section -match 'state the exact expected bytes when bytes matter' -and
+        $section -match 'Kovan performs\s+those cheap checks as part of implementation' -and
+        $section -match 'Do not add a specialist for a\s+missing focused check by default' -and
+        $section -match 'reconcile with the original Kovan result')
     Check 'FAST_POLICY_PROPORTIONAL_ACCEPTANCE' ($section -match 'formatting such as a trailing newline as\s+irrelevant unless the user or task explicitly requires exact bytes' -and
         $section -match 'Derive\s+acceptance from the stated objective' -and
         $section -match 'Do not\s+require full-repository hashes, Git audits, or Olympus-wide revalidation')
@@ -111,8 +121,8 @@ try {
         $docs -match 'not a seconds\s+SLA')
     Check 'FAST_POLICY_GENERIC' ($docs -match 'special-case project names' -and
         $section -match 'eligible write' -and $section -match 'actual objective')
-    Check 'FAST_POLICY_TRIVIAL_COMPLETION_GATE' ($kael -match 'TRIVIAL FAST-PATH CHANGE: Kael directly implements a small scoped change when effective tools/authority allow, or uses one scoped Kovan writer when that adds value, followed by lightweight direct Kael validation' -and
-        $kael -match 'no separate tester/reviewer unless requested or new evidence requires escalation')
+    Check 'FAST_POLICY_TRIVIAL_COMPLETION_GATE' ($kael -match 'TRIVIAL FAST-PATH CHANGE: one scoped Kovan writer implements every exact small change and may run focused checks; Kael evaluates supplied evidence for acceptance' -and
+        $kael -match 'no separate Nox/Vera unless distinct validation, explicit independent review, or new evidence requires it')
     Check 'RETIRED_USER_MODIFIERS_KEEP_TRIVIAL_FAST_PATH' (
         $kael -match 'TRIVIAL FAST-PATH CHANGE' -and
         $kael -notmatch 'fast-mode|long-mode|surgical-mode|FAST is an explicit user-selected' -and

@@ -73,7 +73,7 @@ Olympus Core defines canonical role responsibilities, model intent, routing, aut
 
 The OpenCode capability contract and its evidence are documented in the [harness guide](HARNESSES.md) and [capability matrix](HARNESS-CAPABILITIES.md).
 
-Kael checks feasibility, repository identity, and task scope before delegated research or planning. The same Kael workflow handles OlympusAgents development and ordinary project work; there is no separate maintenance command, role, or authorization plane. The native `/goal` surface remains opt-in and user-selected where available. Feasible work starts with task-scoped discovery (none, targeted file, or bounded subsystem) and widens only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request. Broad research remains available when justified.
+Kael checks feasibility, repository identity, and task scope using minimal preflight before delegating research or planning. The same Kael workflow handles OlympusAgents development and ordinary project work; there is no separate maintenance command, role, or authorization plane. Kael does not explore repositories, conduct technical research, implement, or execute technical validation; responsible roles gather evidence and perform those tasks, while Kael reconciles their results and owns acceptance. A direct answer from existing context uses no tools or children. The native `/goal` surface remains opt-in and user-selected where available. Feasible work uses only materially needed task-scoped discovery (none, targeted, or bounded subsystem), widening only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request.
 
 ### Authority Grants — beta.3
 
@@ -148,21 +148,25 @@ test/build temporary output does not grant permission for unrelated source edits
 
 ### Trivial task / authority fast path
 
-For a small deterministic operation with known scope and established ownership,
-one sufficient writer, no architecture/uncertain diagnosis/cross-subsystem or
-high-risk work, and directly verifiable acceptance, Kael may use one writer and
-proportional direct verification. Specialist value must exceed orchestration
-cost: Veyra is not required to rediscover established ownership, Nox is not
-required for a simple directly observable success, and Vera/Atlas/other roles
-are not invoked just because they exist. Explicit independent review remains
-required when requested. This is an eligible-task policy, not an automatic route
-for every apparently small task.
+For a small deterministic change with known scope and established ownership,
+one scoped Kovan writer is sufficient when there is no
+architecture/uncertain-diagnosis/cross-subsystem or high-risk work and acceptance
+can be checked cheaply from supplied evidence. Kovan may run focused checks as
+part of implementation. Kael evaluates that evidence for acceptance; it does
+not implement, explore, research, or execute technical validation. Veyra is not
+required to rediscover established ownership, Nox is not required unless
+distinct test/runtime evidence is needed, and Vera/Atlas/other roles are not
+invoked just because they exist. Explicit independent review remains required
+when requested. An answer available from existing context uses no tools or
+children. This is an eligible-task policy, not an automatic route for every
+apparently small task.
 
 For an eligible scoped `NATIVE_ASK` write, Kael determines exact operation,
-`WRITE_SCOPE`, repository root and ownership before launch; Kovan is the only
-child, attempts the exact native operation, and waits for OpenCode's native
-Approve/Reject result. Approval permits the operation to continue but does not
-expand scope. Kael checks the requested target and exact scope proportionally.
+`WRITE_SCOPE`, repository root and ownership before launch; one Kovan writer is
+the only child, attempts the exact native operation, and waits for OpenCode's
+native Approve/Reject result. Approval permits the operation to continue but
+does not expand scope. Kael evaluates supplied evidence against the requested
+target and exact scope proportionally.
 Acceptance follows the real objective: a trailing newline is immaterial unless
 exact bytes were explicitly required. Material validation failure, uncertain
 ownership, scope expansion, unknown root cause, cross-subsystem/architectural
@@ -185,8 +189,10 @@ verification stages (not wall-clock time):
 
 **DO YOUR ROLE; DO NOT ABSORB ANOTHER ROLE TO SAVE A HANDOFF.** Kael owns Preflight,
 routing, dependencies, session families, reconciliation, retry decisions and final
-synthesis. Veyra supplies discovery; Orin architecture; Kovan implementation;
-Nox runtime/test evidence; Vera independent review. Atlas optionally plans execution order for already-scoped, already-architected changes without discovering, editing or validating; Thales reasons over actual
+synthesis; it evaluates supplied evidence and does not perform repository exploration,
+technical research, implementation, or technical validation. Veyra supplies
+discovery; Orin architecture; Kovan implementation; Nox runtime/test evidence;
+Vera independent review. Atlas optionally plans execution order for already-scoped, already-architected changes without discovering, editing or validating; Thales reasons over actual
 evidence under the existing Diagnostic Gate; straightforward bugs do not trigger
 Thales. Reasoners identify hypotheses and discriminating evidence, not execute
 specialist work or self-review in place of Vera.
@@ -492,7 +498,7 @@ python -B ./tests/maintenance-scope/qualify.py
 pwsh -NoProfile -File ./tests/structured-output/qualify.ps1
 ```
 
-`tests/maintenance-scope/qualify.py` checks the contextual-maintenance policy, target identity boundary, opt-in `/goal`, current Kael roster, and absence of retired product outputs. It is static and does not claim interactive model behavior. `tests/structured-output/qualify.ps1` checks exact requested terminal-field preservation as a general Kael contract, also without claiming live model behavior. `tests/authority/qualify.ps1` stages generated runtime resources in a disposable project, so its live effective-agent probe does not depend on this checkout's `.opencode` outputs. This isolates only the byte/runtime-sensitive gates and does not require serializing unrelated read-only qualifications.
+`tests/maintenance-scope/qualify.py` checks the contextual-maintenance policy, target identity boundary, Kael's delegation-only work boundary, unchanged native tool metadata, opt-in `/goal`, current roster, and absence of retired product outputs. It is static and does not claim interactive model behavior. `tests/trivial-fast-path/qualify.ps1` checks the one-Kovan fast path and synthetic acceptance cases; `tests/completion-gates/qualify.ps1` checks static pending-work/completion wording plus synthetic gates. Neither claims live routing or model behavior. `tests/structured-output/qualify.ps1` checks exact requested terminal-field preservation as a general Kael contract, also without claiming live model behavior. `tests/authority/qualify.ps1` stages generated runtime resources in a disposable project, so its live effective-agent probe does not depend on this checkout's `.opencode` outputs. This isolates only the byte/runtime-sensitive gates and does not require serializing unrelated read-only qualifications.
 
 `check` is read-only. Harness-core qualification tests renderer idempotence,
 drift/missing-output detection, canonical role/model/policy sources, and the
@@ -563,11 +569,16 @@ interactive-agent or runtime-permission test.
 
 ### Native child waiting without active reasoning
 
-Keeping a task pending does not require keeping a model turn active. With native
-background children, Kael may continue independent work; otherwise it sends one
-IN PROGRESS update and ends the turn. Native child notifications resume the
-parent to reconcile the original results. If work is still pending and there is
-nothing independent to do, it yields again without repeating unchanged updates.
+Keeping a task pending does not require keeping a model turn active. While a
+child is pending, Kael may dispatch only work already necessary to the objective,
+ready, and independent under existing dependencies and concurrency ceilings; it
+does not start opportunistic research, verification, or unrelated work. With
+native background children, Kael may continue only that work; otherwise, when
+none remains, it sends at most one IN PROGRESS update and ends the turn. Native
+child notifications resume the parent to reconcile the original results. If
+work is still pending and no necessary independent work is ready, it awaits the
+notification without repeating unchanged updates or polling. Treat an earlier
+running/partial status as stale until new native evidence arrives.
 Yielding does not complete the task, cancel children, release writer ownership,
 or authorize replacement invocations. Final completion still requires all
 required terminal results to be collected, validated, and consumed once.

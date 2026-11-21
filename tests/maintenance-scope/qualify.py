@@ -75,7 +75,7 @@ def main() -> int:
     check("CONTEXTUAL_TARGET_IDENTITY", all(marker in policy for marker in (
         "olympus/core/models.toml", "olympus/core/identities.toml",
         "olympus/policies/routing.md", "project-identity evidence",
-        "do not perform dependent writes")))
+        "If identity, ownership, or target is unclear or conflicting, stop before dependent work")))
     check("EXTERNAL_PROJECT_BOUNDARY", "different user project" in policy
           and re.search(r"do not reach into a separate OlympusAgents checkout", policy, re.IGNORECASE)
           and "manifest-owned files" in policy)
@@ -89,20 +89,24 @@ def main() -> int:
         marker in preflight for marker in (
             "Reuse an explicitly identified Git worktree root",
             "`git rev-parse --show-toplevel` alone",
-            "Use scoped reads for the Core markers, independent project identity",
+            "read all three Core markers, independent project identity",
             "positive ownership evidence",
-            "install-manifest check when applicable",
-            "no-approval constraint, stop before delegation or writing",
+            "applicable install-manifest/installer ownership evidence",
+            "no-approval constraint, stop before dependent work",
         )
     ))
-    check("KAEL_DIRECT_TOOLS_ARE_SCOPE_BOUND", "native `edit`" in source_prompt
-          and "native `shell`" in source_prompt
-          and "effective permission and exact task scope allow" in source_prompt
+    check("KAEL_DIRECT_TOOLS_ARE_SCOPE_BOUND", "Kael's direct repository access is limited to minimum root, identity, ownership, and applicable manifest preflight" in source_prompt
+          and "Kael never directly implements or executes" in source_prompt
+          and "technical validation" in source_prompt
           and "`WRITE_SCOPE`/`GIT_SCOPE`" in source_prompt
           and "`DO_NOT_TOUCH`" in source_prompt
+          and "Kael may directly implement" not in source_prompt
+          and "Kael may use native `edit` for small" not in source_prompt
+          and "Kael may use native `shell` for small" not in source_prompt
           and "Master Orchestrator is read-only" not in source_prompt
-          and "Kael remains shell DENY" not in source_prompt
-          and re.search(r'(?m)^  - action: shell\n    resource: "\*"\n    effect: ask$', kael_metadata)
+          and "Kael remains shell DENY" not in source_prompt)
+    check("KAEL_NATIVE_METADATA_CAPABILITIES_UNCHANGED",
+          re.search(r'(?m)^  - action: shell\n    resource: "\*"\n    effect: ask$', kael_metadata)
           and re.search(r'(?m)^  - action: edit\n    resource: "\*"\n    effect: allow$', kael_metadata))
     check("ADAPTER_CAPABILITY_CONTRACT", set(capabilities) == {"opencode"}
           and capabilities["opencode"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "SUPPORTED"

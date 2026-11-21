@@ -190,20 +190,20 @@ def _parallel_guidance(children: int) -> str:
     if children == 1:
         return (
             "NORMAL is cost/context-aware: adapt from zero to one child, preferring the\n"
-            "minimum useful parallelism. Use zero for direct/trivial work and one for\n"
+            "minimum useful parallelism. Use zero for direct answers and one for\n"
             "ordinary delegated work; keep child work sequential rather than splitting\n"
             "independent work across concurrently active children."
         )
     if children == 2:
         return (
             "NORMAL is cost/context-aware: adapt from zero to two children, preferring the\n"
-            "minimum useful parallelism. Use zero for direct/trivial work, one for ordinary\n"
+            "minimum useful parallelism. Use zero for direct answers, one for ordinary\n"
             "delegated work, and two for common independent work only where both are useful."
         )
     if children == 4:
         return (
             "NORMAL is cost/context-aware: adapt from zero to four children, preferring the\n"
-            "minimum useful parallelism. Use zero for direct/trivial work, one for ordinary\n"
+            "minimum useful parallelism. Use zero for direct answers, one for ordinary\n"
             "delegated work, two for common independent work, and three or four only where\n"
             "genuinely independent workstreams justify them. Before adding a concurrent child,\n"
             "check that its distinct responsibility or independent batch partition can progress\n"
@@ -221,7 +221,7 @@ def _parallel_guidance(children: int) -> str:
         upper = "three"
     return (
         f"NORMAL is cost/context-aware: adapt from zero to {word} children, preferring the\n"
-        "minimum useful parallelism. Use zero for direct/trivial work, one for ordinary\n"
+        "minimum useful parallelism. Use zero for direct answers, one for ordinary\n"
         f"delegated work, two for common independent work, and {upper} only where\n"
         "genuinely independent workstreams justify them. Before adding a concurrent child,\n"
         "check that its distinct responsibility or independent batch partition can progress\n"

@@ -13,17 +13,74 @@ model. No separate fixture is needed:
 python -B tests/prompt-book/check_readonly.py
 ```
 
-The smoke runs three fresh native sessions: a direct read with no child, a
-successful read delegated to Nox, and a required Nox read of a deliberately
-absent file. The last case passes only if the native read fails because the
-file is missing and Kael reports `VERIFICATION: BLOCKED` after Nox finishes.
-The smoke checks the original child exports, uses no polling, and verifies that
-the worktree evidence is unchanged.
+The smoke runs three fresh native sessions: closed arithmetic with zero root
+tools or children, a successful read delegated to Nox, and a required Nox read
+of a deliberately absent file. The last case passes only if the native read
+fails because the file is missing and Kael reports `VERIFICATION: BLOCKED`
+after Nox finishes. The smoke checks the original child exports, uses no
+polling, and verifies that the worktree evidence is unchanged.
 
-This opt-in smoke uses `--auto`, which can approve an unexpected request. It
-does **not** test whether a permission request occurred. Do not add write,
-shell, ambiguity, or permission scenarios to this mode. The manual cases
-below retain their zero-approval rule and are not run by the smoke.
+The two Nox read cases use `--auto`, which can approve an unexpected request. The smoke
+does **not** test whether a permission request occurred. It does not run the
+write comparison below. The manual cases retain their zero-approval rule and
+are not run by the smoke.
+
+### Before/after native routing comparison
+
+Use the same checkout, OpenCode version, and configured default model for both
+commands. First run the baseline against the unchanged generated agents; then
+render the candidate agents outside this runner and run the candidate command:
+
+```powershell
+python -B tests/prompt-book/check_readonly.py --compare baseline
+python -B tests/prompt-book/check_readonly.py --compare candidate
+```
+
+Both commands use the same three prompts and session titles, with no `--auto`,
+permission override, cache manipulation, or Git mutation. The runner does not
+render agents. Baseline output records the observed topology and violations;
+it is an observation, **not** a candidate `PASS`. A nonzero command or
+unrecognized trace leaves that case unconfirmed. Permission UI or a user's
+decision is not inferred from an exit status; record those only when directly
+observed.
+
+The comparison recognizes a permission-request notice on either stdout or
+stderr, a `permission.rejected` marker in the run trace, and the same marker in
+original session exports. An observed no-auto request/rejection fails candidate
+acceptance; the runner never approves it. `not-observed` means only that these
+evidence channels contained no marker, not that no permission UI appeared.
+
+The three comparison prompts are:
+
+1. Compute `19 + 23`; the expected final field is `ANSWER: 42`, with no root
+   tool calls or child.
+2. Find the next level-two section heading after `Automated read-only checks`
+   in this version-controlled README. The prompt does not give the answer or
+   prescribe a role. The candidate expects one original Veyra child to read this
+   file, with no root technical search; at most one exact root-only probe may
+   precede dispatch. The original child must be terminal before Kael's final
+   answer. Baseline reports whether the correct answer came from the previous
+   root read or from Veyra, plus the observed tool counts.
+3. Replace the contents of the exclusively created
+   `tests/prompt-book/.routing-fixture/status.txt` with exactly
+   `READY | 2 items` and a newline. The candidate expects permitted exact
+   ownership/manifest preflight reads, one original Kovan, a focused Kovan read
+   after the edit, a successful child terminal, and only this fixture effect.
+   The runner checks exact LF bytes, refuses parent escapes, reparse points,
+   hardlinks, and unexpected entries, and removes only the safe fixture in its
+   exclusively created directory after terminal results are confirmed. It then
+   compares repository evidence by naming changed `git status`, `git diff`, or
+   README-byte channels; this does not attribute a cause or print the worktree.
+   If the fixture path already exists, the runner refuses to inspect or alter
+   it. If execution is uncertain or safety checks fail, it retains the fixture
+   for reconciliation rather than deleting unexpected state.
+
+Each comparison prints one `USAGE` JSON line per task with per-session and
+summed counters: `input`, `cache_read`, `cache_write`, `output`, and `reasoning`.
+The runner reads each known original session export once in memory and prints
+the tool names, model IDs, and counts, not the transcript. Compare matching
+cases and model configurations. `null` means not exposed; a zero cost from
+OpenCode is not proof of zero billing or of savings.
 
 ## Prepare the fixture
 
@@ -85,14 +142,14 @@ replacement while the original execution is still unresolved.
 
 ## Run the cases
 
-### 1. Direct read
+### 1. Closed arithmetic routing
 
-> Read `tests/prompt-book/local-case/README.md` and tell me the title of the
-> first section below the document title. Do not modify anything.
+> Compute 19 + 23. In your final response include the field `ANSWER` with the
+> value `42`.
 
-**Pass:** Kael answers `Status formatter` without delegating. The checkout is
-unchanged. If the trace cannot establish whether a child was launched, the
-no-delegation criterion is unconfirmed.
+**Pass:** Kael returns `ANSWER: 42` with no root tool calls or child. The
+checkout is unchanged. If the native trace is missing or incomplete, zero
+tool calls are unconfirmed.
 
 ### 2. Kovan writes, Nox validates, Kael closes
 
@@ -141,7 +198,7 @@ does not establish that no approval was requested.
 
 | Case | Verdict | Evidence or missing observation |
 |---|---|---|
-| Direct read | | |
+| Closed arithmetic routing | | |
 | Kovan → Nox → close | | |
 | Role boundary | | |
 | Required verification blocked | | |

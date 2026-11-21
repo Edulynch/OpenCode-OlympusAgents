@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## v0.12.3
+
+### Highlights
+
+- Clarify Kael's coordinator-only role: route eligible scoped implementation through one Kovan writer and avoid redundant coordinator research, implementation, or testing.
+- Add focused routing comparisons for closed arithmetic, targeted Veyra reads, and scoped Kovan edits, with terminal-result and permission-evidence checks.
+
+### Capability limits
+
+- Existing OpenCode 2.3.2 arithmetic/Veyra/Kovan traces were accepted by offline replay; live Nox smoke was not rerun. No token or billing savings are claimed.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.12.3 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.3/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.3/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+
 ## v0.12.2
 
 ### Highlights

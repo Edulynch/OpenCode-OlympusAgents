@@ -329,9 +329,13 @@ def main() -> int:
 
     check("MAX_CHILDREN_CANONICAL_FOUR", orchestration["max_children"] == 4)
     routing = (ROOT / "olympus/policies/routing.md").read_text(encoding="utf-8")
-    check("TRIVIAL_FAST_PATH_CANONICAL", "trivial deterministic changes do not fan out" in routing and
-          "Kael may directly implement a small, deterministic change" in routing and
-          "delegate to Kovan when implementation complexity or independent expertise makes that useful" in routing)
+    check("TRIVIAL_FAST_PATH_CANONICAL", "A direct answer from existing context uses zero tools and zero children" in routing and
+          "Every source change, including a trivial deterministic edit, goes to one scoped Kovan writer" in routing and
+          "Kael does not explore repositories, conduct technical research, implement, or execute technical validation" in routing and
+          "Kael may directly implement" not in routing)
+    check("PENDING_WORK_ROUTING_CANONICAL", "dispatch only work already necessary to the objective, ready, and independent" in routing and
+          "Do not start opportunistic research, verification, or unrelated work" in routing and
+          "do not poll or treat an earlier running/partial status as current without new evidence" in routing)
     lifecycle = (ROOT / "olympus/policies/result-lifecycle.md").read_text(encoding="utf-8")
     check("QUESTION_BARRIER_CANONICAL_ONCE", lifecycle.count("## Question barrier") == 1)
     check("COMPLETION_BARRIER_CANONICAL_ONCE", lifecycle.count("## Completion barrier") == 1)

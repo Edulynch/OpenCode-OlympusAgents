@@ -1039,7 +1039,7 @@ try {
         $_.action -eq 'edit' -and $_.resource -eq '*' -and $_.effect -eq 'allow'
     }).Count -eq 1)
 
-    Check 'AUTH1_NORMAL_IN_SCOPE_NO_QUESTION' ($kael -match 'Normal in-scope project work proceeds directly when the effective native\s+permission is ALLOW' -and
+    Check 'AUTH1_NORMAL_IN_SCOPE_NO_QUESTION' ($kael -match 'An assigned worker proceeds directly with its in-scope operation when the\s+effective native\s+permission is ALLOW\.' -and
         (Decide 'kovan' $operation 'src/cart.ts' 'src/**' $rootPath $null).decision -eq 'ALLOW' -and
         (Native-Decision $nativeRules 'edit' 'src/cart.ts') -eq 'ALLOW' -and
         (Decide 'kovan' $operation 'src/cart.ts' 'src/**' $rootPath $null).question -eq 0)

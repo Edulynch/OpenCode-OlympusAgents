@@ -32,7 +32,7 @@ function Frontmatter([string]$Text) {
 try {
     $preflight = Section $kael 'Capability Preflight — before research'
     $authority = Section $kael 'Task-scoped Authority Grants and native permission outcomes'
-    $kaelMetadata = Frontmatter $kael
+    $kaelMetadata = Frontmatter ([IO.File]::ReadAllText((Join-Path $root 'olympus/harnesses/opencode/agent-metadata/kael.md')))
     $noxMetadata = Frontmatter $nox
     $discovery = Section $kael 'Task-scoped, progressive discovery'
     $mission = Section $kael 'Mission and routing'
@@ -122,10 +122,19 @@ try {
         $maintenance -match 'manifest-owned files' -and
         $kael -notmatch '(?i)Aegis|/maintain')
     Check KAEL_NATIVE_PERMISSION ($kaelMetadata -notmatch '(?m)^  - action: external_directory\b' -and
-        $kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: ask(?:\r?\n|$)' -and
-        $kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "git status \*"\r?\n    effect: allow(?:\r?\n|$)' -and
+        $kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
+        $kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "git rev-parse --show-toplevel"\r?\n    effect: allow(?:\r?\n|$)' -and
+        $kaelMetadata -notmatch '(?ms)^  - action: shell\r?\n    resource: "(?:git status \*|git branch --show-current|git diff --check|git diff --stat)"\r?\n    effect: allow$' -and
+        $kaelMetadata -match '(?m)^  - action: edit\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
+        $kaelMetadata -match '(?m)^  - action: serena_\*\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
+        $kaelMetadata -notmatch '(?ms)^  - action: serena_[^\r\n]*\r?\n    resource: [^\r\n]+\r?\n    effect: allow$' -and
         $kaelMetadata -match '(?m)^  - action: subagent\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
         $kaelMetadata -match '(?m)^  - action: subagent\r?\n    resource: nox\r?\n    effect: allow(?:\r?\n|$)')
+    $expectedKaelChildren = @('veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios')
+    $actualKaelChildren = @([regex]::Matches($kaelMetadata, '(?m)^  - action: subagent\r?\n    resource: ([^\r\n]+)\r?\n    effect: allow\r?$') |
+        ForEach-Object { $_.Groups[1].Value.Trim('"') })
+    Check KAEL_SPECIALIST_ALLOWLIST_UNCHANGED (($actualKaelChildren -join ',') -ceq ($expectedKaelChildren -join ',') -and
+        $kael -match '(?m)^mode: primary$' -and $kael -match 'model: "openai/gpt-6\.2-sol#high"')
     Check NOX_NATIVE_SHELL ($noxMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: allow(?:\r?\n|$)' -and
         $nox -match 'Source-read-only trusted-project validation specialist with practical shell')
 

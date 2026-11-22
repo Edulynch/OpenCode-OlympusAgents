@@ -207,13 +207,46 @@ candidate requires its own runtime evidence. The OpenCode adapter does not
 register any MCP server. MCP is optional user/host configuration: Olympus does
 not require an MCP CLI on `PATH`, install Serena, or manage the user's MCP
 settings. If a user or host separately makes Serena tools available, the
-canonical Olympus configuration keeps their grants limited to read-only
-symbol-navigation tools for Kael, Veyra, and Kovan, with the global `serena_*`
-denial and mutation-tool defenses preserved. These conditional grants are not a
-Serena prerequisite or a guarantee against host-level MCP failures; normal
-non-MCP tools remain subject to their configured permissions.
+canonical Olympus configuration keeps read-only symbol-navigation grants for
+Veyra and Kovan; Kael has a role-specific `serena_*` DENY because the minimal
+global permission source has no Serena default denial. These conditional grants
+are not a Serena prerequisite or a guarantee against host-level MCP failures.
 Global discovery is separately qualified above for isolated Windows V2.0.26;
 no model-backed prompt is implied.
+
+### Kael's native permission boundary
+
+Kael's metadata denies wildcard `shell` and `edit`; its only shell exception is
+the literal `git rev-parse --show-toplevel` needed when a repository-root probe
+is genuinely required. The previous status, branch, and diff shell exceptions
+are absent. Kael's existing ten-agent subagent allowlist remains unchanged.
+OpenCode applies agent permission rules after shared configuration and uses the
+last matching rule, so this exact shell exception follows Kael's wildcard
+DENY. Prompt-level minimal reads, user questions, scoped delegation, and native
+child-result handling remain; they do not grant shell commands or edits.
+
+No agent-level `external_directory` rule is added. The shared ASK fallback and
+any later applicable user, project, or host/system restrictions still govern
+external paths; these source declarations do not establish effective runtime
+configuration or grant external access. Static source/render checks establish
+configured rules only—not tool execution, native permission UI or decisions,
+or user/account state. Shell retains host authority and is not an OS sandbox.
+
+**Issue #177 qualification (2026-11-22).** Nox's independent isolated OpenCode
+v2.3.2 run of `pwsh -NoProfile -File ./tests/authority/qualify.ps1 -QualificationSlice Runtime` reported `AUTH14_OPENCODE_EFFECTIVE_RULES PASS` and
+fixture cleanup PASS; this evaluated loaded rules only (Kael edit DENY, shell
+DENY except the exact root probe, Serena 6/6 DENY, ten named specialists ALLOW
+and unlisted DENY, inherited external-directory ASK without a Kael-local
+override, and Kovan ordinary edit ALLOW/project-plugin ASK/Activity DENY), not
+tool execution.
+**USER_REPORTED:** the renderer changed one managed Kael output, left 17
+unchanged, and `HARNESS_RENDER_CHECK: PASS` (18 managed); in a separate
+disposable Windows project, the TUI showed Veyra start and finish the read-only
+“Leer primer encabezado README” task before Kael reported the line-1 heading
+`# Prueba aislada del issue 177` and said no file was modified. This is one
+delegation/completion/answer observation—not independent filesystem-integrity
+evidence, a denied-action attempt, ASK UI/decision evidence, an observed root
+shell probe, or fresh global-scope evidence.
 
 ## Capability evidence
 

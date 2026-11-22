@@ -59,6 +59,8 @@ def main() -> int:
     capabilities = tomllib.loads(text("olympus/harnesses/capabilities.toml"))
     config_source = re.sub(r"(?m)^\s*//.*(?:\r?\n|$)", "", text("olympus/harnesses/opencode/config.jsonc"))
     opencode_config = json.loads(config_source)
+    global_source = re.sub(r"(?m)^\s*//.*(?:\r?\n|$)", "", text("olympus/harnesses/opencode/global-permissions.jsonc"))
+    minimal_global_config = json.loads(global_source)
     generated_roles = {path.stem for path in (ROOT / ".opencode/agents").glob("*.md")}
 
     check("ONE_KAEL_ROOT", "root orchestrator for both ordinary project work and OlympusAgents development" in policy
@@ -105,9 +107,19 @@ def main() -> int:
           and "Kael may use native `shell` for small" not in source_prompt
           and "Master Orchestrator is read-only" not in source_prompt
           and "Kael remains shell DENY" not in source_prompt)
-    check("KAEL_NATIVE_METADATA_CAPABILITIES_UNCHANGED",
-          re.search(r'(?m)^  - action: shell\n    resource: "\*"\n    effect: ask$', kael_metadata)
-          and re.search(r'(?m)^  - action: edit\n    resource: "\*"\n    effect: allow$', kael_metadata))
+    kael_rules = metadata_rules(kael_metadata)
+    check("KAEL_NATIVE_METADATA_LEAST_PRIVILEGE",
+          {"action": "shell", "resource": "*", "effect": "deny"} in kael_rules
+          and {"action": "shell", "resource": "git rev-parse --show-toplevel", "effect": "allow"} in kael_rules
+          and {"action": "edit", "resource": "*", "effect": "deny"} in kael_rules
+          and {"action": "serena_*", "resource": "*", "effect": "deny"} in kael_rules
+          and not any(rule["action"] == "shell" and rule["effect"] == "allow"
+                      and rule["resource"] != "git rev-parse --show-toplevel" for rule in kael_rules)
+          and not any(rule["action"].startswith("serena_") and rule["effect"] == "allow" for rule in kael_rules))
+    expected_children = ("veyra", "orin", "kovan", "nox", "vera", "thales", "atlas", "argus", "talos", "helios")
+    kael_children = tuple(rule["resource"] for rule in kael_rules
+                          if rule["action"] == "subagent" and rule["effect"] == "allow")
+    check("KAEL_SPECIALIST_ALLOWLIST_UNCHANGED", kael_children == expected_children)
     check("ADAPTER_CAPABILITY_CONTRACT", set(capabilities) == {"opencode"}
           and capabilities["opencode"]["CONTEXTUAL_OLYMPUS_MAINTENANCE"] == "SUPPORTED"
           and "AEGIS" not in capabilities["opencode"])
@@ -120,7 +132,7 @@ def main() -> int:
         "get_symbols_overview", "find_symbol", "find_referencing_symbols",
         "find_implementations", "find_declaration", "get_diagnostics_for_file",
     )
-    for role in ("kael", "veyra", "kovan"):
+    for role in ("veyra", "kovan"):
         metadata = text(f"olympus/harnesses/opencode/agent-metadata/{role}.md")
         check(f"SERENA_READ_ONLY_TOOLS_ALLOWED_{role.upper()}", all(
             re.search(rf"(?m)^  - action: serena_{tool}\n    resource: \"\*\"\n    effect: allow$", metadata)
@@ -128,10 +140,15 @@ def main() -> int:
         ) and not re.search(r"(?m)^  - action: serena_\*\n    resource: \"\*\"\n    effect: allow$", metadata))
     # The global denial precedes all explicit read-only Serena allowances.
     global_rules = opencode_config["permissions"]
+    minimal_global_rules = minimal_global_config["permissions"]
     check("SERENA_DENY_BY_DEFAULT", any(
         rule == {"action": "serena_*", "resource": "*", "effect": "deny"}
         for rule in global_rules
     ))
+    check("KAEL_SERENA_DENIED_WITH_MINIMAL_GLOBAL",
+          not any(rule["action"].startswith("serena_") for rule in minimal_global_rules)
+          and all(permission_effect(minimal_global_rules, kael_metadata, f"serena_{tool}") == "deny"
+                  for tool in semantic_tools))
     protected_serena_tools = (
         "serena_replace_symbol_body", "serena_rename_symbol",
         "serena_insert_after_symbol", "serena_insert_before_symbol",
@@ -150,24 +167,38 @@ def main() -> int:
     ))
     check("SERENA_READ_ONLY_SEMANTICS_EFFECTIVE", all(
         permission_effect(global_rules, role_metadata[role], f"serena_{tool}") == "allow"
-        for role in ("kael", "kovan", "veyra")
+        for role in ("kovan", "veyra")
+        for tool in semantic_tools
+    ) and all(
+        permission_effect(global_rules, role_metadata["kael"], f"serena_{tool}") == "deny"
         for tool in semantic_tools
     ))
-    check("KAEL_SHELL_ASK_WITH_NARROW_INSPECTION_ALLOWLIST", all(
+    check("KAEL_SHELL_ROOT_PROBE_ONLY", all(
         permission_effect(global_rules, kael_metadata, "shell", command) == expected
         for command, expected in (
-            ("git status --short", "allow"),
-            ("git branch --show-current", "allow"),
             ("git rev-parse --show-toplevel", "allow"),
-            ("git ls-files -- olympus/core/models.toml", "ask"),
-            ("git diff --check", "allow"),
-            ("git diff --stat", "allow"),
-            ("python scripts/check_docs.py", "ask"),
-            ("git push origin feat/28-single-kael-maintenance", "ask"),
-            ("git reset --hard", "ask"),
-            ("Remove-Item docs/DEVELOPMENT.md", "ask"),
+            ("git status --short", "deny"),
+            ("git branch --show-current", "deny"),
+            ("git ls-files -- olympus/core/models.toml", "deny"),
+            ("git diff --check", "deny"),
+            ("git diff --stat", "deny"),
+            ("python scripts/check_docs.py", "deny"),
+            ("git push origin feat/28-single-kael-maintenance", "deny"),
+            ("git reset --hard", "deny"),
+            ("Remove-Item docs/DEVELOPMENT.md", "deny"),
         )
     ))
+    check("KAEL_EDIT_DENIED_KOVAN_AND_PLUGIN_BOUNDARIES_UNCHANGED", all(
+        permission_effect(global_rules, kael_metadata, "edit", path) == "deny"
+        for path in ("src/cart.ts", "olympus/core/models.toml")
+    ) and permission_effect(global_rules, role_metadata["kovan"], "edit", "src/cart.ts") == "allow"
+      and permission_effect(global_rules, role_metadata["kovan"], "edit", "olympus/core/models.toml") == "allow"
+      and permission_effect(global_rules, role_metadata["kovan"], "edit", ".opencode/plugins/project-owned/index.ts") == "ask"
+      and permission_effect(global_rules, role_metadata["kovan"], "edit", ".opencode/plugins/olympus-activity/activity.ts") == "deny"
+      and permission_effect(global_rules, role_metadata["kovan"], "edit", ".opencode/agents/kovan.md") == "deny")
+    check("KAEL_EXTERNAL_DIRECTORY_RULES_UNCHANGED",
+          not any(rule["action"] == "external_directory" for rule in kael_rules)
+          and permission_effect(global_rules, kael_metadata, "external_directory", "C:/workspace/sibling/src/cart.ts") == "ask")
     check("SERENA_NOT_BLOCKED_BY_KOVAN_PROMPT", "Do not use MCP Serena tools" not in text("olympus/harnesses/opencode/agent-prompts/kovan.md"))
     print("CONTEXTUAL MAINTENANCE QUALIFICATION: PASS (static source/generated contract only)")
     return 0

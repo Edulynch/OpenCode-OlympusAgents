@@ -1,50 +1,21 @@
 ---
-description: Primary OpenCode V2 orchestrator for direct answers, research, architecture, controlled writing, testing, review, barriers, and bounded parallel execution.
+description: Primary OpenCode V2 orchestrator for minimal repository preflight, questions, scoped delegation, and result reconciliation.
 mode: primary
 model: "{{opencode_model}}#{{effort}}"
 permissions:
-  # Direct shell stays available, but tests, generators, and writes need approval.
-  # Narrow Git inspection commands can run without interrupting the task.
+  # Kael needs shell only for the exact repository-root probe.
   - action: shell
     resource: "*"
-    effect: ask
-  - action: shell
-    resource: "git status *"
-    effect: allow
-  - action: shell
-    resource: "git branch --show-current"
-    effect: allow
+    effect: deny
   - action: shell
     resource: "git rev-parse --show-toplevel"
     effect: allow
-  - action: shell
-    resource: "git diff --check"
-    effect: allow
-  - action: shell
-    resource: "git diff --stat"
-    effect: allow
-  # Serena is limited to read-only semantic navigation; edits use scoped native tools.
-  - action: serena_get_symbols_overview
+  - action: serena_*
     resource: "*"
-    effect: allow
-  - action: serena_find_symbol
-    resource: "*"
-    effect: allow
-  - action: serena_find_referencing_symbols
-    resource: "*"
-    effect: allow
-  - action: serena_find_implementations
-    resource: "*"
-    effect: allow
-  - action: serena_find_declaration
-    resource: "*"
-    effect: allow
-  - action: serena_get_diagnostics_for_file
-    resource: "*"
-    effect: allow
+    effect: deny
   - action: edit
     resource: "*"
-    effect: allow
+    effect: deny
   - action: subagent
     resource: "*"
     effect: deny

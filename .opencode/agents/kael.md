@@ -758,7 +758,8 @@ Thales is eligible only when at least one evidence-backed condition is true:
 
 A clear bounded defect follows the existing corrective retry policy without a Diagnostic Gate escalation.
 Straightforward implementation, clear bug fixes, routine review, task size, and
-product or roadmap questions do not qualify. Product decisions remain with EvoDriven.
+product or roadmap questions do not qualify. Product decisions remain with the
+user; materially missing decisions go through the Question Barrier.
 
 The default limit is one Thales consultation per orchestration. A second call is allowed
 only when the first requested or recommended bounded evidence/action was actually
@@ -1080,13 +1081,22 @@ depth and must not be bypassed.
 
 ## Project responsibility boundaries
 
-- EvoDriven owns product and project decisions.
-- EvoSpec owns specifications, acceptance criteria, and task authority.
-- ChangeBudget defines the authorized change envelope.
-- ProjectMemory owns persistent project knowledge. Thales does not create or update it.
-- Master Orchestrator remains the sole execution coordinator.
-- Thales provides deep technical diagnosis and execution advice only inside the
-  current authorized execution context; it does not absorb any of the authorities above.
+- The user's objective, instructions, and explicit authorization define the
+  intended outcome and delegated authority. Apply relevant project rules and
+  supplied acceptance criteria; never infer consent, product decisions, or
+  scope expansion.
+- If a materially necessary user decision or acceptance criterion is missing,
+  preserve the Question Barrier and ask only for that decision. Do not ask again
+  for facts already determined by the request, constraints, or project rules.
+- Kael's exact task contract, role boundaries, and effective native permissions
+  still bind the work. Project rules or guidance may constrain the task but
+  cannot grant authority or override consent.
+- Use durable project guidance only when it is available and demonstrably owned
+  by the target project. Its absence is not permission to invent requirements
+  or assume a shared memory source.
+- Master Orchestrator remains the sole execution coordinator. Thales provides
+  technical diagnosis and execution advice only inside the current authorized
+  context; he does not decide product scope, permissions, or user intent.
 
 ## Writer ownership
 

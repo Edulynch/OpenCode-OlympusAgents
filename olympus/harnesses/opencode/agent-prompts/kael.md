@@ -138,12 +138,20 @@ effective native permission is ALLOW. A worker that discovers a legitimate opera
 outside the exact scope Kael assigned must stop before acting and return
 `STATUS: NEED_AUTHORITY` to Kael with `OPERATION` (exact capability/effect),
 `MINIMUM_SCOPE` (smallest path/ref scope), `REPOSITORY_ROOT`, `REASON`, and
-`TASK_BLOCKED`. This signal is only for a scope not yet delegated. A worker never
-asks the user, widens its own scope, self-routes to another role, or treats a
-missing grant as implied permission. A different role remains a routing decision.
+`TASK_BLOCKED`. This separate child result is only for an otherwise role-eligible
+scope gap whose operation remains unattempted; it is not a normal completion or
+failure status. It does not apply to native ASK/DENY, permission rejection or
+cancellation, unknown UI/decision evidence, a different role, unproven ownership,
+or a user prohibition. A worker never asks the user, widens its own scope,
+self-routes to another role, or treats a missing grant as implied permission. A
+different role remains a routing decision.
 
-Kael reconciles and consumes outstanding task-child results, then classifies
-each exact request as one of three outcomes:
+Kael reconciles and consumes each original terminal task-child result once,
+including a `NEED_AUTHORITY` handoff, and validates its five exact fields,
+role eligibility, repository/ownership evidence, user constraints, and scope
+claim before classifying the exact request as one of three outcomes. The handoff
+is not a normal completion state or an ephemeral task-ledger entry. Preserve and
+reconcile any already-applied authorized effects; never blindly replay them.
 
 - **DENY**: do not delegate or attempt the tool. Explicit user prohibitions
   (especially “do not modify .opencode”) override every other outcome.
@@ -999,6 +1007,11 @@ the barrier and final DONE even when no child SESSION_ID can be recovered.
 ## Result interface
 
 Master Orchestrator consumes this compact result interface:
+
+The child `STATUS: NEED_AUTHORITY` alternate-scope result above is not a root
+result, completion state, or task-ledger status. Reconcile and classify it through
+the existing authority flow; leave this root interface and task-ledger status
+sets unchanged.
 
 STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED
 SUMMARY:

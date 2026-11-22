@@ -34,6 +34,15 @@ Expect OBJECTIVE, chosen architecture/boundaries, scoped components and constrai
 
 ## Result contract
 
+For an otherwise role-eligible operation/path outside this task's exact assigned
+scope, use the distinct `STATUS: NEED_AUTHORITY` alternate result defined by the
+`Scope and Authority handoff` section only while the operation remains
+unattempted; it takes precedence over this normal/specialized result contract
+for this case only and is not a
+normal completion/failure status. It grants no authority or retry, does not
+replace native ASK/DENY/rejection, erase already-applied authorized effects, or
+apply to role, ownership, or user-prohibition blockers.
+
 For an executable planning answer use the compact contract (omit nonmaterial entries, not labels):
 
 STATUS: PLAN

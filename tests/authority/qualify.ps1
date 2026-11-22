@@ -45,8 +45,8 @@ function Decide([string]$agent, [string]$operation, [string]$path, [string]$norm
                  [bool]$projectOwned = $true, [bool]$explicitProhibition = $false,
                  [string[]]$manifestPaths = @(), [string]$nativeDecision = 'ALLOW',
                  [bool]$canonicalSourceTarget = $false) {
-    # A null grant models an omitted AUTHORITY_GRANT; nativeDecision models the
-    # confirmed effective permission and normalScope the validated assignment scope.
+    # nativeDecision models the effective rule outcome, not a tool attempt or host ASK event.
+    # A null grant models omitted AUTHORITY_GRANT; normalScope is the validated assignment scope.
     if ($explicitProhibition) { return [pscustomobject]@{ decision='DENY'; question=0; reason='USER_PROHIBITION' } }
     if (Is-OlympusOwned $path $manifestPaths $canonicalSourceTarget) { return [pscustomobject]@{ decision='DENY'; question=0; reason='OLYMPUS_OWNED' } }
     if (-not $projectOwned) { return [pscustomobject]@{ decision='DENY'; question=0; reason='OWNERSHIP_UNPROVEN' } }
@@ -1188,6 +1188,10 @@ try {
     if ($QualificationSlice -ne 'Runtime') {
     $kael = Text '.opencode/agents/kael.md'
     $kovan = Text '.opencode/agents/kovan.md'
+    $kaelPromptSource = Text 'olympus/harnesses/opencode/agent-prompts/kael.md'
+    $kovanPromptSource = Text 'olympus/harnesses/opencode/agent-prompts/kovan.md'
+    $noxPromptSource = Text 'olympus/harnesses/opencode/agent-prompts/nox.md'
+    $authorityPolicy = Text 'olympus/policies/authority.md'
     $kaelSourceMetadata = Text 'olympus/harnesses/opencode/agent-metadata/kael.md'
     $kovanSourceMetadata = Text 'olympus/harnesses/opencode/agent-metadata/kovan.md'
     $docs = Text 'docs/DEVELOPMENT.md'
@@ -1241,14 +1245,107 @@ try {
         $kovan -match 'MINIMUM_SCOPE:' -and $kovan -match 'REPOSITORY_ROOT:' -and
         $kovan -match 'TASK_BLOCKED:')
 
-    $approved = Decide 'kovan' $operation '.opencode/plugins/project-owned/index.ts' 'src/**' $rootPath $grant $true $true $false @() 'ASK'
+    $alternateSectionStart = $authorityPolicy.IndexOf('## Out-of-scope task result', [StringComparison]::Ordinal)
+    $alternateDefinition = if ($alternateSectionStart -ge 0) { $authorityPolicy.Substring($alternateSectionStart) } else { '' }
+    $alternateFields = @('STATUS: NEED_AUTHORITY','OPERATION:','MINIMUM_SCOPE:','REPOSITORY_ROOT:','REASON:','TASK_BLOCKED:')
+    $alternateFieldOrderValid = $alternateDefinition.Length -gt 0
+    $lastAlternateField = -1
+    foreach ($field in $alternateFields) {
+        $fieldIndex = $alternateDefinition.IndexOf($field, [StringComparison]::Ordinal)
+        if ($fieldIndex -le $lastAlternateField) { $alternateFieldOrderValid = $false }
+        $lastAlternateField = $fieldIndex
+    }
+    $normalizedAlternatePolicy = $alternateDefinition -replace '\s+', ' '
+    Check 'AUTH2A_CANONICAL_ALTERNATE_SCOPE_RESULT' ($alternateFieldOrderValid -and
+        $normalizedAlternatePolicy -match 'eligible to perform an otherwise legitimate operation.*?outside the current task.s assigned scope.*?operation must remain unattempted' -and
+        $normalizedAlternatePolicy -match 'takes precedence over a normal or specialized result format only for that scope gap' -and
+        $normalizedAlternatePolicy -match 'creates no authority, approval, retry, or permission to act' -and
+        $normalizedAlternatePolicy -match 'native DENY.*?actual pending native ASK event.*?permission rejection/cancellation.*?unknown permission-UI observation' -and
+        $normalizedAlternatePolicy -match 'effective native ASK rule.*?not a tool attempt or an actual native ASK event.*?return `NEED_AUTHORITY`' -and
+        $normalizedAlternatePolicy -match 'correctly assigns the exact operation.*?actual pending native ASK event.*?not `NEED_AUTHORITY`' -and
+        $normalizedAlternatePolicy -match 'does not widen, renew, or transfer a task scope or grant')
+
+    $authorityWorkers = @('veyra','orin','nox','vera','atlas','argus','helios','talos','thales')
+    $workerPromptSources = @{}
+    foreach ($roleName in $authorityWorkers) {
+        $workerPromptSources[$roleName] = Text ('olympus/harnesses/opencode/agent-prompts/' + $roleName + '.md')
+    }
+    $alternateResultClause = 'For an otherwise role-eligible operation/path outside this task''s exact assigned scope, use the distinct `STATUS: NEED_AUTHORITY` alternate result defined by the `Scope and Authority handoff` section only while the operation remains unattempted; it takes precedence over this normal/specialized result contract for this case only and is not a normal completion/failure status. It grants no authority or retry, does not replace native ASK/DENY/rejection, erase already-applied authorized effects, or apply to role, ownership, or user-prohibition blockers.'
+    $workerClauseFailures = @($authorityWorkers | Where-Object {
+        ($workerPromptSources[$_] -replace '\s+', ' ') -notmatch [regex]::Escape($alternateResultClause)
+    })
+    $handoffFields = @('STATUS: NEED_AUTHORITY','OPERATION','MINIMUM_SCOPE','REPOSITORY_ROOT','REASON','TASK_BLOCKED')
+    $workerHandoffsValid = $true
+    foreach ($roleName in $authorityWorkers) {
+        $handoffSplit = $workerPromptSources[$roleName] -split '## Scope and Authority handoff',2
+        $handoffBody = if ($handoffSplit.Count -gt 1) { ($handoffSplit[1] -split '\r?\n## ',2)[0] } else { '' }
+        foreach ($field in $handoffFields) {
+            if ($handoffBody -notmatch [regex]::Escape($field)) { $workerHandoffsValid = $false }
+        }
+    }
+    $kovanSourceNormalized = $kovanPromptSource -replace '\s+', ' '
+    $kovanAlternateClause = 'For an otherwise role-eligible operation/path outside this task''s exact assigned scope, use the existing five-field `STATUS: NEED_AUTHORITY` block in Write rules as a separate child result only while that operation remains unattempted. It takes precedence over this normal result contract for that case only and is not a normal completion/failure status. It grants no authority or retry, does not replace native ASK/DENY/rejection, erase already-applied authorized effects, or apply to role, ownership, user-prohibition, or destructive/high-impact blockers.'
+    $kovanAlternateFieldsValid = @('STATUS: NEED_AUTHORITY','OPERATION:','MINIMUM_SCOPE:','REPOSITORY_ROOT:','REASON:','TASK_BLOCKED:') |
+        Where-Object { $kovanPromptSource -notmatch [regex]::Escape($_) } | Measure-Object | Select-Object -ExpandProperty Count
+    $specializedStatusContracts = @(
+        @('veyra','STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED'),
+        @('orin','STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED'),
+        @('nox','STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED'),
+        @('vera','STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED'),
+        @('atlas','STATUS: PLAN','STATUS: EVIDENCE_REQUEST'),
+        @('argus','STATUS: BUG_DIAGNOSIS','STATUS: EVIDENCE_REQUEST','STATUS: NOT_FUNCTIONAL_BUG'),
+        @('helios','STATUS: OPTIMIZATION_PROPOSAL','STATUS: DO_NOT_OPTIMIZE','STATUS: EVIDENCE_REQUEST'),
+        @('talos','STATUS: SECURITY_DIAGNOSIS','STATUS: EVIDENCE_REQUEST','STATUS: NOT_SECURITY_BUG'),
+        @('thales','STATUS: EVIDENCE_REQUEST','STATUS: ADVICE | INCONCLUSIVE | BLOCKED')
+    )
+    $specializedStatusContractsValid = $true
+    foreach ($contract in $specializedStatusContracts) {
+        $roleName = $contract[0]
+        foreach ($statusField in @($contract | Select-Object -Skip 1)) {
+            if ($workerPromptSources[$roleName] -notmatch [regex]::Escape($statusField)) {
+                $specializedStatusContractsValid = $false
+            }
+        }
+    }
+    Check 'AUTH2B_WORKER_RESULT_PRECEDENCE_AND_EXISTING_FORMATS' (
+        $workerClauseFailures.Count -eq 0 -and
+        $workerHandoffsValid -and
+        $kovanAlternateFieldsValid -eq 0 -and
+        $kovanSourceNormalized.Contains($kovanAlternateClause) -and
+        $kovanPromptSource -match 'STATUS: NEED_AUTHORITY\s+OPERATION: exact capability and effect required' -and
+        $kovanPromptSource -match 'STATUS: SUCCESS \| PARTIAL \| BLOCKED \| FAILED' -and
+        $kovanPromptSource -notmatch '(?m)^STATUS: SUCCESS \| PARTIAL \| BLOCKED \| FAILED \| NEED_AUTHORITY\r?$' -and
+        $specializedStatusContractsValid
+    )
+
+    $normalizedKaelPromptSource = $kaelPromptSource -replace '\s+', ' '
+    Check 'AUTH2C_KAEL_RECONCILES_ALTERNATE_RESULT_WITHOUT_NEW_ROOT_STATE' (
+        $normalizedKaelPromptSource -match 'consumes each original terminal task-child result once.*?including a `NEED_AUTHORITY` handoff' -and
+        $normalizedKaelPromptSource -match 'validates its five exact fields, role eligibility, repository/ownership evidence, user constraints, and scope claim' -and
+        $normalizedKaelPromptSource -match 'not a root result, completion state, or task-ledger status.*?leave this root interface and task-ledger status sets unchanged' -and
+        $normalizedKaelPromptSource -match 'Allowed STATUS values are PENDING, RUNNING, SUCCESS, FAILED, BLOCKED, and CANCELLED\.' -and
+        $kaelPromptSource -match '(?m)^STATUS: SUCCESS \| PARTIAL \| BLOCKED \| FAILED\r?$' -and
+        $normalizedKaelPromptSource -match 'Do not ask when native ASK can obtain the exact required human consent'
+    )
+
+    $assignedAskPath = '.opencode/plugins/project-owned/index.ts'
+    $assignedNativeRule = Native-Decision $nativeRules 'edit' $assignedAskPath
+    $approved = Decide 'kovan' $operation $assignedAskPath 'src/**' $rootPath $grant $true $true $false @() $assignedNativeRule
+    $assignedAskFlow = Synthetic-ToolFlow $approved.decision
     Check 'AUTH3_EXACT_SCOPE_NATIVE_ASK_GRANT' ($approved.decision -eq 'NATIVE_ASK' -and $approved.reason -eq 'EXACT_NATIVE_ASK_GRANT' -and
+        $assignedNativeRule -eq 'ASK' -and $approved.decision -ne 'NEED_AUTHORITY' -and
+        $assignedAskFlow.attempted -and $assignedAskFlow.pending -and -not $assignedAskFlow.executed -and
+        $assignedAskFlow.question -eq 0 -and -not $assignedAskFlow.fallback -and -not $assignedAskFlow.retry -and
         $grant.agent -eq 'kovan' -and $grant.scope -ceq '.opencode/plugins/project-owned/**' -and
         $grant.repository_root -ceq $rootPath -and $grant.permission_mode -ceq 'NATIVE_ASK' -and
         $grant.lifetime -ceq 'current_task' -and $grant.task_id -ceq 'task-7')
 
-    $sibling = Decide 'kovan' $operation '.opencode/plugins/sibling/index.ts' 'src/**' $rootPath $grant $true $true $false @() 'ASK'
+    # Effective rule ASK is not a host event when the sibling scope is unassigned.
+    $siblingPath = '.opencode/plugins/sibling/index.ts'
+    $siblingNativeRule = Native-Decision $nativeRules 'edit' $siblingPath
+    $sibling = Decide 'kovan' $operation $siblingPath 'src/**' $rootPath $grant $true $true $false @() $siblingNativeRule
     Check 'AUTH4_SIBLING_SCOPE_NEEDS_NEW_AUTHORITY' ($sibling.decision -eq 'NEED_AUTHORITY' -and
+        $siblingNativeRule -eq 'ASK' -and $sibling.reason -eq 'SCOPE_NOT_DELEGATED' -and
         -not (Synthetic-ToolFlow $sibling.decision).attempted)
 
     $expired = Decide 'kovan' $operation '.opencode/plugins/foo/index.ts' 'src/**' $rootPath $grant $false
@@ -1667,9 +1764,28 @@ try {
     if ($QualificationSlice -ne 'Runtime') {
     $normalizedDocs = $docs -replace '\s+', ' '
     $reportingPolicy = $normalizedDocs -match '(?is)TOOL_ATTEMPT.*?TOOL_EXECUTION.*?NATIVE_PERMISSION_UI.*?USER_CONFIRMED_EXTERNAL_OBSERVATION.*?NOT_OBSERVABLE.*?Tool success does not establish that ASK was\s+absent.*?tool failure/denial alone does not establish a human rejection'
+    $noxResultContract = ($noxPromptSource -split '## Required result contract',2)[1]
+    $noxCommandResult = if ($noxResultContract) { ($noxResultContract -split 'TRACKED_SOURCE_INTEGRITY:',2)[0] } else { '' }
+    $noxResultFields = @(
+        'COMMANDS:','COMMAND: exact command','EXECUTED: YES | NO','RESULT: PASS | FAIL | BLOCKED',
+        'EXIT_STATUS: value or unavailable','TOOL_ATTEMPT: ATTEMPTED | NOT_ATTEMPTED',
+        'TOOL_EXECUTION: PENDING | SUCCESS | FAILED | NOT_EXECUTED | UNKNOWN','TOOL_RESULT: <direct tool result>',
+        'NATIVE_PERMISSION_UI: OBSERVED_ASK | OBSERVED_NO_ASK | NOT_OBSERVABLE',
+        'NATIVE_PERMISSION_DECISION: APPROVED | REJECTED | NOT_OBSERVABLE',
+        'USER_CONFIRMED_EXTERNAL_OBSERVATION: USER_REPORTED: <concise faithful account> (only when supplied)'
+    )
+    $noxFieldsValid = $noxCommandResult.Length -gt 0
+    foreach ($field in $noxResultFields) {
+        if ($noxCommandResult -notmatch [regex]::Escape($field)) { $noxFieldsValid = $false }
+    }
+    if ($noxCommandResult -notmatch '(?s)COMMANDS:\s+- COMMAND: exact command\s+EXECUTED: YES \| NO\s+RESULT: PASS \| FAIL \| BLOCKED\s+EXIT_STATUS: value or unavailable\s+TOOL_ATTEMPT: ATTEMPTED \| NOT_ATTEMPTED' -or
+        $noxPromptSource -match 'PERMISSION_PROMPT') { $noxFieldsValid = $false }
     Check 'AUTH15_NATIVE_PERMISSION_OBSERVABILITY_POLICY' ($reportingPolicy -and
         $kael -match '(?is)TOOL_ATTEMPT.*?TOOL_EXECUTION.*?NATIVE_PERMISSION_UI.*?NATIVE_PERMISSION_DECISION.*?NOT_OBSERVABLE.*?Tool success does not prove ASK was absent.*?failed\s+or denied tool result does not by itself prove a human rejected.*?USER_CONFIRMED_EXTERNAL_OBSERVATION.*?external/manual evidence' -and
-        $kovan -match '(?is)TOOL_ATTEMPT.*?TOOL_EXECUTION.*?NATIVE_PERMISSION_UI.*?NATIVE_PERMISSION_DECISION.*?NOT_OBSERVABLE.*?success never implies\s+`OBSERVED_NO_ASK`.*?USER_CONFIRMED_EXTERNAL_OBSERVATION')
+        $kovan -match '(?is)TOOL_ATTEMPT.*?TOOL_EXECUTION.*?NATIVE_PERMISSION_UI.*?NATIVE_PERMISSION_DECISION.*?NOT_OBSERVABLE.*?success never implies\s+`OBSERVED_NO_ASK`.*?USER_CONFIRMED_EXTERNAL_OBSERVATION' -and
+        $noxFieldsValid -and
+        $noxResultContract -match '(?is)Tool success does not prove ASK was\s+absent.*?success never implies `OBSERVED_NO_ASK`.*?a tool failure or native\s+DENY does not prove human rejection.*?USER_REPORTED.*?does not replace an observable UI or\s+decision and grants no permission'
+    )
 
     $uiHiddenSuccess = New-PermissionReport $true 'SUCCESS' 'write completed'
     Check 'AUTH26_PERMISSION_UI_UNOBSERVABLE' ($uiHiddenSuccess.NATIVE_PERMISSION_UI -eq 'NOT_OBSERVABLE' -and

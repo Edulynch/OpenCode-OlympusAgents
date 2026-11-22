@@ -130,11 +130,23 @@ function Native-Decision([object[]]$rules, [string]$action, [string]$resource,
     # OpenCode permission patterns use last matching rule; agent rules follow and
     # take precedence over global configuration.
     foreach ($rule in $rules) {
-        if (($rule.action -eq $action -or $rule.action -eq '*') -and (Matches-Glob $rule.resource $resource)) {
+        if ((Matches-Glob $rule.action $action) -and (Matches-Glob $rule.resource $resource)) {
             $decision = $rule.effect.ToUpperInvariant()
         }
     }
     return $decision
+}
+
+function Get-ExactRuleIndices([object[]]$rules, [string]$action, [string]$resource, [string]$effect) {
+    $indices = [Collections.Generic.List[int]]::new()
+    for ($i = 0; $i -lt $rules.Count; $i++) {
+        $rule = $rules[$i]
+        if ([string]$rule.action -ceq $action -and [string]$rule.resource -ceq $resource -and
+            [string]$rule.effect -ceq $effect) {
+            $indices.Add($i)
+        }
+    }
+    return $indices.ToArray()
 }
 
 function Write-Decision([string]$nativeDecision, [string]$approval = 'NONE') {
@@ -240,6 +252,15 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
         } else {
             try {
                 $permissions = @($permissionsProperty.Value)
+                $taskEditPath = 'src/authority-runtime-probe.txt'
+                $projectPluginPath = '.opencode/plugins/project-owned/authority-runtime-probe.ts'
+                $activityPath = '.opencode/plugins/olympus-activity/activity.ts'
+                $taskEditDecision = Native-Decision $permissions 'edit' $taskEditPath
+                $pluginEditDecision = Native-Decision $permissions 'edit' $projectPluginPath
+                $activityEditDecision = Native-Decision $permissions 'edit' $activityPath
+                $taskEditRuleCount = @($permissions | Where-Object {
+                    (Matches-Glob $_.action 'edit') -and (Matches-Glob $_.resource $taskEditPath)
+                }).Count
                 $editWildcardDeny = @($permissions | Where-Object {
                     $_.action -eq 'edit' -and $_.resource -eq '*' -and $_.effect -eq 'deny'
                 }).Count
@@ -255,9 +276,10 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                 $externalAllow = @($permissions | Where-Object {
                     $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'allow'
                 }).Count
-                $permissionEvidence = "edit_*_deny=$editWildcardDeny/0, edit_plugins_ask=$editPluginsAsk/1, activity_deny=$activityDeny/1, external_ask=$externalAsk/inherited, external_allow=$externalAllow/0"
+                $permissionEvidence = "task_edit=$taskEditDecision/$taskEditRuleCount rules, project_plugin_edit=$pluginEditDecision, activity_edit=$activityEditDecision, edit_*_deny=$editWildcardDeny/0, edit_plugins_ask=$editPluginsAsk/1, activity_deny=$activityDeny/1, external_ask=$externalAsk/inherited, external_allow=$externalAllow/0"
                 if ($editWildcardDeny -ne 0 -or $editPluginsAsk -ne 1 -or $activityDeny -ne 1 -or
-                    $externalAllow -ne 0) {
+                    $externalAllow -ne 0 -or $taskEditDecision -ne 'ALLOW' -or $taskEditRuleCount -eq 0 -or
+                    $pluginEditDecision -ne 'ASK' -or $activityEditDecision -ne 'DENY') {
                     $failures.Add('effective_permission_rules_mismatch (' + $permissionEvidence + ')')
                 }
             } catch {
@@ -286,7 +308,157 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                     $failures.Add("${roleName}_managed_command_decision=${path}:$decision (expected DENY)")
                 }
             }
-            $expectedControl = if ($roleName -eq 'kael') { 'ALLOW' } else { 'ASK' }
+            if ($roleName -eq 'kael') {
+                $editWildcardDeny = @($permissions | Where-Object {
+                    $_.action -eq 'edit' -and $_.resource -eq '*' -and $_.effect -eq 'deny'
+                }).Count
+                $shellWildcardDeny = @($permissions | Where-Object {
+                    $_.action -eq 'shell' -and $_.resource -eq '*' -and $_.effect -eq 'deny'
+                }).Count
+                $rootProbeAllow = @($permissions | Where-Object {
+                    $_.action -eq 'shell' -and $_.resource -eq 'git rev-parse --show-toplevel' -and $_.effect -eq 'allow'
+                }).Count
+                $otherShellAllows = @($permissions | Where-Object {
+                    $_.action -eq 'shell' -and $_.effect -eq 'allow' -and $_.resource -ne 'git rev-parse --show-toplevel'
+                }).Count
+                $commandDecisionEvidence.Add("kael:edit_*_deny=$editWildcardDeny;shell_*_deny=$shellWildcardDeny;root_probe_allow=$rootProbeAllow;other_shell_allows=$otherShellAllows")
+                if ($editWildcardDeny -lt 1 -or $shellWildcardDeny -lt 1 -or $rootProbeAllow -lt 1 -or
+                    $otherShellAllows -ne 0) {
+                    $failures.Add('kael_least_privilege_metadata_mismatch')
+                }
+                foreach ($command in @('git status --short','git branch --show-current','git diff --check','python scripts/check_docs.py')) {
+                    $decision = Native-Decision $permissions 'shell' $command
+                    $commandDecisionEvidence.Add("kael:shell:$command=$decision")
+                    if ($decision -ne 'DENY') {
+                        $failures.Add("kael_shell_not_denied=${command}:$decision")
+                    }
+                }
+
+                $kaelSourceMetadata = Text 'olympus/harnesses/opencode/agent-metadata/kael.md'
+                $kaelSourceRules = Read-NativeRules $kaelSourceMetadata @()
+                $sourceSerenaDenyRules = @($kaelSourceRules | Where-Object {
+                    $_.action -eq 'serena_*' -and $_.resource -eq '*' -and $_.effect -eq 'deny'
+                })
+                # Keep this rule in Native-Decision; discount it in category counts only when a later category rule controls it.
+                $baselineAllowIndices = @(Get-ExactRuleIndices $permissions '*' '*' 'allow')
+                $serenaDenyIndices = @(Get-ExactRuleIndices $permissions 'serena_*' '*' 'deny')
+                $baselineAllowIndex = if ($baselineAllowIndices.Count -eq 1) { $baselineAllowIndices[0] } else { -1 }
+                $serenaBaselineBeforeDeny = $baselineAllowIndex -ge 0 -and
+                    $serenaDenyIndices.Count -gt 0 -and $baselineAllowIndex -lt $serenaDenyIndices[-1]
+                $serenaNavigationActions = @(
+                    'serena_get_symbols_overview','serena_find_symbol','serena_find_referencing_symbols',
+                    'serena_find_implementations','serena_find_declaration','serena_get_diagnostics_for_file'
+                )
+                $serenaDeniedCount = 0
+                $serenaDecisionFailures = [Collections.Generic.List[string]]::new()
+                foreach ($action in $serenaNavigationActions) {
+                    $decision = Native-Decision $permissions $action '*'
+                    if ($decision -eq 'DENY') { $serenaDeniedCount++ }
+                    else { $serenaDecisionFailures.Add("${action}=$decision") }
+                }
+                $serenaOverrideRules = [Collections.Generic.List[object]]::new()
+                for ($i = 0; $i -lt $permissions.Count; $i++) {
+                    $rule = $permissions[$i]
+                    $matchesSerena = @($serenaNavigationActions | Where-Object {
+                        Matches-Glob $rule.action $_
+                    }).Count -gt 0
+                    if ($matchesSerena -and $rule.effect -in @('allow','ask') -and
+                        -not ($serenaBaselineBeforeDeny -and $i -eq $baselineAllowIndex)) {
+                        $serenaOverrideRules.Add($rule)
+                    }
+                }
+                $serenaDenyRules = @($permissions | Where-Object {
+                    $rule = $_
+                    @($serenaNavigationActions | Where-Object { Matches-Glob $rule.action $_ }).Count -gt 0 -and
+                    $rule.effect -eq 'deny'
+                })
+                $commandDecisionEvidence.Add("kael:serena_nav_denied=$serenaDeniedCount/$($serenaNavigationActions.Count);source_deny=$($sourceSerenaDenyRules.Count);loaded_direct_deny=$($serenaDenyIndices.Count);base_allow_before_deny=$([int]$serenaBaselineBeforeDeny);deny_rules=$($serenaDenyRules.Count);allow_ask_rules=$($serenaOverrideRules.Count)")
+                if ($serenaDeniedCount -ne $serenaNavigationActions.Count -or $sourceSerenaDenyRules.Count -ne 1 -or
+                    $serenaDenyIndices.Count -eq 0 -or $serenaDenyRules.Count -eq 0 -or
+                    $serenaOverrideRules.Count -ne 0) {
+                    $failures.Add("kael_serena_effective_decision_mismatch=denied:$serenaDeniedCount/$($serenaNavigationActions.Count);source_deny:$($sourceSerenaDenyRules.Count);loaded_direct_deny:$($serenaDenyIndices.Count);base_allow_before_deny:$([int]$serenaBaselineBeforeDeny);deny_rules:$($serenaDenyRules.Count);allow_ask_rules:$($serenaOverrideRules.Count);non_deny:$($serenaDecisionFailures -join ',')")
+                }
+
+                $expectedSpecialists = @('veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios')
+                $subagentDenyIndices = @(Get-ExactRuleIndices $permissions 'subagent' '*' 'deny')
+                $subagentBaselineBeforeDeny = $baselineAllowIndex -ge 0 -and
+                    $subagentDenyIndices.Count -gt 0 -and $baselineAllowIndex -lt $subagentDenyIndices[-1]
+                $specialistAllowRules = [Collections.Generic.List[object]]::new()
+                for ($i = 0; $i -lt $permissions.Count; $i++) {
+                    $rule = $permissions[$i]
+                    if ((Matches-Glob $rule.action 'subagent') -and $rule.effect -eq 'allow' -and
+                        -not ($subagentBaselineBeforeDeny -and $i -eq $baselineAllowIndex)) {
+                        $specialistAllowRules.Add($rule)
+                    }
+                }
+                $actualSpecialists = @($specialistAllowRules | ForEach-Object { [string]$_.resource })
+                $expandedSpecialistRules = @($specialistAllowRules | Where-Object {
+                    $_.action -cne 'subagent' -or $_.resource -notin $expectedSpecialists
+                })
+                $duplicateSpecialists = $actualSpecialists.Count - @($actualSpecialists | Sort-Object -Unique).Count
+                $specialistDecisionFailures = [Collections.Generic.List[string]]::new()
+                foreach ($specialist in $expectedSpecialists) {
+                    $decision = Native-Decision $permissions 'subagent' $specialist
+                    if ($decision -ne 'ALLOW') { $specialistDecisionFailures.Add("${specialist}=$decision") }
+                }
+                $unlistedSpecialistDecision = Native-Decision $permissions 'subagent' '__authority_unlisted_specialist__'
+                $commandDecisionEvidence.Add("kael:subagent_allow_rules=$($specialistAllowRules.Count)/$($expectedSpecialists.Count);named_allow=$($expectedSpecialists.Count - $specialistDecisionFailures.Count)/$($expectedSpecialists.Count);expanded=$($expandedSpecialistRules.Count);duplicates=$duplicateSpecialists;base_allow_before_deny=$([int]$subagentBaselineBeforeDeny);unlisted=$unlistedSpecialistDecision")
+                if ($specialistAllowRules.Count -ne $expectedSpecialists.Count -or
+                    $expandedSpecialistRules.Count -ne 0 -or $duplicateSpecialists -ne 0 -or
+                    $specialistDecisionFailures.Count -ne 0 -or $unlistedSpecialistDecision -ne 'DENY') {
+                    $failures.Add("kael_subagent_allowlist_mismatch=rules:$($specialistAllowRules.Count)/$($expectedSpecialists.Count);expanded:$($expandedSpecialistRules.Count);duplicates:$duplicateSpecialists;base_allow_before_deny:$([int]$subagentBaselineBeforeDeny);unlisted:$unlistedSpecialistDecision;non_allow:$($specialistDecisionFailures -join ',')")
+                }
+
+                $sourceExternalRules = @($kaelSourceRules | Where-Object {
+                    Matches-Glob $_.action 'external_directory'
+                })
+                $permissionConfigText = (Text 'olympus/harnesses/opencode/config.jsonc') -replace '(?m)^\s*//.*(?:\r?\n|$)', ''
+                $permissionConfig = ConvertFrom-Json -InputObject $permissionConfigText -Depth 100 -ErrorAction Stop
+                $expectedInheritedExternalRules = @($permissionConfig.permissions | Where-Object {
+                    Matches-Glob $_.action 'external_directory'
+                })
+                $externalAskIndices = @(Get-ExactRuleIndices $permissions 'external_directory' '*' 'ask')
+                $externalBaselineBeforeAsk = $baselineAllowIndex -ge 0 -and
+                    $externalAskIndices.Count -gt 0 -and $baselineAllowIndex -lt $externalAskIndices[-1]
+                $loadedExternalRuleList = [Collections.Generic.List[object]]::new()
+                for ($i = 0; $i -lt $permissions.Count; $i++) {
+                    $rule = $permissions[$i]
+                    if ((Matches-Glob $rule.action 'external_directory') -and
+                        -not ($externalBaselineBeforeAsk -and $i -eq $baselineAllowIndex)) {
+                        $loadedExternalRuleList.Add($rule)
+                    }
+                }
+                $loadedExternalRules = $loadedExternalRuleList.ToArray()
+                $expectedExternalKeys = @($expectedInheritedExternalRules | ForEach-Object {
+                    "$($_.action)|$($_.resource)|$($_.effect)"
+                })
+                $loadedExternalKeys = @($loadedExternalRules | ForEach-Object {
+                    "$($_.action)|$($_.resource)|$($_.effect)"
+                })
+                $missingExternalRules = @($expectedExternalKeys | Where-Object { $_ -notin $loadedExternalKeys })
+                $unexpectedExternalRules = @($loadedExternalKeys | Where-Object { $_ -notin $expectedExternalKeys })
+                $loadedExternalAllows = @($loadedExternalRules | Where-Object { $_.effect -eq 'allow' })
+                $externalDecision = if ($loadedExternalRules.Count -gt 0) {
+                    Native-Decision $permissions 'external_directory' 'C:\fixture\external\authority-probe.txt'
+                } else { 'NOT_OBSERVABLE' }
+                $expectedExternalShape = $expectedInheritedExternalRules.Count -eq 1 -and
+                    $expectedInheritedExternalRules[0].action -eq 'external_directory' -and
+                    $expectedInheritedExternalRules[0].resource -eq '*' -and
+                    $expectedInheritedExternalRules[0].effect -eq 'ask'
+                $commandDecisionEvidence.Add("kael:external_directory=$externalDecision;source_agent_rules=$($sourceExternalRules.Count);inherited_rules=$($expectedInheritedExternalRules.Count);loaded_category_rules=$($loadedExternalRules.Count);missing=$($missingExternalRules.Count);unexpected=$($unexpectedExternalRules.Count);category_allow=$($loadedExternalAllows.Count);base_allow_before_ask=$([int]$externalBaselineBeforeAsk);read_question=NOT_ASSESSED")
+                if ($sourceExternalRules.Count -ne 0) {
+                    $failures.Add('kael_external_directory_mismatch=source_agent_rules=' + $sourceExternalRules.Count)
+                } elseif (-not $expectedExternalShape) {
+                    $failures.Add("kael_external_directory_inherited_source_mismatch=expected_one_wildcard_ask;rules=$($expectedExternalKeys -join ',')")
+                } elseif ($loadedExternalRules.Count -eq 0) {
+                    $failures.Add('kael_external_directory_not_observable=debug_agents_has_no_matching_rules;source_agent_rules=' + $sourceExternalRules.Count)
+                } elseif ($externalDecision -ne 'ASK' -or $loadedExternalAllows.Count -ne 0 -or
+                    $loadedExternalRules.Count -ne $expectedInheritedExternalRules.Count -or
+                    $missingExternalRules.Count -ne 0 -or $unexpectedExternalRules.Count -ne 0) {
+                    $failures.Add("kael_external_directory_mismatch=decision:$externalDecision;source_agent_rules:$($sourceExternalRules.Count);inherited_rules:$($expectedInheritedExternalRules.Count);loaded_category_rules:$($loadedExternalRules.Count);missing:$($missingExternalRules -join ',');unexpected:$($unexpectedExternalRules -join ',');category_allow:$($loadedExternalAllows.Count);base_allow_before_ask:$([int]$externalBaselineBeforeAsk)")
+                }
+            }
+            $expectedControl = if ($roleName -eq 'kael') { 'DENY' } else { 'ASK' }
             $controls = @(
                 '.opencode/commands/project-owned.md',
                 '.opencode/commands/speckit.plan.md',
@@ -1016,11 +1188,16 @@ try {
     if ($QualificationSlice -ne 'Runtime') {
     $kael = Text '.opencode/agents/kael.md'
     $kovan = Text '.opencode/agents/kovan.md'
+    $kaelSourceMetadata = Text 'olympus/harnesses/opencode/agent-metadata/kael.md'
+    $kovanSourceMetadata = Text 'olympus/harnesses/opencode/agent-metadata/kovan.md'
     $docs = Text 'docs/DEVELOPMENT.md'
     $configText = (Text 'opencode.jsonc') -replace '(?m)^\s*//.*(?:\r?\n|$)', ''
     $config = $configText | ConvertFrom-Json -Depth 100
-    $nativeRules = Read-NativeRules $kovan @($config.permissions)
-    $kaelNativeRules = Read-NativeRules $kael @($config.permissions)
+    $nativeRules = Read-NativeRules $kovanSourceMetadata @($config.permissions)
+    $kaelNativeRules = Read-NativeRules $kaelSourceMetadata @($config.permissions)
+    $kaelSourceRules = Read-NativeRules $kaelSourceMetadata @()
+    $minimalGlobalText = (Text 'olympus/harnesses/opencode/global-permissions.jsonc') -replace '(?m)^\s*//.*(?:\r?\n|$)', ''
+    $minimalGlobal = $minimalGlobalText | ConvertFrom-Json -Depth 100
     $rootPath = 'C:\fixture\project'
     $operation = 'WRITE_SCOPE:create-or-update'
     $grant = New-Grant 'kovan' $operation '.opencode/plugins/project-owned/**' $rootPath 'NATIVE_ASK'
@@ -1117,8 +1294,8 @@ try {
         Check ('AUTH9_NATIVE_DENY_' + ($path -replace '[^A-Za-z0-9]','_')) ((Native-Decision $nativeRules 'edit' $path) -eq 'DENY')
     }
 
-    # Kael and Kovan can maintain canonical OlympusAgents source when task identity
-    # and WRITE_SCOPE are exact. This is a scoped policy decision, not native DENY.
+    # Kovan can maintain canonical source when task identity and WRITE_SCOPE are exact.
+    # Kael's native edit DENY is independent of that task-level role boundary.
     $canonicalPath = 'olympus/core/models.toml'
     $canonicalDeniedWithoutIdentity = Decide 'kovan' $operation $canonicalPath 'olympus/core/**' $rootPath $null
     $canonicalDeniedWithoutScope = Decide 'kovan' $operation $canonicalPath 'src/**' $rootPath $null $true $true $false @() 'ALLOW' $true
@@ -1130,12 +1307,37 @@ try {
         $canonicalAllowed.decision -eq 'ALLOW' -and
         $canonicalNativeDenied.decision -eq 'DENY' -and
         (Native-Decision $nativeRules 'edit' $canonicalPath) -eq 'ALLOW' -and
-        (Native-Decision $kaelNativeRules 'edit' $canonicalPath) -eq 'ALLOW' -and
+        (Native-Decision $kaelNativeRules 'edit' $canonicalPath) -eq 'DENY' -and
         $kael -match 'Canonical Olympus source is writable only when target repository'
+    )
+    $kaelRootProbe = Native-Decision $kaelNativeRules 'shell' 'git rev-parse --show-toplevel'
+    $blockedKaelShell = @(
+        'git status --short','git branch --show-current','git diff --check',
+        'git diff --stat','python scripts/check_docs.py'
+    ) | Where-Object {
+        (Native-Decision $kaelNativeRules 'shell' $_) -ne 'DENY'
+    }
+    $kaelEditWildcardDeny = @($kaelNativeRules | Where-Object {
+        $_.action -eq 'edit' -and $_.resource -ceq '*' -and $_.effect -eq 'deny'
+    }).Count
+    $kaelSerenaWildcardDeny = @($kaelSourceRules | Where-Object {
+        $_.action -ceq 'serena_*' -and $_.resource -ceq '*' -and $_.effect -eq 'deny'
+    }).Count
+    Check 'AUTH9E_KAEL_NATIVE_ROOT_PROBE_ONLY' (
+        $kaelRootProbe -eq 'ALLOW' -and @($blockedKaelShell).Count -eq 0
+    )
+    Check 'AUTH9F_KAEL_NATIVE_EDIT_DENIED' (
+        $kaelEditWildcardDeny -eq 1 -and
+        (Native-Decision $kaelNativeRules 'edit' 'src/cart.ts') -eq 'DENY' -and
+        (Native-Decision $kaelNativeRules 'edit' $canonicalPath) -eq 'DENY'
+    )
+    Check 'AUTH9G_KAEL_SERENA_WILDCARD_DENY' ($kaelSerenaWildcardDeny -eq 1)
+    Check 'AUTH9H_MINIMAL_GLOBAL_HAS_NO_SERENA_DEFAULT' (
+        @($minimalGlobal.permissions | Where-Object { $_.action -like 'serena_*' }).Count -eq 0
     )
 
     # Read-only specialists retain native DENY for source and generated assets;
-    # Kael/Kovan use exact task authority for canonical source instead.
+    # Kovan uses task authority for canonical source while Kael stays read-only.
     $readOnlyAgents = @(Get-ChildItem -LiteralPath (Join-Path $root '.opencode/agents') -Filter '*.md' -File |
         Where-Object { $_.BaseName -notin @('kael','kovan') })
     $coreProtectionValid = @($readOnlyAgents | Where-Object {
@@ -1192,7 +1394,7 @@ try {
     $unrelatedCommandControls = @($projectOwnedCommand, $specKitProjectCommand, $commandPrefixNeighbor)
     $unrelatedCommandControlMismatch = @($unrelatedCommandControls | Where-Object {
         (Is-OlympusOwned $_) -or
-        (Native-Decision $kaelNativeRules 'edit' $_) -ne 'ALLOW' -or
+        (Native-Decision $kaelNativeRules 'edit' $_) -ne 'DENY' -or
         (Native-Decision $nativeRules 'edit' $_) -ne 'ASK'
     })
     Check 'AUTH9D_MANAGED_COMMANDS_EXACT_DENY_AND_UNRELATED_CONTROLS' (
@@ -1386,11 +1588,30 @@ try {
     $runtimeAgentFixture = @(
         [pscustomobject]@{
             id='kael'
-            permissions=@([pscustomobject]@{ action='edit'; resource='*'; effect='allow' }) + $runtimeCommandDenies
+            permissions=@(
+                [pscustomobject]@{ action='*'; resource='*'; effect='allow' }
+                [pscustomobject]@{ action='shell'; resource='*'; effect='deny' }
+                [pscustomobject]@{ action='shell'; resource='git rev-parse --show-toplevel'; effect='allow' }
+                [pscustomobject]@{ action='serena_*'; resource='*'; effect='deny' }
+                [pscustomobject]@{ action='edit'; resource='*'; effect='deny' }
+                [pscustomobject]@{ action='subagent'; resource='*'; effect='deny' }
+                [pscustomobject]@{ action='subagent'; resource='veyra'; effect='allow' }
+                [pscustomobject]@{ action='subagent'; resource='orin'; effect='allow' }
+                [pscustomobject]@{ action='subagent'; resource='kovan'; effect='allow' }
+                [pscustomobject]@{ action='subagent'; resource='nox'; effect='allow' }
+                [pscustomobject]@{ action='subagent'; resource='vera'; effect='allow' }
+                [pscustomobject]@{ action='subagent'; resource='thales'; effect='allow' }
+                [pscustomobject]@{ action='subagent'; resource='atlas'; effect='allow' }
+                [pscustomobject]@{ action='subagent'; resource='argus'; effect='allow' }
+                [pscustomobject]@{ action='subagent'; resource='talos'; effect='allow' }
+                [pscustomobject]@{ action='subagent'; resource='helios'; effect='allow' }
+                [pscustomobject]@{ action='external_directory'; resource='*'; effect='ask' }
+            ) + $runtimeCommandDenies
         }
         [pscustomobject]@{
             id='kovan'
             permissions=@(
+                [pscustomobject]@{ action='*'; resource='*'; effect='allow' }
                 [pscustomobject]@{ action='edit'; resource='*'; effect='allow' }
                 [pscustomobject]@{ action='edit'; resource='.opencode/**'; effect='ask' }
                 [pscustomobject]@{ action='edit'; resource='.opencode/plugins/**'; effect='ask' }
@@ -1414,9 +1635,26 @@ try {
     $singleKovanProbe = Inspect-EffectiveRules 0 $validRuntimeFixture
     Check 'AUTH14_SINGLE_KOVAN_EVALUATES_EFFECTIVE_RULES' ($singleKovanProbe.passed -and
         $singleKovanProbe.evidence -match 'kael_matches=1' -and $singleKovanProbe.evidence -match 'kovan_matches=1' -and
+        $singleKovanProbe.evidence -match 'task_edit=ALLOW/2 rules, project_plugin_edit=ASK, activity_edit=DENY' -and
         $singleKovanProbe.evidence -match 'edit_plugins_ask=1/1' -and
+        $singleKovanProbe.evidence -match 'serena_nav_denied=6/6;source_deny=1;loaded_direct_deny=1;base_allow_before_deny=1;deny_rules=1;allow_ask_rules=0' -and
+        $singleKovanProbe.evidence -match 'subagent_allow_rules=10/10;named_allow=10/10;expanded=0;duplicates=0;base_allow_before_deny=1;unlisted=DENY' -and
+        $singleKovanProbe.evidence -match 'external_directory=ASK;source_agent_rules=0;inherited_rules=1;loaded_category_rules=1;missing=0;unexpected=0;category_allow=0;base_allow_before_ask=1;read_question=NOT_ASSESSED' -and
         $singleKovanProbe.evidence -match 'kael:\.opencode/commands/olympus\.ultra\.md=DENY' -and
         $singleKovanProbe.evidence -match 'kovan:\.opencode/commands/project-owned\.md=ASK')
+    $lateOverridePermissions = @($runtimeAgentFixture[0].permissions | Where-Object {
+        -not ($_.action -ceq '*' -and $_.resource -ceq '*' -and $_.effect -ceq 'allow')
+    }) + @([pscustomobject]@{ action='*'; resource='*'; effect='allow' })
+    $lateOverrideRuntimeFixture = @(
+        [pscustomobject]@{ id='kael'; permissions=$lateOverridePermissions }
+        $runtimeAgentFixture[1]
+    )
+    $lateOverrideProbe = Inspect-EffectiveRules 0 (ConvertTo-Json -InputObject $lateOverrideRuntimeFixture -Compress -Depth 10)
+    Check 'AUTH14_LATE_BASE_ALLOW_OVERRIDE_REJECTED' (-not $lateOverrideProbe.passed -and
+        $lateOverrideProbe.evidence -match 'serena_nav_denied=0/6' -and
+        $lateOverrideProbe.evidence -match 'subagent_allow_rules=11/10' -and
+        $lateOverrideProbe.evidence -match 'unlisted=ALLOW' -and
+        $lateOverrideProbe.evidence -match 'external_directory=ALLOW')
     $badPermissionProbe = Inspect-EffectiveRules 0 '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"deny"}]}]'
     Check 'AUTH14_SINGLE_KOVAN_RULE_MISMATCH_FAILS' (-not $badPermissionProbe.passed -and
         $badPermissionProbe.evidence -match 'edit_\*_deny=1/0')

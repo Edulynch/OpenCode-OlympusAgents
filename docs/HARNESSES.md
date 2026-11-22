@@ -2,7 +2,8 @@
 
 **Olympus Core defines what Olympus means.** A harness adapter defines how a
 runtime expresses that same Core. OpenCode is the only currently supported
-Olympus runtime; its declared capability limits never weaken a Core guarantee.
+Olympus runtime; adapter limits describe representation and evidence, never
+weaken or redefine Core policy.
 
 ## Source layout
 
@@ -21,7 +22,7 @@ Olympus runtime; its declared capability limits never weaken a Core guarantee.
 Adapter prompt files intentionally contain runtime-specific instructions, not
 second canonical role or model definitions. Changes to Olympus meaning start in
 Core; update the relevant adapter representation and qualifications without
-copying or deleting a Core guarantee.
+copying or weakening Core policy.
 
 ## Render and check
 
@@ -46,8 +47,29 @@ outputs**.
 
 | Adapter | Managed/generated outputs |
 |---|---|
-| OpenCode | `.opencode/agents/**`, `.opencode/commands/olympus.ultra.md`, `.opencode/commands/olympus.performance.md`, `.opencode/plugins/olympus-activity/**`, `opencode.jsonc` |
+| OpenCode | `.opencode/agents/**`, `.opencode/commands/olympus.ultra.md`, `.opencode/commands/olympus.performance.md`, `.opencode/plugins/olympus-activity/**`, `.opencode/scripts/worktree-setup.ps1`, `opencode.jsonc` |
 | Shared contract presentation | `docs/HARNESS-CAPABILITIES.md` |
+
+The renderer manages 17 OpenCode runtime outputs: eleven role agents, two
+commands, two Activity plugin files, the worktree setup script, and
+`opencode.jsonc`. It also renders the capability matrix separately. Renderer
+output membership is not by itself an installer ownership declaration; the
+installed manifest and installer define managed resources.
+
+### Core-to-prompt synchronization
+
+The renderer synchronizes the canonical role roster, display identities, and
+per-role model identifiers/effort into OpenCode role metadata; it also injects
+the Core `max_children` value and derived parallelism guidance into prompts.
+Kael's prompt receives the complete canonical maintenance-context policy, the
+TFR section from `routing.md`, and the coding-behavior section; Kovan's prompt
+receives the coding-behavior section.
+
+The renderer does not semantically translate every Core policy. Operational
+instructions in the prompts—including authority and result-lifecycle/routing
+behavior not covered by those explicit substitutions—must be kept manually in
+sync with Core. A rendered prompt or a `SUPPORTED` status is not proof that
+OpenCode enforces every instruction.
 
 Public install/update/uninstall supports **global OpenCode only**, without
 project/harness menus or CWD target selection. Kael is selected through a
@@ -177,8 +199,9 @@ profile. Its older empty-roster observation did not wait for verified plugin
 activation and must not be treated as a current rejection of the V2.0.26
 supported-state evidence.
 
-The OpenCode adapter provides Kael, normal specialists, native ASK,
-hard DENY, Activity HUD, models, permissions, and installer-managed resources.
+The OpenCode adapter represents Kael, normal specialists, native ASK,
+hard DENY, Activity HUD, models, permissions, and installer-managed resources
+through the mechanisms and evidence limits in the [capability table](#capability-evidence).
 Contextual Olympus maintenance uses the same Kael workflow; the current 11-role
 candidate requires its own runtime evidence. The OpenCode adapter does not
 register any MCP server. MCP is optional user/host configuration: Olympus does
@@ -191,6 +214,32 @@ Serena prerequisite or a guarantee against host-level MCP failures; normal
 non-MCP tools remain subject to their configured permissions.
 Global discovery is separately qualified above for isolated Windows V2.0.26;
 no model-backed prompt is implied.
+
+## Capability evidence
+
+Each row separates adapter representation, the evidence that supports the
+recorded status, and the material limit on that evidence. Static checks establish
+source/renderer contracts, not live model behavior. Runtime observations below
+are limited to their stated OpenCode version, platform, and scenario.
+
+| Capability ID | Mechanism | Evidence | Material limit |
+|---|---|---|---|
+| `ROOT_ORCHESTRATOR` | Canonical Kael role is rendered with OpenCode primary-agent metadata and selected as the root default agent. | Core/config assertions in [`tests/harness-core/qualify.py`](../tests/harness-core/qualify.py); Windows OpenCode V2.0.26 selection in [the historical record](#historical-global-install-and-runtime-evidence) and V2.3.0 selection in [the compatibility record](#opencode-23-subagent-compatibility). | Agent registration and selection do not establish model compliance or a correct response. |
+| `CUSTOM_SPECIALISTS` | Renderer requires metadata and a prompt for every canonical role; OpenCode exposes the named agent definitions. | Renderer/roster checks in [`tests/harness-core/qualify.py`](../tests/harness-core/qualify.py); isolated Windows OpenCode V2.3.0 observed 11 Olympus IDs among 18 effective IDs in [the recorded case](#opencode-23-subagent-compatibility). | The additional host IDs were present; roster presence does not establish that every specialist can be delegated successfully. |
+| `PER_ROLE_MODEL` | Canonical role-to-family mappings render an OpenCode model identifier into each role's metadata. | [`models.toml`](../olympus/core/models.toml) and deterministic per-role checks in [`tests/harness-core/qualify.py`](../tests/harness-core/qualify.py). | No general provider access, model availability, or live per-role model selection is established. |
+| `PER_ROLE_REASONING` | Canonical effort values render as OpenCode `#variant` metadata for each role. | [`models.toml`](../olympus/core/models.toml) and deterministic per-role metadata checks in [`tests/harness-core/qualify.py`](../tests/harness-core/qualify.py). | A rendered variant does not establish that a provider supports or honors it. |
+| `MULTI_AGENT` | Kael's instructions use OpenCode native direct child sessions; Olympus does not supply a separate scheduler. | Two concurrent direct Nox children were observed on Windows OpenCode V2.3.0 in [the dated case](#dated-follow-up-2026-11-14). | This scoped observation is not universal evidence for execution, fan-out, cancellation, or service availability. |
+| `BOUNDED_PARALLELISM` | Core `max_children=4` is injected into Kael's prompt as a per-root-session ceiling with adaptive guidance. | [`orchestration.toml`](../olympus/policies/orchestration.toml), [`render_harnesses.py`](../scripts/render_harnesses.py), and the static [`adaptive-concurrency` qualification](../tests/adaptive-concurrency/qualify.ps1); two concurrent children were observed in [the V2.3.0 case](#dated-follow-up-2026-11-14). | The ceiling is prompt guidance, not scheduler enforcement, a cross-root quota, or an OS mutex; observing two children did not test ceiling enforcement. |
+| `QUESTION_CENTRALIZATION` | Core result-lifecycle policy and Kael's prompt centralize user questions through the root orchestrator. | Static/synthetic [`question-barrier` qualification](../tests/question-barrier/qualify.ps1) and the [qualification limits](DEVELOPMENT.md#question-barrier). | A live question race has not been demonstrated. |
+| `COMPLETION_BARRIER` | Core completion policy and Kael's prompt require original child results to be reconciled before completion. | Static/synthetic [`completion-gates` qualification](../tests/completion-gates/qualify.ps1); a pending original child was awaited through its terminal report in [the V2.3.0 case](#dated-follow-up-2026-11-14). | The dated case does not establish behavior for every child crash or cancellation. |
+| `RESULT_DELIVERY` | OpenCode provides native child-result reports; Kael's prompt consumes the original child result. | A partial report followed by a terminal report from the same child was observed on Windows OpenCode V2.3.0 in [the dated case](#dated-follow-up-2026-11-14). | One observed delivery path is not a universal native delivery guarantee. |
+| `RESULT_RECONCILIATION` | Core result-lifecycle policy and Kael's prompt retain the original child and prohibit blind retry on missing output. | Deterministic [`result-reconciliation` fixture](../tests/result-reconciliation/qualify.ps1) and [documented Issue #1 ordering](DEVELOPMENT.md#result-correlation-safety-issue-1). | The intermittent trigger was not reproduced; there is no exactly-once runtime enforcement. |
+| `ALLOW` | Core task authority is combined with the effective native OpenCode permission rule for the exact operation. | Static scope and effective-rule assertions in [`tests/authority/qualify.ps1`](../tests/authority/qualify.ps1). | Configuration and fixture evidence are not blanket live API or permission-UI proof for arbitrary operations. |
+| `ASK` | An applicable native OpenCode ASK rule requests permission; Core instructions require an exact scoped attempt and separate reporting of permission observation. | Static/synthetic authority checks and the isolated [permission API smoke](../tests/global-installer/native-permission-api-smoke.ps1), which programmatically rejects its ASK case. | Programmatic rejection is not human approval, interactive TUI visibility, or evidence that a notice appeared to a user. |
+| `DENY` | Native rules refuse the exact operation, while Core DENY remains a non-elevatable policy boundary. | Effective-rule assertions in [`tests/authority/qualify.ps1`](../tests/authority/qualify.ps1) and the specific automatic-denial case in the isolated [permission API smoke](../tests/global-installer/native-permission-api-smoke.ps1). | This is not general shell/filesystem isolation; shell retains host authority and the fixtures do not establish a universal sandbox. |
+| `CONTEXTUAL_OLYMPUS_MAINTENANCE` | The renderer transcludes canonical maintenance policy into Kael's prompt, which routes by target identity and task intent. | Static [`maintenance-scope` qualification](../tests/maintenance-scope/qualify.py) and the [canonical policy](../olympus/policies/maintenance-context.md). | Static coverage does not establish live, universal routing behavior. |
+| `ACTIVITY_VISIBILITY` | The passive Activity plugin reads native child-session state and presents active children. | Plugin source plus the Node [presentation test](../tests/activity-hud/activity.test.mjs) and [qualification](../tests/activity-hud/qualify.ps1). | Interactive HUD visibility, including low-verbosity presentation, has not been verified. |
+| `GLOBAL_RUNTIME_DISCOVERY` | Isolated OpenCode configuration/data paths are used to check global agent discovery separately from renderer output or file placement. | Historical Windows OpenCode V2.0.26/v0.4.6 evidence found 12 then-current agents and two controls; current-team Windows V2.3.0 (#143) observed 11 Olympus IDs among 18 in [the recorded case](#opencode-23-subagent-compatibility); the V2.3.2 candidate report observed 11 expected IDs, with uniqueness unverified ([#180 evidence](../specs/001-portable-olympus-cli/evidence/issue-180-first-use.md)). | Evidence is limited to recorded Windows versions and isolated paths; it does not establish Unix global install/runtime, model execution, or universal public-install discovery. |
 
 ### OpenCode 2.3 subagent compatibility
 

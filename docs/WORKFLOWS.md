@@ -4,6 +4,63 @@ Start with the quick guide in [English](../README.md) or [Español](../README.ES
 
 ## Try a task
 
+### First task in a plain Git project
+
+Use a disposable local Git repository and a real OpenCode session with
+OlympusAgents (Kael) already available and an already usable model. The project
+itself needs no Olympus checkout, project-scoped setup, or extra harness. Do not
+grant blanket permissions; handle any native permission request through
+OpenCode's normal scoped UI.
+
+In the repository root, create these two files:
+
+`status.py`:
+
+```python
+def format_status(status, detail):
+    return f"{detail} | {status}"
+```
+
+`test_status.py`:
+
+```python
+import unittest
+
+from status import format_status
+
+
+class StatusTest(unittest.TestCase):
+    def test_status_precedes_detail(self):
+        self.assertEqual(format_status("READY", "2 items"), "READY | 2 items")
+```
+
+Run `git init` and `git add status.py test_status.py` to record the baseline
+without committing. This test should fail before the change:
+
+```sh
+python -B -m unittest -v test_status.StatusTest.test_status_precedes_detail
+```
+
+Give Kael this task without naming a worker:
+
+> In this disposable Git project, change `status.py` so status appears before
+> detail while preserving the ` | ` separator. Only `status.py` may change. Run
+> `python -B -m unittest -v test_status.StatusTest.test_status_precedes_detail`,
+> report the observed result and exact diff, and do not commit.
+
+Afterward, independently rerun the test and inspect the result:
+
+```sh
+python -B -m unittest -v test_status.StatusTest.test_status_precedes_detail
+git diff --check
+git status --short
+git diff -- status.py
+```
+
+Expect one passing test, a clean whitespace check, and only the intended
+formatter change in the diff. Record the actual OpenCode version, model, test
+output, and diff; this fixture does not establish behavior beyond that run.
+
 ### Build something
 
 Open OpenCode in your project and describe the outcome:

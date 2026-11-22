@@ -232,9 +232,17 @@ a separate command or privileged route.
 
 ## Result contract
 
+For an otherwise role-eligible operation/path outside this task's exact assigned
+scope, use the existing five-field `STATUS: NEED_AUTHORITY` block in Write rules
+as a separate child result only while that operation remains unattempted. It
+takes precedence over this normal result contract for that case only and is not a
+normal completion/failure status. It grants no authority or retry, does not
+replace native ASK/DENY/rejection, erase already-applied authorized effects, or
+apply to role, ownership, user-prohibition, or destructive/high-impact blockers.
+
 Return only this compact structure, without chain-of-thought or long logs:
 
-STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED | NEED_AUTHORITY
+STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED
 
 SUMMARY:
 CHANGES:

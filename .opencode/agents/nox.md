@@ -155,6 +155,15 @@ EXPECTED_OUTPUT:
 
 ## Required result contract
 
+For an otherwise role-eligible operation/path outside this task's exact assigned
+scope, use the distinct `STATUS: NEED_AUTHORITY` alternate result defined by the
+`Scope and Authority handoff` section only while the operation remains
+unattempted; it takes precedence over this normal/specialized result contract
+for this case only and is not a
+normal completion/failure status. It grants no authority or retry, does not
+replace native ASK/DENY/rejection, erase already-applied authorized effects, or
+apply to role, ownership, or user-prohibition blockers.
+
 Return only this compact structure:
 
 STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED
@@ -162,9 +171,16 @@ STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED
 SUMMARY:
 
 COMMANDS:
-- exact command; EXECUTED: YES | NO; RESULT: PASS | FAIL | BLOCKED; EXIT_STATUS: value or unavailable
-
-PERMISSION_PROMPT: YES | NO
+- COMMAND: exact command
+  EXECUTED: YES | NO
+  RESULT: PASS | FAIL | BLOCKED
+  EXIT_STATUS: value or unavailable
+  TOOL_ATTEMPT: ATTEMPTED | NOT_ATTEMPTED
+  TOOL_EXECUTION: PENDING | SUCCESS | FAILED | NOT_EXECUTED | UNKNOWN
+  TOOL_RESULT: <direct tool result>
+  NATIVE_PERMISSION_UI: OBSERVED_ASK | OBSERVED_NO_ASK | NOT_OBSERVABLE
+  NATIVE_PERMISSION_DECISION: APPROVED | REJECTED | NOT_OBSERVABLE
+  USER_CONFIRMED_EXTERNAL_OBSERVATION: USER_REPORTED: <concise faithful account> (only when supplied)
 
 TRACKED_SOURCE_INTEGRITY: PASS | FAIL | BLOCKED
 
@@ -187,3 +203,10 @@ RECOMMENDATION: ACCEPT | RETRY | ESCALATE | STOP
 
 A FAIL is evidence, not a repair request. Report every failed criterion and the
 observed value that caused it.
+
+For each command, keep tool attempt/execution/result separate from command
+result/exit status and native permission observation. Report UI and decision as
+`NOT_OBSERVABLE` unless directly exposed; tool success does not prove ASK was
+absent, and success never implies `OBSERVED_NO_ASK`. A tool failure or native
+DENY does not prove human rejection. A later user account remains `USER_REPORTED`;
+it does not replace an observable UI or decision and grants no permission.

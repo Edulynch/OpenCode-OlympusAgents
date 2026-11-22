@@ -134,7 +134,7 @@ try {
     $actualKaelChildren = @([regex]::Matches($kaelMetadata, '(?m)^  - action: subagent\r?\n    resource: ([^\r\n]+)\r?\n    effect: allow\r?$') |
         ForEach-Object { $_.Groups[1].Value.Trim('"') })
     Check KAEL_SPECIALIST_ALLOWLIST_UNCHANGED (($actualKaelChildren -join ',') -ceq ($expectedKaelChildren -join ',') -and
-        $kael -match '(?m)^mode: primary$' -and $kael -match 'model: "openai/gpt-6\.2-sol#high"')
+        $kael -match '(?m)^mode: primary\r?$' -and $kael -match 'model: "openai/gpt-6\.2-sol#high"')
     Check NOX_NATIVE_SHELL ($noxMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: allow(?:\r?\n|$)' -and
         $nox -match 'Source-read-only trusted-project validation specialist with practical shell')
 

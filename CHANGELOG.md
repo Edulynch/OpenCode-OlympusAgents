@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## v0.12.4
+
+### Highlights
+
+- Add standalone workflows with evidence handling (#175, #180); clarify supported scope and evidence (#178), narrow Kael's coordinator-only active rules (#177), and distinguish tool results from native permission/decision observability (#176).
+
+### Capability limits
+
+- The Windows first-task result is user-reported after an unpublished install; it does not verify public release bytes or provenance. Linux lifecycle evidence is separate and limited to Ubuntu 24.04 in WSL 2; no WSL first-task, native Linux/macOS, or broader platform support is claimed.
+- Static checks do not establish a live native ASK UI or user approval/rejection.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.12.4 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.4/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.4/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+
 ## v0.12.3
 
 ### Highlights

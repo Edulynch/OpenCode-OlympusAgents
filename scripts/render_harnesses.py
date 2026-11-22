@@ -331,7 +331,7 @@ def capability_doc(capabilities: dict) -> str:
         "<!-- " + GENERATED + " Source: olympus/harnesses/capabilities.toml. -->",
         "# Olympus harness capability contract",
         "",
-        "`SUPPORTED`, `ADAPTABLE`, `PARTIAL`, `GAP`, and `NOT_NEEDED` describe the Olympus guarantee available through each adapter. A GAP never weakens Core policy.",
+        "`SUPPORTED`, `ADAPTABLE`, `PARTIAL`, `GAP`, and `NOT_NEEDED` describe the capability represented through each adapter and the scope of its evidence—not a blanket guarantee of native runtime behavior. `SUPPORTED` means Olympus represents the capability through an adapter mechanism; see the [per-capability evidence](HARNESSES.md#capability-evidence) for its limits. Adapter limits do not change or weaken Core policy.",
         "",
         "| Capability | OpenCode |",
         "|---|---|",
@@ -341,7 +341,7 @@ def capability_doc(capabilities: dict) -> str:
     lines.extend(
         [
             "",
-            "Global install file placement and global runtime discovery are separate claims. `GLOBAL_RUNTIME_DISCOVERY = GAP` means an isolated runtime omitted required global agents; `PARTIAL` means evidence is incomplete or inconclusive; `SUPPORTED` requires isolated paths and the expected runtime roster.",
+            "Global install file placement and global runtime discovery are separate claims. `GLOBAL_RUNTIME_DISCOVERY = GAP` means an isolated runtime omitted required global agents; `PARTIAL` means evidence is incomplete or inconclusive; `SUPPORTED` records isolated paths and the expected roster only within the version/platform scope in the [evidence table](HARNESSES.md#capability-evidence). It does not imply every platform, public installation path, or model execution.",
             "",
         ]
     )

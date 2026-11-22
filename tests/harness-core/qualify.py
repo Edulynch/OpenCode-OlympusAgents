@@ -62,6 +62,36 @@ def run_renderer(
     )
 
 
+def capability_evidence_rows(text: str) -> list[list[str]] | None:
+    lines = text.splitlines()
+    try:
+        heading = lines.index("## Capability evidence")
+    except ValueError:
+        return None
+    end = next((index for index in range(heading + 1, len(lines)) if lines[index].startswith("#")), len(lines))
+    table = [line for line in lines[heading + 1 : end] if line.strip().startswith("|")]
+    if not table or [cell.strip() for cell in table[0].strip().strip("|").split("|")] != [
+        "Capability ID", "Mechanism", "Evidence", "Material limit",
+    ]:
+        return None
+    rows = []
+    for line in table[2:]:
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if cells and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
+            continue
+        rows.append(cells)
+    return rows
+
+
+def capability_evidence_is_complete(text: str, expected: set[str]) -> bool:
+    rows = capability_evidence_rows(text)
+    if rows is None or len(rows) != len(expected) or any(len(row) != 4 for row in rows):
+        return False
+    identifiers = [row[0].strip("`") for row in rows]
+    substantive = all(len(value.strip()) >= 12 for row in rows for value in row[1:])
+    return set(identifiers) == expected and all(identifiers.count(item) == 1 for item in expected) and substantive
+
+
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -350,6 +380,30 @@ def main() -> int:
           set(capabilities["opencode"]) == EXPECTED_CAPABILITIES and
           all(state in {"SUPPORTED", "ADAPTABLE", "PARTIAL", "GAP", "NOT_NEEDED"} for state in capabilities["opencode"].values()))
     check("GLOBAL_RUNTIME_DISCOVERY_EVIDENCE_STATES", capabilities["opencode"]["GLOBAL_RUNTIME_DISCOVERY"] == "SUPPORTED")
+    harness_guide = (ROOT / "docs" / "HARNESSES.md").read_text(encoding="utf-8")
+    evidence_rows = capability_evidence_rows(harness_guide)
+    root_evidence_row = next(
+        (row for row in evidence_rows or [] if row and row[0] == "`ROOT_ORCHESTRATOR`"),
+        None,
+    )
+    check("CAPABILITY_EVIDENCE_ROWS_COMPLETE_AND_SUBSTANTIVE",
+          capability_evidence_is_complete(harness_guide, EXPECTED_CAPABILITIES))
+    if root_evidence_row is not None:
+        root_row_text = next(
+            line for line in harness_guide.splitlines()
+            if line.startswith("| `ROOT_ORCHESTRATOR` |")
+        )
+        missing_row_doc = harness_guide.replace(root_row_text + "\n", "", 1)
+        duplicate_row_doc = harness_guide.replace(root_row_text, root_row_text + "\n" + root_row_text, 1)
+        malformed_row_doc = harness_guide.replace(
+            root_row_text, "| `ROOT_ORCHESTRATOR` | — | — | — |", 1
+        )
+    else:
+        missing_row_doc = duplicate_row_doc = malformed_row_doc = harness_guide
+    check("CAPABILITY_EVIDENCE_MISSING_DUPLICATE_MALFORMED_ROWS_REJECTED",
+          not capability_evidence_is_complete(missing_row_doc, EXPECTED_CAPABILITIES)
+          and not capability_evidence_is_complete(duplicate_row_doc, EXPECTED_CAPABILITIES)
+          and not capability_evidence_is_complete(malformed_row_doc, EXPECTED_CAPABILITIES))
 
     protected_paths = ("olympus/**", ".codex/**", "CODEX.md", "scripts/render_harnesses.py")
     protected = True
@@ -457,6 +511,12 @@ def main() -> int:
     check("CAPABILITY_DOC_MATCHES_RENDERER",
           renderer.capability_doc(capabilities) ==
           (ROOT / "docs/HARNESS-CAPABILITIES.md").read_text(encoding="utf-8"))
+    rendered_capability_doc = renderer.capability_doc(capabilities)
+    matrix_rows = [line for line in rendered_capability_doc.splitlines() if line.startswith("|")]
+    check("CAPABILITY_MATRIX_REMAINS_TWO_COLUMN_AND_LINKS_EVIDENCE",
+          len(matrix_rows) == len(EXPECTED_CAPABILITIES) + 2
+          and all(len(line.strip().strip("|").split("|")) == 2 for line in matrix_rows)
+          and "HARNESSES.md#capability-evidence" in rendered_capability_doc)
     managed = set(outputs)
     before = snapshot_outputs(managed)
     print(f"ROOT_MANAGED_OUTPUT_COUNT {len(managed)}")

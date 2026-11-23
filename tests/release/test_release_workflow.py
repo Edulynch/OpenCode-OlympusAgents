@@ -1,5 +1,7 @@
 import argparse
+from contextlib import redirect_stdout
 import importlib.util
+import io
 import json
 import os
 import re
@@ -65,6 +67,17 @@ def extract_tag_guard_script():
     )
     if script is None:
         raise AssertionError("release tag guard heredoc is missing")
+    return textwrap.dedent(script.group("body"))
+
+
+def extract_promotion_guard_script():
+    text = (ROOT / ".github/workflows/promotion-guard.yml").read_text(encoding="utf-8")
+    script = re.search(
+        r"(?ms)^          python3 - <<'PY'\r?\n(?P<body>.*?)^          PY[ \t]*\r?$",
+        text,
+    )
+    if script is None:
+        raise AssertionError("promotion guard heredoc is missing")
     return textwrap.dedent(script.group("body"))
 
 
@@ -492,6 +505,57 @@ class PublicAssetVerificationTests(unittest.TestCase):
             )
 
 
+class PromotionGuardEventPathTests(unittest.TestCase):
+    def test_runner_event_path_is_read_and_workflow_ref_is_logged_without_api_use(self):
+        with tempfile.TemporaryDirectory() as temp:
+            event_path = Path(temp) / "event.json"
+            event_path.write_text(
+                json.dumps({"pull_request": {"head": {"sha": "invalid"}}}),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            env = {
+                "GITHUB_EVENT_PATH": str(event_path),
+                "GITHUB_WORKFLOW_REF": (
+                    "Edulynch/OpenCode-OlympusAgents/"
+                    ".github/workflows/promotion-guard.yml@refs/heads/master"
+                ),
+            }
+            with (
+                mock.patch.dict(os.environ, env, clear=True),
+                mock.patch("urllib.request.urlopen") as urlopen,
+                redirect_stdout(output),
+            ):
+                with self.assertRaisesRegex(SystemExit, "PROMOTION_HEAD_SHA_INVALID"):
+                    exec(compile(extract_promotion_guard_script(), "promotion-guard.yml", "exec"), {})
+
+            self.assertIn("PROMOTION_WORKFLOW_REF: " + env["GITHUB_WORKFLOW_REF"], output.getvalue())
+            urlopen.assert_not_called()
+
+    def test_missing_or_unreadable_runner_event_path_fails_closed_without_api_use(self):
+        with tempfile.TemporaryDirectory() as temp:
+            missing_file = str(Path(temp) / "missing-event.json")
+            for env, reason in (
+                ({"GITHUB_WORKFLOW_REF": "workflow-ref"}, "PROMOTION_EVENT_PATH_MISSING"),
+                (
+                    {
+                        "GITHUB_EVENT_PATH": missing_file,
+                        "GITHUB_WORKFLOW_REF": "workflow-ref",
+                    },
+                    "PROMOTION_EVENT_PATH_UNREADABLE",
+                ),
+            ):
+                with (
+                    self.subTest(reason=reason),
+                    mock.patch.dict(os.environ, env, clear=True),
+                    mock.patch("urllib.request.urlopen") as urlopen,
+                    redirect_stdout(io.StringIO()),
+                ):
+                    with self.assertRaisesRegex(SystemExit, reason):
+                        exec(compile(extract_promotion_guard_script(), "promotion-guard.yml", "exec"), {})
+                    urlopen.assert_not_called()
+
+
 class WorkflowBoundaryTests(unittest.TestCase):
     def test_contributor_workflows_cover_both_bases_without_losing_master_pushes(self):
         workflows = {
@@ -511,7 +575,9 @@ class WorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("branches: [master]", text)
         self.assertIn("statuses: write", text)
         self.assertIn('"context": "Promotion source"', text)
-        self.assertIn("EVENT_PATH: ${{ github.event_path }}", text)
+        self.assertIn('event_path = os.environ.get("GITHUB_EVENT_PATH")', text)
+        self.assertNotIn("github.event_path", text)
+        self.assertIn("PROMOTION_WORKFLOW_REF:", text)
         self.assertNotIn("actions/checkout", text)
         self.assertNotRegex(text, r"\$\{\{\s*github\.event\.pull_request\.(?:head|base)")
 

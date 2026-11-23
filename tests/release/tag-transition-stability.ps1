@@ -6,10 +6,12 @@ $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $genericUrl = 'https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1'
 $installCommand = "& ([scriptblock]::Create((irm '$genericUrl')))"
+$pinnedVersion = 'vX.Y.Z'
+$pinnedCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$pinnedVersion/install.ps1')))"
 $latestReleaseUrl = 'https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest'
 
 function Read-ReleaseDocs {
-    $paths = @('install.ps1','README.md','CHANGELOG.md','docs/INSTALLATION.md','docs/DEVELOPMENT.md',
+    $paths = @('install.ps1','README.md','README.ES.md','CHANGELOG.md','docs/INSTALLATION.md','docs/DEVELOPMENT.md',
         'docs/HARNESSES.md','docs/HARNESS-CAPABILITIES.md','olympus/harnesses/capabilities.toml')
     $docs = @{}
     foreach ($path in $paths) { $docs[$path] = [IO.File]::ReadAllText((Join-Path $source $path)) }
@@ -26,18 +28,26 @@ function Get-PowerShellStatements([string]$Markdown) {
     }
 }
 
-function Test-ReadmeCommands([string]$Readme, [string]$Version) {
+function Test-ReadmeCommands([string]$Readme, [string]$Version, [string]$Language = 'en') {
     try {
-        $pinnedCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$Version/install.ps1')))"
+        $installTitle = if ($Language -eq 'es') { '⚡ Instala o actualiza' } else { 'Fast Install' }
+        $uninstallTitle = if ($Language -eq 'es') { '🗑️ Desinstala' } else { 'Fast Uninstall' }
+        $specificTitle = if ($Language -eq 'es') { '📌 Instala una versión específica' } else { 'Install a specific version' }
         foreach ($action in @('Install','Uninstall')) {
-            $section = [regex]::Matches($Readme, '(?ms)^## Fast ' + $action + '[ \t]*\r?\n(?<body>.*?)(?=^## |\z)')
+            $title = if ($action -eq 'Install') { $installTitle } else { $uninstallTitle }
+            $section = [regex]::Matches($Readme, '(?ms)^## ' + [regex]::Escape($title) + '[ \t]*\r?\n(?<body>.*?)(?=^## |\z)')
             if ($section.Count -ne 1) { return $false }
             $statements = @(Get-PowerShellStatements $section[0].Groups['body'].Value)
             $expected = if ($action -eq 'Install') { $installCommand } else { 'olympus uninstall' }
             if ($statements.Count -ne 1 -or $statements[0].Extent.Text.Trim() -cne $expected) { return $false }
         }
-        if ([regex]::Matches($Readme, '(?m)^## Fast ').Count -ne 2) { return $false }
-        $pinnedSection = [regex]::Matches($Readme, '(?ms)^## Install a specific version[ \t]*\r?\n(?<body>.*?)(?=^## |\z)')
+        $fastHeadings = if ($Language -eq 'es') {
+            [regex]::Matches($Readme, '(?m)^## (?:⚡ Instala o actualiza|🗑️ Desinstala)[ \t]*\r?$').Count
+        } else {
+            [regex]::Matches($Readme, '(?m)^## Fast ').Count
+        }
+        if ($fastHeadings -ne 2) { return $false }
+        $pinnedSection = [regex]::Matches($Readme, '(?ms)^## ' + [regex]::Escape($specificTitle) + '[ \t]*\r?\n(?<body>.*?)(?=^## |\z)')
         if ($pinnedSection.Count -ne 1) { return $false }
         $pinnedStatements = @(Get-PowerShellStatements $pinnedSection[0].Groups['body'].Value)
         if ($pinnedStatements.Count -ne 1 -or $pinnedStatements[0].Extent.Text.Trim() -cne $pinnedCommand) { return $false }
@@ -95,11 +105,16 @@ function Get-DocumentationErrors([hashtable]$Docs, [string]$Version) {
         $issues.Add('DOC_EPHEMERAL_RELEASE_STATE')
     }
     $readme = $Docs['README.md']
-    if (-not (Test-ReadmeCommands $readme $Version) -or
+    if (-not (Test-ReadmeCommands $readme $Version 'en') -or
         -not $readme.Contains('published, immutable') -or
         $readme -notmatch '(?i)global and OpenCode-only' -or
         $readme.Contains("/$Version/install-olympus.ps1") -or
         $readme.Contains("/$Version/uninstall-olympus.ps1")) {
+        $issues.Add('DOC_README_IMMUTABLE_ENTRYPOINT_INVALID')
+    }
+    if (-not (Test-ReadmeCommands $Docs['README.ES.md'] $Version 'es') -or
+        $Docs['README.ES.md'].Contains("/$Version/install.ps1") -or
+        $Docs['README.ES.md'].Contains("/$Version/install-olympus.ps1")) {
         $issues.Add('DOC_README_IMMUTABLE_ENTRYPOINT_INVALID')
     }
     foreach ($token in @('**draft**', '**before publishing**', 'verify its bytes match the tag', 'immutability enabled')) {
@@ -119,10 +134,9 @@ function Get-DocumentationErrors([hashtable]$Docs, [string]$Version) {
         if (-not $Docs['docs/INSTALLATION.md'].Contains($token)) { $issues.Add('DOC_INSTALLATION_SAFETY_INCOMPLETE') }
     }
     $installationGuide = $Docs['docs/INSTALLATION.md']
-    $pinnedCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$Version/install.ps1')))"
     if (-not $installationGuide.Contains($installCommand) -or
         -not $installationGuide.Contains('olympus uninstall') -or
-        -not $installationGuide.Contains($Version) -or
+        -not $installationGuide.Contains($pinnedVersion) -or
         -not $installationGuide.Contains($latestReleaseUrl) -or
         -not $installationGuide.Contains($pinnedCommand) -or
         $installationGuide.Contains("/$Version/install-olympus.ps1") -or
@@ -204,7 +218,6 @@ function Assert-Rejected([hashtable]$Docs, [string]$Version, [string]$Expected) 
 
 $docs = Read-ReleaseDocs
 $version = [regex]::Match($docs['install.ps1'], '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''').Groups[1].Value
-$pinnedCommand = "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$version/install.ps1')))"
 foreach ($tagState in @('PRE_TAG','SIMULATED_POST_TAG')) {
     $issues = @(Get-DocumentationErrors $docs $version)
     if ($issues.Count) { throw "${tagState}_SEMANTIC_VALIDATION_FAIL: $($issues -join ',')" }
@@ -264,7 +277,7 @@ $bad = $docs.Clone()
 $bad['README.md'] += "`n## Alternative`n" + '```powershell' + "`n$installCommand`n" + '```'
 Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
 foreach ($replacement in @(
-    $pinnedCommand.Replace("/$version/", '/master/'),
+    $pinnedCommand.Replace("/$pinnedVersion/", '/master/'),
     $pinnedCommand.Replace('/install.ps1', '/install-olympus.ps1'),
     "$pinnedCommand -Version '$version'",
     '# missing pinned installer'
@@ -273,6 +286,11 @@ foreach ($replacement in @(
     $bad['README.md'] = $bad['README.md'].Replace($pinnedCommand, $replacement)
     Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
 }
+$bad = $docs.Clone()
+$bad['README.ES.md'] = $bad['README.ES.md'].Replace(
+    $pinnedCommand,
+    $pinnedCommand.Replace("/$pinnedVersion/", '/master/'))
+Assert-Rejected $bad $version 'DOC_README_IMMUTABLE_ENTRYPOINT_INVALID'
 $bad = $docs.Clone()
 $bad['install.ps1'] = $bad['install.ps1'].Replace("`$ReleaseVersion = '$version'", "`$ReleaseVersion = 'v9.9.9'")
 Assert-Rejected $bad $version 'DOC_ACTIVE_RELEASE_IDENTITY_MISMATCH'

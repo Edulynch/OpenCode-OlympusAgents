@@ -2,21 +2,91 @@
 
 For Olympus maintainers, contributors, installation debugging, qualification, and release engineering. For first-time setup, start with the [README](../README.md).
 
-## Publishing the generic installer asset
+## Promotion and automatic releases
+
+Contributor work targets `develop`; only a human manually merges a canonical
+same-repository `develop` → `master` PR. There is no automatic merge, PAT, or
+release dispatch. CI covers PRs to both branches while retaining the exact
+required `FAST / Windows` name. On 2026-11-23, the observed `master` ruleset
+required a PR and `FAST / Windows`, required zero independent approvals, and
+blocked branch deletion and force pushes. Recheck the live ruleset before
+rollout; this source change does not alter GitHub settings. The observed
+repository also deleted branches on merge. Disable that setting for `develop`
+before the first promotion, or GitHub can delete the long-lived source branch.
+
+PRs targeting `master` run `Promotion source` from base-owned
+`pull_request_target` metadata only: no checkout, PR code, or secrets. The job
+checks the canonical repository and exact `develop` head / `master` base, then
+sets that status on the PR head SHA using `statuses: write`. A status name alone
+does not prove which GitHub App supplied it. First observe same-repository and
+fork allow/deny outcomes and the status's source-app attribution; only then
+consider requiring `Promotion source` in the ruleset with its GitHub Actions
+integration bound. Until that hosted evidence exists, retain the existing
+required checks and treat the source-status/ruleset integration as a rollout
+gate, not as proved by local YAML tests.
+
+The release workflow is push-only on exact `master` in the canonical repository.
+It remains off unless repository variable `OLYMPUS_RELEASE_ENABLED` is exactly
+`true` (unset is off). It rejects created/deleted/forced refs, stale SHAs,
+direct pushes, other branches/forks, non-merge commits, ambiguous PR metadata,
+and anything other than one merged canonical `develop` → `master` PR whose
+merge SHA, first parent, second parent, and event `before` SHA agree. It also
+requires that exact SHA still be current `master` before each write boundary.
+An unchanged installer version is a successful no-op, including when a
+historical tag already exists; migration does not select or bump a version.
+For a new version, aligned stable installer markers, a reviewed versioned
+changelog block, monotonicity over the prior candidate and latest public
+release, and a collision-free tag are required.
+
+GitHub's repository immutable-release settings endpoint requires administrator
+read access, which the ordinary Actions token may not have. The workflow uses
+the endpoint when accessible and fails if it reports immutability disabled. If
+the endpoint returns 401/403, the explicit repository variable
+`OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED=true` is a manual activation
+precondition: an administrator must first enable and verify immutable releases
+in repository settings. That variable is an owner assertion, not live platform
+proof; remove it before changing the setting. A 404, unset assertion, or any
+other API error fails closed. The workflow additionally requires GitHub to
+report `immutable=true` after publication.
+
+Each new release run first qualifies the exact push SHA read-only, then creates
+an annotated tag, fetches and peels that remote tag, and runs the tagged source
+archive through the isolated Windows release qualifier before creating a
+**draft**. The draft contains only `install-olympus.ps1` and
+`install-olympus.sh` bytes read from that exact commit; their SHA-256 values and
+the reviewed notes are checked before publishing. Separate jobs hold
+`contents: write` only for tag creation, draft/assets, or publication. Those
+jobs do not check out repository code or execute tests/assets; there is no PAT
+and no second workflow triggered by the `GITHUB_TOKEN` tag/release writes.
+Existing mismatched tags, releases, asset digests, ownership, or immutable
+state are conflicts; the workflow never moves, deletes, recreates, or edits a
+published release.
+
+The release workflow serializes its runs but GitHub keeps only one pending
+concurrency run and a newer pending run may replace it; this is not a FIFO
+queue. Promote one PR at a time and wait for its workflow to finish before
+merging another. Every writer rechecks current `master`, but a branch update
+can race with a remote API operation; sequential promotion is an operational
+precondition. If a failed run left an orphan tag, do not delete or recreate it;
+investigate and advance only through an authorized new version. A matching
+draft for the same SHA can resume after the read-only gates pass.
+
+Create the matching **draft**, attach both assets **before publishing**, and
+verify its bytes match the tag; publish only with immutability enabled.
+
+After publication, the workflow verifies `releases/latest`, immutable stable
+metadata, the exact annotated tag and both public asset bytes. This is not a
+real installer lifecycle: the public latest-endpoint install/VerifyOnly/
+uninstall check remains pending for an isolated supported Windows environment
+and the documented Linux route. Mocked or local tag qualification is not
+equivalent to that endpoint gate. Do not announce availability until the
+separate lifecycle evidence is complete; never point executable installation
+sources at `master` or `develop`.
 
 The intended public URL is:
 `https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1`.
-Local implementation or mocked acquisition tests do not prove that endpoint works.
-
-For a separately authorized future release:
-
-1. Complete focused installer/default-agent tests, configuration review, and all required release/CI gates. Test helpers must use disposable profiles, explicit global roots, CLI roots, and a file-backed PATH store. Never install an incomplete checkout over a real user installation.
-2. Select a new product version and tag only under separate authorization; keep installer defaults/release markers/archive identity consistent. Do not move or recreate `v0.7.0`.
-3. Create the new release as a **draft** for the exact reviewed tag. Attach `install-olympus.ps1` from that tag as an asset **before publishing**; verify its bytes match the tag. The asset must not point execution to a mutable branch.
-4. Publish the stable release with immutability enabled, then verify `immutable=true`, `draft=false`, `prerelease=false`, the exact tag, zoned publication timestamp, and the installer asset. Published immutable assets cannot be added or replaced later.
-5. Verify the generic URL against the published asset and run an isolated public-endpoint install/VerifyOnly/uninstall. Only then announce availability. GitHub's metadata assertions are not independent cryptographic signature verification by the installer.
-
-This procedure is documentation, not authorization to change a version, tag, release, PATH, or real installation.
+This procedure is documentation, not authorization to change a version, tag,
+release setting, PATH, or real installation.
 
 ## Optional native Git hooks
 
@@ -336,6 +406,7 @@ Use the following existing checks as starting points for development validation 
 
 | Change | Recommended check |
 | --- | --- |
+| Release provenance and version/tag policy | `python -B -m unittest discover -s tests/release -p 'test_release_workflow.py' -v` |
 | Release-facing README, changelog, or documentation contracts | `pwsh -NoProfile -File ./tests/release/tag-transition-stability.ps1` |
 | Olympus Core, renderer, or OpenCode adapter contracts | `python3.11 -B ./scripts/render_harnesses.py check --harness opencode`<br>`python3.11 -B ./tests/harness-core/qualify.py` |
 | Completion-gate policy | `pwsh -NoProfile -File ./tests/completion-gates/qualify.ps1` |
@@ -386,11 +457,13 @@ retained as evidence, not executed as current contract tests by these profiles.
 
 | CI check | What it verifies |
 | --- | --- |
-| [`FAST / Windows`](../.github/workflows/fast.yml) | Required for `master`. Runs offline FAST, authority checks, the packaged CLI lifecycle with mocked release downloads, native PowerShell completion, and isolated installer and worktree fixtures. The post-install fixture uses mocked OpenCode. |
+| [`FAST / Windows`](../.github/workflows/fast.yml) | Required for `master`; contributor PR CI runs on both `develop` and `master`. Runs offline FAST, release policy tests, authority checks, the packaged CLI lifecycle with mocked release downloads, native PowerShell completion, and isolated installer and worktree fixtures. The post-install fixture uses mocked OpenCode. |
 | [`Read-only and integrated CLI coverage / Linux`](../.github/workflows/fast.yml) | Read-only CLI without TOML Kit, followed by integrated CLI tests in a dedicated environment. |
 | [`Project manifest, writer-lock, and CLI safety`](../.github/workflows/fast.yml) | Shared Python manifest and lock tests on Windows and Linux. Windows retains PowerShell-specific coverage; Linux checks the POSIX launcher, global install, packaged CLI, and release routing without PowerShell. No macOS runner. |
 | [`Secret and link gates`](../.github/workflows/secrets.yml) | Secret scanning and documentation links on Windows and Linux. |
 | [`Global-only ASK/DENY / Windows V2 API`](../.github/workflows/native-permission-api.yml) | Real OpenCode V2 permission handling with a local model stub. The assertion rejects ASK through the API; it does not test the interactive permission UI or a hosted model. |
+| [`Promotion source`](../.github/workflows/promotion-guard.yml) | Base-owned PR metadata check that writes a distinct status to the exact PR head. Hosted source-app attribution and ruleset association still require platform verification. |
+| [`Release / immutable master promotion`](../.github/workflows/release.yml) | Opt-in exact-SHA provenance, read-only candidate/tag qualification, isolated tag/draft/publish jobs, and public metadata/asset-byte checks. Real public installer lifecycle remains a separate pending gate. |
 
 A local FAST pass is not a pass for all CI jobs. Use display names that describe
 the behavior and distinguish real runtime from mocked fixtures. Keep required
@@ -637,43 +710,51 @@ active version is still future, untagged, unmerged, pending publication, or
 forbidden from publication. Keep execution status in qualification output and
 this procedure.
 
-Use this state machine for each release:
+For each release, first agree and review the new product version in the
+`develop` change; do not bump a version as part of a workflow migration. Open a
+manual `develop` → `master` PR and wait for all required hosted checks. Do not
+merge a second promotion while the release workflow is active. The exact
+workflow sequence is:
 
-1. **Master validated.** Run release/version and documentation-claim
-   qualifications on the exact `master` commit. Review capability gaps and
-   static-versus-interactive limits; release notes must include `Installation`
-   and `Verify installation` sections with commands pinned to the same version.
-   For an exact local mock target, run
+1. Validate the `master` push SHA, current branch tip, canonical merged PR and
+   merge parents; validate the aligned installer markers, changelog section,
+   prior/latest version ordering, and tag/release state.
+2. Run
    `pwsh -NoProfile -File ./tests/release/qualify.ps1 -MockOpenCode -ExpectedVersion <tag>`
-   and replace `<tag>` with the exact release version.
-2. **Tag candidate.** Create the candidate tag from the validated commit. A
-   beta/prerelease must not use mutable `master` as its installer source.
-3. **Validate the immutable remote tag.** Fetch/inspect that exact tag and run
-   installer and `VerifyOnly` checks against its tag-shaped source/URL in
-   disposable, isolated global OpenCode roots—not disposable Git projects.
-   Use `tests/installer-test-environment.ps1` and
-   `Enter-OlympusInstallerTestEnvironment` to isolate process-wide OpenCode
-   roots; pass an explicit CLI install root and file-backed PATH store to the
-   tagged top-level `install.ps1` with `-CliInstallRoot` and
-   `-CliPathStorePath`. For fixture cleanup, run that same tagged
-   `install.ps1 -Uninstall` with the same explicit CLI root and PATH store.
-   These are top-level tagged-installer parameters, not the internal
-   `-InstallRoot` and `-PathStorePath` arguments used when it invokes the CLI
-   installer; do not add fixture overrides to generic public wrappers. The
-   global installer must not target a project checkout. Local-source
-   `tests/release/qualify.ps1` does not replace this tagged-source validation.
-4. **If PASS, create the GitHub Release.** Use the same tag and validated notes,
-   then run `pwsh -NoProfile -File ./tests/release/github-release-notes.ps1
-   -Version <tag>` to check the actual published Release body.
-   For Linux-enabled releases, include the exact tagged `install-olympus.sh`
-   asset alongside `install-olympus.ps1`. Verify both assets against the tag
-   before making the draft immutable. After publishing, check the public `sh`
-   entrypoint in an isolated Ubuntu 24.04 WSL 2 environment without PowerShell.
-5. **If FAIL, keep the tag immutable and advance the patch version.** Do not
-   move, delete, or recreate the failed tag; make corrections on `master`,
-   validate the next patch candidate, and repeat the state machine. A failed
-   validation tag does not itself constitute a published release.
+   and `tests/release/github-release-notes.ps1` on the exact candidate SHA. The
+   candidate job has read-only permissions; the deterministic OpenCode stub is
+   explicitly mocked and does not establish native runtime behavior.
+3. Create (or verify on an exact same-SHA retry) the annotated tag. The
+   read-only tagged-source job fetches that remote tag, checks its object,
+   message, and peeled commit, archives the exact tree, then runs the release
+   qualifier against that extracted source with isolated Windows temp/profile
+   roots. No `-SourceRoot` or real user destination is used.
+4. Only after tagged-source qualification, create/resume a matching draft and
+   attach exactly the PS1 and `sh` installer bytes at that tag. Compare source
+   SHA-256 digests and draft asset digests before publication. Publish only
+   after rechecking the exact `master` tip, tag, release body, assets, and
+   immutable-release setting. Do not use npm publication or a second
+   release-trigger workflow.
+5. Verify `immutable=true`, `draft=false`, `prerelease=false`, the exact
+   annotated tag, a timezone-aware publication timestamp, `releases/latest`,
+   and downloaded public bytes for both installer assets. Then complete a
+   separate disposable public-endpoint install/VerifyOnly/uninstall using the
+   supported Windows process-root/CLI-root/PATH-store isolation described in
+   [installation qualification](#choosing-qualification-by-change-risk) and
+   the documented Linux route. Current Actions automation reports this actual
+   public lifecycle as **PENDING**; a dry run or mocked qualifier is not a
+   substitute. Stop and investigate if any post-publication check fails; never
+   rewrite the immutable tag or release.
 
-The release-notes gate checks the actual GitHub body after publication and
-rejects missing or mismatched install/verification commands. The local
-qualification checks are deterministic and do not create tags or releases.
+An unchanged version is a successful migration no-op even if a historical tag
+exists. A changed version colliding with any existing tag/release—including
+the historical `v0.12.4` tag at its different target—is a hard conflict. Do not
+move, delete, or recreate tags to recover. Only an exact matching draft can
+resume; an orphan or conflicting tag requires maintainer investigation and an
+authorized later version.
+
+GitHub concurrency is serial but not FIFO: a newer pending run may replace an
+older pending run. If a candidate becomes stale before a write, the workflow
+fails closed; rerun that same SHA only if it remains current and eligible.
+GitHub's immutability field and tagged-source identity checks are platform
+assertions, not independent signature verification by the installer.

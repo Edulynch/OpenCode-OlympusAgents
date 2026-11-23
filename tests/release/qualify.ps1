@@ -32,6 +32,7 @@ if ($RecoveryRunId -notmatch '^[A-Za-z0-9-]{8,80}$') { throw 'RECOVERY_RUN_ID_IN
 $run = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId)
 $receiptPath = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId + '.json')
 $transcriptPath = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId + '.log')
+[IO.Directory]::CreateDirectory($tempOpencode) | Out-Null
 $cliInstallRoot = Join-Path $run 'cli-install'
 $cliPathStorePath = Join-Path $cliInstallRoot 'cli-path.json'
 . (Join-Path $PSScriptRoot '../installer-test-environment.ps1')

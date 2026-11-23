@@ -18,6 +18,39 @@ jobs:
   fast:
     name: FAST / Windows
     runs-on: windows-2025
+    needs:
+      - global-cli-windows
+      - default-agent-windows
+      - permission-guard-windows
+    if: ${{ always() }}
+    timeout-minutes: 20
+    steps:
+      - name: Require every Windows lane to succeed
+        shell: bash
+        env:
+          GLOBAL_CLI_RESULT: ${{ needs.global-cli-windows.result }}
+          DEFAULT_AGENT_RESULT: ${{ needs.default-agent-windows.result }}
+          PERMISSION_GUARD_RESULT: ${{ needs.permission-guard-windows.result }}
+        run: |
+          set -euo pipefail
+          failed=0
+          if [[ "$GLOBAL_CLI_RESULT" != success ]]; then
+            printf 'Global CLI lane result was %q; expected success.\n' "$GLOBAL_CLI_RESULT" >&2
+            failed=1
+          fi
+          if [[ "$DEFAULT_AGENT_RESULT" != success ]]; then
+            printf 'Default Agent lane result was %q; expected success.\n' "$DEFAULT_AGENT_RESULT" >&2
+            failed=1
+          fi
+          if [[ "$PERMISSION_GUARD_RESULT" != success ]]; then
+            printf 'Permission guard lane result was %q; expected success.\n' "$PERMISSION_GUARD_RESULT" >&2
+            failed=1
+          fi
+          exit "$failed"
+
+  global-cli-windows:
+    name: Global CLI and smoke / Windows
+    runs-on: windows-2025
     timeout-minutes: 20
     steps:
       - name: Checkout (read-only)
@@ -31,7 +64,51 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Prepare isolated FAST temp directory
+      - name: Prepare isolated Windows temp directory
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $approvedTemp = Join-Path $env:TEMP 'opencode'
+          New-Item -ItemType Directory -Force -Path $approvedTemp | Out-Null
+
+      - name: "Global CLI: install, update, verify, and uninstall (isolated Windows)"
+        shell: pwsh
+        env:
+          OLYMPUS_TEST_ROOT: ${{ runner.temp }}/opencode
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -B -m unittest discover -s tests/harness-core -p test_global_cli.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pwsh -NoProfile -File ./tests/global-cli/smoke.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Confirm source checkout unchanged
+        shell: pwsh
+        run: |
+          $changes = @(git status --porcelain)
+          if ($LASTEXITCODE -ne 0) { throw 'Git status failed' }
+          if ($changes.Count -gt 0) {
+            $changes | Out-Host
+            throw 'FAST modified the source checkout'
+          }
+
+  default-agent-windows:
+    name: Default Agent and offline checks / Windows
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - name: Checkout (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # Maintenance Handoff compares a historical baseline commit.
+
+      - name: Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Prepare isolated Windows temp directory
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -60,25 +137,13 @@ jobs:
           pwsh -NoProfile -File ./tests/authority/qualify.ps1 -QualificationSlice Offline
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Global OpenCode permission guard (isolated Windows fixtures)
-        shell: pwsh
-        run: |
-          # Qualify ASK/DENY precedence and global-only install ownership without
-          # touching the runner's actual OpenCode or Codex user configuration.
-          pwsh -NoProfile -File ./tests/global-installer/qualify.ps1
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: "Global CLI: install, update, verify, and uninstall (isolated Windows)"
+      - name: "Default Agent (isolated Windows)"
         shell: pwsh
         env:
           OLYMPUS_TEST_ROOT: ${{ runner.temp }}/opencode
         run: |
           $ErrorActionPreference = 'Stop'
-          python -B -m unittest discover -s tests/harness-core -p test_global_cli.py -v
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -B -m unittest discover -s tests/harness-core -p test_default_agent.py -v
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pwsh -NoProfile -File ./tests/global-cli/smoke.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: CLI completion (native PowerShell)
@@ -98,6 +163,47 @@ jobs:
         run: |
           # Exercise current local-source worktree provisioning and safety gates in temporary Git fixtures.
           pwsh -NoProfile -File ./tests/worktree-activation/qualify.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Confirm source checkout unchanged
+        shell: pwsh
+        run: |
+          $changes = @(git status --porcelain)
+          if ($LASTEXITCODE -ne 0) { throw 'Git status failed' }
+          if ($changes.Count -gt 0) {
+            $changes | Out-Host
+            throw 'FAST modified the source checkout'
+          }
+
+  permission-guard-windows:
+    name: Global OpenCode permission guard / Windows
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - name: Checkout (read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Prepare isolated Windows temp directory
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $approvedTemp = Join-Path $env:TEMP 'opencode'
+          New-Item -ItemType Directory -Force -Path $approvedTemp | Out-Null
+
+      - name: Global OpenCode permission guard (isolated Windows fixtures)
+        shell: pwsh
+        run: |
+          # Qualify ASK/DENY precedence and global-only install ownership without
+          # touching the runner's actual OpenCode or Codex user configuration.
+          pwsh -NoProfile -File ./tests/global-installer/qualify.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Confirm source checkout unchanged

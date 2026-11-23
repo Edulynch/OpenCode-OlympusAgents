@@ -302,6 +302,18 @@ def scan_files(binary: Path, source: Path, *, cwd: Path, config: Path, ignore_fi
     return result.returncode, _result_count(result)
 
 
+def scan_staged(binary: Path, *, cwd: Path, config: Path, ignore_file: Path) -> tuple[int, int]:
+    """Scan only Git's active index diff; captured scanner output is never displayed."""
+    args = [
+        str(binary), "git", "--pre-commit", "--staged", "--config", str(config),
+        "--gitleaks-ignore-path", str(ignore_file), "--ignore-gitleaks-allow",
+        "--no-banner", "--redact=100", "--report-format", "json", "--report-path", "-",
+        "--log-level", "fatal",
+    ]
+    result = quiet_run(args, cwd=cwd)
+    return result.returncode, _result_count(result)
+
+
 def scan_history(binary: Path, *, cwd: Path, config: Path, ignore_file: Path, history: str | None = None, all_history: bool = False) -> tuple[int, int]:
     """Scan the selected Git history range without exposing captured output."""
     log_options = "--all" if all_history else f"{history}..HEAD"
@@ -366,10 +378,33 @@ def run_gate(root: Path, binary: Path, *, base: str | None = None, all_history: 
     return 0
 
 
+def run_staged_gate(root: Path, binary: Path) -> int:
+    with tempfile.TemporaryDirectory(prefix="olympus-gitleaks-staged-") as temporary:
+        temporary_root = Path(temporary)
+        try:
+            if os.name != "nt":
+                temporary_root.chmod(0o700)
+            config = temporary_root / "gitleaks.toml"
+            config.write_text('[extend]\nuseDefault = true\n', encoding="utf-8")
+            ignore_file = temporary_root / ".gitleaksignore"
+            ignore_file.write_text("", encoding="utf-8")
+        except OSError:
+            raise GateError("Could not prepare a private temporary scan configuration.") from None
+        status, findings = scan_staged(binary, cwd=root, config=config, ignore_file=ignore_file)
+        if findings:
+            print(f"[gitleaks] FAIL: {findings} staged finding(s); output was redacted and discarded.")
+            return 1
+        if status != 0:
+            raise GateError("Gitleaks did not complete the staged-index scan.")
+        print("[gitleaks] PASS: staged index changes scanned.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run an integrity-pinned Gitleaks gate without exposing findings.")
     parser.add_argument("--repo", type=Path, help="Git worktree root (defaults to the current worktree).")
     group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--staged", action="store_true", help="scan only the active Git index diff.")
     group.add_argument("--base", help="Scan commits reachable from HEAD but not from this commit/ref.")
     group.add_argument("--all-history", action="store_true", help="Scan all refs and commits reachable in this clone.")
     args = parser.parse_args(argv)
@@ -377,6 +412,8 @@ def main(argv: list[str] | None = None) -> int:
         root = repository_root(args.repo)
         with tempfile.TemporaryDirectory(prefix="olympus-gitleaks-bin-") as temporary:
             binary = ensure_binary(Path(temporary))
+            if args.staged:
+                return run_staged_gate(root, binary)
             return run_gate(root, binary, base=args.base, all_history=args.all_history)
     except GateError as error:
         print(f"[gitleaks] ERROR: {error}", file=sys.stderr)

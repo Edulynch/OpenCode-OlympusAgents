@@ -34,6 +34,9 @@ Thumbs.db
 tests/.phase4c-work/
 tests/.release-work/
 
+# Disposable Prompt Book local fixture.
+/tests/prompt-book/local-case/
+
 # Local OpenCode runtime state and disposable qualification output.
 .opencode/sessions/
 .opencode/state/

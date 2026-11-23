@@ -512,6 +512,13 @@ def qualify_hosted_readonly(_: argparse.Namespace) -> None:
             "TAG_CONFLICT_NOT_EVALUATED",
             "latest published release does not have a stable version tag",
         )
+    release_id = latest.get("id")
+    if type(release_id) is not int or release_id <= 0:
+        reject(
+            "TAG_CONFLICT_NOT_EVALUATED",
+            "latest published release has no stable identity",
+        )
+    release_identity = (release_id, version)
     tag_path = "/git/ref/tags/" + urllib.parse.quote(version, safe="")
     tag_ref = api.get(tag_path, optional=True)
     if not isinstance(tag_ref, dict) or tag_ref.get("ref") != f"refs/tags/{version}":
@@ -527,11 +534,17 @@ def qualify_hosted_readonly(_: argparse.Namespace) -> None:
             "TAG_CONFLICT_NOT_EVALUATED",
             "latest stable release is not backed by a resolvable annotated tag",
         )
+    tag_ref_identity = (
+        tag_ref["ref"],
+        ref_object["type"],
+        ref_object["sha"],
+    )
     tag_object = api.get(
         "/git/tags/" + urllib.parse.quote(ref_object["sha"], safe="")
     )
     target = tag_object.get("object") if isinstance(tag_object, dict) else None
     tag_target_sha = target.get("sha") if isinstance(target, dict) else None
+    tagger = tag_object.get("tagger") if isinstance(tag_object, dict) else None
     if (
         not isinstance(tag_object, dict)
         or tag_object.get("tag") != version
@@ -540,11 +553,20 @@ def qualify_hosted_readonly(_: argparse.Namespace) -> None:
         or not isinstance(tag_target_sha, str)
         or not SHA.fullmatch(tag_target_sha)
         or tag_target_sha == master_sha
+        or not isinstance(tagger, dict)
     ):
         reject(
             "TAG_CONFLICT_NOT_EVALUATED",
             "latest stable annotated tag does not resolve to a different commit",
         )
+    tag_object_identity = (
+        tag_object.get("tag"),
+        tag_object.get("message"),
+        tagger.get("name"),
+        tagger.get("email"),
+        target.get("type"),
+        tag_target_sha,
+    )
     try:
         _require_tag(tag_ref, tag_object, version, master_sha)
     except ReleaseError as error:
@@ -556,6 +578,77 @@ def qualify_hosted_readonly(_: argparse.Namespace) -> None:
             "existing tag unexpectedly satisfies the current master tag predicate",
         )
 
+    latest_recheck = api.get("/releases/latest", optional=True)
+    if (
+        not isinstance(latest_recheck, dict)
+        or type(latest_recheck.get("id")) is not int
+        or latest_recheck.get("draft") is not False
+        or latest_recheck.get("prerelease") is not False
+        or (latest_recheck.get("id"), latest_recheck.get("tag_name"))
+        != release_identity
+    ):
+        reject(
+            "HOSTED_RELEASE_IDENTITY_CHANGED",
+            "latest published stable release changed or became unavailable during qualification",
+        )
+
+    tag_ref_recheck = api.get(tag_path, optional=True)
+    rechecked_ref_object = (
+        tag_ref_recheck.get("object")
+        if isinstance(tag_ref_recheck, dict)
+        else None
+    )
+    if (
+        not isinstance(rechecked_ref_object, dict)
+        or (
+            tag_ref_recheck.get("ref"),
+            rechecked_ref_object.get("type"),
+            rechecked_ref_object.get("sha"),
+        )
+        != tag_ref_identity
+    ):
+        reject(
+            "HOSTED_TAG_IDENTITY_CHANGED",
+            "latest stable annotated tag ref changed or became unavailable during qualification",
+        )
+
+    tag_object_recheck = api.get(
+        "/git/tags/" + urllib.parse.quote(ref_object["sha"], safe="")
+    )
+    rechecked_target = (
+        tag_object_recheck.get("object")
+        if isinstance(tag_object_recheck, dict)
+        else None
+    )
+    rechecked_tagger = (
+        tag_object_recheck.get("tagger")
+        if isinstance(tag_object_recheck, dict)
+        else None
+    )
+    if (
+        not isinstance(tag_object_recheck, dict)
+        or not isinstance(rechecked_target, dict)
+        or not isinstance(rechecked_tagger, dict)
+        or (
+            tag_object_recheck.get("tag"),
+            tag_object_recheck.get("message"),
+            rechecked_tagger.get("name"),
+            rechecked_tagger.get("email"),
+            rechecked_target.get("type"),
+            rechecked_target.get("sha"),
+        )
+        != tag_object_identity
+    ):
+        reject(
+            "HOSTED_TAG_IDENTITY_CHANGED",
+            "resolved annotated tag object changed or became unavailable during qualification",
+        )
+
+    if _api_ref_sha(api.get("/git/ref/heads/develop"), "develop") != dispatch_sha:
+        reject("STALE_DEVELOP_SHA", "develop moved during hosted qualification")
+    if _api_ref_sha(api.get("/git/ref/heads/master"), "master") != master_sha:
+        reject("STALE_MASTER_SHA", "master moved during hosted qualification")
+
     print(
         f"HOSTED_READ_ONLY_NOOP: master_sha={master_sha} version={version_after} "
         f"previous_version={version_before} promotion_pr=#{promotion_number}"
@@ -566,7 +659,8 @@ def qualify_hosted_readonly(_: argparse.Namespace) -> None:
     )
     print(
         "HOSTED_QUALIFICATION_LIMITS: no tag/release writes; draft write visibility "
-        "and public endpoint installation are not verified"
+        "and public endpoint installation are not verified; GitHub state is confirmed "
+        "only through these final re-reads, not an atomic snapshot"
     )
 
 

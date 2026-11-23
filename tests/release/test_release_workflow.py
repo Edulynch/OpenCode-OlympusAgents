@@ -375,6 +375,7 @@ class HostedReadOnlyQualificationTests(unittest.TestCase):
                 "content": content,
             },
             "/releases/latest": {
+                "id": 123,
                 "tag_name": self.version,
                 "draft": False,
                 "prerelease": False,
@@ -391,6 +392,8 @@ class HostedReadOnlyQualificationTests(unittest.TestCase):
             },
         }
         self.calls = []
+        self.response_counts = {}
+        self.response_overrides = {}
 
     def env(self):
         return {
@@ -418,7 +421,12 @@ class HostedReadOnlyQualificationTests(unittest.TestCase):
             route += "?" + parsed.query
         if route not in self.responses:
             raise AssertionError(f"unexpected API read: {route}")
-        return FakeResponse(self.responses[route])
+        count = self.response_counts.get(route, 0) + 1
+        self.response_counts[route] = count
+        payload = self.response_overrides.get(
+            (route, count), self.responses[route]
+        )
+        return FakeResponse(payload)
 
     def run_qualification(self, env=None):
         output = io.StringIO()
@@ -429,6 +437,23 @@ class HostedReadOnlyQualificationTests(unittest.TestCase):
         ):
             release.qualify_hosted_readonly(argparse.Namespace())
         return output.getvalue()
+
+    def assert_revalidation_failure(self, route, response, reason):
+        self.calls.clear()
+        self.response_counts.clear()
+        self.response_overrides.clear()
+        self.response_overrides[(route, 2)] = response
+        output = io.StringIO()
+        with (
+            mock.patch.dict(os.environ, self.env(), clear=True),
+            mock.patch("urllib.request.urlopen", side_effect=self.fake_urlopen),
+            redirect_stdout(output),
+        ):
+            with self.assertRaisesRegex(release.ReleaseError, reason):
+                release.qualify_hosted_readonly(argparse.Namespace())
+        self.assertEqual(output.getvalue(), "")
+        self.assertTrue(self.calls)
+        self.assertTrue(all(method == "GET" and body is None for method, body, _ in self.calls))
 
     def test_mocked_master_noop_and_existing_tag_conflict_use_get_only_client(self):
         client = release.ReadOnlyGitHub("offline-test-token")
@@ -449,8 +474,60 @@ class HostedReadOnlyQualificationTests(unittest.TestCase):
             output,
         )
         self.assertIn("draft write visibility", output)
+        self.assertIn("not an atomic snapshot", output)
         self.assertTrue(self.calls)
         self.assertTrue(all(method == "GET" and body is None for method, body, _ in self.calls))
+        for route in (
+            "/git/ref/heads/develop",
+            "/git/ref/heads/master",
+            "/releases/latest",
+            f"/git/ref/tags/{self.version}",
+            f"/git/tags/{self.tag_object_sha}",
+        ):
+            self.assertEqual(self.response_counts.get(route), 2, route)
+
+    def test_stale_refs_and_moved_release_or_tag_fail_before_success(self):
+        scenarios = (
+            (
+                "/git/ref/heads/develop",
+                {"object": {"sha": "f" * 40}},
+                "STALE_DEVELOP_SHA",
+            ),
+            (
+                "/git/ref/heads/master",
+                {"object": {"sha": "f" * 40}},
+                "STALE_MASTER_SHA",
+            ),
+            (
+                "/releases/latest",
+                {
+                    "id": 124,
+                    "tag_name": self.version,
+                    "draft": False,
+                    "prerelease": False,
+                },
+                "HOSTED_RELEASE_IDENTITY_CHANGED",
+            ),
+            (
+                f"/git/ref/tags/{self.version}",
+                {
+                    "ref": f"refs/tags/{self.version}",
+                    "object": {"type": "tag", "sha": "f" * 40},
+                },
+                "HOSTED_TAG_IDENTITY_CHANGED",
+            ),
+            (
+                f"/git/tags/{self.tag_object_sha}",
+                {
+                    **self.responses[f"/git/tags/{self.tag_object_sha}"],
+                    "object": {"type": "commit", "sha": "f" * 40},
+                },
+                "HOSTED_TAG_IDENTITY_CHANGED",
+            ),
+        )
+        for route, response, reason in scenarios:
+            with self.subTest(route=route):
+                self.assert_revalidation_failure(route, response, reason)
 
     def test_changed_master_version_is_not_reported_as_noop_or_tag_conflict(self):
         content = base64.b64encode(

@@ -661,6 +661,11 @@ command status fails that gate even when the shell tool completed. Deadline
 expiry alone proves neither termination nor success; reconcile the original
 execution and effects before recovery.
 
+Cancellation or missing output alone does not prove non-execution. If exact
+process ownership or safe cleanup cannot be established, stop and report
+`COMPLETION_UNCONFIRMED`; do not attempt cleanup, recovery, or termination
+against an uncertain target.
+
 ### Required hosted CI
 
 After publishing, Kovan may return the observed revision, ref, and pull request;

@@ -59,7 +59,7 @@ try {
     Check 'KAEL_FOREGROUND_OWNERSHIP' ($kael -match 'Kael owns every process, controller, build/test job, and native child session' -and
         $kael -match 'Keep the task pending from launch through tracking,\s*wait/join, collection, validation, and finalization' -and
         $kael -match 'background does not authorize detached work' -and
-        $kael -match 'report BLOCKED without starting it' -and
+        $kael -match 'If that lifecycle is unavailable, use authorized\s+foreground execution when feasible or report BLOCKED before launch' -and
         $docs -match 'Keep the task open through tracking, wait/join,\s*collection, validation, and finalization' -and
         $docs -match 'Background requests do not authorize\s+detachment' -and
         $docs -match 'otherwise report BLOCKED without starting it')
@@ -114,9 +114,10 @@ try {
         $nox -match 'send only a progress update and yield so native completion can resume this same session' -and
         $nox -match 'match and consume that original execution.s terminal result once' -and
         $nox -match 'report output/exit only when exposed, otherwise report missing terminal evidence without retrying')
-    Check 'PROCESS_OWNERSHIP' ($kael -match 'Missing output is not failure' -and
-        $kael -match 'never blindly retry' -and
-        $kael -match 'If exact ownership, safe cleanup, or lifecycle\s+completion cannot be established')
+    Check 'PROCESS_OWNERSHIP' ($kael -match 'Missing output is\s+neither failure nor retry authorization' -and
+        $kael -match 'never blindly duplicate it' -and
+        $kael -match 'Cancellation or missing output alone does not prove non-execution' -and
+        $kael -match 'If exact\s+process ownership or safe cleanup cannot be established,\s*stop and report\s+`COMPLETION_UNCONFIRMED`; do not attempt cleanup, recovery, or termination\s+against an uncertain target')
     Check 'PARALLEL_CONTROLLER_AND_GATES' ($kael -match 'waits for required native results or parent notifications' -and
         $kael -match 'consume each result' -and
         $kael -match 'An assistant\s+message or an idle root does not join background children')

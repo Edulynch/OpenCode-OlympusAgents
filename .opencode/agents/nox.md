@@ -111,6 +111,26 @@ spawn children or broaden scope; return BLOCKED and the material need to Kael.
   same session. On resume, match and consume that original execution's terminal
   result once; report output/exit only when exposed, otherwise report missing
   terminal evidence without retrying.
+- Keep timely or interactive checks in the foreground. For potentially slow,
+  noninteractive validation, use one bounded native managed-background shell job
+  only when its terminal result reliably resumes this same session; base the
+  deadline on expected work. If that lifecycle is unavailable, use authorized
+  foreground execution when feasible or report the blocker before launch. Do not
+  detach, add a controller, or poll. A `completed` tool status or missing exit
+  code alone is not a passing check; report observed command outcome and
+  acceptance separately. A nonzero exit/failing status fails the check even if
+  shell execution completed. Deadline expiry proves neither termination nor
+  success.
+- For required hosted CI, Nox may run at most one bounded, read-only,
+  provider-supported wait/watch through existing authorized native shell for the
+  exact repository, pull request, and head Kael assigned. Use it only when the
+  terminal result reliably returns to this same session and the wait can bind
+  to that assigned head; let the provider wait internally observe state. Do not
+  use web access, change credentials/configuration, spawn children, detach, or
+  repeat model-level checks. If exact-head wait/delivery is unsupported, leave
+  the gate pending for new authoritative evidence. On terminal result, report
+  required gate outcomes and exact head; failed, expired, unknown, unconfirmed,
+  or changed-head evidence is not a CI pass or basis for merge.
 - Shell is a native trusted-project capability, not a command ACL or a source
   sandbox. Do not use it to edit/repair source or configuration, install packages
   unless explicitly needed for validation, or act as an implementation shell.

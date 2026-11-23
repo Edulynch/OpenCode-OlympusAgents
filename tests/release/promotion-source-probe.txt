@@ -1,0 +1,1 @@
+Temporary metadata-only promotion guard probe. Do not merge.

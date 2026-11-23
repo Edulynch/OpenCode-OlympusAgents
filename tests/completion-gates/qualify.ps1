@@ -121,7 +121,7 @@ try {
     foreach ($prompt in @($kaelSource, $kael)) {
         Check 'NATIVE_PARENT_YIELD' (
             $prompt -match 'keep the logical task pending, not the\s+model turn active' -and
-            $prompt -match 'When no such assignment remains, send at most one IN PROGRESS update, end the\s+turn, and await native notification' -and
+            $prompt -match 'before the first yield of a continuous wait on\s+confirmed background work send exactly one visible IN PROGRESS / waiting notice\s+under User-facing lifecycle communication, then end the turn and await native\s+notification; reconcile the original result on resume' -and
             $prompt -match 'Yielding is not completion,\s+cancellation, or permission to release ownership' -and
             $prompt -match 'results remain pending and no independent work is available, yield again' -and
             $prompt -notmatch 'Keep the turn open|or end the root turn after a progress message')
@@ -133,8 +133,8 @@ try {
     Check 'PENDING_WORK_LIMITED_TO_READY_NECESSARY_ASSIGNMENTS' (
         $nativeSessions -match 'dispatch only assignments already necessary for the\s+objective, ready, and independent under existing dependencies and concurrency\s+ceilings' -and
         $nativeSessions -match 'Do not start opportunistic research, verification, or unrelated work' -and
-        $nativeSessions -match 'send at most one IN PROGRESS update' -and
-        $nativeSessions -match 'await native notification; reconcile the original result on resume' -and
+        $nativeSessions -match 'before the first yield of a continuous wait on\s+confirmed background work send exactly one visible IN PROGRESS / waiting notice' -and
+        $nativeSessions -match 'await native\s+notification; reconcile the original result on resume' -and
         $nativeSessions -match 'Treat earlier running/partial status as stale until new native evidence arrives'
     )
     Check 'NATIVE_BACKGROUND_SCHEMA_NEUTRAL' (

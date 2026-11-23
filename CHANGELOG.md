@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Carry applicable validation evidence across PR, CI, and release handoffs; request only the smallest check for a named acceptance gap, without repeating checks solely because the stage changed. Required reviews and release gates remain in force.
+
 ## v0.12.4
 
 ### Highlights

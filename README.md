@@ -26,6 +26,8 @@ After [installing Olympus](#fast-install), open OpenCode in your project and tel
 
 **🧭 Start with Kael.** It brings in specialists when they help. You don't have to pick an agent for each step.
 
+Kael carries applicable validation evidence forward across implementation, pull requests, CI, and release handoffs, so checks need not be repeated just because the stage changed. If an acceptance criterion is still unsupported, it asks for the smallest needed check; required reviews and release gates still apply.
+
 Need parallel work or a performance review? See [OpenCode commands](#task-parallelism).
 
 ## Fast Install

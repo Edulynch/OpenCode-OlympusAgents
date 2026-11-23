@@ -26,6 +26,8 @@ Después de [instalar Olympus](#fast-install), abre OpenCode en tu proyecto y di
 
 **🧭 Empieza con Kael.** Se encarga de sumar especialistas cuando aportan algo. No tienes que elegir un agente para cada paso.
 
+Kael conserva la evidencia de validación aplicable durante la implementación, los pull requests, CI y las etapas de publicación, así que no hace falta repetir pruebas solo porque cambió la etapa. Si queda un criterio de aceptación sin validar, solicita la comprobación mínima necesaria; las revisiones y los controles de publicación obligatorios siguen vigentes.
+
 ¿Quieres trabajar en paralelo o evaluar el rendimiento? Consulta los [comandos de OpenCode](#task-parallelism).
 
 <a id="fast-install"></a>

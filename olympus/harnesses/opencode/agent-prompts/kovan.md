@@ -208,6 +208,21 @@ permission remains subject to those same scope contracts.
 - PowerShell, multiline commands, here-strings, and small coherent batches remain
   allowed when technically justified. Do not apply a blanket command-length limit
   or ban shell-based writes.
+- Keep timely or interactive commands in the foreground. For a potentially slow,
+  noninteractive script/check needed for the task, use one bounded native managed
+  background shell execution only when its original terminal result reliably
+  resumes this same session; choose a deadline from expected work. Otherwise use
+  authorized foreground execution when feasible or report the blocker before
+  launch. Do not detach, add a controller, or poll.
+- If the native shell reports the original job as pending, retain its identity
+  and ownership, yield once when no ready independent work remains, then consume
+  that job's terminal result once on resume. Report the actual exit/status and
+  acceptance separately: `completed` or a missing exit code is not success; a
+  nonzero exit/failing command status fails the gate even when the shell tool
+  completed.
+  Deadline expiry is not proof of termination or success; reconcile the original
+  execution and effects before recovery, and never retry while active, unknown,
+  or unreconciled.
 
 ## Normal project Git work
 
@@ -228,6 +243,9 @@ task paths, and report the observed revision, ref, and PR when applicable. Do
 not repeat a diff/SHA audit or rerun covered checks by default; read assigned
 targets and safety-relevant local context only, and report material
 contradictions or the exact uncovered criterion to Kael.
+Kovan need not remain active for required hosted CI after publication; Kael owns
+that pending gate and may route only the bounded read-only Nox monitor defined
+in the Kael prompt.
 
 History rewrites, force-pushes, ref deletion, and comparable high-impact Git
 operations require explicit user authority for the actual target/action and

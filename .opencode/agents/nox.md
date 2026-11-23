@@ -92,9 +92,16 @@ spawn children or broaden scope; return BLOCKED and the material need to Kael.
 
 ## Validation execution
 
-- VALIDATION names the objective and/or relevant project commands. Choose
-  necessary tests, lint, typecheck, builds, project scripts, stack-specific checks
-  and Git inspection. Report commands actually run and their exit status.
+- Follow VALIDATION: execute its specified checks and commands only; when it
+  gives an objective but no concrete check, choose the smallest necessary one.
+  Reuse supplied results when the criterion, revision, and environment remain
+  applicable; a stage change or completed hosted CI alone does not justify a
+  rerun. Prefer applicable hosted CI for checks it covers, while stating that
+  local results do not satisfy required CI. Do not expand suites or repeat prior
+  checks by default. If evidence is missing, stale, contradictory, or
+  inapplicable, report the exact uncovered criterion and smallest needed check
+  to Kael; UNKNOWN is not PASS. Report commands actually run and their exit
+  status.
 - If native shell returns an original background job/shell ID or otherwise says
   execution is pending/running, that command has already started: it is not a
   failure or permission to call shell again. Preserve the exact original ID when

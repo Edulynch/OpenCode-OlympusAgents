@@ -128,6 +128,50 @@ class SecretGateTests(unittest.TestCase):
         self.assertNotIn(canary, stream.getvalue())
         self.assertIn("output was redacted and discarded", stream.getvalue())
 
+    def test_staged_scan_uses_active_alternate_index_and_ignores_unstaged_secret(self) -> None:
+        tracked = self.repo / "candidate.txt"
+        tracked.write_text("safe baseline\n", encoding="utf-8")
+        self.commit("safe baseline")
+        canary = self.canary()
+
+        with tempfile.TemporaryDirectory(prefix="olympus-gitleaks-alternate-index-") as temporary:
+            alternate_index = Path(temporary) / "index"
+            env = {**os.environ, "GIT_INDEX_FILE": str(alternate_index)}
+
+            def git_in_alternate_index(*args: str) -> None:
+                result = subprocess.run(
+                    ["git", *args],
+                    cwd=self.repo,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, "alternate-index fixture setup failed")
+
+            git_in_alternate_index("read-tree", "HEAD")
+            tracked.write_text("safe staged content\n", encoding="utf-8")
+            git_in_alternate_index("add", "candidate.txt")
+            tracked.write_text(f"synthetic_key={canary}\n", encoding="utf-8")
+
+            output = io.StringIO()
+            with mock.patch.dict(os.environ, {"GIT_INDEX_FILE": str(alternate_index)}), contextlib.redirect_stdout(output):
+                self.assertEqual(secret_gate.run_staged_gate(self.repo, self.binary), 0)
+            self.assertNotIn(canary, output.getvalue())
+            self.assertIn("PASS: staged index changes scanned", output.getvalue())
+
+            git_in_alternate_index("add", "candidate.txt")
+            output = io.StringIO()
+            with mock.patch.dict(os.environ, {"GIT_INDEX_FILE": str(alternate_index)}), contextlib.redirect_stdout(output):
+                self.assertEqual(secret_gate.run_staged_gate(self.repo, self.binary), 1)
+            self.assertNotIn(canary, output.getvalue())
+            self.assertIn("staged finding(s)", output.getvalue())
+
+    def test_staged_gate_fails_closed_on_scanner_error(self) -> None:
+        with mock.patch.object(secret_gate, "scan_staged", return_value=(2, 0)):
+            with self.assertRaisesRegex(secret_gate.GateError, "did not complete"):
+                secret_gate.run_staged_gate(self.repo, self.binary)
+
     def test_bad_history_base_fails_closed(self) -> None:
         self.commit("empty baseline")
         with self.assertRaises(secret_gate.GateError):
@@ -267,19 +311,27 @@ class GitleaksAcquisitionTests(unittest.TestCase):
             self.assertEqual(list(Path(directory).iterdir()), [])
 
 
-class LocalHookConfigTests(unittest.TestCase):
-    def test_opt_in_hook_pins_official_gitleaks_and_preserves_ci(self) -> None:
-        hook = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+class NativeHookContractTests(unittest.TestCase):
+    def test_native_hooks_use_staged_gate_and_preserve_independent_ci(self) -> None:
+        pre_commit_hook = (ROOT / ".githooks" / "pre-commit").read_text(encoding="utf-8")
+        pre_push_hook = (ROOT / ".githooks" / "pre-push").read_text(encoding="utf-8")
+        attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
         workflow = (ROOT / ".github" / "workflows" / "secrets.yml").read_text(encoding="utf-8")
-        self.assertIn("repo: https://github.com/gitleaks/gitleaks", hook)
-        self.assertIn("rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e", hook)
-        self.assertIn("- id: gitleaks", hook)
+        development = (ROOT / "docs" / "DEVELOPMENT.md").read_text(encoding="utf-8")
+        self.assertEqual(pre_commit_hook, "#!/bin/sh\nexec python -B scripts/secret_gate.py --staged\n")
+        self.assertEqual(pre_push_hook, "#!/bin/sh\nexec python -B scripts/pre_push.py --git-hook\n")
+        self.assertIn(".githooks/pre-commit text eol=lf", attributes)
+        self.assertIn(".githooks/pre-push text eol=lf", attributes)
+        self.assertFalse((ROOT / ".pre-commit-config.yaml").exists())
+        self.assertIn("git config --local core.hooksPath .githooks", development)
+        self.assertIn("Gitleaks `v8.30.1`", development)
         # An optional commit-time check cannot silently replace the history
         # and current-file security scan that already runs on CI.
         self.assertIn("python -B scripts/secret_gate.py", workflow)
+        self.assertIn("python -B scripts/secret_gate.py --base", workflow)
+        self.assertIn("python -B scripts/secret_gate.py --all-history", workflow)
         self.assertIn("OLYMPUS_GITLEAKS_CACHE_DIR", workflow)
         self.assertIn("actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", workflow)
-        self.assertIn("pre-commit install --allow-missing-config", (ROOT / "docs" / "DEVELOPMENT.md").read_text(encoding="utf-8"))
 
 
 class DocumentationLinkGateTests(unittest.TestCase):

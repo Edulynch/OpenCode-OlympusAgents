@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import os
 import shutil
 import stat
@@ -47,7 +46,7 @@ class PushSelectionTests(unittest.TestCase):
         with patch.object(pre_push, "resolve_commit", return_value="a" * 40), patch.object(
             pre_push, "tracked_paths", return_value=["src/core.py"]
         ) as tracked:
-            self.assertEqual(pre_push.paths_for_push(None, None, "main"), ["src/core.py"])
+            self.assertEqual(pre_push.paths_for_push(None, None), ["src/core.py"])
         tracked.assert_called_once_with()
 
     def test_all_files_without_local_branch_does_not_invent_a_target(self) -> None:
@@ -58,16 +57,6 @@ class PushSelectionTests(unittest.TestCase):
         self.assertEqual(resolve.call_args_list[0].args, ("HEAD",))
         self.assertEqual(resolve.call_count, 1)
         tracked.assert_called_once_with()
-
-    def test_missing_range_rejects_local_branch_that_is_not_head(self) -> None:
-        with patch.object(pre_push, "resolve_commit", side_effect=["a" * 40, "b" * 40]) as resolve, patch.object(
-            pre_push, "tracked_paths"
-        ) as tracked:
-            with self.assertRaises(pre_push.GateError):
-                pre_push.paths_for_push(None, None, "other-branch")
-        self.assertEqual(resolve.call_args_list[0].args, ("HEAD",))
-        self.assertEqual(resolve.call_args_list[1].args, ("other-branch",))
-        tracked.assert_not_called()
 
     def test_incomplete_or_wrong_target_range_fails_closed(self) -> None:
         with self.assertRaises(pre_push.GateError):
@@ -90,12 +79,75 @@ class PushSelectionTests(unittest.TestCase):
             ["diff", "--name-only", "-z", "--no-renames", "a" * 40, "b" * 40, "--"],
         )
 
+    def test_native_update_parser_accepts_sha1_and_sha256_new_refs(self) -> None:
+        for size in (40, 64):
+            with self.subTest(oid_size=size):
+                zero = "0" * size
+                oid = "a" * size
+                updates = pre_push.parse_push_updates(
+                    f"refs/heads/main {oid} refs/heads/main {zero}\n".encode()
+                )
+                self.assertEqual(updates, [("refs/heads/main", oid, "refs/heads/main", zero)])
+                with patch.object(pre_push, "resolve_commit", return_value=oid), patch.object(
+                    pre_push, "tracked_paths", return_value=["README.md"]
+                ) as tracked:
+                    self.assertEqual(pre_push.paths_for_hook_updates(updates), ["README.md"])
+                tracked.assert_called_once_with()
+
+    def test_native_update_parser_recognizes_deletion_and_empty_input(self) -> None:
+        self.assertEqual(pre_push.parse_push_updates(b""), [])
+        updates = pre_push.parse_push_updates(
+            f"(delete) {'0' * 40} refs/heads/old {'a' * 40}\n".encode()
+        )
+        self.assertIsNone(pre_push.paths_for_hook_updates(updates))
+
+    def test_native_update_parser_rejects_malformed_and_inconsistent_records(self) -> None:
+        cases = (
+            b"refs/heads/main\n",
+            f"refs/heads/main {'a' * 40} refs/heads/main {'0' * 64}\n".encode(),
+            f"refs/heads/main {'0' * 40} refs/heads/main {'a' * 40}\n".encode(),
+            f"(delete) {'a' * 40} refs/heads/main {'b' * 40}\n".encode(),
+            f"refs/heads/main {'a' * 40} invalid..ref {'0' * 40}\n".encode(),
+            f"refs/heads/main {'a' * 39} refs/heads/main {'0' * 40}\n".encode(),
+            f"(delete) {'0' * 40} refs/heads/main {'0' * 40}\n".encode(),
+        )
+        for payload in cases:
+            with self.subTest(payload=payload):
+                with self.assertRaises(pre_push.GateError):
+                    pre_push.parse_push_updates(payload)
+
+    def test_multiple_non_deletion_updates_are_rejected(self) -> None:
+        oid = "a" * 40
+        zero = "0" * 40
+        updates = [
+            ("refs/heads/main", oid, "refs/heads/main", zero),
+            ("refs/heads/side", oid, "refs/heads/side", zero),
+        ]
+        with self.assertRaisesRegex(pre_push.GateError, "one non-deletion ref"):
+            pre_push.paths_for_hook_updates(updates)
+
+    def test_one_update_among_deletions_is_selected(self) -> None:
+        oid = "a" * 40
+        zero = "0" * 40
+        updates = [
+            ("(delete)", zero, "refs/heads/old", oid),
+            ("refs/heads/main", oid, "refs/heads/main", zero),
+        ]
+        with patch.object(pre_push, "paths_for_push", return_value=["README.md"]) as paths:
+            self.assertEqual(pre_push.paths_for_hook_updates(updates), ["README.md"])
+        paths.assert_called_once_with(zero, oid)
+
     def test_revision_flag_injection_and_git_errors_fail_closed(self) -> None:
         with self.assertRaises(pre_push.GateError):
             pre_push.resolve_commit("--help")
         with patch.object(pre_push, "git_output", side_effect=pre_push.GateError("Git unavailable")):
             with self.assertRaises(pre_push.GateError):
                 pre_push.tracked_paths()
+
+    def test_unavailable_remote_object_fails_closed(self) -> None:
+        with patch.object(pre_push, "git_output", side_effect=pre_push.GateError("remote object unavailable")):
+            with self.assertRaisesRegex(pre_push.GateError, "remote object unavailable"):
+                pre_push.resolve_commit("a" * 40)
 
     def test_tracked_dirty_check_ignores_untracked_but_fails_on_tracked_changes(self) -> None:
         with patch.object(pre_push, "git_output", return_value=b"") as git:
@@ -104,6 +156,15 @@ class PushSelectionTests(unittest.TestCase):
         with patch.object(pre_push, "git_output", return_value=b" M tracked.py\0"):
             with self.assertRaises(pre_push.GateError):
                 pre_push.require_clean_tracked_tree()
+
+    def test_native_hook_empty_and_deletion_input_skip_checks(self) -> None:
+        for payload in (
+            b"",
+            f"(delete) {'0' * 40} refs/heads/old {'a' * 40}\n".encode(),
+        ):
+            with self.subTest(payload=payload), patch.object(pre_push, "require_clean_tracked_tree") as clean:
+                self.assertEqual(pre_push.main(["--git-hook"], hook_input=payload), 0)
+                clean.assert_not_called()
 
 
 class RunCheckEnvironmentTests(unittest.TestCase):
@@ -117,8 +178,7 @@ class RunCheckEnvironmentTests(unittest.TestCase):
             "GIT_CONFIG_PARAMETERS": "'core.bare=true'",
             "GIT_SSH_COMMAND": "ssh -o BatchMode=yes",
             "PATH": "fixture-path",
-            "PRE_COMMIT_FROM_REF": "from-sentinel",
-            "PRE_COMMIT_TO_REF": "to-sentinel",
+            "OLYMPUS_PUSH_SENTINEL": "preserved",
         }
         with patch.dict(os.environ, values, clear=False):
             parent_before = os.environ.copy()
@@ -133,7 +193,7 @@ class RunCheckEnvironmentTests(unittest.TestCase):
             self.assertIsNot(child_env, os.environ)
             for name in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_CONFIG_PARAMETERS"):
                 self.assertNotIn(name, child_env)
-            for name in ("GIT_SSH_COMMAND", "PATH", "PRE_COMMIT_FROM_REF", "PRE_COMMIT_TO_REF"):
+            for name in ("GIT_SSH_COMMAND", "PATH", "OLYMPUS_PUSH_SENTINEL"):
                 self.assertEqual(child_env[name], values[name])
             self.assertEqual(os.environ, parent_before)
 
@@ -236,7 +296,7 @@ top = subprocess.run(
 ).stdout.strip()
 assert os.path.samefile(top, inner)
 assert os.environ.get("GIT_SSH_COMMAND") == "ssh -o BatchMode=yes"
-assert os.environ.get("PRE_COMMIT_FROM_REF") == "from-sentinel"
+assert os.environ.get("OLYMPUS_PUSH_SENTINEL") == "preserved"
 for name in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
     assert name not in os.environ, name
 """
@@ -248,7 +308,7 @@ for name in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
                     "GIT_WORK_TREE": str(outer),
                     "GIT_INDEX_FILE": str(outer_index),
                     "GIT_SSH_COMMAND": "ssh -o BatchMode=yes",
-                    "PRE_COMMIT_FROM_REF": "from-sentinel",
+                    "OLYMPUS_PUSH_SENTINEL": "preserved",
                 }
             )
             with patch.dict(os.environ, controlled_env, clear=True), patch.object(pre_push, "ROOT", outer):
@@ -287,60 +347,59 @@ for name in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
             )
 
 
-@unittest.skipUnless(importlib.util.find_spec("pre_commit"), "pre-commit is not installed in this Python")
-class LocalBarePushTests(unittest.TestCase):
-    def test_installed_gate_blocks_failed_fast_without_updating_local_bare_remote(self) -> None:
-        temp_base = Path(tempfile.gettempdir()) / "opencode" / "olympus-pre-push-qualification"
+@unittest.skipUnless(
+    os.name == "nt" and shutil.which("pwsh") and shutil.which("python"),
+    "native hook integration requires the supported Windows Git, Python, and PowerShell environment",
+)
+class NativeBarePushTests(unittest.TestCase):
+    def test_checked_in_native_hook_qualifies_pushes_and_blocks_unsafe_updates(self) -> None:
+        temp_base = Path(tempfile.gettempdir()) / "opencode" / "olympus-native-hook-tests"
         temp_base.mkdir(parents=True, exist_ok=True)
-        fixture = Path(tempfile.mkdtemp(prefix="run-", dir=temp_base))
-        worktree = fixture / "worktree"
-        remote = fixture / "remote.git"
-        log = fixture / "checks.log"
-        cache = fixture / "pre-commit-home"
-        env = os.environ.copy()
-        env["OLYMPUS_GATE_LOG"] = str(log)
-        env["PRE_COMMIT_HOME"] = str(cache)
-        env["GIT_ALLOW_PROTOCOL"] = "file"
+        with tempfile.TemporaryDirectory(prefix="fixture-", dir=temp_base) as directory:
+            fixture = Path(directory)
+            worktree = fixture / "worktree"
+            remote = fixture / "remote.git"
+            log = fixture / "checks.log"
+            env = os.environ.copy()
+            env["OLYMPUS_GATE_LOG"] = str(log)
+            env["GIT_ALLOW_PROTOCOL"] = "file"
 
-        def run(args: list[str], cwd: Path | None = None, check: bool = True, **extra: str) -> subprocess.CompletedProcess[str]:
-            result = subprocess.run(
-                args,
-                cwd=cwd,
-                env={**env, **extra},
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                check=False,
-            )
-            if check and result.returncode:
-                self.fail(f"Command failed ({result.returncode}): {args}\n{result.stdout}")
-            return result
+            def run(
+                args: list[str],
+                cwd: Path | None = None,
+                check: bool = True,
+                **extra: str,
+            ) -> subprocess.CompletedProcess[str]:
+                result = subprocess.run(
+                    args,
+                    cwd=cwd,
+                    env={**env, **extra},
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    check=False,
+                )
+                if check and result.returncode:
+                    self.fail(f"Command failed ({result.returncode}): {args}\n{result.stdout}")
+                return result
 
-        try:
             run(["git", "init", "--bare", str(remote)])
             run(["git", "--git-dir", str(remote), "symbolic-ref", "HEAD", "refs/heads/main"])
+            run(["git", "--git-dir", str(remote), "config", "receive.denyDeleteCurrent", "ignore"])
             run(["git", "init", str(worktree)])
-            run(["git", "checkout", "-b", "main"], cwd=worktree)
-            run(["git", "config", "user.name", "Gate Test"], cwd=worktree)
-            run(["git", "config", "user.email", "gate@example.invalid"], cwd=worktree)
+            run(["git", "-C", str(worktree), "checkout", "-b", "main"])
+            run(["git", "-C", str(worktree), "config", "user.name", "Native Hook Test"])
+            run(["git", "-C", str(worktree), "config", "user.email", "native-hook@example.invalid"])
 
+            hooks = worktree / ".githooks"
             scripts = worktree / "scripts"
+            hooks.mkdir()
             scripts.mkdir()
             (worktree / "docs").mkdir()
             (worktree / "src").mkdir()
-            (worktree / ".pre-commit-config.yaml").write_text(
-                "repos:\n"
-                "  - repo: local\n"
-                "    hooks:\n"
-                "      - id: olympus-pre-push-gate\n"
-                "        name: Olympus FAST and documentation pre-push gate\n"
-                "        entry: python -B scripts/pre_push.py\n"
-                "        language: system\n"
-                "        stages: [pre-push]\n"
-                "        always_run: true\n"
-                "        pass_filenames: false\n",
-                encoding="utf-8",
-            )
+            shutil.copyfile(ROOT / ".githooks" / "pre-push", hooks / "pre-push")
+            shutil.copyfile(ROOT / ".gitattributes", worktree / ".gitattributes")
+            os.chmod(hooks / "pre-push", hooks.joinpath("pre-push").stat().st_mode | stat.S_IXUSR)
             shutil.copyfile(pre_push.__file__, scripts / "pre_push.py")
             (scripts / "check_docs.py").write_text(
                 "import os\n"
@@ -356,61 +415,87 @@ class LocalBarePushTests(unittest.TestCase):
             (worktree / "README.md").write_text("# Fixture\n", encoding="utf-8")
             (worktree / "docs" / "guide.md").write_text("# Guide\n", encoding="utf-8")
             (worktree / "src" / "core.py").write_text("value = 1\n", encoding="utf-8")
-
-            self.assertFalse(cache.exists(), "pre-commit cache must start empty")
-            run([sys.executable, "-m", "pre_commit", "install", "--hook-type", "pre-push", "--allow-missing-config"], cwd=worktree)
-            run(["git", "add", "-A"], cwd=worktree)
-            run(["git", "commit", "-m", "fixture initial state"], cwd=worktree)
-            run(["git", "remote", "add", "origin", str(remote)], cwd=worktree)
-            run(["git", "push", "--set-upstream", "origin", "main"], cwd=worktree)
+            run(["git", "-C", str(worktree), "add", "-A"])
+            run(["git", "-C", str(worktree), "update-index", "--chmod=+x", ".githooks/pre-push"])
+            run(["git", "-C", str(worktree), "commit", "-m", "fixture initial state"])
+            run(["git", "-C", str(worktree), "config", "--local", "core.hooksPath", ".githooks"])
+            run(["git", "-C", str(worktree), "remote", "add", "origin", str(remote)])
+            run(["git", "-C", str(worktree), "push", "--set-upstream", "origin", "main"])
             first_remote = run(["git", "--git-dir", str(remote), "rev-parse", "refs/heads/main"]).stdout.strip()
             self.assertEqual(log.read_text(encoding="utf-8").splitlines(), ["docs", "fast"])
 
+            log.write_text("", encoding="utf-8")
+            run(["git", "-C", str(worktree), "branch", "stale", first_remote])
             (worktree / "src" / "core.py").write_text("value = 2\n", encoding="utf-8")
-            run(["git", "add", "src/core.py"], cwd=worktree)
-            run(["git", "commit", "-m", "fixture code change"], cwd=worktree)
-            blocked = run(["git", "push"], cwd=worktree, check=False, OLYMPUS_GATE_FAST_EXIT="23")
+            run(["git", "-C", str(worktree), "add", "src/core.py"])
+            run(["git", "-C", str(worktree), "commit", "-m", "fixture code change"])
+            wrong_head = run(
+                ["git", "-C", str(worktree), "push", "origin", "stale:refs/heads/stale"],
+                check=False,
+            )
+            self.assertNotEqual(wrong_head.returncode, 0, wrong_head.stdout)
+            self.assertIn("not the clean checked-out HEAD", wrong_head.stdout)
+            self.assertEqual(log.read_text(encoding="utf-8"), "")
+
+            (worktree / "README.md").write_text("# Dirty fixture\n", encoding="utf-8")
+            dirty = run(["git", "-C", str(worktree), "push"], check=False)
+            self.assertNotEqual(dirty.returncode, 0, dirty.stdout)
+            self.assertIn("Tracked files or the index are dirty", dirty.stdout)
+            self.assertEqual(log.read_text(encoding="utf-8"), "")
+            (worktree / "README.md").write_text("# Fixture\n", encoding="utf-8")
+
+            blocked = run(["git", "-C", str(worktree), "push"], check=False, OLYMPUS_GATE_FAST_EXIT="23")
             self.assertNotEqual(blocked.returncode, 0, blocked.stdout)
             self.assertIn("FAST failed", blocked.stdout)
+            self.assertEqual(log.read_text(encoding="utf-8").splitlines(), ["docs", "fast"])
             self.assertEqual(
                 run(["git", "--git-dir", str(remote), "rev-parse", "refs/heads/main"]).stdout.strip(),
                 first_remote,
             )
 
-            run(["git", "push"], cwd=worktree)
+            log.write_text("", encoding="utf-8")
+            run(["git", "-C", str(worktree), "push"])
+            self.assertEqual(log.read_text(encoding="utf-8").splitlines(), ["docs", "fast"])
+            run(["git", "-C", str(worktree), "tag", "-a", "v-fixture", "-m", "annotated fixture tag"])
+            log.write_text("", encoding="utf-8")
+            run(["git", "-C", str(worktree), "push", "origin", "refs/tags/v-fixture"])
+            self.assertEqual(log.read_text(encoding="utf-8").splitlines(), ["docs", "fast"])
+
             log.write_text("", encoding="utf-8")
             (worktree / "docs" / "guide.md").write_text("# Updated guide\n", encoding="utf-8")
-            run(["git", "add", "docs/guide.md"], cwd=worktree)
-            run(["git", "commit", "-m", "fixture docs change"], cwd=worktree)
-            run(["git", "push"], cwd=worktree)
+            run(["git", "-C", str(worktree), "add", "docs/guide.md"])
+            run(["git", "-C", str(worktree), "commit", "-m", "fixture docs change"])
+            run(["git", "-C", str(worktree), "push"])
             self.assertEqual(log.read_text(encoding="utf-8").splitlines(), ["docs"])
 
             log.write_text("", encoding="utf-8")
-            before_delete_push = run(["git", "--git-dir", str(remote), "rev-parse", "refs/heads/main"]).stdout.strip()
-            run(["git", "rm", "docs/guide.md"], cwd=worktree)
-            run(["git", "commit", "-m", "fixture deleted documentation"], cwd=worktree)
-            blocked_docs = run(["git", "push"], cwd=worktree, check=False, OLYMPUS_GATE_DOCS_EXIT="17")
+            run(["git", "-C", str(worktree), "rm", "docs/guide.md"])
+            run(["git", "-C", str(worktree), "commit", "-m", "fixture deleted documentation"])
+            blocked_docs = run(
+                ["git", "-C", str(worktree), "push"],
+                check=False,
+                OLYMPUS_GATE_DOCS_EXIT="17",
+            )
             self.assertNotEqual(blocked_docs.returncode, 0, blocked_docs.stdout)
             self.assertIn("Documentation check failed", blocked_docs.stdout)
             self.assertEqual(log.read_text(encoding="utf-8").splitlines(), ["docs"])
-            self.assertEqual(
-                run(["git", "--git-dir", str(remote), "rev-parse", "refs/heads/main"]).stdout.strip(),
-                before_delete_push,
-            )
+            log.write_text("", encoding="utf-8")
+            run(["git", "-C", str(worktree), "push"])
+            self.assertEqual(log.read_text(encoding="utf-8").splitlines(), ["docs"])
 
             log.write_text("", encoding="utf-8")
-            run(["git", "push"], cwd=worktree)
-            self.assertEqual(log.read_text(encoding="utf-8").splitlines(), ["docs"])
-            self.assertFalse(
-                cache.exists() and any(path.name.startswith("repo") for path in cache.iterdir()),
-                "local hook fixture must not clone a remote hook repository",
+            run(["git", "-C", str(worktree), "push", "origin", ":refs/heads/main"])
+            self.assertEqual(log.read_text(encoding="utf-8"), "")
+            self.assertNotEqual(
+                run(["git", "--git-dir", str(remote), "show-ref", "--verify", "--quiet", "refs/heads/main"], check=False).returncode,
+                0,
             )
-        finally:
-            def retry_readonly_removal(function, path, _error) -> None:
-                os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
-                function(path)
 
-            shutil.rmtree(fixture, onerror=retry_readonly_removal)
+            run(["git", "-C", str(worktree), "branch", "side"])
+            multiple = run(["git", "-C", str(worktree), "push", "--all", "origin"], check=False)
+            self.assertNotEqual(multiple.returncode, 0, multiple.stdout)
+            self.assertIn("one non-deletion ref at a time", multiple.stdout)
+            self.assertEqual(log.read_text(encoding="utf-8"), "")
 
 
 if __name__ == "__main__":

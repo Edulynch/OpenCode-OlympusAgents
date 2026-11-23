@@ -18,48 +18,59 @@ For a separately authorized future release:
 
 This procedure is documentation, not authorization to change a version, tag, release, PATH, or real installation.
 
-## Optional local Gitleaks and pre-push hooks
+## Optional native Git hooks
 
-The repository provides an **opt-in** `.pre-commit-config.yaml`. Its Gitleaks hook remains pinned to the official `v8.30.1` upstream commit and scans **staged changes** before a local commit. The pre-push hook runs the documentation checker for every changed push and runs the existing offline **FAST** profile whenever any changed path is not documentation-only. Root Markdown and Markdown/images under `docs/` or `specs/` are documentation-only; Core/prompts, tests, code, configuration, and unknown paths select FAST. It validates the tracked/index state visible to the hook, checks a supplied `PRE_COMMIT_TO_REF` against `HEAD`, and checks `PRE_COMMIT_LOCAL_BRANCH` against `HEAD` on the all-files fallback. When a manual all-files invocation supplies no branch, the helper does not invent a target ref. The gate itself never stashes or resets user work, but pre-commit may temporarily stash and restore unstaged changes before invoking hooks; unstaged edits hidden in that manager snapshot cannot be rejected by this helper. It does not run Gitleaks, FULL, RUNTIME, or runtime/API checks during push. The gate is locally qualified on Windows with Python 3.11+ and PowerShell 7; no Linux/macOS hook support is claimed. CI and its independent secret/history gates remain mandatory.
+The checked-in `.githooks/pre-commit` and `.githooks/pre-push` are **opt-in** and are never installed by cloning OlympusAgents or by an Olympus installer. The pre-commit hook runs the Python secret gate with the official Gitleaks `v8.30.1` executable acquired only from supported release archives whose pinned SHA-256 is verified before execution. It scans Git's active staged-index diff (including an alternate `GIT_INDEX_FILE` used for partial commits), fully redacts and suppresses scanner output, and blocks on a finding or any acquisition/scanner error. It requires Python 3.11+ and network access when no verified archive cache is available; it needs neither pre-commit nor Go. `OLYMPUS_GITLEAKS_CACHE_DIR` may name an optional cache, whose archive is hash-checked on every use.
 
-Neither hook is installed by cloning OlympusAgents or by an Olympus installer. Gitleaks requires [pre-commit](https://pre-commit.com/), Go, and network access on its first environment bootstrap. The pre-push gate uses Python's standard library and the existing FAST prerequisites; it does not install or update dependencies.
+The native pre-push hook reads Git's update records from stdin. Empty input and deletion-only pushes run no checks because no content is going out. Exactly one non-deletion ref is supported per invocation; multiple content updates are rejected rather than partially qualified. Its local object must peel to the clean checked-out `HEAD`, including annotated or lightweight tags pointing there. A first push/new remote ref checks all tracked paths; later updates use the remote-old-to-local commit diff, retaining deleted paths. If the remote's old object ID is unavailable in the local object database, the range cannot be verified and the push fails closed; fetch that remote history and retry. Push one checked-out branch or a tag at `HEAD` at a time.
 
-Before installing any hook, inspect the effective Git hooks location and any existing `pre-commit` hook. Git's `core.hooksPath` can redirect hooks away from the default directory. In Windows PowerShell:
+For content pushes, the gate requires tracked files and the index to be clean and never stashes or resets user state. It always runs the documentation checker, then runs the existing offline **FAST** profile when any changed path is not documentation-only. Root Markdown and Markdown/images under `docs/` or `specs/` are documentation-only; Core/prompts, tests, code, configuration, and unknown paths select FAST. FAST requires PowerShell 7 (`pwsh`). A manual `python -B scripts/pre_push.py` invocation remains separate and checks all tracked paths without inventing a pushed ref. Push checks do not run Gitleaks, FULL, RUNTIME, or runtime/API checks. The hooks are locally qualified only on Windows with Git for Windows, Python 3.11+, and PowerShell 7; no Linux/macOS hook support is claimed. Hooks can be bypassed; CI secret/history and qualification gates remain mandatory.
+
+From the source checkout root, before opting in, inspect all current Git hooks, the effective `core.hooksPath`, any hooks redirected there (not only `pre-commit`/`pre-push`), `.githooks`, the current branch, and linked worktrees. Switching `core.hooksPath` replaces the active hooks directory and can bypass unrelated hooks; reconcile existing hooks manually before proceeding. In Windows PowerShell:
 
 ```powershell
-cd 'D:\WORKSPACE\Personal\Tools\OpenCode-OlympusAgents'
 git status --short --branch
 git branch --show-current
 git worktree list
 
-$hookDirectory = (git rev-parse --path-format=absolute --git-path hooks).Trim()
-Get-Item -LiteralPath (Join-Path $hookDirectory 'pre-commit') -ErrorAction SilentlyContinue
-Get-Item -LiteralPath (Join-Path $hookDirectory 'pre-push') -ErrorAction SilentlyContinue
 git config --show-origin --get core.hooksPath
+$configuredHooks = (git config --path --get core.hooksPath 2>$null | Out-String).Trim()
+if ($configuredHooks) {
+    $hookDirectory = if ([IO.Path]::IsPathRooted($configuredHooks)) {
+        $configuredHooks
+    } else {
+        Join-Path (Get-Location) $configuredHooks
+    }
+} else {
+    $hookDirectory = (git rev-parse --path-format=absolute --git-path hooks).Trim()
+}
+Get-ChildItem -LiteralPath $hookDirectory -Force -ErrorAction SilentlyContinue
+Get-ChildItem -LiteralPath .githooks -Force -ErrorAction SilentlyContinue
 ```
 
-Linked worktrees share the repository's Git hooks directory, so installing the pre-push hook affects sibling worktrees too; inspect `git worktree list` and their configuration before enabling it.
-
-If an existing hook or custom hooks path is configured, reconcile it manually first; **do not overwrite or bypass it automatically**. To add only the pre-push gate while preserving an existing pre-commit hook, install this hook type explicitly (without `--overwrite`):
+Only after reconciling that state, enable both native hooks for this repository:
 
 ```powershell
-cd 'D:\WORKSPACE\Personal\Tools\OpenCode-OlympusAgents'
-git status --short --branch
-git branch --show-current
-
-pre-commit --version
-pre-commit validate-config
-pre-commit install --hook-type pre-push --allow-missing-config
+git config --local core.hooksPath .githooks
 ```
 
-Use the `pre-commit` executable from the environment where the package is installed. `python -m pre_commit` works only when that exact `python` interpreter has the module; the `python` on `PATH` may differ from the interpreter used by `pre-commit`. The configuration also declares both hook types as defaults, so `pre-commit install --allow-missing-config` installs both when intentionally setting up a fresh hook directory. Do not use `--overwrite`; inspect and reconcile any existing hooks first. To run Gitleaks manually or install its hook separately:
+Git runs hooks only when their committed mode is executable. When publishing from Windows, maintainers must preserve mode `100755` for both hook files, for example with `git add --chmod=+x .githooks/pre-commit .githooks/pre-push`; this is a publication detail, not part of local activation.
+
+The setting is local to the repository and may affect sibling worktrees. It persists across branch changes: before using an older branch, verify that it contains `.githooks` and the referenced scripts; otherwise restore the prior hook path or unset the local setting until returning to a branch with these hooks.
+
+For rollback, restore the exact prior **local** value if one existed:
 
 ```powershell
-pre-commit install --hook-type pre-commit --allow-missing-config
-pre-commit run gitleaks
+git config --local core.hooksPath '<previous-local-value>'
 ```
 
-The pre-push gate uses the pre-commit manager's supplied range; on a first push or when no range is supplied, it conservatively checks all tracked files and validates the manager-supplied local branch when available. It checks one eligible pushed ref per invocation, so push one checked-out branch at a time; it does not reconstruct multi-ref transport. `--allow-missing-config` skips hooks in older worktrees that lack this configuration; it does **not** provide secret scanning or qualification there. Local hooks can be bypassed, so CI secret and qualification gates remain mandatory. CI scans tracked and non-ignored current files plus the selected Git history. Its pinned release archive is downloaded with bounded retries and may be cached by the workflow; every cached or newly downloaded archive must pass the expected SHA-256 check before execution. A missing or invalid archive fails the gate closed. A cache-write failure after a verified download does not abort scanning, because caching is optional. No credentials, findings, or executable files are shared with the local hook.
+If there was no prior local value, remove the opt-in setting:
+
+```powershell
+git config --local --unset core.hooksPath
+```
+
+That returns Git to an inherited global/system path if one exists, or its default `$GIT_DIR/hooks` directory if none exists. Local hooks remain optional and do not replace CI: CI independently scans tracked and non-ignored current files plus selected Git history. Its pinned release archive uses bounded retries and may be cached by the workflow; each downloaded or restored archive must pass the expected SHA-256 check before execution. A cache-write failure after verified download does not abort scanning, because caching is optional.
 
 ## Architecture
 

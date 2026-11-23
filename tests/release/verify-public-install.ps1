@@ -54,7 +54,8 @@ if ($LASTEXITCODE -ne 0 -or $target -cne $ExpectedCommit -or
 $runRoot = Join-Path ([IO.Path]::GetFullPath($env:RUNNER_TEMP)) ('opencode/tag-qualification-' + [guid]::NewGuid().ToString('N'))
 $archive = Join-Path $runRoot 'tag-source.zip'
 $tagSource = Join-Path $runRoot 'source'
-$processTemp = Join-Path $runRoot 'process-temp'
+# Keep Git fixtures at the shallower runner temp root; Windows Git also traverses longer .git metadata paths.
+$processTemp = [IO.Path]::GetFullPath($env:RUNNER_TEMP)
 [IO.Directory]::CreateDirectory($tagSource) | Out-Null
 [IO.Directory]::CreateDirectory($processTemp) | Out-Null
 & git -C $checkout archive --format=zip --output=$archive $localRef

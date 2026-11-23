@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## v0.12.7
+
+### Highlights
+
+- Since the public v0.12.3 release, add standalone workflows with evidence handling; clarify supported scope and evidence; keep Kael coordinator-only; and distinguish tool results from native permission and user-decision evidence.
+- Carry applicable validation evidence across PR, CI, and release handoffs, requesting only the smallest check for a named gap. Separate `develop` contributor CI from manually merged `develop` → `master` promotion, and add the opt-in provenance-checked immutable GitHub Release path without a migration-time version bump.
+- Fix Windows release qualification when `TEMP`/`TMP` points to a fresh missing parent by creating the `opencode` temp directory before writing qualification receipts and transcripts. The clean-root mocked qualification passed 60 markers after reproducing the missing-parent failure.
+- Fix Windows tagged-source qualification by keeping process temporary files at a short runner-temp root and validating the Git-created archive inventory before running the extracted source without `.git` metadata.
+
+### Capability limits
+
+- Mocked qualification and Windows contributor CI are not public tagged-archive qualification or a public-endpoint install, `VerifyOnly`, or uninstall result. Linux lifecycle evidence remains limited to Ubuntu 24.04 under WSL 2; no WSL first-task, native Linux/macOS, or broader platform support is claimed.
+- Static and mocked checks do not establish live native ASK UI or user approval/rejection. Hosted contributor CI, manual promotion, public-tag validation, and public-endpoint lifecycle qualification remain separate gates.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.12.7 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.7/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.7/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+
 ## v0.12.6
 
 ### Highlights

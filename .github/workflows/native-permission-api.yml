@@ -2,7 +2,7 @@ name: Native V2 / Permission API
 
 on:
   pull_request:
-    branches: [master]
+    branches: [develop, master]
   workflow_dispatch:
 
 permissions:

@@ -48,7 +48,7 @@ Kael conserva la evidencia de validación aplicable durante la implementación, 
 
 **Requisitos:** `curl`, `sh`, OpenCode V2 y Python 3.11+.
 
-Cuando la [última versión publicada](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) incluya `install-olympus.sh`, ejecuta:
+La [última versión estable](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) incluye el instalador para Linux:
 
 ```sh
 curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh
@@ -62,13 +62,15 @@ Validado en Ubuntu 24.04 con WSL 2. [Configuración y verificación en Linux (en
 
 ## 📌 Instala una versión específica
 
-**Windows:** instala la versión fijada `v0.12.4`:
+Elige un tag estable publicado y sustituye `vX.Y.Z` por ese tag exacto.
+
+**Windows:**
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.12.4/install.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/vX.Y.Z/install.ps1')))
 ```
 
-**Linux:** cuando la última versión incluya el instalador de Linux, sustituye `vX.Y.Z` por el tag de una versión estable que admita la instalación en Linux:
+**Linux:** usa el mismo tag estable seleccionado si admite la instalación en Linux:
 
 ```sh
 curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh -s -- vX.Y.Z

@@ -1,0 +1,8 @@
+import unittest
+
+from status import format_status
+
+
+class StatusTest(unittest.TestCase):
+    def test_status_precedes_detail(self):
+        self.assertEqual(format_status("READY", "2 items"), "READY | 2 items")

@@ -90,41 +90,22 @@ revision and rendered agents you want to test, and that OpenCode loads those
 agents rather than an older installation. Do not reinstall, change permissions,
 or edit runtime configuration for these checks.
 
-For each case, start a fresh Kael session. Create the three files below in a new,
+For each case, start a fresh Kael session. Create the three files in a new,
 unused `tests/prompt-book/local-case/` directory (or use a new directory name and
 update the prompt paths). For a repeat, use fresh copies rather than resetting
-or overwriting files from an earlier run. Do not stage or commit the fixture or
-transcripts. Leave `test_status_native.py` absent.
+or overwriting files from an earlier run. Do not stage or commit the generated
+case or transcripts. Leave `test_status_native.py` absent.
 
-`README.md`:
+From the checkout root, copy the versioned templates into the new directory.
+The `.py.template` suffix is removed for the two Python files:
 
-```markdown
-# Prompt Book fixture
-
-## Status formatter
-
-This is a disposable fixture for the repository's Prompt Book.
-Its code is `status.py` and its regression test is `test_status.py`.
-```
-
-`status.py`:
-
-```python
-def format_status(status, detail):
-    return f"{detail} | {status}"
-```
-
-`test_status.py`:
-
-```python
-import unittest
-
-from status import format_status
-
-
-class StatusTest(unittest.TestCase):
-    def test_status_precedes_detail(self):
-        self.assertEqual(format_status("READY", "2 items"), "READY | 2 items")
+```powershell
+$fixture = "tests/prompt-book/local-case"
+if (Test-Path -LiteralPath $fixture) { throw "$fixture already exists; choose a fresh directory" }
+New-Item -ItemType Directory -Path $fixture | Out-Null
+Copy-Item -LiteralPath tests/prompt-book/templates/README.md -Destination "$fixture/README.md"
+Copy-Item -LiteralPath tests/prompt-book/templates/status.py.template -Destination "$fixture/status.py"
+Copy-Item -LiteralPath tests/prompt-book/templates/test_status.py.template -Destination "$fixture/test_status.py"
 ```
 
 From the checkout root, the following command should fail before the change and

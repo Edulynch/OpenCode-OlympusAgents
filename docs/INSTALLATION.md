@@ -34,7 +34,7 @@ Both source entrypoints, `install-olympus.ps1` and `uninstall-olympus.ps1`, are 
 
 ## Linux `sh` entrypoint
 
-When the [latest release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) includes `install-olympus.sh`, run:
+The [latest stable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) includes the Linux entrypoint:
 
 ```sh
 curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh
@@ -65,14 +65,14 @@ curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/do
 #### Windows
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.12.4/install.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/vX.Y.Z/install.ps1')))
 ```
 
-The tagged `install.ps1` defaults to its embedded version and downloads the exact tag archive, so no extra `-Version` argument is needed. This bypasses `latest` selection. A versioned URL for `install-olympus.ps1` would not pin the installed version: that bootstrap still selects the latest release.
+Replace `vX.Y.Z` with the exact tag of a published stable release. The tagged `install.ps1` defaults to its embedded version and downloads the exact tag archive, so no extra `-Version` argument is needed. This bypasses `latest` selection. A versioned URL for `install-olympus.ps1` would not pin the installed version: that bootstrap still selects the latest release.
 
 #### Linux
 
-Once the latest release includes the Linux bootstrap, pass the exact tag of a stable, immutable release that supports installation by tag:
+Pass the exact tag of a published stable, immutable release that supports installation by tag:
 
 ```sh
 curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh -s -- vX.Y.Z
@@ -170,7 +170,7 @@ Maintainers may run `install.ps1` directly against a trusted local checkout inst
 ```powershell
 $source = (Resolve-Path '.').Path
 pwsh -NoProfile -File (Join-Path $source 'install.ps1') `
-    -Version 'v0.12.4' -SourceRoot $source -DryRun
+    -Version 'vX.Y.Z' -SourceRoot $source -DryRun
 ```
 
 Use the version actually declared by the checkout; do not copy the example version blindly. Local-source installation is for advanced, trusted-checkout use and is not evidence that the corresponding release is published or immutable.

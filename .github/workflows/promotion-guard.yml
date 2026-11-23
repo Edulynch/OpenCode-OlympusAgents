@@ -1,0 +1,88 @@
+name: Promotion source
+
+on:
+  pull_request_target:
+    branches: [master]
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft]
+
+permissions: {}
+
+jobs:
+  source:
+    if: ${{ github.repository == 'Edulynch/OpenCode-OlympusAgents' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+    steps:
+      - name: Validate base-owned pull request metadata and set head status
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import urllib.error
+          import urllib.request
+
+          repository = "Edulynch/OpenCode-OlympusAgents"
+          print(f"PROMOTION_WORKFLOW_REF: {os.environ.get('GITHUB_WORKFLOW_REF') or 'unavailable'}")
+          event_path = os.environ.get("GITHUB_EVENT_PATH")
+          if not event_path:
+              raise SystemExit("PROMOTION_EVENT_PATH_MISSING")
+          try:
+              with open(event_path, encoding="utf-8") as stream:
+                  event = json.load(stream)
+          except OSError:
+              raise SystemExit("PROMOTION_EVENT_PATH_UNREADABLE")
+          pr = event.get("pull_request") or {}
+          base = pr.get("base") or {}
+          head = pr.get("head") or {}
+          base_repo = (base.get("repo") or {}).get("full_name", "")
+          head_repo = (head.get("repo") or {}).get("full_name", "")
+          sha = head.get("sha", "")
+          if not isinstance(sha, str) or re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", sha) is None:
+              raise SystemExit("PROMOTION_HEAD_SHA_INVALID")
+          valid = (
+              os.environ["REPOSITORY"].casefold() == repository.casefold()
+              and (event.get("repository") or {}).get("full_name", "").casefold() == repository.casefold()
+              and pr.get("state") == "open"
+              and pr.get("draft") is False
+              and base_repo.casefold() == repository.casefold()
+              and base.get("ref") == "master"
+              and head_repo.casefold() == repository.casefold()
+              and head.get("ref") == "develop"
+          )
+          state = "success" if valid else "failure"
+          description = "Canonical develop to master source" if valid else "PR must be canonical develop to master"
+          payload = json.dumps({
+              "state": state,
+              "context": "Promotion source",
+              "description": description,
+              "target_url": f"https://github.com/{repository}/actions/runs/{os.environ['RUN_ID']}",
+          }).encode("utf-8")
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{repository}/statuses/{sha}",
+              data=payload,
+              method="POST",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+                  "Content-Type": "application/json",
+                  "User-Agent": "Olympus-promotion-source-guard",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  if response.status != 201:
+                      raise SystemExit("PROMOTION_STATUS_WRITE_FAILED")
+          except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
+              raise SystemExit("PROMOTION_STATUS_WRITE_FAILED")
+          print(f"PROMOTION_SOURCE: {'PASS' if valid else 'FAIL'} (metadata only; no PR code executed)")
+          if not valid:
+              raise SystemExit("PROMOTION_SOURCE_INVALID")
+          PY

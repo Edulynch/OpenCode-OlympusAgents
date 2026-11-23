@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Carry applicable validation evidence across PR, CI, and release handoffs; request only the smallest check for a named acceptance gap, without repeating checks solely because the stage changed. Required reviews and release gates remain in force.
+- Separate contributor CI on `develop` from manually merged `develop` → `master` promotions; add an opt-in, provenance-checked immutable GitHub Release path with no migration-time version bump.
 
 ## v0.12.4
 

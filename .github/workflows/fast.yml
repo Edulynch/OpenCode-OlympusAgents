@@ -2,7 +2,7 @@ name: CI / FAST
 
 on:
   pull_request:
-    branches: [master]
+    branches: [develop, master]
   push:
     branches: [master]
   workflow_dispatch:
@@ -119,6 +119,12 @@ jobs:
         shell: pwsh
         run: |
           pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FAST
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Release promotion and publication policy (offline)
+        shell: pwsh
+        run: |
+          python -B -m unittest discover -s tests/release -p 'test_release_workflow.py' -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Authority scope invariants (offline)

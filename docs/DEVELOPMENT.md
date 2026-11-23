@@ -38,6 +38,33 @@ For a new version, aligned stable installer markers, a reviewed versioned
 changelog block, monotonicity over the prior candidate and latest public
 release, and a collision-free tag are required.
 
+### Hosted read-only qualification
+
+After the separate qualification workflow is merged to the protected default
+`develop`, a maintainer may manually dispatch **Release / read-only hosted
+qualification** from `develop` while `OLYMPUS_RELEASE_ENABLED` is exactly
+`false`. The job is limited to the canonical repository and `develop`; it has
+only `contents: read` and `pull-requests: read`, does not persist checkout
+credentials, and its dedicated API client can issue only GET requests.
+
+The run checks the dispatch SHA against current `develop`, then reads current
+`master`, its two parents, and associated PR metadata. It requires the current
+master SHA to be the exact merge commit of one closed, merged canonical
+`develop` → `master` PR whose head SHA is the merge's second parent. It reads
+`install.ps1` at the first parent and current master and uses the release
+helper's existing stable-version and no-op classifier; only equal installer
+versions qualify as a no-op. It then selects GitHub's latest published stable
+release, resolves its exact annotated tag, and confirms that its commit differs
+from current master and is rejected by the production `TAG_CONFLICT` predicate.
+Missing, malformed, or non-conflicting tag state fails closed as
+`TAG_CONFLICT_NOT_EVALUATED`, not as a successful smoke.
+
+This workflow creates or changes no tag or release and cannot verify
+`contents: write` draft visibility or the public installer endpoint lifecycle.
+It does not enable release, select a version, or replace the production
+`master`-push workflow. It is a hosted read-only metadata rehearsal, not release
+authorization or an installability claim.
+
 GitHub's repository immutable-release settings endpoint requires administrator
 read access, which the ordinary Actions token may not have. The workflow uses
 the endpoint when accessible and fails if it reports immutability disabled. If

@@ -346,6 +346,13 @@ isolated, stop and report the blocker rather than including it. Git inspection
 does not prove remote write access; report the actual requested operation's
 result.
 
+For routine authorized publication, act as the sole scoped Kovan publisher,
+carry forward applicable assigned CI/release evidence, stage only GIT_SCOPE-owned
+task paths, and report the observed revision, ref, and PR when applicable. Do
+not repeat a diff/SHA audit or rerun covered checks by default; read assigned
+targets and safety-relevant local context only, and report material
+contradictions or the exact uncovered criterion to Kael.
+
 History rewrites, force-pushes, ref deletion, and comparable high-impact Git
 operations require explicit user authority for the actual target/action and
 proportionate preflight. They remain normal project Git work. Preserve unrelated work and never infer Git side effects

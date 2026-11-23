@@ -92,14 +92,29 @@ def validate_promotion(
         reject("PUSH_SHA_MISMATCH", "event after SHA must equal the workflow SHA")
     if current_master_sha != sha:
         reject("STALE_MASTER_SHA", "event SHA is not the current master tip")
+    return _validate_promotion_merge(sha, parents, associated_prs, before=before)
+
+
+def _validate_promotion_merge(
+    sha: str,
+    parents: list[str],
+    associated_prs: list[dict],
+    *,
+    before: str | None = None,
+) -> dict:
     if (
         not isinstance(parents, list)
         or len(parents) != 2
         or any(not isinstance(parent, str) or not SHA.fullmatch(parent) for parent in parents)
-        or parents[0] != before
+        or (before is not None and parents[0] != before)
         or parents[1] == parents[0]
     ):
-        reject("MERGE_PARENTS_INVALID", "merge commit must have first parent equal to push before")
+        detail = (
+            "merge commit must have first parent equal to push before"
+            if before is not None
+            else "current master commit must have two distinct valid parents"
+        )
+        reject("MERGE_PARENTS_INVALID", detail)
 
     exact = [
         pr for pr in associated_prs
@@ -128,6 +143,21 @@ def validate_promotion(
             "the associated merged PR must be canonical develop -> master with the exact second parent",
         )
     return pr
+
+
+def validate_master_promotion(
+    repository: str,
+    sha: str,
+    parents: list[str],
+    associated_prs: list[dict],
+    current_master_sha: str,
+) -> dict:
+    """Validate current master as an exact canonical develop -> master merge."""
+    if not isinstance(repository, str) or repository.casefold() != REPOSITORY.casefold():
+        reject("REPOSITORY_MISMATCH", "qualification runs only in the canonical repository")
+    if current_master_sha != sha:
+        reject("STALE_MASTER_SHA", "qualified SHA is not the current master tip")
+    return _validate_promotion_merge(sha, parents, associated_prs)
 
 
 def tag_message(version: str, sha: str) -> str:
@@ -322,6 +352,316 @@ class GitHub:
             if optional and error.status == 404:
                 return None
             raise
+
+
+class ReadOnlyGitHub:
+    """GitHub API client with no method capable of issuing a write request."""
+
+    def __init__(self, token: str):
+        self.token = token
+        self.root = f"https://api.github.com/repos/{REPOSITORY}"
+
+    def get(self, path: str, *, optional: bool = False):
+        if not isinstance(path, str) or not path.startswith("/"):
+            reject("GITHUB_API_PATH_INVALID", "read-only API paths must be repository-relative")
+        request = urllib.request.Request(
+            self.root + path,
+            method="GET",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {self.token}",
+                "User-Agent": "Olympus-release-read-only-qualification",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                payload = response.read()
+                return json.loads(payload) if payload else None
+        except urllib.error.HTTPError as error:
+            if optional and error.code == 404:
+                return None
+            raise ApiError(error.code, path) from None
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            reject("GITHUB_API_UNAVAILABLE", f"read-only request failed for {path}")
+
+
+def _api_ref_sha(ref: object, name: str) -> str:
+    object_data = ref.get("object") if isinstance(ref, dict) else None
+    sha = object_data.get("sha") if isinstance(object_data, dict) else None
+    if not isinstance(sha, str) or not SHA.fullmatch(sha):
+        reject("HOSTED_QUALIFICATION_METADATA_INVALID", f"{name} ref has no full object SHA")
+    return sha
+
+
+def _api_installer_version(api: ReadOnlyGitHub, sha: str, label: str) -> str:
+    response = api.get(
+        "/contents/install.ps1?ref=" + urllib.parse.quote(sha, safe="")
+    )
+    if (
+        not isinstance(response, dict)
+        or response.get("type") != "file"
+        or response.get("encoding") != "base64"
+        or not isinstance(response.get("content"), str)
+    ):
+        reject("HOSTED_INSTALLER_METADATA_INVALID", f"{label} install.ps1 is unavailable")
+    try:
+        content = base64.b64decode(
+            "".join(response["content"].split()), validate=True
+        ).decode("utf-8-sig")
+    except (ValueError, UnicodeDecodeError):
+        reject("HOSTED_INSTALLER_METADATA_INVALID", f"{label} install.ps1 is malformed")
+    return extract_release_version(content, label)
+
+
+def qualify_hosted_readonly(_: argparse.Namespace) -> None:
+    """Read-only hosted proof of current master no-op and an existing tag conflict."""
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    workflow_ref = (
+        f"{REPOSITORY}/.github/workflows/release-qualification.yml@refs/heads/develop"
+    )
+    if (
+        repository.casefold() != REPOSITORY.casefold()
+        or os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
+        or os.environ.get("GITHUB_REF") != "refs/heads/develop"
+        or os.environ.get("GITHUB_WORKFLOW_REF") != workflow_ref
+    ):
+        reject(
+            "HOSTED_QUALIFICATION_CONTEXT_INVALID",
+            "dispatch must come from the canonical repository's develop workflow ref",
+        )
+    if os.environ.get("OLYMPUS_RELEASE_ENABLED") != "false":
+        reject(
+            "RELEASE_OPT_IN_NOT_DISABLED",
+            "hosted qualification requires OLYMPUS_RELEASE_ENABLED=false",
+        )
+    token = os.environ.get("GITHUB_TOKEN", "")
+    dispatch_sha = os.environ.get("GITHUB_SHA", "").lower()
+    if not token or not SHA.fullmatch(dispatch_sha):
+        reject(
+            "HOSTED_QUALIFICATION_CONTEXT_INVALID",
+            "a read-only token and full workflow SHA are required",
+        )
+
+    api = ReadOnlyGitHub(token)
+    develop_sha = _api_ref_sha(api.get("/git/ref/heads/develop"), "develop")
+    if develop_sha != dispatch_sha:
+        reject("STALE_DEVELOP_SHA", "dispatch SHA is not the current develop tip")
+
+    master_sha = _api_ref_sha(api.get("/git/ref/heads/master"), "master")
+    commit = api.get("/commits/" + urllib.parse.quote(master_sha, safe=""))
+    if not isinstance(commit, dict) or commit.get("sha") != master_sha:
+        reject("HOSTED_QUALIFICATION_METADATA_INVALID", "master commit response SHA does not match")
+    parent_objects = commit.get("parents") if isinstance(commit, dict) else None
+    if not isinstance(parent_objects, list):
+        reject("MERGE_PARENTS_INVALID", "current master commit has no parent list")
+    parents = [
+        parent.get("sha") if isinstance(parent, dict) else None
+        for parent in parent_objects
+    ]
+    associated = api.get(
+        "/commits/" + urllib.parse.quote(master_sha, safe="") + "/pulls?per_page=100"
+    )
+    if not isinstance(associated, list):
+        reject("PROMOTION_PR_METADATA_INVALID", "associated PR response is malformed")
+    promotion = validate_master_promotion(
+        repository,
+        master_sha,
+        parents,
+        associated,
+        master_sha,
+    )
+    promotion_number = promotion.get("number")
+    if not isinstance(promotion_number, int) or promotion_number <= 0:
+        reject("PROMOTION_PR_METADATA_INVALID", "associated promotion PR has no valid number")
+
+    version_before = _api_installer_version(api, parents[0], "previous")
+    version_after = _api_installer_version(api, master_sha, "candidate")
+    mode = classify_existing_release(
+        version_before=version_before,
+        version_after=version_after,
+        latest_release=None,
+        tag_ref=None,
+        tag_object=None,
+        release=None,
+        sha=master_sha,
+        body="",
+        expected_assets={},
+    )
+    if mode != "noop":
+        reject(
+            "HOSTED_RELEASE_NOOP_NOT_CONFIRMED",
+            f"master installer version changed from {version_before} to {version_after}",
+        )
+
+    latest = api.get("/releases/latest", optional=True)
+    if (
+        not isinstance(latest, dict)
+        or latest.get("draft") is not False
+        or latest.get("prerelease") is not False
+    ):
+        reject(
+            "TAG_CONFLICT_NOT_EVALUATED",
+            "latest published stable release metadata is unavailable",
+        )
+    version = latest.get("tag_name")
+    try:
+        version_key(version)
+    except (ReleaseError, TypeError):
+        reject(
+            "TAG_CONFLICT_NOT_EVALUATED",
+            "latest published release does not have a stable version tag",
+        )
+    release_id = latest.get("id")
+    if type(release_id) is not int or release_id <= 0:
+        reject(
+            "TAG_CONFLICT_NOT_EVALUATED",
+            "latest published release has no stable identity",
+        )
+    release_identity = (release_id, version)
+    tag_path = "/git/ref/tags/" + urllib.parse.quote(version, safe="")
+    tag_ref = api.get(tag_path, optional=True)
+    if not isinstance(tag_ref, dict) or tag_ref.get("ref") != f"refs/tags/{version}":
+        reject("TAG_CONFLICT_NOT_EVALUATED", "latest stable tag ref is missing or malformed")
+    ref_object = tag_ref.get("object")
+    if (
+        not isinstance(ref_object, dict)
+        or ref_object.get("type") != "tag"
+        or not isinstance(ref_object.get("sha"), str)
+        or not SHA.fullmatch(ref_object["sha"])
+    ):
+        reject(
+            "TAG_CONFLICT_NOT_EVALUATED",
+            "latest stable release is not backed by a resolvable annotated tag",
+        )
+    tag_ref_identity = (
+        tag_ref["ref"],
+        ref_object["type"],
+        ref_object["sha"],
+    )
+    tag_object = api.get(
+        "/git/tags/" + urllib.parse.quote(ref_object["sha"], safe="")
+    )
+    target = tag_object.get("object") if isinstance(tag_object, dict) else None
+    tag_target_sha = target.get("sha") if isinstance(target, dict) else None
+    tagger = tag_object.get("tagger") if isinstance(tag_object, dict) else None
+    if (
+        not isinstance(tag_object, dict)
+        or tag_object.get("tag") != version
+        or not isinstance(target, dict)
+        or target.get("type") != "commit"
+        or not isinstance(tag_target_sha, str)
+        or not SHA.fullmatch(tag_target_sha)
+        or tag_target_sha == master_sha
+        or not isinstance(tagger, dict)
+    ):
+        reject(
+            "TAG_CONFLICT_NOT_EVALUATED",
+            "latest stable annotated tag does not resolve to a different commit",
+        )
+    tag_object_identity = (
+        tag_object.get("tag"),
+        tag_object.get("message"),
+        tagger.get("name"),
+        tagger.get("email"),
+        target.get("type"),
+        tag_target_sha,
+    )
+    try:
+        _require_tag(tag_ref, tag_object, version, master_sha)
+    except ReleaseError as error:
+        if not str(error).startswith("TAG_CONFLICT:"):
+            raise
+    else:
+        reject(
+            "TAG_CONFLICT_NOT_DETECTED",
+            "existing tag unexpectedly satisfies the current master tag predicate",
+        )
+
+    latest_recheck = api.get("/releases/latest", optional=True)
+    if (
+        not isinstance(latest_recheck, dict)
+        or type(latest_recheck.get("id")) is not int
+        or latest_recheck.get("draft") is not False
+        or latest_recheck.get("prerelease") is not False
+        or (latest_recheck.get("id"), latest_recheck.get("tag_name"))
+        != release_identity
+    ):
+        reject(
+            "HOSTED_RELEASE_IDENTITY_CHANGED",
+            "latest published stable release changed or became unavailable during qualification",
+        )
+
+    tag_ref_recheck = api.get(tag_path, optional=True)
+    rechecked_ref_object = (
+        tag_ref_recheck.get("object")
+        if isinstance(tag_ref_recheck, dict)
+        else None
+    )
+    if (
+        not isinstance(rechecked_ref_object, dict)
+        or (
+            tag_ref_recheck.get("ref"),
+            rechecked_ref_object.get("type"),
+            rechecked_ref_object.get("sha"),
+        )
+        != tag_ref_identity
+    ):
+        reject(
+            "HOSTED_TAG_IDENTITY_CHANGED",
+            "latest stable annotated tag ref changed or became unavailable during qualification",
+        )
+
+    tag_object_recheck = api.get(
+        "/git/tags/" + urllib.parse.quote(ref_object["sha"], safe="")
+    )
+    rechecked_target = (
+        tag_object_recheck.get("object")
+        if isinstance(tag_object_recheck, dict)
+        else None
+    )
+    rechecked_tagger = (
+        tag_object_recheck.get("tagger")
+        if isinstance(tag_object_recheck, dict)
+        else None
+    )
+    if (
+        not isinstance(tag_object_recheck, dict)
+        or not isinstance(rechecked_target, dict)
+        or not isinstance(rechecked_tagger, dict)
+        or (
+            tag_object_recheck.get("tag"),
+            tag_object_recheck.get("message"),
+            rechecked_tagger.get("name"),
+            rechecked_tagger.get("email"),
+            rechecked_target.get("type"),
+            rechecked_target.get("sha"),
+        )
+        != tag_object_identity
+    ):
+        reject(
+            "HOSTED_TAG_IDENTITY_CHANGED",
+            "resolved annotated tag object changed or became unavailable during qualification",
+        )
+
+    if _api_ref_sha(api.get("/git/ref/heads/develop"), "develop") != dispatch_sha:
+        reject("STALE_DEVELOP_SHA", "develop moved during hosted qualification")
+    if _api_ref_sha(api.get("/git/ref/heads/master"), "master") != master_sha:
+        reject("STALE_MASTER_SHA", "master moved during hosted qualification")
+
+    print(
+        f"HOSTED_READ_ONLY_NOOP: master_sha={master_sha} version={version_after} "
+        f"previous_version={version_before} promotion_pr=#{promotion_number}"
+    )
+    print(
+        f"HOSTED_TAG_CONFLICT_CONFIRMED: tag={version} target={tag_target_sha} "
+        f"current_master={master_sha} predicate=TAG_CONFLICT"
+    )
+    print(
+        "HOSTED_QUALIFICATION_LIMITS: no tag/release writes; draft write visibility "
+        "and public endpoint installation are not verified; GitHub state is confirmed "
+        "only through these final re-reads, not an atomic snapshot"
+    )
 
 
 def git_bytes(revision: str, path: str) -> bytes:
@@ -614,6 +954,8 @@ def main() -> int:
     verify_parser.add_argument("--ps1-sha256", required=True)
     verify_parser.add_argument("--sh-sha256", required=True)
     verify_parser.set_defaults(function=verify_public)
+    hosted_parser = subparsers.add_parser("qualify-hosted-readonly")
+    hosted_parser.set_defaults(function=qualify_hosted_readonly)
     args = parser.parse_args()
     try:
         args.function(args)

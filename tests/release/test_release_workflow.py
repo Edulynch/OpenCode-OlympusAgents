@@ -1,4 +1,5 @@
 import argparse
+import base64
 from contextlib import redirect_stdout
 import importlib.util
 import io
@@ -324,6 +325,260 @@ class CandidatePolicyTests(unittest.TestCase):
         self.assertIn("## v1.2.3", release.extract_release_notes(notes, "v1.2.3"))
 
 
+class HostedReadOnlyQualificationTests(unittest.TestCase):
+    def setUp(self):
+        self.develop_sha = "a" * 40
+        self.master_sha = "b" * 40
+        self.previous_sha = "c" * 40
+        self.source_sha = "d" * 40
+        self.tag_object_sha = "e" * 40
+        self.version = "v1.2.3"
+        self.pr = {
+            "number": 42,
+            "state": "closed",
+            "merged_at": "2026-01-01T00:00:00Z",
+            "merge_commit_sha": self.master_sha,
+            "base": {
+                "ref": "master",
+                "repo": {"full_name": release.REPOSITORY},
+            },
+            "head": {
+                "ref": "develop",
+                "sha": self.source_sha,
+                "repo": {"full_name": release.REPOSITORY},
+            },
+        }
+        installer = (
+            f"[string]$Version = '{self.version}'\n"
+            f"$ReleaseVersion = '{self.version}'\n"
+        ).encode()
+        content = base64.b64encode(installer).decode()
+        self.responses = {
+            "/git/ref/heads/develop": {"object": {"sha": self.develop_sha}},
+            "/git/ref/heads/master": {"object": {"sha": self.master_sha}},
+            f"/commits/{self.master_sha}": {
+                "sha": self.master_sha,
+                "parents": [
+                    {"sha": self.previous_sha},
+                    {"sha": self.source_sha},
+                ],
+            },
+            f"/commits/{self.master_sha}/pulls?per_page=100": [self.pr],
+            f"/contents/install.ps1?ref={self.previous_sha}": {
+                "type": "file",
+                "encoding": "base64",
+                "content": content,
+            },
+            f"/contents/install.ps1?ref={self.master_sha}": {
+                "type": "file",
+                "encoding": "base64",
+                "content": content,
+            },
+            "/releases/latest": {
+                "id": 123,
+                "tag_name": self.version,
+                "draft": False,
+                "prerelease": False,
+            },
+            f"/git/ref/tags/{self.version}": {
+                "ref": f"refs/tags/{self.version}",
+                "object": {"type": "tag", "sha": self.tag_object_sha},
+            },
+            f"/git/tags/{self.tag_object_sha}": {
+                "tag": self.version,
+                "message": release.tag_message(self.version, self.previous_sha),
+                "tagger": {"name": release.BOT_NAME, "email": release.BOT_EMAIL},
+                "object": {"type": "commit", "sha": self.previous_sha},
+            },
+        }
+        self.calls = []
+        self.response_counts = {}
+        self.response_overrides = {}
+
+    def env(self):
+        return {
+            "GITHUB_REPOSITORY": release.REPOSITORY,
+            "GITHUB_EVENT_NAME": "workflow_dispatch",
+            "GITHUB_REF": "refs/heads/develop",
+            "GITHUB_WORKFLOW_REF": (
+                f"{release.REPOSITORY}/.github/workflows/"
+                "release-qualification.yml@refs/heads/develop"
+            ),
+            "GITHUB_SHA": self.develop_sha,
+            "GITHUB_TOKEN": "offline-test-token",
+            "OLYMPUS_RELEASE_ENABLED": "false",
+        }
+
+    def fake_urlopen(self, request, timeout):
+        self.calls.append((request.get_method(), request.data, request.full_url))
+        if request.get_method() != "GET" or request.data is not None:
+            raise AssertionError("read-only client attempted a non-GET or request body")
+        if timeout != 30:
+            raise AssertionError(f"unexpected API timeout: {timeout}")
+        parsed = urllib.parse.urlparse(request.full_url)
+        route = parsed.path.removeprefix(f"/repos/{release.REPOSITORY}")
+        if parsed.query:
+            route += "?" + parsed.query
+        if route not in self.responses:
+            raise AssertionError(f"unexpected API read: {route}")
+        count = self.response_counts.get(route, 0) + 1
+        self.response_counts[route] = count
+        payload = self.response_overrides.get(
+            (route, count), self.responses[route]
+        )
+        return FakeResponse(payload)
+
+    def run_qualification(self, env=None):
+        output = io.StringIO()
+        with (
+            mock.patch.dict(os.environ, self.env() if env is None else env, clear=True),
+            mock.patch("urllib.request.urlopen", side_effect=self.fake_urlopen),
+            redirect_stdout(output),
+        ):
+            release.qualify_hosted_readonly(argparse.Namespace())
+        return output.getvalue()
+
+    def assert_revalidation_failure(self, route, response, reason):
+        self.calls.clear()
+        self.response_counts.clear()
+        self.response_overrides.clear()
+        self.response_overrides[(route, 2)] = response
+        output = io.StringIO()
+        with (
+            mock.patch.dict(os.environ, self.env(), clear=True),
+            mock.patch("urllib.request.urlopen", side_effect=self.fake_urlopen),
+            redirect_stdout(output),
+        ):
+            with self.assertRaisesRegex(release.ReleaseError, reason):
+                release.qualify_hosted_readonly(argparse.Namespace())
+        self.assertEqual(output.getvalue(), "")
+        self.assertTrue(self.calls)
+        self.assertTrue(all(method == "GET" and body is None for method, body, _ in self.calls))
+
+    def test_mocked_master_noop_and_existing_tag_conflict_use_get_only_client(self):
+        client = release.ReadOnlyGitHub("offline-test-token")
+        self.assertFalse(hasattr(client, "request"))
+        self.assertFalse(hasattr(client, "post"))
+
+        output = self.run_qualification()
+
+        self.assertIn(
+            f"HOSTED_READ_ONLY_NOOP: master_sha={self.master_sha} "
+            f"version={self.version} previous_version={self.version} promotion_pr=#42",
+            output,
+        )
+        self.assertIn(
+            f"HOSTED_TAG_CONFLICT_CONFIRMED: tag={self.version} "
+            f"target={self.previous_sha} current_master={self.master_sha} "
+            "predicate=TAG_CONFLICT",
+            output,
+        )
+        self.assertIn("draft write visibility", output)
+        self.assertIn("not an atomic snapshot", output)
+        self.assertTrue(self.calls)
+        self.assertTrue(all(method == "GET" and body is None for method, body, _ in self.calls))
+        for route in (
+            "/git/ref/heads/develop",
+            "/git/ref/heads/master",
+            "/releases/latest",
+            f"/git/ref/tags/{self.version}",
+            f"/git/tags/{self.tag_object_sha}",
+        ):
+            self.assertEqual(self.response_counts.get(route), 2, route)
+
+    def test_stale_refs_and_moved_release_or_tag_fail_before_success(self):
+        scenarios = (
+            (
+                "/git/ref/heads/develop",
+                {"object": {"sha": "f" * 40}},
+                "STALE_DEVELOP_SHA",
+            ),
+            (
+                "/git/ref/heads/master",
+                {"object": {"sha": "f" * 40}},
+                "STALE_MASTER_SHA",
+            ),
+            (
+                "/releases/latest",
+                {
+                    "id": 124,
+                    "tag_name": self.version,
+                    "draft": False,
+                    "prerelease": False,
+                },
+                "HOSTED_RELEASE_IDENTITY_CHANGED",
+            ),
+            (
+                f"/git/ref/tags/{self.version}",
+                {
+                    "ref": f"refs/tags/{self.version}",
+                    "object": {"type": "tag", "sha": "f" * 40},
+                },
+                "HOSTED_TAG_IDENTITY_CHANGED",
+            ),
+            (
+                f"/git/tags/{self.tag_object_sha}",
+                {
+                    **self.responses[f"/git/tags/{self.tag_object_sha}"],
+                    "object": {"type": "commit", "sha": "f" * 40},
+                },
+                "HOSTED_TAG_IDENTITY_CHANGED",
+            ),
+        )
+        for route, response, reason in scenarios:
+            with self.subTest(route=route):
+                self.assert_revalidation_failure(route, response, reason)
+
+    def test_changed_master_version_is_not_reported_as_noop_or_tag_conflict(self):
+        content = base64.b64encode(
+            b"[string]$Version = 'v1.2.4'\n$ReleaseVersion = 'v1.2.4'\n"
+        ).decode()
+        self.responses[f"/contents/install.ps1?ref={self.master_sha}"]["content"] = content
+        output = io.StringIO()
+        with (
+            mock.patch.dict(os.environ, self.env(), clear=True),
+            mock.patch("urllib.request.urlopen", side_effect=self.fake_urlopen),
+            redirect_stdout(output),
+        ):
+            with self.assertRaisesRegex(
+                release.ReleaseError, "HOSTED_RELEASE_NOOP_NOT_CONFIRMED"
+            ):
+                release.qualify_hosted_readonly(argparse.Namespace())
+        self.assertEqual(output.getvalue(), "")
+        self.assertFalse(any("/releases/latest" in url for _, _, url in self.calls))
+        self.assertTrue(all(method == "GET" and body is None for method, body, _ in self.calls))
+
+    def test_tag_matching_master_fails_closed_as_not_evaluated(self):
+        tag_object = self.responses[f"/git/tags/{self.tag_object_sha}"]
+        tag_object["object"]["sha"] = self.master_sha
+        tag_object["message"] = release.tag_message(self.version, self.master_sha)
+        output = io.StringIO()
+        with (
+            mock.patch.dict(os.environ, self.env(), clear=True),
+            mock.patch("urllib.request.urlopen", side_effect=self.fake_urlopen),
+            redirect_stdout(output),
+        ):
+            with self.assertRaisesRegex(
+                release.ReleaseError, "TAG_CONFLICT_NOT_EVALUATED"
+            ):
+                release.qualify_hosted_readonly(argparse.Namespace())
+        self.assertEqual(output.getvalue(), "")
+        self.assertTrue(all(method == "GET" and body is None for method, body, _ in self.calls))
+
+    def test_release_opt_in_must_be_false_before_api_access(self):
+        env = self.env()
+        env["OLYMPUS_RELEASE_ENABLED"] = "true"
+        with (
+            mock.patch.dict(os.environ, env, clear=True),
+            mock.patch("urllib.request.urlopen") as urlopen,
+        ):
+            with self.assertRaisesRegex(
+                release.ReleaseError, "RELEASE_OPT_IN_NOT_DISABLED"
+            ):
+                release.qualify_hosted_readonly(argparse.Namespace())
+        urlopen.assert_not_called()
+
+
 class PreTagReleaseConflictTests(unittest.TestCase):
     def test_prepare_queries_release_without_tag_and_refuses_before_planning(self):
         event, sha, before, head_sha, pr = promotion_fixture()
@@ -601,6 +856,20 @@ class WorkflowBoundaryTests(unittest.TestCase):
             self.assertNotIn("release.py", body)
         self.assertIn("verify-public-install.ps1", text)
         self.assertIn("PUBLIC_INSTALL_LIFECYCLE: PENDING", (ROOT / ".github/release.py").read_text(encoding="utf-8"))
+
+    def test_hosted_qualification_is_separate_and_read_only(self):
+        text = (ROOT / ".github/workflows/release-qualification.yml").read_text(encoding="utf-8")
+        self.assertRegex(text, r"on:\s*\n\s+workflow_dispatch:")
+        self.assertIn("permissions: {}", text)
+        self.assertIn("contents: read", text)
+        self.assertIn("pull-requests: read", text)
+        self.assertNotIn("contents: write", text)
+        self.assertNotIn("secrets.", text)
+        self.assertIn("vars.OLYMPUS_RELEASE_ENABLED == 'false'", text)
+        self.assertIn("github.ref == 'refs/heads/develop'", text)
+        self.assertIn("persist-credentials: false", text)
+        self.assertIn("GITHUB_TOKEN: ${{ github.token }}", text)
+        self.assertIn("qualify-hosted-readonly", text)
 
     def test_release_helper_does_not_publish_and_checks_public_bytes(self):
         helper = (ROOT / ".github/release.py").read_text(encoding="utf-8")

@@ -2,8 +2,26 @@
 
 ## [Unreleased]
 
-- Carry applicable validation evidence across PR, CI, and release handoffs; request only the smallest check for a named acceptance gap, without repeating checks solely because the stage changed. Required reviews and release gates remain in force.
+## v0.12.5
+
+### Highlights
+
+- Add standalone workflows with evidence handling; clarify supported scope and evidence, keep Kael coordinator-only, and distinguish tool results from native permission and user-decision observability.
+- Carry applicable validation evidence across PR, CI, and release handoffs; request only the smallest check for a named acceptance gap without repeating checks solely because the stage changed. Required reviews and release gates remain in force.
 - Separate contributor CI on `develop` from manually merged `develop` → `master` promotions; add an opt-in, provenance-checked immutable GitHub Release path with no migration-time version bump.
+
+### Capability limits
+
+- The Windows first-task result remains user-reported after an unpublished install; it does not verify public release bytes or provenance. Linux lifecycle evidence is separate and limited to Ubuntu 24.04 in WSL 2; no WSL first-task, native Linux/macOS, or broader platform support is claimed.
+- Static and mocked checks do not establish live native ASK UI or user approval/rejection. Contributor CI, manual promotion, public-tag validation, and public-endpoint installation/VerifyOnly/uninstall qualification remain separate gates.
+
+## Installation
+
+When published, use **Fast Install** or **Fast Uninstall** from the [v0.12.5 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.5/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+After publication, see [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.5/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
 
 ## v0.12.4
 

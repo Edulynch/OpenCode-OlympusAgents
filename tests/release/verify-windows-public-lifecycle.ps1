@@ -230,7 +230,7 @@ function Invoke-ChildPwsh([string]$Path, [string[]]$Arguments, [string]$Label) {
     foreach ($line in @($lines | Where-Object {
             $_ -match '^(OLYMPUS_(?:SOURCE|RELEASE_SELECTED|ENTRYPOINT|RELEASE_EXECUTING|RELEASE_EXECUTED|GLOBAL_VERIFY|CLI|CLI_PATH|RUNTIME_VALIDATION_WARNING)|PUBLIC_)'
         })) {
-        Write-Output $line
+        Write-Host $line
     }
     if ($code -ne 0) {
         $diagnostic = @($lines | Where-Object { $_ -match 'OLYMPUS_|FAILED|ERROR' } | Select-Object -First 2) -join '; '

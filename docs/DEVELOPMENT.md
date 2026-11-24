@@ -103,12 +103,33 @@ verify its bytes match the tag; publish only with immutability enabled.
 
 After publication, the workflow verifies `releases/latest`, immutable stable
 metadata, the exact annotated tag and both public asset bytes. This is not a
-real installer lifecycle: the public latest-endpoint install/VerifyOnly/
-uninstall check remains pending for an isolated supported Windows environment
-and the documented Linux route. Mocked or local tag qualification is not
+complete installer lifecycle. The Linux v0.12.8 route has separately passed;
+the Windows public latest-endpoint install/VerifyOnly/uninstall check remains
+pending until its hosted run passes. Mocked or local tag qualification is not
 equivalent to that endpoint gate. Do not announce availability until the
 separate lifecycle evidence is complete; never point executable installation
 sources at `master` or `develop`.
+
+The [`public Windows lifecycle workflow`](../.github/workflows/public-windows-lifecycle.yml)
+runs only for same-repository PRs to `develop` that change this workflow or
+`tests/release/verify-windows-public-lifecycle.ps1`. It uses a GitHub-hosted
+`windows-2025` VM, a read-only checkout token, the verified public
+`install-olympus.ps1` asset, the exact tagged `install.ps1 -VerifyOnly`, and
+the tagged public uninstaller. The script independently checks immutable
+release metadata, the annotated tag object and peeled commit, the asset
+SHA-256/size, and GitHub's canonical blob for the tagged installer before
+executing those files. Its `PUBLIC_WINDOWS_LIFECYCLE: PASS` output is the
+hosted acceptance result; local guard/static checks do not establish it.
+
+The installer changes the disposable runner account's user PATH as its normal
+behavior. All other profile/config/CLI roots and an OpenCode config sentinel
+are fixture-isolated; the existing deterministic OpenCode stub is used, with
+no live OpenCode, model, provider, or agent evidence. A `.git`-less public
+archive may record `installed_from_commit: "unknown"`: the test reports that
+value without treating it as provenance. The release commit is verified
+separately through the exact immutable release and annotated tag, so the
+manifest's `unknown` is not substituted for source verification. This check
+does not independently verify a cryptographic signature.
 
 The intended public URL is:
 `https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1`.

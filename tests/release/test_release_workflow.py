@@ -71,6 +71,20 @@ def extract_tag_guard_script():
     return textwrap.dedent(script.group("body"))
 
 
+def extract_release_job_script(name):
+    text = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    job = re.search(rf"(?ms)^  {re.escape(name)}:\n(?P<body>.*?)(?=^  [a-z][a-z-]*:\n|\Z)", text)
+    if job is None:
+        raise AssertionError(f"release {name} job is missing")
+    script = re.search(
+        r"(?ms)^          python3 - <<'PY'\r?\n(?P<body>.*?)^          PY[ \t]*\r?$",
+        job.group("body"),
+    )
+    if script is None:
+        raise AssertionError(f"release {name} heredoc is missing")
+    return textwrap.dedent(script.group("body"))
+
+
 def extract_promotion_guard_script():
     text = (ROOT / ".github/workflows/promotion-guard.yml").read_text(encoding="utf-8")
     script = re.search(
@@ -249,18 +263,14 @@ class CandidatePolicyTests(unittest.TestCase):
         )
         self.assertEqual(self.classify(tag_ref=None, tag_object=None, release=None), "create")
 
-    def test_conflicting_tag_target_and_orphan_tag_fail_closed(self):
+    def test_conflicting_tag_target_fails_and_hidden_draft_is_provisional(self):
         wrong_tag = {**self.tag_object, "object": {"type": "commit", "sha": "d" * 40}}
         assert_reason(
             self,
             "TAG_CONFLICT",
             lambda: self.classify(tag_object=wrong_tag),
         )
-        assert_reason(
-            self,
-            "ORPHAN_TAG_CONFLICT",
-            lambda: self.classify(release=None),
-        )
+        self.assertEqual(self.classify(release=None), "provisional")
 
     def test_matching_draft_resumes_but_wrong_asset_digest_does_not(self):
         self.assertEqual(self.classify(), "resume")
@@ -610,6 +620,8 @@ class PreTagReleaseConflictTests(unittest.TestCase):
                     self.reads.append(path)
                     if (method, path) == ("GET", "/immutable-releases"):
                         return 200, {"enabled": True}
+                    if (method, path) == ("GET", f"/releases/tags/{version_after}"):
+                        return 200, {"tag_name": version_after, "draft": True}
                     raise AssertionError(f"unexpected API request: {method} {path}")
 
             api = FakeReadApi()
@@ -665,6 +677,107 @@ class PreTagReleaseConflictTests(unittest.TestCase):
             self.assertIn(f"/releases/tags/{version_after}", api.reads)
             self.assertFalse(out_dir.exists())
 
+    def test_prepare_marks_matching_tag_without_public_release_as_provisional(self):
+        event, sha, before, head_sha, pr = promotion_fixture()
+        version_before, version_after = "v1.2.2", "v1.2.3"
+        tag_ref = {
+            "ref": f"refs/tags/{version_after}",
+            "object": {"type": "tag", "sha": "f" * 40},
+        }
+        tag_object = {
+            "tag": version_after,
+            "message": release.tag_message(version_after, sha),
+            "tagger": {"name": release.BOT_NAME, "email": release.BOT_EMAIL},
+            "object": {"type": "commit", "sha": sha},
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            event_path = Path(temp) / "event.json"
+            event_path.write_text(json.dumps(event), encoding="utf-8")
+            out_dir = Path(temp) / "plan"
+            output_path = Path(temp) / "github-output"
+
+            class FakeReadApi:
+                def __init__(self):
+                    self.reads = []
+
+                def get(self, path, *, optional=False):
+                    self.reads.append(path)
+                    if path == "/git/ref/heads/master":
+                        return {"object": {"sha": sha}}
+                    if path == f"/commits/{sha}/pulls?per_page=100":
+                        return [pr]
+                    if path == "/releases/latest":
+                        return {"tag_name": version_before}
+                    if path == f"/git/ref/tags/{version_after}":
+                        return tag_ref
+                    if path == f"/git/tags/{'f' * 40}":
+                        return tag_object
+                    if path == f"/releases/tags/{version_after}":
+                        return None
+                    raise AssertionError(f"unexpected API read: {path}")
+
+                def request(self, method, path):
+                    self.reads.append(path)
+                    if (method, path) == ("GET", "/immutable-releases"):
+                        return 200, {"enabled": True}
+                    if (method, path) == ("GET", f"/releases/tags/{version_after}"):
+                        raise release.ApiError(404, path)
+                    raise AssertionError(f"unexpected API request: {method} {path}")
+
+            api = FakeReadApi()
+
+            def fake_git(command, **_):
+                if command[1:] == ["rev-parse", "HEAD"]:
+                    stdout = f"{sha}\n"
+                elif command[1:] == ["show", "-s", "--format=%P", sha]:
+                    stdout = f"{before} {head_sha}\n"
+                else:
+                    raise AssertionError(f"unexpected git command: {command}")
+                return type("Result", (), {"stdout": stdout})()
+
+            def fake_git_bytes(revision, path):
+                if path == "install.ps1":
+                    version = version_before if revision == before else version_after
+                    return (
+                        f"[string]$Version = '{version}'\n"
+                        f"$ReleaseVersion = '{version}'\n"
+                    ).encode()
+                if path == "CHANGELOG.md":
+                    return (
+                        f"# Release notes\n## {version_after}\n"
+                        "### Highlights\nok\n### Capability limits\nok\n"
+                        "## Installation\nok\n## Verify installation\nok\n"
+                    ).encode()
+                if path in release.ASSET_PATHS.values():
+                    return b"candidate installer"
+                raise AssertionError(f"unexpected source read: {revision}:{path}")
+
+            env = {
+                "GITHUB_REPOSITORY": release.REPOSITORY,
+                "GITHUB_SHA": sha,
+                "GITHUB_REF": "refs/heads/master",
+                "GITHUB_TOKEN": "offline-test-token",
+                "GITHUB_OUTPUT": str(output_path),
+                "OLYMPUS_RELEASE_ENABLED": "true",
+            }
+            with (
+                mock.patch.dict(os.environ, env, clear=True),
+                mock.patch.object(release, "GitHub", return_value=api),
+                mock.patch.object(release.subprocess, "run", side_effect=fake_git),
+                mock.patch.object(release, "git_bytes", side_effect=fake_git_bytes),
+            ):
+                release.prepare(
+                    argparse.Namespace(event=str(event_path), out_dir=str(out_dir))
+                )
+
+            outputs = dict(
+                line.split("=", 1)
+                for line in output_path.read_text(encoding="utf-8").splitlines()
+            )
+            self.assertEqual(outputs["mode"], "provisional")
+            self.assertNotIn("release_id", outputs)
+            self.assertIn(f"/releases/tags/{version_after}", api.reads)
+
     def test_write_enabled_tag_guard_refuses_release_without_ref_before_any_write(self):
         version = "v1.2.3"
         sha = "a" * 40
@@ -705,6 +818,468 @@ class PreTagReleaseConflictTests(unittest.TestCase):
         self.assertIn(("GET", release_path), calls)
         self.assertLess(calls.index(("GET", tag_path)), calls.index(("GET", release_path)))
         self.assertFalse(any(method == "POST" for method, _ in calls), calls)
+
+
+class FakeDraftApi:
+    def __init__(self, version, sha, body, contents, *, existing_release=None, list_pages=None):
+        self.version = version
+        self.sha = sha
+        self.body = body
+        self.contents = contents
+        self.tag_sha = "f" * 40
+        self.tag_target_sha = sha
+        self.master_sha = sha
+        self.release = existing_release
+        self.list_pages = list_pages
+        self.calls = []
+        self.patch_ids = []
+
+    def response(self, payload):
+        return FakeResponse(payload)
+
+    def not_found(self, request):
+        raise urllib.error.HTTPError(request.full_url, 404, "Not Found", None, None)
+
+    def urlopen(self, request, timeout):
+        parsed = urllib.parse.urlparse(request.full_url)
+        prefix = f"/repos/{release.REPOSITORY}"
+        route = parsed.path.removeprefix(prefix)
+        query = urllib.parse.parse_qs(parsed.query)
+        method = request.get_method()
+        self.calls.append((method, parsed.netloc, route, query, request.data))
+
+        if parsed.netloc == "api.github.com":
+            if method == "GET" and route == "/immutable-releases":
+                return self.response({"enabled": True})
+            if method == "GET" and route == "/git/ref/heads/master":
+                return self.response({"object": {"sha": self.master_sha}})
+            if method == "GET" and route == f"/git/ref/tags/{self.version}":
+                return self.response({
+                    "ref": f"refs/tags/{self.version}",
+                    "object": {"type": "tag", "sha": self.tag_sha},
+                })
+            if method == "GET" and route == f"/git/tags/{self.tag_sha}":
+                return self.response({
+                    "tag": self.version,
+                    "message": release.tag_message(self.version, self.sha),
+                    "tagger": {"name": release.BOT_NAME, "email": release.BOT_EMAIL},
+                    "object": {"type": "commit", "sha": self.tag_target_sha},
+                })
+            if method == "GET" and route.startswith("/contents/"):
+                name = urllib.parse.unquote(route.rsplit("/", 1)[-1])
+                if query.get("ref") != [self.sha] or name not in self.contents:
+                    raise AssertionError(f"unexpected content request: {route} {query}")
+                return self.response({
+                    "type": "file",
+                    "encoding": "base64",
+                    "content": base64.b64encode(self.contents[name]).decode("ascii"),
+                })
+            if method == "GET" and route == f"/releases/tags/{self.version}":
+                return self.not_found(request)
+            if method == "GET" and route == "/releases":
+                page = int(query["page"][0])
+                if self.list_pages is not None:
+                    return self.response(self.list_pages.get(page, []))
+                return self.response([self.release] if self.release is not None else [])
+            if method == "POST" and route == "/releases":
+                if self.release is not None:
+                    raise AssertionError("draft create would duplicate an existing release")
+                payload = json.loads(request.data)
+                self.release = {
+                    "id": 456,
+                    **payload,
+                    "author": {"login": release.BOT_NAME},
+                    "published_at": None,
+                    "assets": [],
+                    "upload_url": (
+                        f"https://uploads.github.com/repos/{release.REPOSITORY}"
+                        "/releases/456/assets{?name,label}"
+                    ),
+                }
+                return self.response(self.release)
+            if method == "GET" and route == "/releases/latest":
+                if self.release is not None and self.release.get("draft") is False:
+                    return self.response(self.release)
+                return self.not_found(request)
+            if method == "GET" and re.fullmatch(r"/releases/[0-9]+", route):
+                if self.release is None:
+                    return self.not_found(request)
+                return self.response(self.release)
+            if method == "PATCH" and re.fullmatch(r"/releases/[0-9]+", route):
+                requested_id = int(route.rsplit("/", 1)[-1])
+                self.patch_ids.append(requested_id)
+                if self.release is None or requested_id != self.release.get("id"):
+                    return self.not_found(request)
+                payload = json.loads(request.data)
+                if payload != {"draft": False, "make_latest": "true"}:
+                    raise AssertionError(f"unexpected publish payload: {payload}")
+                self.release.update({
+                    "draft": False,
+                    "immutable": True,
+                    "published_at": "2026-01-01T00:00:00Z",
+                })
+                return self.response(self.release)
+
+        if parsed.netloc == "uploads.github.com" and method == "POST":
+            match = re.fullmatch(r"/releases/([0-9]+)/assets", route)
+            if match is None or self.release is None or int(match.group(1)) != self.release.get("id"):
+                return self.not_found(request)
+            name = query.get("name", [None])[0]
+            if name not in self.contents or request.data != self.contents[name]:
+                raise AssertionError(f"unexpected upload: {name}")
+            asset = {
+                "name": name,
+                "digest": "sha256:" + release.sha256(request.data),
+                "size": len(request.data),
+            }
+            self.release["assets"].append(asset)
+            return self.response(asset)
+
+        raise AssertionError(f"unexpected API operation: {method} {parsed.netloc}{route} {query}")
+
+
+class DraftReleaseWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        self.version = "v1.2.3"
+        self.sha = "a" * 40
+        self.body = "reviewed release notes\n"
+        self.contents = {
+            "install-olympus.ps1": b"windows installer",
+            "install-olympus.sh": b"linux installer",
+        }
+        self.expected = {
+            name: {
+                "sha256": release.sha256(content),
+                "size": len(content),
+            }
+            for name, content in self.contents.items()
+        }
+        self.draft_script = extract_release_job_script("draft")
+        self.publish_script = extract_release_job_script("publish")
+
+    def make_draft(self, *, release_id=456, target_sha=None, assets=None):
+        return {
+            "id": release_id,
+            "tag_name": self.version,
+            "target_commitish": self.sha if target_sha is None else target_sha,
+            "name": self.version,
+            "body": self.body,
+            "draft": True,
+            "prerelease": False,
+            "author": {"login": release.BOT_NAME},
+            "published_at": None,
+            "assets": list(assets or []),
+            "upload_url": (
+                f"https://uploads.github.com/repos/{release.REPOSITORY}"
+                f"/releases/{release_id}/assets{{?name,label}}"
+            ),
+        }
+
+    def env(self, output=None, *, mode="provisional", release_id="456"):
+        values = {
+            "REPOSITORY": release.REPOSITORY,
+            "GITHUB_TOKEN": "offline-test-token",
+            "RELEASE_VERSION": self.version,
+            "RELEASE_SHA": self.sha,
+            "RELEASE_MODE": mode,
+            "RELEASE_BODY_B64": base64.b64encode(self.body.encode()).decode(),
+            "RELEASE_BODY_SHA256": release.sha256(self.body.encode()),
+            "RELEASE_PS1_SHA256": self.expected["install-olympus.ps1"]["sha256"],
+            "RELEASE_SH_SHA256": self.expected["install-olympus.sh"]["sha256"],
+            "RELEASE_PS1_SIZE": str(self.expected["install-olympus.ps1"]["size"]),
+            "RELEASE_SH_SIZE": str(self.expected["install-olympus.sh"]["size"]),
+            "OLYMPUS_RELEASE_ENABLED": "true",
+            "OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED": "true",
+            "RELEASE_ID": release_id,
+        }
+        if output is not None:
+            values["GITHUB_OUTPUT"] = str(output)
+        return values
+
+    def run_script(self, script, api, env):
+        with (
+            mock.patch.dict(os.environ, env, clear=True),
+            mock.patch("urllib.request.urlopen", side_effect=api.urlopen),
+            redirect_stdout(io.StringIO()),
+        ):
+            exec(compile(script, "release.yml:embedded-job", "exec"), {})
+
+    def assert_no_release_writes(self, api):
+        writes = [
+            (method, route)
+            for method, _, route, _, _ in api.calls
+            if method in ("POST", "PATCH", "DELETE")
+        ]
+        self.assertEqual(writes, [])
+
+    def test_first_run_hands_off_numeric_id_and_publishes_by_id(self):
+        api = FakeDraftApi(self.version, self.sha, self.body, self.contents)
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "github-output"
+            self.run_script(self.draft_script, api, self.env(output, mode="create"))
+            self.assertEqual(output.read_text(encoding="utf-8"), "release_id=456\n")
+            self.assertEqual(api.release["target_commitish"], self.sha)
+            self.assertEqual(
+                {(asset["name"], asset["size"], asset["digest"]) for asset in api.release["assets"]},
+                {
+                    (name, item["size"], f"sha256:{item['sha256']}")
+                    for name, item in self.expected.items()
+                },
+            )
+            self.assertEqual(
+                [route for method, _, route, _, _ in api.calls if method == "POST"],
+                ["/releases", "/releases/456/assets", "/releases/456/assets"],
+            )
+            before_publish = len(api.calls)
+            self.run_script(
+                self.publish_script,
+                api,
+                self.env(release_id=output.read_text(encoding="utf-8").split("=", 1)[1].strip()),
+            )
+            publish_calls = api.calls[before_publish:]
+            self.assertEqual(api.patch_ids, [456])
+            self.assertFalse(
+                any(route.startswith("/releases/tags/") for _, _, route, _, _ in publish_calls)
+            )
+            self.assertEqual(api.release["draft"], False)
+            self.assertEqual(api.release["immutable"], True)
+            self.assertEqual(api.release["id"], 456)
+
+    def test_same_sha_resume_finds_hidden_draft_and_reuses_its_id(self):
+        first_asset = {
+            "name": "install-olympus.ps1",
+            "digest": f"sha256:{self.expected['install-olympus.ps1']['sha256']}",
+            "size": self.expected["install-olympus.ps1"]["size"],
+        }
+        api = FakeDraftApi(
+            self.version,
+            self.sha,
+            self.body,
+            self.contents,
+            existing_release=self.make_draft(assets=[first_asset]),
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "github-output"
+            self.run_script(self.draft_script, api, self.env(output, mode="provisional"))
+            self.assertEqual(output.read_text(encoding="utf-8"), "release_id=456\n")
+            self.assertFalse(any(method == "POST" and route == "/releases" for method, _, route, _, _ in api.calls))
+            self.assertEqual(
+                [route for method, _, route, _, _ in api.calls if method == "POST"],
+                ["/releases/456/assets"],
+            )
+            by_tag_reads = len([
+                call for call in api.calls if call[0] == "GET" and call[2].startswith("/releases/tags/")
+            ])
+            before_publish = len(api.calls)
+            self.run_script(
+                self.publish_script,
+                api,
+                self.env(release_id=output.read_text(encoding="utf-8").split("=", 1)[1].strip()),
+            )
+            publish_calls = api.calls[before_publish:]
+            self.assertEqual(api.patch_ids, [456])
+            self.assertFalse(
+                any(route.startswith("/releases/tags/") for _, _, route, _, _ in publish_calls)
+            )
+            self.assertEqual(
+                len([
+                    call for call in api.calls if call[0] == "GET" and call[2].startswith("/releases/tags/")
+                ]),
+                by_tag_reads,
+            )
+
+    def test_missing_or_ambiguous_draft_fails_before_any_write(self):
+        no_draft = FakeDraftApi(self.version, self.sha, self.body, self.contents)
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(SystemExit, "ORPHAN_TAG_CONFLICT"):
+                self.run_script(
+                    self.draft_script,
+                    no_draft,
+                    self.env(Path(temp) / "out", mode="provisional"),
+                )
+        self.assert_no_release_writes(no_draft)
+
+        first = self.make_draft()
+        fillers = [
+            {"id": 1000 + index, "tag_name": f"v9.{index}.0", "draft": True}
+            for index in range(99)
+        ]
+        second = self.make_draft(release_id=457)
+        duplicate_pages = {1: fillers + [first], 2: [second]}
+        duplicate = FakeDraftApi(
+            self.version,
+            self.sha,
+            self.body,
+            self.contents,
+            existing_release=first,
+            list_pages=duplicate_pages,
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(SystemExit, "DRAFT_RELEASE_AMBIGUOUS"):
+                self.run_script(
+                    self.draft_script,
+                    duplicate,
+                    self.env(Path(temp) / "out", mode="provisional"),
+                )
+        pages = [query["page"][0] for method, _, route, query, _ in duplicate.calls if method == "GET" and route == "/releases"]
+        self.assertEqual(pages, ["1", "2"])
+        self.assert_no_release_writes(duplicate)
+
+    def test_unusable_bounded_pagination_fails_closed(self):
+        full_pages = {
+            page: [
+                {"id": page * 100 + index, "tag_name": f"v9.{page}.{index}", "draft": True}
+                for index in range(100)
+            ]
+            for page in range(1, 11)
+        }
+        api = FakeDraftApi(
+            self.version,
+            self.sha,
+            self.body,
+            self.contents,
+            list_pages=full_pages,
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(SystemExit, "RELEASE_LIST_INCOMPLETE"):
+                self.run_script(
+                    self.draft_script,
+                    api,
+                    self.env(Path(temp) / "out", mode="provisional"),
+                )
+        pages = [query["page"][0] for method, _, route, query, _ in api.calls if method == "GET" and route == "/releases"]
+        self.assertEqual(pages, [str(page) for page in range(1, 11)])
+        self.assert_no_release_writes(api)
+
+    def test_wrong_id_body_or_asset_fails_before_draft_writes(self):
+        cases = (
+            (
+                self.make_draft(release_id=457),
+                [{"id": 456, "tag_name": self.version, "draft": True}],
+                "DRAFT_RELEASE_IDENTITY_INVALID",
+            ),
+            (
+                {**self.make_draft(), "body": "different notes"},
+                None,
+                "DRAFT_RELEASE_CONFLICT",
+            ),
+            (
+                self.make_draft(assets=[{
+                    "name": "install-olympus.ps1",
+                    "digest": "sha256:" + "0" * 64,
+                    "size": self.expected["install-olympus.ps1"]["size"],
+                }]),
+                None,
+                "DRAFT_ASSET_CONFLICT",
+            ),
+        )
+        for draft, list_page, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                pages = None if list_page is None else {1: list_page}
+                api = FakeDraftApi(
+                    self.version,
+                    self.sha,
+                    self.body,
+                    self.contents,
+                    existing_release=draft,
+                    list_pages=pages,
+                )
+                with tempfile.TemporaryDirectory() as temp:
+                    with self.assertRaisesRegex(SystemExit, expected_error):
+                        self.run_script(
+                            self.draft_script,
+                            api,
+                            self.env(Path(temp) / "out", mode="provisional"),
+                        )
+                self.assert_no_release_writes(api)
+
+        wrong_tag = FakeDraftApi(
+            self.version,
+            self.sha,
+            self.body,
+            self.contents,
+            existing_release=self.make_draft(),
+        )
+        wrong_tag.tag_target_sha = "d" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(SystemExit, "TAG_CONFLICT"):
+                self.run_script(
+                    self.draft_script,
+                    wrong_tag,
+                    self.env(Path(temp) / "out", mode="provisional"),
+                )
+        self.assert_no_release_writes(wrong_tag)
+
+    def test_publisher_rejects_bad_id_or_asset_without_patch(self):
+        api = FakeDraftApi(
+            self.version,
+            self.sha,
+            self.body,
+            self.contents,
+            existing_release=self.make_draft(assets=[
+                {
+                    "name": name,
+                    "digest": f"sha256:{item['sha256']}",
+                    "size": item["size"],
+                }
+                for name, item in self.expected.items()
+            ]),
+        )
+        with self.assertRaisesRegex(SystemExit, "DRAFT_RELEASE_ID_INVALID"):
+            self.run_script(self.publish_script, api, self.env(release_id="0"))
+        self.assertEqual(api.calls, [])
+
+        api.release["assets"][0]["size"] += 1
+        with self.assertRaisesRegex(SystemExit, "DRAFT_ASSET_CONFLICT"):
+            self.run_script(self.publish_script, api, self.env(release_id="456"))
+        self.assertEqual(api.patch_ids, [])
+        self.assert_no_release_writes(api)
+
+
+class TagDraftDiscoveryTests(unittest.TestCase):
+    def test_create_does_not_write_tag_when_authenticated_list_has_hidden_draft(self):
+        version = "v1.2.3"
+        sha = "a" * 40
+        calls = []
+        root = f"/repos/{release.REPOSITORY}"
+
+        def fake_urlopen(request, timeout):
+            parsed = urllib.parse.urlparse(request.full_url)
+            route = parsed.path.removeprefix(root)
+            method = request.get_method()
+            calls.append((method, route))
+            if (method, route) == ("GET", "/immutable-releases"):
+                return FakeResponse({"enabled": True})
+            if (method, route) == ("GET", "/git/ref/heads/master"):
+                return FakeResponse({"object": {"sha": sha}})
+            if (method, route) in (
+                ("GET", f"/git/ref/tags/{version}"),
+                ("GET", f"/releases/tags/{version}"),
+            ):
+                raise urllib.error.HTTPError(request.full_url, 404, "Not Found", None, None)
+            if method == "GET" and route == "/releases":
+                return FakeResponse([{"tag_name": version, "draft": True}])
+            raise AssertionError(f"unexpected API operation: {method} {route}")
+
+        env = {
+            "REPOSITORY": release.REPOSITORY,
+            "GITHUB_TOKEN": "offline-test-token",
+            "RELEASE_VERSION": version,
+            "RELEASE_SHA": sha,
+            "RELEASE_MODE": "create",
+            "OLYMPUS_RELEASE_ENABLED": "true",
+            "OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED": "true",
+        }
+        with (
+            mock.patch.dict(os.environ, env, clear=True),
+            mock.patch("urllib.request.urlopen", side_effect=fake_urlopen),
+            redirect_stdout(io.StringIO()),
+        ):
+            with self.assertRaisesRegex(SystemExit, "RELEASE_STATE_CONFLICT"):
+                exec(compile(extract_tag_guard_script(), "release.yml:tag-guard", "exec"), {})
+
+        self.assertTrue(calls)
+        self.assertTrue(all(method == "GET" for method, _ in calls))
 
 
 class PublicAssetVerificationTests(unittest.TestCase):
@@ -846,6 +1421,10 @@ class WorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("ref: ${{ github.sha }}", text)
         self.assertIn("pull-requests: read", text)
         self.assertIn("contents: write", text)
+        self.assertIn("release_id: ${{ steps.attach.outputs.release_id }}", text)
+        self.assertIn("RELEASE_ID: ${{ needs.draft.outputs.release_id }}", text)
+        self.assertIn("ps1_size: ${{ steps.plan.outputs.ps1_size }}", text)
+        self.assertNotIn("/releases/tags/", extract_release_job_script("publish"))
         for job in ("tag", "draft", "publish"):
             block = re.search(rf"(?ms)^  {job}:\n(?P<body>.*?)(?=^  [a-z][a-z-]*:\n|\Z)", text)
             self.assertIsNotNone(block, job)

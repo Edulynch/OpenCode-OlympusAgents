@@ -2,8 +2,92 @@
 
 ## [Unreleased]
 
-- Carry applicable validation evidence across PR, CI, and release handoffs; request only the smallest check for a named acceptance gap, without repeating checks solely because the stage changed. Required reviews and release gates remain in force.
+## v0.12.8
+
+### Highlights
+
+- Since the public v0.12.3 release, add standalone workflows with evidence handling; clarify supported scope and evidence; keep Kael coordinator-only; and distinguish tool results from native permission and user-decision evidence.
+- Carry applicable validation evidence across PR, CI, and release handoffs, requesting only the smallest check for a named gap. Separate `develop` contributor CI from manually merged `develop` → `master` promotion, and add the opt-in provenance-checked immutable GitHub Release path without a migration-time version bump.
+- Fix the numeric release-draft ID handoff and allow a same-SHA draft to resume without repeating an already-completed mutation.
+- Fix Windows release qualification when `TEMP`/`TMP` points to a fresh missing parent by creating the `opencode` temp directory before writing qualification receipts and transcripts.
+- Fix Windows tagged-source qualification by keeping process temporary files at a short runner-temp root and validating the explicit Git archive inventory before running extracted source without `.git` metadata.
+
+### Capability limits
+
+- Mocked candidate qualification does not establish public tagged-archive or public-endpoint install, `VerifyOnly`, or uninstall behavior, and does not exercise a live OpenCode session or native permission decisions. No native Linux/macOS or WSL first-task support is claimed.
+- Hosted contributor CI, human-only manual promotion, public-tag validation, and public-endpoint lifecycle qualification remain separate gates.
+
+## Installation
+
+This PR prepares v0.12.8; it is not publicly available yet. When published, use **Fast Install** or **Fast Uninstall** from the [v0.12.8 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.8/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+After publication, see [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.8/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+
+## v0.12.7
+
+### Highlights
+
+- Since the public v0.12.3 release, add standalone workflows with evidence handling; clarify supported scope and evidence; keep Kael coordinator-only; and distinguish tool results from native permission and user-decision evidence.
+- Carry applicable validation evidence across PR, CI, and release handoffs, requesting only the smallest check for a named gap. Separate `develop` contributor CI from manually merged `develop` → `master` promotion, and add the opt-in provenance-checked immutable GitHub Release path without a migration-time version bump.
+- Fix Windows release qualification when `TEMP`/`TMP` points to a fresh missing parent by creating the `opencode` temp directory before writing qualification receipts and transcripts. The clean-root mocked qualification passed 60 markers after reproducing the missing-parent failure.
+- Fix Windows tagged-source qualification by keeping process temporary files at a short runner-temp root and validating the Git-created archive inventory before running the extracted source without `.git` metadata.
+
+### Capability limits
+
+- Mocked qualification and Windows contributor CI are not public tagged-archive qualification or a public-endpoint install, `VerifyOnly`, or uninstall result. Linux lifecycle evidence remains limited to Ubuntu 24.04 under WSL 2; no WSL first-task, native Linux/macOS, or broader platform support is claimed.
+- Static and mocked checks do not establish live native ASK UI or user approval/rejection. Hosted contributor CI, manual promotion, public-tag validation, and public-endpoint lifecycle qualification remain separate gates.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.12.7 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.7/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.7/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+
+## v0.12.6
+
+### Highlights
+
+- Since the public v0.12.3 release, add standalone workflows with evidence handling; clarify supported scope and evidence; keep Kael coordinator-only; and distinguish tool results from native permission and user-decision evidence.
+- Carry applicable validation evidence across PR, CI, and release handoffs, requesting only the smallest check for a named gap. Separate `develop` contributor CI from manually merged `develop` → `master` promotion, and add the opt-in provenance-checked immutable GitHub Release path without a migration-time version bump.
+- Fix Windows release qualification when `TEMP`/`TMP` points to a fresh missing parent by creating the `opencode` temp directory before writing qualification receipts and transcripts. The clean-root mocked qualification passed 60 markers after reproducing the missing-parent failure.
+
+### Capability limits
+
+- The Windows clean-`TEMP` result is mocked qualification evidence, not a public-endpoint install, `VerifyOnly`, or uninstall result. Linux lifecycle evidence remains limited to Ubuntu 24.04 under WSL 2; no WSL first-task, native Linux/macOS, or broader platform support is claimed.
+- Static and mocked checks do not establish live native ASK UI or user approval/rejection. Hosted contributor CI, manual promotion, public-tag validation, and public-endpoint lifecycle qualification remain separate gates.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.12.6 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.6/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.6/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+
+## v0.12.5
+
+### Highlights
+
+- Add standalone workflows with evidence handling; clarify supported scope and evidence, keep Kael coordinator-only, and distinguish tool results from native permission and user-decision observability.
+- Carry applicable validation evidence across PR, CI, and release handoffs; request only the smallest check for a named acceptance gap without repeating checks solely because the stage changed. Required reviews and release gates remain in force.
 - Separate contributor CI on `develop` from manually merged `develop` → `master` promotions; add an opt-in, provenance-checked immutable GitHub Release path with no migration-time version bump.
+
+### Capability limits
+
+- The Windows first-task result remains user-reported after an unpublished install; it does not verify public release bytes or provenance. Linux lifecycle evidence is separate and limited to Ubuntu 24.04 in WSL 2; no WSL first-task, native Linux/macOS, or broader platform support is claimed.
+- Static and mocked checks do not establish live native ASK UI or user approval/rejection. Contributor CI, manual promotion, public-tag validation, and public-endpoint installation/VerifyOnly/uninstall qualification remain separate gates.
+
+## Installation
+
+When published, use **Fast Install** or **Fast Uninstall** from the [v0.12.5 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.5/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+After publication, see [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.5/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
 
 ## v0.12.4
 

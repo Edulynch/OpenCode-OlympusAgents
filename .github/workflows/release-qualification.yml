@@ -1,0 +1,33 @@
+name: Release / read-only hosted qualification
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  qualify:
+    if: ${{ github.repository == 'Edulynch/OpenCode-OlympusAgents' && github.ref == 'refs/heads/develop' && vars.OLYMPUS_RELEASE_ENABLED == 'false' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout exact dispatch SHA without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Verify current master no-op and existing tag conflict using read-only API
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OLYMPUS_RELEASE_ENABLED: ${{ vars.OLYMPUS_RELEASE_ENABLED }}
+        run: python -B .github/release.py qualify-hosted-readonly

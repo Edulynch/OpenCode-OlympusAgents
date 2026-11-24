@@ -38,6 +38,33 @@ For a new version, aligned stable installer markers, a reviewed versioned
 changelog block, monotonicity over the prior candidate and latest public
 release, and a collision-free tag are required.
 
+### Hosted read-only qualification
+
+After the separate qualification workflow is merged to the protected default
+`develop`, a maintainer may manually dispatch **Release / read-only hosted
+qualification** from `develop` while `OLYMPUS_RELEASE_ENABLED` is exactly
+`false`. The job is limited to the canonical repository and `develop`; it has
+only `contents: read` and `pull-requests: read`, does not persist checkout
+credentials, and its dedicated API client can issue only GET requests.
+
+The run checks the dispatch SHA against current `develop`, then reads current
+`master`, its two parents, and associated PR metadata. It requires the current
+master SHA to be the exact merge commit of one closed, merged canonical
+`develop` → `master` PR whose head SHA is the merge's second parent. It reads
+`install.ps1` at the first parent and current master and uses the release
+helper's existing stable-version and no-op classifier; only equal installer
+versions qualify as a no-op. It then selects GitHub's latest published stable
+release, resolves its exact annotated tag, and confirms that its commit differs
+from current master and is rejected by the production `TAG_CONFLICT` predicate.
+Missing, malformed, or non-conflicting tag state fails closed as
+`TAG_CONFLICT_NOT_EVALUATED`, not as a successful smoke.
+
+This workflow creates or changes no tag or release and cannot verify
+`contents: write` draft visibility or the public installer endpoint lifecycle.
+It does not enable release, select a version, or replace the production
+`master`-push workflow. It is a hosted read-only metadata rehearsal, not release
+authorization or an installability claim.
+
 GitHub's repository immutable-release settings endpoint requires administrator
 read access, which the ordinary Actions token may not have. The workflow uses
 the endpoint when accessible and fails if it reports immutability disabled. If
@@ -76,12 +103,33 @@ verify its bytes match the tag; publish only with immutability enabled.
 
 After publication, the workflow verifies `releases/latest`, immutable stable
 metadata, the exact annotated tag and both public asset bytes. This is not a
-real installer lifecycle: the public latest-endpoint install/VerifyOnly/
-uninstall check remains pending for an isolated supported Windows environment
-and the documented Linux route. Mocked or local tag qualification is not
+complete installer lifecycle. The Linux v0.12.8 route has separately passed;
+the Windows public latest-endpoint install/VerifyOnly/uninstall check remains
+pending until its hosted run passes. Mocked or local tag qualification is not
 equivalent to that endpoint gate. Do not announce availability until the
 separate lifecycle evidence is complete; never point executable installation
 sources at `master` or `develop`.
+
+The [`public Windows lifecycle workflow`](../.github/workflows/public-windows-lifecycle.yml)
+runs only for same-repository PRs to `develop` that change this workflow or
+`tests/release/verify-windows-public-lifecycle.ps1`. It uses a GitHub-hosted
+`windows-2025` VM, a read-only checkout token, the verified public
+`install-olympus.ps1` asset, the exact tagged `install.ps1 -VerifyOnly`, and
+the tagged public uninstaller. The script independently checks immutable
+release metadata, the annotated tag object and peeled commit, the asset
+SHA-256/size, and GitHub's canonical blob for the tagged installer before
+executing those files. Its `PUBLIC_WINDOWS_LIFECYCLE: PASS` output is the
+hosted acceptance result; local guard/static checks do not establish it.
+
+The installer changes the disposable runner account's user PATH as its normal
+behavior. All other profile/config/CLI roots and an OpenCode config sentinel
+are fixture-isolated; the existing deterministic OpenCode stub is used, with
+no live OpenCode, model, provider, or agent evidence. A `.git`-less public
+archive may record `installed_from_commit: "unknown"`: the test reports that
+value without treating it as provenance. The release commit is verified
+separately through the exact immutable release and annotated tag, so the
+manifest's `unknown` is not substituted for source verification. This check
+does not independently verify a cryptographic signature.
 
 The intended public URL is:
 `https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1`.
@@ -750,8 +798,12 @@ An unchanged version is a successful migration no-op even if a historical tag
 exists. A changed version colliding with any existing tag/release—including
 the historical `v0.12.4` tag at its different target—is a hard conflict. Do not
 move, delete, or recreate tags to recover. Only an exact matching draft can
-resume; an orphan or conflicting tag requires maintainer investigation and an
-authorized later version.
+resume. Because the public release-by-tag endpoint may return 404 for drafts, a
+valid matching tag with no public release is only a provisional candidate
+state: the write-enabled draft stage must enumerate the bounded authenticated
+release list and re-read exactly one same-tag draft by numeric ID. A missing,
+duplicate, or unverifiable draft is an orphan/conflict requiring maintainer
+investigation and an authorized later version.
 
 GitHub concurrency is serial but not FIFO: a newer pending run may replace an
 older pending run. If a candidate becomes stale before a write, the workflow

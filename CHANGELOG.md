@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## v0.12.9
+
+### Highlights
+
+- Align all eleven OpenCode role configurations with OpenCode 2.4.0, including updated automation/browser rules and job-aware passive Activity HUD status with fallback behavior (#217).
+- Narrow OpenCode 2.4.1 adjustments to the Windows Kael-to-Veyra handoff and Activity HUD; update Linux/WSL2 runtime badge and XERJ project-link documentation (#218).
+- Add a hosted Windows public-installer lifecycle qualification workflow for immutable tagged-source, asset, and install/VerifyOnly/uninstall checks (#216).
+
+### Capability limits
+
+- A local mocked qualification does not establish a public v0.12.9 tag or endpoint result; Windows public latest-endpoint install/VerifyOnly/uninstall remains a separate hosted acceptance gate.
+- OpenCode 2.4.1 changes are limited to the stated Windows handoff and Activity HUD scope; Linux/WSL2 badges and the XERJ link are documentation, not platform or project runtime qualification. No universal OpenCode/Linux, Desktop/catalog, or broader compatibility claim is made.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.12.9 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.9/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.9/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+
 ## v0.12.8
 
 ### Highlights
@@ -19,11 +40,11 @@
 
 ## Installation
 
-This PR prepares v0.12.8; it is not publicly available yet. When published, use **Fast Install** or **Fast Uninstall** from the [v0.12.8 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.8/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+Use **Fast Install** or **Fast Uninstall** from the [v0.12.8 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.8/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
 
 ## Verify installation
 
-After publication, see [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.8/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.8/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
 
 ## v0.12.7
 

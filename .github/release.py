@@ -251,7 +251,7 @@ def classify_existing_release(
     body: str,
     expected_assets: dict[str, str],
 ) -> str:
-    """Return noop/create/resume/published, rejecting any conflicting state."""
+    """Return noop/create/provisional/resume/published, rejecting conflicts."""
     before_key = version_key(version_before)
     after_key = version_key(version_after)
     if version_after == version_before:
@@ -278,7 +278,9 @@ def classify_existing_release(
         reject("TAG_OBJECT_MISSING", "annotated tag object cannot be resolved")
     _require_tag(tag_ref, tag_object, version_after, sha)
     if release is None:
-        reject("ORPHAN_TAG_CONFLICT", "existing tag has no matching owned draft or public release")
+        # The public release-by-tag endpoint does not expose every draft.
+        # Write-enabled jobs must resolve this provisional state by release ID.
+        return "provisional"
 
     by_name = _validate_release_identity(release, version_after, body, expected_assets)
     if release.get("draft") is True:
@@ -766,8 +768,19 @@ def prepare(args: argparse.Namespace) -> None:
     tag_path = "/git/ref/tags/" + urllib.parse.quote(version_after, safe="")
     tag_ref = api.get(tag_path, optional=True)
     release_path = "/releases/tags/" + urllib.parse.quote(version_after, safe="")
-    release = api.get(release_path, optional=True)
-    if release is not None and not isinstance(release, dict):
+    try:
+        release_status, release = api.request("GET", release_path)
+    except ApiError as error:
+        if error.status != 404:
+            raise
+        release_status, release = 404, None
+    if release_status == 200 and release is None:
+        reject("RELEASE_METADATA_INVALID", "release-by-tag returned an empty response")
+    if release_status not in (200, 404):
+        reject("RELEASE_METADATA_INVALID", "release-by-tag returned an unexpected status")
+    if release_status == 404:
+        release = None
+    elif not isinstance(release, dict):
         reject("RELEASE_METADATA_INVALID", "release-by-tag response is malformed")
     tag_object = None
     if tag_ref is not None:
@@ -795,6 +808,8 @@ def prepare(args: argparse.Namespace) -> None:
             "body_sha256": sha256(body.encode("utf-8")),
             "ps1_sha256": expected_assets["install-olympus.ps1"],
             "sh_sha256": expected_assets["install-olympus.sh"],
+            "ps1_size": str(len(assets["install-olympus.ps1"])),
+            "sh_size": str(len(assets["install-olympus.sh"])),
             "immutability_evidence": immutability_evidence,
         })
         return
@@ -825,6 +840,8 @@ def prepare(args: argparse.Namespace) -> None:
         "body_sha256": body_hash,
         "ps1_sha256": expected_assets["install-olympus.ps1"],
         "sh_sha256": expected_assets["install-olympus.sh"],
+        "ps1_size": str(len(assets["install-olympus.ps1"])),
+        "sh_size": str(len(assets["install-olympus.sh"])),
         "immutability_evidence": immutability_evidence,
     }
     write_output(output)

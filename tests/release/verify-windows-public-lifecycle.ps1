@@ -150,7 +150,7 @@ function Assert-PathAdded([string[]]$Before, [string]$AfterValue, [string]$Manag
             [StringComparison]::OrdinalIgnoreCase)
     })
     if ($managed.Count -ne 1 -or -not (Test-SequenceEqual $other $Before)) {
-        throw 'USER_PATH_INSTALL_MISMATCH: installation must add exactly its managed bin while preserving other entries.'
+        throw 'USER_PATH_INSTALL_MISMATCH: installation must add exactly its managed bin while preserving the controlled fixture entries.'
     }
 }
 
@@ -160,7 +160,7 @@ function Assert-PathRestored([string[]]$Before, [string]$AfterValue, [string]$Ma
             [string]::Equals((Normalize-PathEntry $_), (Normalize-PathEntry $ManagedBin),
                 [StringComparison]::OrdinalIgnoreCase)
         }).Count -ne 0 -or -not (Test-SequenceEqual $after $Before)) {
-        throw 'USER_PATH_UNINSTALL_MISMATCH: uninstall did not remove only the managed entry and preserve all other entries.'
+        throw 'USER_PATH_UNINSTALL_MISMATCH: uninstall must remove only its managed entry and preserve the controlled fixture entries.'
     }
 }
 
@@ -246,6 +246,9 @@ $uninstallSucceeded = $false
 $environmentCaptured = $false
 $failure = $null
 $cleanupFailure = $null
+$userPathRestoreRequired = $false
+$userPathRestored = $false
+$userPathRestoreFailure = $null
 $originalEnvironment = @{}
 $environmentNames = @(
     'PATH','TEMP','TMP','TMPDIR','USERPROFILE','HOME','APPDATA','LOCALAPPDATA',
@@ -257,6 +260,7 @@ $environmentNames = @(
     'PYTHONDONTWRITEBYTECODE'
 )
 
+try {
 try {
     $script:PwshPath = (Get-Command pwsh.exe -CommandType Application -ErrorAction Stop).Source
     $latest = Get-GitHubJson "$ApiRoot/releases/latest"
@@ -398,15 +402,44 @@ try {
 
     $cliRoot = Join-Path $localAppData 'Programs/Olympus'
     $cliBin = Join-Path $cliRoot 'bin'
+    $pathSentinelBins = @(
+        (Join-Path $fixtureRoot 'user-path-sentinels/one/bin'),
+        (Join-Path $fixtureRoot 'user-path-sentinels/two/bin')
+    )
+    foreach ($path in $pathSentinelBins) {
+        [IO.Directory]::CreateDirectory($path) | Out-Null
+    }
+    $fixtureRootPrefix = [IO.Path]::GetFullPath($fixtureRoot).TrimEnd([char[]]@('\','/')) +
+        [IO.Path]::DirectorySeparatorChar
+    $fixtureUserPathEntries = [Collections.Generic.List[string]]::new()
+    $distinctPathEntries = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($path in $pathSentinelBins) {
+        $full = [IO.Path]::GetFullPath($path)
+        if (-not [IO.Path]::IsPathFullyQualified($full) -or
+            $full.Contains([IO.Path]::PathSeparator) -or
+            -not $full.StartsWith($fixtureRootPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+            -not (Test-Path -LiteralPath $full -PathType Container) -or
+            -not $distinctPathEntries.Add($full)) {
+            throw 'USER_PATH_FIXTURE_INVALID: sentinel bins must be distinct existing directories inside the unique fixture root.'
+        }
+        $fixtureUserPathEntries.Add($full)
+    }
+    if ($fixtureUserPathEntries.Count -lt 2) {
+        throw 'USER_PATH_FIXTURE_INVALID: at least two controlled sentinel bins are required.'
+    }
+    $fixtureUserPathEntries = $fixtureUserPathEntries.ToArray()
+    $fixtureUserPath = [string]::Join([IO.Path]::PathSeparator, $fixtureUserPathEntries)
+    # Replace incidental runner entries only after the hosted guard; restore their exact original value in the enclosing finally.
     $originalUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     $originalMachinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
-    $originalUserPathEntries = @(Get-PathEntries $originalUserPath)
-    if (@($originalUserPathEntries | Where-Object {
-            [string]::Equals((Normalize-PathEntry $_), (Normalize-PathEntry $cliBin),
-                [StringComparison]::OrdinalIgnoreCase)
-        }).Count -gt 0) {
-        throw 'USER_PATH_BASELINE_CONFLICT: disposable runner already contains the fixture CLI path.'
+    $userPathRestoreRequired = $true
+    [Environment]::SetEnvironmentVariable('Path', $fixtureUserPath, 'User')
+    $configuredUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if (-not [string]::Equals($configuredUserPath, $fixtureUserPath, [StringComparison]::Ordinal) -or
+        -not (Test-SequenceEqual @(Get-PathEntries $configuredUserPath) $fixtureUserPathEntries)) {
+        throw 'USER_PATH_FIXTURE_SET_FAILED: disposable User PATH does not exactly match the controlled sentinel baseline.'
     }
+    Write-Output 'PUBLIC_WINDOWS_LIFECYCLE_USER_PATH_BASELINE: PASS fixture_entries=2 unrelated_values_controlled=true'
 
     $globalManifestPath = Join-Path $configRoot 'olympus/orchestrator-install.json'
     $installAttempted = $true
@@ -429,7 +462,7 @@ try {
         @($installed.Manifest.managed_files | Where-Object { $_.path -ceq 'opencode.jsonc' }).Count -ne 0) {
         throw 'PUBLIC_INSTALL_USER_CONFIG_MISMATCH: install did not preserve ownership of the sentinel config.'
     }
-    Assert-PathAdded $originalUserPathEntries ([Environment]::GetEnvironmentVariable('Path', 'User')) $cliBin
+    Assert-PathAdded $fixtureUserPathEntries ([Environment]::GetEnvironmentVariable('Path', 'User')) $cliBin
     if ([Environment]::GetEnvironmentVariable('Path', 'Machine') -cne $originalMachinePath) {
         throw 'MACHINE_PATH_CHANGED: public install must never change machine PATH.'
     }
@@ -532,7 +565,7 @@ try {
         $installedAgain.Manifest.installed_version -cne $installed.Manifest.installed_version) {
         throw 'PUBLIC_INSTALL_MANIFEST_CHANGED: manifest identity drifted during VerifyOnly.'
     }
-    Assert-PathAdded $originalUserPathEntries ([Environment]::GetEnvironmentVariable('Path', 'User')) $cliBin
+    Assert-PathAdded $fixtureUserPathEntries ([Environment]::GetEnvironmentVariable('Path', 'User')) $cliBin
     Write-Output "PUBLIC_VERIFY_ONLY: PASS version=$Version read_only=true live_opencode_calls=0"
 
     $latestBeforeUninstall = Get-GitHubJson "$ApiRoot/releases/latest"
@@ -584,7 +617,7 @@ if ($installAttempted -and $null -eq $failure) {
             [Convert]::ToBase64String([IO.File]::ReadAllBytes($sentinelPath)) -cne $originalSentinel) {
             throw 'PUBLIC_UNINSTALL_USER_DATA_CHANGED: sentinel config or binary bytes were not preserved.'
         }
-        Assert-PathRestored $originalUserPathEntries ([Environment]::GetEnvironmentVariable('Path', 'User')) $cliBin
+        Assert-PathRestored $fixtureUserPathEntries ([Environment]::GetEnvironmentVariable('Path', 'User')) $cliBin
         if ([Environment]::GetEnvironmentVariable('Path', 'Machine') -cne $originalMachinePath) {
             throw 'MACHINE_PATH_CHANGED: public uninstall changed machine PATH.'
         }
@@ -598,7 +631,7 @@ if ($installAttempted -and $null -eq $failure) {
             }
         }
         $uninstallSucceeded = $true
-        Write-Output "PUBLIC_UNINSTALL: PASS managed_files_removed=$($installed.ManagedPaths.Count) cli_payload_files_removed=$($managedCliFiles.Count) user_path_entries_preserved=true user_config_bytes_preserved=true sentinel_bytes_preserved=true machine_path_unchanged=true"
+        Write-Output "PUBLIC_UNINSTALL: PASS managed_files_removed=$($installed.ManagedPaths.Count) cli_payload_files_removed=$($managedCliFiles.Count) user_path_fixture_entries_preserved=true user_config_bytes_preserved=true sentinel_bytes_preserved=true machine_path_unchanged=true"
     } catch {
         $cleanupFailure = $_.Exception.Message
     }
@@ -609,11 +642,39 @@ if ($environmentCaptured) {
         [Environment]::SetEnvironmentVariable($name, $originalEnvironment[$name], 'Process')
     }
 }
+} catch {
+    if ($null -eq $failure) {
+        $failure = $_.Exception.Message
+    } elseif ($null -eq $cleanupFailure) {
+        $cleanupFailure = $_.Exception.Message
+    }
+} finally {
+    if ($userPathRestoreRequired) {
+        try {
+            [Environment]::SetEnvironmentVariable('Path', $originalUserPath, 'User')
+            $restoredUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+            if (-not [string]::Equals($restoredUserPath, $originalUserPath, [StringComparison]::Ordinal)) {
+                throw 'The original disposable User PATH value was not restored exactly.'
+            }
+            $userPathRestored = $true
+        } catch {
+            $userPathRestoreFailure = $_.Exception.Message
+        }
+    }
+}
+if ($userPathRestoreRequired) {
+    if ($userPathRestored) {
+        Write-Output 'PUBLIC_WINDOWS_LIFECYCLE_USER_PATH_RESTORE: PASS exact_original_value=true'
+    } else {
+        Write-Output "PUBLIC_WINDOWS_LIFECYCLE_USER_PATH_RESTORE: FAIL detail=$userPathRestoreFailure"
+        if ($null -eq $failure) { $failure = 'USER_PATH_RESTORE_FAILED' }
+    }
+}
 if ($null -eq $failure -and $null -ne $cleanupFailure) { $failure = $cleanupFailure }
 if ($null -ne $failure) {
     Write-Output "PUBLIC_WINDOWS_LIFECYCLE: FAIL reason=$failure"
     if ($null -ne $cleanupFailure) {
-        Write-Output "PUBLIC_WINDOWS_LIFECYCLE_CLEANUP: FAIL reason=$cleanupFailure (the hosted runner will be discarded; PATH was not repaired by the test)"
+        Write-Output "PUBLIC_WINDOWS_LIFECYCLE_CLEANUP: FAIL reason=$cleanupFailure"
     }
     exit 1
 }
@@ -627,4 +688,4 @@ try {
     Write-Output "PUBLIC_WINDOWS_LIFECYCLE: FAIL reason=fixture cleanup failed under runner temp: $($_.Exception.Message)"
     exit 1
 }
-Write-Output "PUBLIC_WINDOWS_LIFECYCLE: PASS version=$Version commit=$ExpectedCommit manifest_from_commit=$($installed.Commit) manifest_commit_attests=$($manifestCommitAttests.ToString().ToLowerInvariant()) host=github-hosted-windows disposable_user_path=true mocked_opencode=true"
+Write-Output "PUBLIC_WINDOWS_LIFECYCLE: PASS version=$Version commit=$ExpectedCommit manifest_from_commit=$($installed.Commit) manifest_commit_attests=$($manifestCommitAttests.ToString().ToLowerInvariant()) host=github-hosted-windows disposable_user_path=true user_path_fixture_entries=$($fixtureUserPathEntries.Count) mocked_opencode=true"

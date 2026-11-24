@@ -3,6 +3,12 @@ description: Read-only researcher worker for bounded repository and documentatio
 mode: subagent
 model: "{{opencode_model}}#{{effort}}"
 permissions:
+  - action: automation_*
+    resource: "*"
+    effect: deny
+  - action: browser
+    resource: "*"
+    effect: deny
   - action: edit
     resource: "*"
     effect: deny

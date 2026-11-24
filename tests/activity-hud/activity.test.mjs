@@ -22,6 +22,50 @@ test("H5 running direct children appear and disappear on native status transitio
   assert.deepEqual(activeChildren("root", sessions, status([])), [])
 })
 
+test("H5 idle direct child stays visible for its active shell job", () => {
+  const sessions = [root, child("a", "nox")]
+  const jobs = [{ kind: "shell", sessionID: "a", status: "running" }]
+  assert.deepEqual(activeChildren("root", sessions, status([]), jobs).map((row) => row.id), ["a"])
+})
+
+test("H5 all v2.4 job kinds use their native ownership anchor", () => {
+  const sessions = [root, child("a", "nox")]
+  for (const kind of ["shell", "subagent", "image", "video", "codemode"]) {
+    const job = kind === "subagent"
+      ? { kind, sessionID: "root", childSessionID: "a", status: "running" }
+      : { kind, sessionID: "a", status: "running" }
+    assert.deepEqual(activeChildren("root", sessions, status([]), [job]).map((row) => row.id), ["a"], kind)
+  }
+})
+
+test("H5 active subagent jobs belong to a represented direct-child tree, not extra rows", () => {
+  const sessions = [root, child("a", "nox"), child("nested", "orin", "Nested work", "a")]
+  const jobs = [{ kind: "subagent", sessionID: "root", childSessionID: "nested", status: "running" }]
+  assert.deepEqual(activeChildren("root", sessions, status([]), jobs).map((row) => row.id), ["a"])
+  assert.deepEqual(activeChildren("root", [root, child("a", "nox")], status([]), jobs), [])
+})
+
+test("H5 root-owned, unknown-family, settled, and missing-status jobs do not activate a child", () => {
+  const sessions = [root, child("a", "nox")]
+  const jobs = [
+    { kind: "shell", sessionID: "root", status: "running" },
+    { kind: "shell", sessionID: "a", status: "completed" },
+    { kind: "automation", sessionID: "a", status: "running" },
+    { kind: "image", sessionID: "a" },
+  ]
+  assert.deepEqual(activeChildren("root", sessions, status([]), jobs), [])
+})
+
+test("H5 multiple jobs produce one row per direct child and parent cycles terminate", () => {
+  const sessions = [root, child("a", "nox"), child("cycle-a", "orin", "Cycle", "cycle-b"), child("cycle-b", "veyra", "Cycle", "cycle-a")]
+  const jobs = [
+    { kind: "shell", sessionID: "a", status: "running" },
+    { kind: "shell", sessionID: "a", status: "running" },
+    { kind: "shell", sessionID: "cycle-a", status: "running" },
+  ]
+  assert.deepEqual(activeChildren("root", sessions, status([]), jobs).map((row) => row.id), ["a"])
+})
+
 test("H6 duplicate sessions remain distinct rows", () => {
   const rows = activeChildren("root", [root, child("a", "unknown-role"), child("b", "unknown-role")], status(["a", "b"]))
   assert.deepEqual(rows.map((row) => row.id), ["a", "b"])
@@ -40,6 +84,8 @@ test("H8 slot is passive and only reads native state", () => {
   assert.match(view, /append: "session\.composer\.top"/)
   assert.match(view, /context\.data\.session\.list\(\)/)
   assert.match(view, /context\.data\.session\.status\(id\)/)
+  assert.match(view, /job\?\.list\(sessionID\)/)
+  assert.doesNotMatch(view, /job\.(?:sync|invalidate)\(/)
   assert.doesNotMatch(view, /\b(?:onMouse\w*|onKey\w*|keymap|navigate|interrupt|cancel|setInterval|setTimeout|client\.)\b/)
   assert.match(view, /slice\(0, 4\)/)
 })

@@ -1878,7 +1878,7 @@ try {
         $integrationRouteSource -match 'AUTHORITY_INTEGRATION_CONTEXT: PASS' -and
         $integrationRouteSource -notmatch 'AUTHORITY_PLUGIN_ACTIVATION|Start-Sleep|while\s*\(' -and
         $normalizedQualificationDocs -match 'a 200 may arrive before plugin activation completes.*?not a readiness signal.*?bounded internal wait.*?no polling loop or arbitrary sleep' -and
-        $normalizedQualificationDocs -match 'pre-edit baseline.*?did not prove uniqueness of all 11.*?Post-edit.*?has not yet been run'
+        $normalizedQualificationDocs -match '`AUTH14_OPENCODE_EFFECTIVE_RULES PASS`.*?all 11 Olympus IDs exactly once.*?effective DENY for all 66 checks.*?did not establish plugin activation/readiness'
     )
     $badPermissionProbe = Inspect-EffectiveRules 0 '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"deny"}]}]'
     Check 'AUTH14_SINGLE_KOVAN_RULE_MISMATCH_FAILS' (-not $badPermissionProbe.passed -and

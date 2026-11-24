@@ -164,12 +164,21 @@ function Assert-PathRestored([string[]]$Before, [string]$AfterValue, [string]$Ma
     }
 }
 
-function Get-TreeSnapshot([string]$Root) {
+function Get-TreeSnapshot([string]$Root, [switch]$IgnorePowerShellStartupProfileCache) {
     $records = [Collections.Generic.List[string]]::new()
     $base = [IO.Path]::GetFullPath($Root).TrimEnd([char[]]@('\','/'))
     foreach ($item in @(Get-ChildItem -LiteralPath $base -Recurse -Force -ErrorAction Stop |
             Sort-Object FullName)) {
         $relative = $item.FullName.Substring($base.Length + 1).Replace('\','/')
+        # Noninteractive PowerShell may create this host startup profile-optimization cache.
+        if ($IgnorePowerShellStartupProfileCache -and
+            [string]::Equals($relative,
+                'profile/AppData/Local/Microsoft/PowerShell/StartupProfileData-NonInteractive',
+                [StringComparison]::Ordinal) -and
+            $item -is [IO.FileInfo] -and
+            ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
+            continue
+        }
         if ($item.PSIsContainer) {
             $records.Add("D:$relative")
         } else {
@@ -627,7 +636,7 @@ try {
     Write-Output "PUBLIC_INSTALL_MANIFEST: PASS installed_version=$Version installed_from_commit=$($installed.Commit) manifest_commit_attests=$($manifestCommitAttests.ToString().ToLowerInvariant()) source_identity=independently_verified"
     Write-Output "PUBLIC_CLI_VERSION: PASS $($cliOutput -join ' ')"
 
-    $beforeVerify = Get-TreeSnapshot $fixtureRoot
+    $beforeVerify = Get-TreeSnapshot $fixtureRoot -IgnorePowerShellStartupProfileCache
     $pathBeforeVerify = [Environment]::GetEnvironmentVariable('Path', 'User')
     $machinePathBeforeVerify = [Environment]::GetEnvironmentVariable('Path', 'Machine')
     $verifyCallLog = Join-Path $runRoot 'verify-only-opencode-calls.log'
@@ -644,7 +653,7 @@ try {
         $env:OLYMPUS_VERIFYONLY_PROBE = $null
         $env:OLYMPUS_VERIFYONLY_CALL_LOG = $null
     }
-    $afterVerify = Get-TreeSnapshot $fixtureRoot
+    $afterVerify = Get-TreeSnapshot $fixtureRoot -IgnorePowerShellStartupProfileCache
     $verifyGuard = Get-VerifyOnlyGuardResults $verifyResult.Lines $Version `
         $beforeVerify $afterVerify `
         $pathBeforeVerify ([Environment]::GetEnvironmentVariable('Path', 'User')) `

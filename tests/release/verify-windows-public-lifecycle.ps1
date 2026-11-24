@@ -174,7 +174,7 @@ function Get-TreeSnapshot([string]$Root) {
             $records.Add("D:$relative")
         } else {
             $digest = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            $records.Add('F:{0}:{1}' -f $relative, $digest)
+            $records.Add(('F:{0}:{1}' -f @($relative, $digest)))
         }
     }
     return ($records.ToArray() -join "`n")

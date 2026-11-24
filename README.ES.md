@@ -10,8 +10,6 @@
 
 [![Última versión](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) [![Windows validado](https://img.shields.io/badge/Windows-validado-2563eb?style=flat-square)](docs/HARNESSES.md) [![Linux (WSL 2)](https://img.shields.io/badge/Linux-WSL%202-2563eb?style=flat-square)](docs/INSTALLATION.md#linux-sh-entrypoint) [![OpenCode v2.4.1](https://img.shields.io/badge/OpenCode-v2.4.1-2563eb?style=flat-square)](https://github.com/anomalyco/opencode/releases/tag/v2.4.1) [![Licencia MIT](https://img.shields.io/badge/Licencia-MIT-f59e0b?style=flat-square)](LICENSE)
 
-[Incluido en XERJ Corpus Hub](https://hub.xerj.org/corpus/edulynch--opencode-olympusagents)
-
 **[🎯 Pruébalo](#your-first-task) · [⚡ Instala](#fast-install) · [👥 Equipo](#the-team) · [🧭 Comandos](#task-parallelism) · [🛠️ CLI](#portable-cli) · [📚 Guías](#guides)**
 
 </div>
@@ -153,7 +151,9 @@ La documentación técnica está en inglés.
 | 📦 **Versiones** | [Última versión estable](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) · [Todas las versiones](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Registro de cambios](CHANGELOG.md) |
 | 📖 **Toda la documentación** | [Índice de guías](docs/README.md) · [Licencia](LICENSE) |
 
-<sub>Olympus es un sistema de coordinación independiente, no un fork. La idea de un equipo especializado se inspiró en parte en [codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).</sub>
+## Menciones
+
+- [XERJ Corpus Hub](https://hub.xerj.org/corpus/edulynch--opencode-olympusagents)
 
 ## ⚠️ Uso y responsabilidad
 

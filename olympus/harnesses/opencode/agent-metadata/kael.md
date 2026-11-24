@@ -3,6 +3,12 @@ description: Primary OpenCode V2 orchestrator for minimal repository preflight, 
 mode: primary
 model: "{{opencode_model}}#{{effort}}"
 permissions:
+  - action: automation_*
+    resource: "*"
+    effect: deny
+  - action: browser
+    resource: "*"
+    effect: deny
   # Kael needs shell only for the exact repository-root probe.
   - action: shell
     resource: "*"

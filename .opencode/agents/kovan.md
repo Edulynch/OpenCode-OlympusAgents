@@ -4,6 +4,12 @@ description: "Kovan — The Coder. Trusted-project implementer with shell and ex
 mode: subagent
 model: "openai/gpt-6-luna#max"
 permissions:
+  - action: automation_*
+    resource: "*"
+    effect: deny
+  - action: browser
+    resource: "*"
+    effect: deny
   - action: shell
     resource: "*"
     effect: allow

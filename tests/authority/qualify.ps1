@@ -7,6 +7,10 @@ $exactManagedCommandPaths = @(
     '.opencode/commands/olympus.ultra.md',
     '.opencode/commands/olympus.performance.md'
 )
+$expectedOlympusAgentIds = @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios')
+$automationActionsV240 = @('automation_create','automation_list','automation_pause','automation_resume','automation_delete')
+$protectedToolActionsV240 = @($automationActionsV240) + @('browser')
+$newToolDenyAgentIds = @('kael','kovan','nox','orin','vera','veyra')
 function Text([string]$path) { [IO.File]::ReadAllText((Join-Path $root $path)) }
 function Check([string]$id, [bool]$ok) {
     if (-not $ok) { throw "$id FAIL" }
@@ -113,7 +117,7 @@ function Read-NativeRules([string]$agentText, [object[]]$globalRules) {
     $header = [regex]::Match($agentText, '(?s)\A---\r?\n(.*?)\r?\n---').Groups[1].Value
     $rules = [Collections.Generic.List[object]]::new()
     foreach ($m in [regex]::Matches($header, '(?ms)^\s{2}- action:\s*(?<action>[^\r\n]+)\r?\n\s{4}resource:\s*"?(?<resource>[^"\r\n]+)"?\r?\n\s{4}effect:\s*(?<effect>allow|ask|deny)\s*$')) {
-        $rules.Add([pscustomobject]@{ action=$m.Groups['action'].Value.Trim(); resource=$m.Groups['resource'].Value.Trim(); effect=$m.Groups['effect'].Value.Trim() })
+        $rules.Add([pscustomobject]@{ action=$m.Groups['action'].Value.Trim().Trim('"'); resource=$m.Groups['resource'].Value.Trim(); effect=$m.Groups['effect'].Value.Trim() })
     }
     return @($globalRules) + @($rules.ToArray())
 }
@@ -181,6 +185,11 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                                 [string]$runtimeStderr = '', [string]$invocationError = '') {
     $failures = [Collections.Generic.List[string]]::new()
     $runtimeAgents = @()
+    $olympusAgentMatches = @{}
+    foreach ($agentId in $expectedOlympusAgentIds) {
+        $olympusAgentMatches[$agentId] = [Collections.Generic.List[object]]::new()
+    }
+    $additionalAgentIds = [Collections.Generic.List[string]]::new()
     $runtimeJsonParseable = $false
     $runtimeJsonParseError = ''
     $runtimeJsonRootType = 'UNAVAILABLE'
@@ -222,11 +231,27 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
             if ($null -eq $candidate) { continue }
             $idProperty = $candidate.PSObject.Properties['id']
             if ($null -eq $idProperty) { continue }
-            if ($idProperty.Value -eq 'kael') {
+            $agentId = [string]$idProperty.Value
+            if ($agentId -cin $expectedOlympusAgentIds) {
+                $olympusAgentMatches[$agentId].Add($candidate)
+            } else {
+                $additionalAgentIds.Add($agentId)
+            }
+            if ($agentId -ceq 'kael') {
                 $kaelMatches.Add($candidate)
-            } elseif ($idProperty.Value -eq 'kovan') {
+            } elseif ($agentId -ceq 'kovan') {
                 $kovanMatches.Add($candidate)
             }
+        }
+    }
+    $rosterEvidence = [Collections.Generic.List[string]]::new()
+    foreach ($agentId in $expectedOlympusAgentIds) {
+        $count = $olympusAgentMatches[$agentId].Count
+        $rosterEvidence.Add("${agentId}=$count")
+        if ($count -eq 0) {
+            $failures.Add("roster_${agentId}=missing (matches=0)")
+        } elseif ($count -gt 1) {
+            $failures.Add("roster_${agentId}=duplicated (matches=$count)")
         }
     }
     $kaelCount = $kaelMatches.Count
@@ -241,6 +266,32 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
     } elseif ($kovanCount -gt 1) {
         $failures.Add("kovan=duplicated (matches=$kovanCount)")
     }
+
+    $toolDecisionEvidence = [Collections.Generic.List[string]]::new()
+    $toolDecisionCount = 0
+    $toolDenyCount = 0
+    $toolResourceProbe = '__authority_tool_resource_probe__'
+    foreach ($agentId in $expectedOlympusAgentIds) {
+        if ($olympusAgentMatches[$agentId].Count -ne 1) { continue }
+        $role = $olympusAgentMatches[$agentId][0]
+        $rolePermissionsProperty = $role.PSObject.Properties['permissions']
+        if ($null -eq $rolePermissionsProperty) {
+            $failures.Add("${agentId}_permissions=missing")
+            continue
+        }
+        $rolePermissions = @($rolePermissionsProperty.Value)
+        foreach ($toolAction in $protectedToolActionsV240) {
+            $decision = Native-Decision $rolePermissions $toolAction $toolResourceProbe
+            $toolDecisionCount++
+            $toolDecisionEvidence.Add("${agentId}/${toolAction}=$decision")
+            if ($decision -eq 'DENY') {
+                $toolDenyCount++
+            } else {
+                $failures.Add("${agentId}_${toolAction}_effective_decision=$decision (expected DENY)")
+            }
+        }
+    }
+    $toolPermissionEvidence = "tool_denies=$toolDenyCount/$($expectedOlympusAgentIds.Count * $protectedToolActionsV240.Count);tool_checks=$toolDecisionCount;additional_agent_ids=$($additionalAgentIds.Count);effective_tool_rules=$($toolDecisionEvidence -join ',')"
 
     $permissionEvidence = 'not evaluated'
     if ($kovanCount -eq 1) {
@@ -479,7 +530,7 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
 
     $runtimeExitEvidence = if ($null -eq $runtimeExit) { '<unavailable>' } else { [string]$runtimeExit }
     $failureEvidence = if ($failures.Count -eq 0) { 'none' } else { $failures -join ', ' }
-    $evidence = "runtime_exit=$runtimeExitEvidence; json_parseable=$runtimeJsonParseable; json_root=$runtimeJsonRootType; kael_matches=$kaelCount; kovan_matches=$kovanCount; permission_rules=$permissionEvidence; command_decisions=$($commandDecisionEvidence -join ','); stderr=$(Compact-Evidence $runtimeStderr); failures=$failureEvidence"
+    $evidence = "runtime_exit=$runtimeExitEvidence; json_parseable=$runtimeJsonParseable; json_root=$runtimeJsonRootType; olympus_roster=$($rosterEvidence -join ','); additional_agent_ids=$($additionalAgentIds.Count); kael_matches=$kaelCount; kovan_matches=$kovanCount; tool_permissions=$toolPermissionEvidence; permission_rules=$permissionEvidence; command_decisions=$($commandDecisionEvidence -join ','); stderr=$(Compact-Evidence $runtimeStderr); failures=$failureEvidence"
     [pscustomobject]@{ passed=($failures.Count -eq 0); evidence=$evidence }
 }
 
@@ -1055,60 +1106,61 @@ function Invoke-IsolatedAuthorityRuntime {
 
         Assert-AuthorityOwnedServer $ownedServer $serviceRegistry
         try {
-            $activationRegistration = [IO.File]::ReadAllText($serviceRegistry) | ConvertFrom-Json -Depth 20 -ErrorAction Stop
-            $activationPassword = [string]$activationRegistration.password
+            $integrationRegistration = [IO.File]::ReadAllText($serviceRegistry) | ConvertFrom-Json -Depth 20 -ErrorAction Stop
+            $integrationPassword = [string]$integrationRegistration.password
         } catch {
-            throw ('AUTHORITY_PLUGIN_ACTIVATION_CONTEXT_FAILED: isolated service registration is invalid: ' +
+            throw ('AUTHORITY_INTEGRATION_CONTEXT_FAILED: isolated service registration is invalid: ' +
                 (Compact-Evidence $_.Exception.Message))
         }
-        if ([string]::IsNullOrWhiteSpace($activationPassword)) {
-            throw 'AUTHORITY_PLUGIN_ACTIVATION_CONTEXT_FAILED: isolated service registration has no password.'
+        if ([string]::IsNullOrWhiteSpace($integrationPassword)) {
+            throw 'AUTHORITY_INTEGRATION_CONTEXT_FAILED: isolated service registration has no password.'
         }
         $directoryHeader = 'x-opencode-directory:' + [Uri]::EscapeDataString($projectRoot)
-        $activationArguments = @('api','--server',$ownedServer.Url,'--header',$directoryHeader,'GET','/api/integration')
-        $activationProbe = $null
-        $activationInvocationError = ''
+        # This route verifies fixture context and response shape only; HTTP 200 is not plugin-readiness evidence.
+        $integrationArguments = @('api','--server',$ownedServer.Url,'--header',$directoryHeader,'GET','/api/integration')
+        $integrationProbe = $null
+        $integrationInvocationError = ''
         try {
-            $activationProbe = Invoke-AuthorityCapturedProcess $realOpenCode $activationArguments $projectRoot $fixtureRoot `
-                -OpenCodePassword $activationPassword
-        } catch { $activationInvocationError = $_.Exception.Message }
-        $activationPassword = $null
-        if ($null -eq $activationProbe) {
+            $integrationProbe = Invoke-AuthorityCapturedProcess $realOpenCode $integrationArguments $projectRoot $fixtureRoot `
+                -OpenCodePassword $integrationPassword
+        } catch { $integrationInvocationError = $_.Exception.Message }
+        $integrationPassword = $null
+        if ($null -eq $integrationProbe) {
             Write-Output ('AUTHORITY_RUNTIME_QUERY: opencode api GET /api/integration pid=<unavailable>; cwd=' + $projectRoot + '; exit=<unavailable>')
-            throw ('AUTHORITY_PLUGIN_ACTIVATION FAIL: invocation failed (invocation_error=' +
-                (Compact-Evidence $activationInvocationError) + ')')
+            throw ('AUTHORITY_INTEGRATION_CONTEXT FAIL: invocation failed (invocation_error=' +
+                (Compact-Evidence $integrationInvocationError) + ')')
         }
-        Write-Output ('AUTHORITY_RUNTIME_QUERY: opencode api GET /api/integration pid=' + $activationProbe.Pid +
-            '; cwd=' + $activationProbe.WorkingDirectory + '; exit=' + $activationProbe.ExitCode)
-        Assert-AuthorityNoOpenCodeChild $activationProbe $realOpenCode
+        Write-Output ('AUTHORITY_RUNTIME_QUERY: opencode api GET /api/integration pid=' + $integrationProbe.Pid +
+            '; cwd=' + $integrationProbe.WorkingDirectory + '; exit=' + $integrationProbe.ExitCode)
+        Assert-AuthorityNoOpenCodeChild $integrationProbe $realOpenCode
         Assert-AuthorityOwnedServer $ownedServer $serviceRegistry
-        if ($activationProbe.ExitCode -ne 0) {
-            throw ('AUTHORITY_PLUGIN_ACTIVATION FAIL: GET /api/integration returned nonzero (runtime_exit=' +
-                [string]$activationProbe.ExitCode + '; stderr=' + (Compact-Evidence $activationProbe.Stderr) +
-                '; output=' + (Compact-Evidence $activationProbe.Stdout) + ')')
+        if ($integrationProbe.ExitCode -ne 0) {
+            throw ('AUTHORITY_INTEGRATION_CONTEXT FAIL: GET /api/integration returned nonzero (runtime_exit=' +
+                [string]$integrationProbe.ExitCode + '; stderr=' + (Compact-Evidence $integrationProbe.Stderr) +
+                '; output=' + (Compact-Evidence $integrationProbe.Stdout) + ')')
         }
         try {
-            $activationDocument = ConvertFrom-Json -InputObject $activationProbe.Stdout -Depth 60 -NoEnumerate -ErrorAction Stop
-            if ($null -eq $activationDocument.location -or $null -eq $activationDocument.location.directory) {
+            $integrationDocument = ConvertFrom-Json -InputObject $integrationProbe.Stdout -Depth 60 -NoEnumerate -ErrorAction Stop
+            if ($null -eq $integrationDocument.location -or $null -eq $integrationDocument.location.directory) {
                 throw 'response has no location.directory'
             }
-            if ($activationDocument.data -isnot [array]) { throw 'response data is not an integration array' }
-            $effectiveLocation = [string]$activationDocument.location.directory
+            if ($integrationDocument.data -isnot [array]) { throw 'response data is not an integration array' }
+            $effectiveLocation = [string]$integrationDocument.location.directory
             if (-not [IO.Path]::IsPathFullyQualified($effectiveLocation)) {
                 throw ('effective location.directory is not absolute: ' + $effectiveLocation)
             }
             $effectiveLocation = [IO.Path]::GetFullPath($effectiveLocation)
         } catch {
-            throw ('AUTHORITY_PLUGIN_ACTIVATION FAIL: GET /api/integration returned invalid context (json_error=' +
-                (Compact-Evidence $_.Exception.Message) + '; stderr=' + (Compact-Evidence $activationProbe.Stderr) +
-                '; output=' + (Compact-Evidence $activationProbe.Stdout) + ')')
+            throw ('AUTHORITY_INTEGRATION_CONTEXT FAIL: GET /api/integration returned invalid context (json_error=' +
+                (Compact-Evidence $_.Exception.Message) + '; stderr=' + (Compact-Evidence $integrationProbe.Stderr) +
+                '; output=' + (Compact-Evidence $integrationProbe.Stdout) + ')')
         }
         if (-not [string]::Equals($effectiveLocation,[IO.Path]::GetFullPath($projectRoot),[StringComparison]::OrdinalIgnoreCase)) {
-            throw ('AUTHORITY_PLUGIN_ACTIVATION FAIL: endpoint resolved an unexpected directory (expected=' +
+            throw ('AUTHORITY_INTEGRATION_CONTEXT FAIL: endpoint resolved an unexpected directory (expected=' +
                 $projectRoot + '; actual=' + $effectiveLocation + ')')
         }
-        Write-Output ('AUTHORITY_PLUGIN_ACTIVATION: PASS (endpoint=GET /api/integration; pid=' + $activationProbe.Pid +
-            '; effective_location=' + $effectiveLocation + '; integrations=' + $activationDocument.data.Count + ')')
+        Write-Output ('AUTHORITY_INTEGRATION_CONTEXT: PASS (endpoint=GET /api/integration; pid=' + $integrationProbe.Pid +
+            '; effective_location=' + $effectiveLocation + '; data_items=' + $integrationDocument.data.Count + ')')
 
         $runtimeProbe = $null
         $runtimeInvocationError = ''
@@ -1202,6 +1254,8 @@ try {
     $kaelSourceRules = Read-NativeRules $kaelSourceMetadata @()
     $minimalGlobalText = (Text 'olympus/harnesses/opencode/global-permissions.jsonc') -replace '(?m)^\s*//.*(?:\r?\n|$)', ''
     $minimalGlobal = $minimalGlobalText | ConvertFrom-Json -Depth 100
+    $authoritySource = Text 'tests/authority/qualify.ps1'
+    $harnessDocs = Text 'docs/HARNESSES.md'
     $rootPath = 'C:\fixture\project'
     $operation = 'WRITE_SCOPE:create-or-update'
     $grant = New-Grant 'kovan' $operation '.opencode/plugins/project-owned/**' $rootPath 'NATIVE_ASK'
@@ -1219,6 +1273,50 @@ try {
     }).Count -eq 0 -and @($nativeRules | Where-Object {
         $_.action -eq 'edit' -and $_.resource -eq '*' -and $_.effect -eq 'allow'
     }).Count -eq 1)
+
+    $sourceToolRuleFailures = [Collections.Generic.List[string]]::new()
+    $sourceToolDecisions = [Collections.Generic.List[string]]::new()
+    $sourceToolDenyCount = 0
+    foreach ($roleName in $expectedOlympusAgentIds) {
+        $roleSourceRules = Read-NativeRules (Text ('olympus/harnesses/opencode/agent-metadata/' + $roleName + '.md')) @()
+        $roleEffectiveRules = Read-NativeRules (Text ('olympus/harnesses/opencode/agent-metadata/' + $roleName + '.md')) @($config.permissions)
+        $automationWildcardDenies = @($roleSourceRules | Where-Object {
+            $_.action -ceq 'automation_*' -and $_.resource -ceq '*' -and $_.effect -ceq 'deny'
+        }).Count
+        $browserWildcardDenies = @($roleSourceRules | Where-Object {
+            $_.action -ceq 'browser' -and $_.resource -ceq '*' -and $_.effect -ceq 'deny'
+        }).Count
+        $allActionWildcardDenies = @($roleSourceRules | Where-Object {
+            $_.action -ceq '*' -and $_.resource -ceq '*' -and $_.effect -ceq 'deny'
+        }).Count
+        if ($roleName -cin $newToolDenyAgentIds) {
+            if ($automationWildcardDenies -ne 1 -or $browserWildcardDenies -ne 1) {
+                $sourceToolRuleFailures.Add("${roleName}:automation_*=$automationWildcardDenies;browser=$browserWildcardDenies")
+            }
+        } elseif ($allActionWildcardDenies -lt 1 -or $automationWildcardDenies -ne 0 -or $browserWildcardDenies -ne 0) {
+            $sourceToolRuleFailures.Add("${roleName}:all_action_deny=$allActionWildcardDenies;redundant_automation=$automationWildcardDenies;redundant_browser=$browserWildcardDenies")
+        }
+        foreach ($toolAction in $protectedToolActionsV240) {
+            $decision = Native-Decision $roleEffectiveRules $toolAction '__authority_tool_resource_probe__'
+            $sourceToolDecisions.Add("${roleName}/${toolAction}=$decision")
+            if ($decision -eq 'DENY') { $sourceToolDenyCount++ }
+            else { $sourceToolRuleFailures.Add("${roleName}/${toolAction}=$decision") }
+        }
+    }
+    Check 'AUTH0C_ALL_OLYMPUS_NATIVE_TOOL_ACTIONS_DENIED' (
+        $sourceToolRuleFailures.Count -eq 0 -and
+        $sourceToolDenyCount -eq ($expectedOlympusAgentIds.Count * $protectedToolActionsV240.Count) -and
+        $sourceToolDecisions.Count -eq ($expectedOlympusAgentIds.Count * $protectedToolActionsV240.Count)
+    )
+    $kovanToolSourceRules = Read-NativeRules $kovanSourceMetadata @()
+    $lateAutomationAllow = @($kovanToolSourceRules) + @([pscustomobject]@{ action='automation_create'; resource='*'; effect='allow' })
+    $lateBrowserAllow = @($kovanToolSourceRules) + @([pscustomobject]@{ action='browser'; resource='*'; effect='allow' })
+    Check 'AUTH0D_TOOL_DENIES_USE_LAST_MATCH_SEMANTICS' (
+        (Native-Decision $kovanToolSourceRules 'automation_create' '__authority_tool_resource_probe__') -eq 'DENY' -and
+        (Native-Decision $kovanToolSourceRules 'browser' '__authority_tool_resource_probe__') -eq 'DENY' -and
+        (Native-Decision $lateAutomationAllow 'automation_create' '__authority_tool_resource_probe__') -eq 'ALLOW' -and
+        (Native-Decision $lateBrowserAllow 'browser' '__authority_tool_resource_probe__') -eq 'ALLOW'
+    )
 
     Check 'AUTH1_NORMAL_IN_SCOPE_NO_QUESTION' ($kael -match 'An assigned worker proceeds directly with its in-scope operation when the\s+effective native\s+permission is ALLOW\.' -and
         (Decide 'kovan' $operation 'src/cart.ts' 'src/**' $rootPath $null).decision -eq 'ALLOW' -and
@@ -1687,6 +1785,8 @@ try {
             id='kael'
             permissions=@(
                 [pscustomobject]@{ action='*'; resource='*'; effect='allow' }
+                [pscustomobject]@{ action='automation_*'; resource='*'; effect='deny' }
+                [pscustomobject]@{ action='browser'; resource='*'; effect='deny' }
                 [pscustomobject]@{ action='shell'; resource='*'; effect='deny' }
                 [pscustomobject]@{ action='shell'; resource='git rev-parse --show-toplevel'; effect='allow' }
                 [pscustomobject]@{ action='serena_*'; resource='*'; effect='deny' }
@@ -1709,6 +1809,8 @@ try {
             id='kovan'
             permissions=@(
                 [pscustomobject]@{ action='*'; resource='*'; effect='allow' }
+                [pscustomobject]@{ action='automation_*'; resource='*'; effect='deny' }
+                [pscustomobject]@{ action='browser'; resource='*'; effect='deny' }
                 [pscustomobject]@{ action='edit'; resource='*'; effect='allow' }
                 [pscustomobject]@{ action='edit'; resource='.opencode/**'; effect='ask' }
                 [pscustomobject]@{ action='edit'; resource='.opencode/plugins/**'; effect='ask' }
@@ -1716,6 +1818,11 @@ try {
             ) + $runtimeCommandDenies
         }
     )
+    foreach ($roleName in @($expectedOlympusAgentIds | Where-Object { $_ -notin @('kael','kovan') })) {
+        $rolePermissions = Read-NativeRules (Text ('olympus/harnesses/opencode/agent-metadata/' + $roleName + '.md')) @()
+        $runtimeAgentFixture += [pscustomobject]@{ id=$roleName; permissions=@($rolePermissions) }
+    }
+    $runtimeAgentFixture += [pscustomobject]@{ id='opencode_builtin_fixture'; permissions=@() }
     $validRuntimeFixture = ConvertTo-Json -InputObject $runtimeAgentFixture -Compress -Depth 10
     $failedRuntimeProbe = Inspect-EffectiveRules 17 $validRuntimeFixture 'fixture runtime error'
     Check 'AUTH14_RUNTIME_COMMAND_FAILURE_HAS_EVIDENCE' (-not $failedRuntimeProbe.passed -and
@@ -1729,8 +1836,18 @@ try {
     $duplicateKovanProbe = Inspect-EffectiveRules 0 '[{"id":"kovan","permissions":[]},{"id":"kovan","permissions":[]}]'
     Check 'AUTH14_DUPLICATE_KOVAN_HAS_EVIDENCE' (-not $duplicateKovanProbe.passed -and
         $duplicateKovanProbe.evidence -match 'kovan=duplicated \(matches=2\)')
+    $missingNoxFixture = @($runtimeAgentFixture | Where-Object { $_.id -cne 'nox' })
+    $missingNoxProbe = Inspect-EffectiveRules 0 (ConvertTo-Json -InputObject $missingNoxFixture -Compress -Depth 10)
+    Check 'AUTH14_MISSING_EXPECTED_OLYMPUS_ID_REJECTED' (-not $missingNoxProbe.passed -and
+        $missingNoxProbe.evidence -match 'roster_nox=missing \(matches=0\)')
+    $duplicateNoxFixture = @($runtimeAgentFixture) + @($runtimeAgentFixture | Where-Object { $_.id -ceq 'nox' })
+    $duplicateNoxProbe = Inspect-EffectiveRules 0 (ConvertTo-Json -InputObject $duplicateNoxFixture -Compress -Depth 10)
+    Check 'AUTH14_DUPLICATE_EXPECTED_OLYMPUS_ID_REJECTED' (-not $duplicateNoxProbe.passed -and
+        $duplicateNoxProbe.evidence -match 'roster_nox=duplicated \(matches=2\)')
     $singleKovanProbe = Inspect-EffectiveRules 0 $validRuntimeFixture
     Check 'AUTH14_SINGLE_KOVAN_EVALUATES_EFFECTIVE_RULES' ($singleKovanProbe.passed -and
+        $singleKovanProbe.evidence -match 'olympus_roster=kael=1,veyra=1,orin=1,kovan=1,nox=1,vera=1,thales=1,atlas=1,argus=1,talos=1,helios=1' -and
+        $singleKovanProbe.evidence -match 'tool_denies=66/66;tool_checks=66;additional_agent_ids=1' -and
         $singleKovanProbe.evidence -match 'kael_matches=1' -and $singleKovanProbe.evidence -match 'kovan_matches=1' -and
         $singleKovanProbe.evidence -match 'task_edit=ALLOW/2 rules, project_plugin_edit=ASK, activity_edit=DENY' -and
         $singleKovanProbe.evidence -match 'edit_plugins_ask=1/1' -and
@@ -1751,7 +1868,18 @@ try {
         $lateOverrideProbe.evidence -match 'serena_nav_denied=0/6' -and
         $lateOverrideProbe.evidence -match 'subagent_allow_rules=11/10' -and
         $lateOverrideProbe.evidence -match 'unlisted=ALLOW' -and
+        $lateOverrideProbe.evidence -match 'kael/automation_create=ALLOW' -and
+        $lateOverrideProbe.evidence -match 'kael/browser=ALLOW' -and
         $lateOverrideProbe.evidence -match 'external_directory=ALLOW')
+    $integrationRouteSource = [regex]::Match($authoritySource, '(?s)\$directoryHeader = .*?(?=\$runtimeProbe = \$null)').Value
+    $normalizedQualificationDocs = ($docs + $harnessDocs) -replace '\s+', ' '
+    Check 'AUTH14_INTEGRATION_ROUTE_IS_CONTEXT_ONLY' (
+        $integrationRouteSource -match 'response shape only; HTTP 200 is not plugin-readiness evidence' -and
+        $integrationRouteSource -match 'AUTHORITY_INTEGRATION_CONTEXT: PASS' -and
+        $integrationRouteSource -notmatch 'AUTHORITY_PLUGIN_ACTIVATION|Start-Sleep|while\s*\(' -and
+        $normalizedQualificationDocs -match 'a 200 may arrive before plugin activation completes.*?not a readiness signal.*?bounded internal wait.*?no polling loop or arbitrary sleep' -and
+        $normalizedQualificationDocs -match '`AUTH14_OPENCODE_EFFECTIVE_RULES PASS`.*?all 11 Olympus IDs exactly once.*?effective DENY for all 66 checks.*?did not establish plugin activation/readiness'
+    )
     $badPermissionProbe = Inspect-EffectiveRules 0 '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"deny"}]}]'
     Check 'AUTH14_SINGLE_KOVAN_RULE_MISMATCH_FAILS' (-not $badPermissionProbe.passed -and
         $badPermissionProbe.evidence -match 'edit_\*_deny=1/0')

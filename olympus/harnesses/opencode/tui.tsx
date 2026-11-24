@@ -1,6 +1,6 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, For, Show } from "solid-js"
-import { activeChildren } from "./activity.ts"
+import { activeChildren, type Job } from "./activity.ts"
 
 export default Plugin.define({
   id: "olympus.activity",
@@ -8,10 +8,14 @@ export default Plugin.define({
     context.ui.slot({
       append: "session.composer.top",
       render({ sessionID }) {
-        // Reading the native reactive store in a memo tracks both session creation
-        // and status transitions. No polling, commands, or child-session actions.
+        // Reading the native reactive store in a memo tracks session and job
+        // transitions. No polling, commands, or child-session actions.
+        // Older TUI Data types lack this optional job list.
         const active = createMemo(() => activeChildren(
-          sessionID, context.data.session.list(), (id) => context.data.session.status(id),
+          sessionID,
+          context.data.session.list(),
+          (id) => context.data.session.status(id),
+          (context.data as unknown as { job?: { list: (id: string) => Job[] } }).job?.list(sessionID) ?? [],
         ))
         return (
           <Show when={active().length > 0}>

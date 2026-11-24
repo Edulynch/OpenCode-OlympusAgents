@@ -4,6 +4,12 @@ description: "Veyra — The Explorer. Read-only researcher worker for bounded re
 mode: subagent
 model: "openai/gpt-6-luna#max"
 permissions:
+  - action: automation_*
+    resource: "*"
+    effect: deny
+  - action: browser
+    resource: "*"
+    effect: deny
   - action: edit
     resource: "*"
     effect: deny

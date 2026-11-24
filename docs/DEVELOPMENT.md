@@ -103,12 +103,33 @@ verify its bytes match the tag; publish only with immutability enabled.
 
 After publication, the workflow verifies `releases/latest`, immutable stable
 metadata, the exact annotated tag and both public asset bytes. This is not a
-real installer lifecycle: the public latest-endpoint install/VerifyOnly/
-uninstall check remains pending for an isolated supported Windows environment
-and the documented Linux route. Mocked or local tag qualification is not
+complete installer lifecycle. The Linux v0.12.8 route has separately passed;
+the Windows public latest-endpoint install/VerifyOnly/uninstall check remains
+pending until its hosted run passes. Mocked or local tag qualification is not
 equivalent to that endpoint gate. Do not announce availability until the
 separate lifecycle evidence is complete; never point executable installation
 sources at `master` or `develop`.
+
+The [`public Windows lifecycle workflow`](../.github/workflows/public-windows-lifecycle.yml)
+runs only for same-repository PRs to `develop` that change this workflow or
+`tests/release/verify-windows-public-lifecycle.ps1`. It uses a GitHub-hosted
+`windows-2025` VM, a read-only checkout token, the verified public
+`install-olympus.ps1` asset, the exact tagged `install.ps1 -VerifyOnly`, and
+the tagged public uninstaller. The script independently checks immutable
+release metadata, the annotated tag object and peeled commit, the asset
+SHA-256/size, and GitHub's canonical blob for the tagged installer before
+executing those files. Its `PUBLIC_WINDOWS_LIFECYCLE: PASS` output is the
+hosted acceptance result; local guard/static checks do not establish it.
+
+The installer changes the disposable runner account's user PATH as its normal
+behavior. All other profile/config/CLI roots and an OpenCode config sentinel
+are fixture-isolated; the existing deterministic OpenCode stub is used, with
+no live OpenCode, model, provider, or agent evidence. A `.git`-less public
+archive may record `installed_from_commit: "unknown"`: the test reports that
+value without treating it as provenance. The release commit is verified
+separately through the exact immutable release and annotated tag, so the
+manifest's `unknown` is not substituted for source verification. This check
+does not independently verify a cryptographic signature.
 
 The intended public URL is:
 `https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1`.
@@ -516,10 +537,17 @@ project: `debug paths` first confirms isolated paths, then Runtime starts an
 owned loopback OpenCode service on an ephemeral port and verifies its isolated
 XDG state registry. The subsequent `debug config`, authenticated
 `GET /api/integration`, and `debug agents` queries use that same backend. The
-integration request waits for plugin activation and verifies the returned
-`location.directory`; it uses only the service password from the fixture
-registry. Runtime checks that the registry still names the owned process after
-each query and verifies the owned loopback listener before stopping the service.
+integration request verifies only response shape and the returned
+`location.directory`; a 200 may arrive before plugin activation completes
+([upstream regression #63814](https://github.com/anomalyco/opencode/issues/63814)),
+so it is not a readiness signal. `debug agents` uses OpenCode's bounded internal
+wait in V2.3.2/V2.4.0; the fixture adds no polling loop or arbitrary sleep. The
+Authority runtime check requires each of the 11 expected Olympus IDs exactly
+once while allowing additional OpenCode built-ins, and evaluates their effective
+permission rules. The API request uses only the service password from the
+fixture registry. Runtime checks that the registry still names the owned
+process after each query and verifies the owned loopback listener before
+stopping the service.
 Cleanup confirms process exit and drained streams, then removes the fixture;
 cleanup or removal failures fail qualification.
 Offline makes no real OpenCode calls; Both runs Offline plus this same Runtime
@@ -540,7 +568,12 @@ evidence is not current product support.
 A completed RUNTIME profile still does **not** qualify interactive child
 execution, native ASK UI or human approval/rejection, the question race, or
 Activity TUI rendering; those remain separately observed/manual
-evidence.
+evidence. The 2026-11-23 bundled Windows OpenCode V2.4.0 Authority Runtime
+result and its evidence scope and limits are recorded in the
+[V2.4.0 evidence](HARNESSES.md#opencode-240-role-tool-boundaries). That
+effective-rule pass does not establish UI behavior or live result delivery;
+`/api/integration` checks response shape and directory only, not plugin
+readiness.
 
 Use the [Prompt Book](../tests/prompt-book/README.md) for an opt-in automated
 read-only smoke against real Kael and Nox sessions, and for separate manual
@@ -665,7 +698,21 @@ Explicitly bootstrapped projects are treated as trusted. Kovan can edit and use 
 
 ## Activity HUD
 
-The passive, read-only plugin uses native OpenCode child-session list and status to show running agents and their tasks. It appears only when direct children are active; it does not spawn sessions, poll, or alter orchestration.
+The passive, read-only plugin keeps the existing root-only, direct-child rows
+and labels. A row is active when the child session is running or, when the
+reactive TUI store exposes `data.job.list(rootSessionID)`, while that child's
+represented session tree owns a running job of kind `shell`, `subagent`,
+`image`, `video`, or `codemode`; subagent jobs follow `childSessionID`, and
+other kinds follow `sessionID`. OpenCode V2.3.2's TUI `Data` has no job API, so
+feature detection preserves the session-status-only behavior there and on
+other versions without the API. The plugin reads the store inside its existing
+reactive memo; it does not poll, spawn sessions, or alter orchestration. The
+focused Node test covers this union. **USER_REPORTED:** the post-change Windows
+TUI visual check passed for one scenario: a yielded idle child stayed visible
+while its original shell job was pending and disappeared after terminal
+completion. The exact OpenCode version and native shell exit code are
+unavailable; this is not broader runtime qualification (see the
+[HUD evidence](HARNESSES.md#opencode-240-role-tool-boundaries)).
 
 ## External work ownership
 

@@ -10,7 +10,7 @@ Thanks for helping keep the framework reliable and approachable. Small, focused 
 ## Before you start
 
 - Use Windows, Git, PowerShell 7 and Python 3.11+ for the supported offline contributor qualifications.
-- Start from current `master`; work on a topic branch. Do not commit directly to release tags.
+- Start from current `develop`; work on a topic branch and open contributor pull requests against `develop`. Do not commit directly to `master` or release tags.
 - For bugs, explain **expected versus observed** behavior, affected harness/version, a minimal reproduction, and what is still unknown.
 - For security issues, use [SECURITY.md](SECURITY.md) instead of sharing private details in public discussions.
 
@@ -39,9 +39,9 @@ Run FAST from the repository root:
 pwsh -NoProfile -File ./scripts/qualify.ps1 -Profile FAST
 ```
 
-GitHub Actions also runs FAST for pull requests targeting `master`. FULL and RUNTIME are deliberately separate and are not CI defaults. See [the testing guidance](docs/DEVELOPMENT.md#choosing-qualification-by-change-risk).
+GitHub Actions runs contributor CI for pull requests targeting `develop` and `master`; FAST remains the required `FAST / Windows` check. Changes reach `master` only through a manually reviewed and merged canonical `develop` → `master` promotion PR; automatic merge is not enabled. FULL and RUNTIME are deliberately separate and are not CI defaults. See [the testing guidance](docs/DEVELOPMENT.md#choosing-qualification-by-change-risk) and [promotion/release procedure](docs/DEVELOPMENT.md#promotion-and-automatic-releases).
 
-The security workflow runs the same documentation and secret checks on pull requests, pushes to `master`, and manual runs. The Gitleaks gate downloads and verifies its pinned open-source CLI on each explicit invocation; it has no required Git hook and never publishes a report. See [the scanner and evidence-handling contract](SECURITY.md#secret-scanning-and-handling-evidence).
+The security workflow runs the same documentation and secret checks on pull requests to both branches, pushes to `master`, and manual runs. The Gitleaks gate downloads and verifies its pinned open-source CLI on each explicit invocation; it has no required Git hook and never publishes a report. See [the scanner and evidence-handling contract](SECURITY.md#secret-scanning-and-handling-evidence).
 
 ## Pull request checklist
 
@@ -50,3 +50,4 @@ The security workflow runs the same documentation and secret checks on pull requ
 - List the actual commands run and their results, including any **NOT RUN** gates.
 - Keep the diff reviewable, avoid unrelated formatting, and do not rewrite historical release evidence.
 - Allow a maintainer to review before merge; never rewrite an already published release tag.
+- Treat `develop` → `master` as a separate manual promotion. Do not queue another promotion until the opt-in release workflow finishes and its exact-SHA result is reconciled.

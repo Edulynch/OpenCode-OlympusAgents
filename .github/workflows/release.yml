@@ -1,0 +1,775 @@
+name: Release / immutable master promotion
+
+on:
+  push:
+    branches: [master]
+
+permissions: {}
+
+concurrency:
+  group: olympus-release-master
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    if: ${{ github.repository == 'Edulynch/OpenCode-OlympusAgents' && github.ref == 'refs/heads/master' && vars.OLYMPUS_RELEASE_ENABLED == 'true' }}
+    runs-on: windows-2025
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
+      body_b64: ${{ steps.plan.outputs.body_b64 }}
+      body_sha256: ${{ steps.plan.outputs.body_sha256 }}
+      ps1_sha256: ${{ steps.plan.outputs.ps1_sha256 }}
+      sh_sha256: ${{ steps.plan.outputs.sh_sha256 }}
+      ps1_size: ${{ steps.plan.outputs.ps1_size }}
+      sh_size: ${{ steps.plan.outputs.sh_size }}
+      immutability_evidence: ${{ steps.plan.outputs.immutability_evidence }}
+    steps:
+      - name: Checkout exact push SHA without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Validate promotion provenance and prepare read-only release plan
+        id: plan
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OLYMPUS_RELEASE_ENABLED: ${{ vars.OLYMPUS_RELEASE_ENABLED }}
+          OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED: ${{ vars.OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -B .github/release.py prepare `
+            --event $env:GITHUB_EVENT_PATH `
+            --out-dir (Join-Path $env:RUNNER_TEMP 'olympus-release')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Qualify exact candidate and release notes (mocked OpenCode)
+        if: ${{ steps.plan.outputs.mode == 'create' || steps.plan.outputs.mode == 'resume' || steps.plan.outputs.mode == 'provisional' }}
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.plan.outputs.version }}
+          RELEASE_NOTES: ${{ runner.temp }}\olympus-release\release-notes.md
+        run: |
+          $ErrorActionPreference = 'Stop'
+          pwsh -NoProfile -File ./tests/release/qualify.ps1 -MockOpenCode -ExpectedVersion $env:RELEASE_VERSION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $body = [IO.File]::ReadAllText($env:RELEASE_NOTES)
+          pwsh -NoProfile -File ./tests/release/github-release-notes.ps1 `
+            -Version $env:RELEASE_VERSION -ReleaseBody $body
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  tag:
+    needs: candidate
+    if: ${{ needs.candidate.result == 'success' && (needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume' || needs.candidate.outputs.mode == 'provisional') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Create or verify exact annotated tag
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_VERSION: ${{ needs.candidate.outputs.version }}
+          RELEASE_SHA: ${{ needs.candidate.outputs.sha }}
+          RELEASE_MODE: ${{ needs.candidate.outputs.mode }}
+          OLYMPUS_RELEASE_ENABLED: ${{ vars.OLYMPUS_RELEASE_ENABLED }}
+          OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED: ${{ vars.OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from datetime import datetime, timezone
+
+          repo = "Edulynch/OpenCode-OlympusAgents"
+          if os.environ["REPOSITORY"].casefold() != repo.casefold() or os.environ["OLYMPUS_RELEASE_ENABLED"] != "true":
+              raise SystemExit("RELEASE_CONTEXT_INVALID")
+          version = os.environ["RELEASE_VERSION"]
+          sha = os.environ["RELEASE_SHA"]
+          if not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version):
+              raise SystemExit("RELEASE_VERSION_INVALID")
+          if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", sha):
+              raise SystemExit("RELEASE_SHA_INVALID")
+          mode = os.environ["RELEASE_MODE"]
+          if mode not in ("create", "resume", "provisional"):
+              raise SystemExit("RELEASE_MODE_INVALID")
+          root = f"https://api.github.com/repos/{repo}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+              "User-Agent": "Olympus-release-tag",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+          class ApiError(Exception):
+              def __init__(self, status):
+                  self.status = status
+          def api(method, path, payload=None, optional=False):
+              data = None if payload is None else json.dumps(payload).encode()
+              request = urllib.request.Request(
+                  root + path, data=data, method=method,
+                  headers={**headers, **({"Content-Type": "application/json"} if data else {})},
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      raw = response.read()
+                      result = json.loads(raw) if raw else None
+                      if result is None:
+                          raise SystemExit("GITHUB_API_RESPONSE_INVALID")
+                      return result
+              except urllib.error.HTTPError as error:
+                  if optional and error.code == 404:
+                      return None
+                  raise ApiError(error.code) from None
+              except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+                  raise SystemExit("GITHUB_API_UNAVAILABLE") from None
+          def matching_releases():
+              matches = []
+              for page in range(1, 11):
+                  releases = api("GET", f"/releases?per_page=100&page={page}")
+                  if not isinstance(releases, list) or len(releases) > 100:
+                      raise SystemExit("RELEASE_LIST_INVALID")
+                  for release in releases:
+                      if (
+                          not isinstance(release, dict)
+                          or not isinstance(release.get("tag_name"), str)
+                          or not isinstance(release.get("draft"), bool)
+                      ):
+                          raise SystemExit("RELEASE_LIST_INVALID")
+                      if release["tag_name"] == version:
+                          matches.append(release)
+                  if len(releases) < 100:
+                      return matches
+              raise SystemExit("RELEASE_LIST_INCOMPLETE")
+          try:
+              immutable = api("GET", "/immutable-releases")
+          except ApiError as error:
+              if error.status == 404 or (error.status in (401, 403) and os.environ["OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED"] != "true"):
+                  raise SystemExit("IMMUTABILITY_NOT_CONFIRMED") from None
+              if error.status not in (401, 403):
+                  raise SystemExit("IMMUTABILITY_CHECK_FAILED") from None
+              print("IMMUTABILITY_EVIDENCE: explicit owner precondition (API setting read unavailable)")
+          else:
+              if not isinstance(immutable, dict) or immutable.get("enabled") is not True:
+                  raise SystemExit("IMMUTABILITY_DISABLED")
+          current = api("GET", "/git/ref/heads/master")
+          if (current.get("object") or {}).get("sha") != sha:
+              raise SystemExit("STALE_MASTER_SHA")
+          tag_path = "/git/ref/tags/" + urllib.parse.quote(version, safe="")
+          existing = api("GET", tag_path, optional=True)
+          release_path = "/releases/tags/" + urllib.parse.quote(version, safe="")
+          existing_release = api("GET", release_path, optional=True)
+          if existing_release is not None and (
+              not isinstance(existing_release, dict) or existing_release.get("tag_name") != version
+          ):
+              raise SystemExit("RELEASE_METADATA_INVALID")
+          if existing_release is not None and existing is None:
+              raise SystemExit("RELEASE_WITHOUT_TAG")
+          message = f"Olympus automatic release\nversion: {version}\ncommit: {sha}\n"
+          if mode == "create":
+              if existing_release is not None:
+                  raise SystemExit("RELEASE_STATE_CONFLICT")
+              if existing is not None:
+                  raise SystemExit("TAG_CONFLICT")
+              if matching_releases():
+                  raise SystemExit("RELEASE_STATE_CONFLICT")
+              tag = api("POST", "/git/tags", {
+                  "tag": version,
+                  "message": message,
+                  "object": sha,
+                  "type": "commit",
+                  "tagger": {
+                      "name": "github-actions[bot]",
+                      "email": "41898282+github-actions[bot]@users.noreply.github.com",
+                      "date": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+                  },
+              })
+              if not isinstance(tag, dict) or not isinstance(tag.get("sha"), str):
+                  raise SystemExit("TAG_OBJECT_CREATE_FAILED")
+              try:
+                  api("POST", "/git/refs", {"ref": f"refs/tags/{version}", "sha": tag["sha"]})
+              except ApiError:
+                  raise SystemExit("TAG_REF_CREATE_FAILED") from None
+              existing = api("GET", tag_path)
+          else:
+              if existing is None:
+                  raise SystemExit("RESUME_TAG_MISSING")
+              if existing_release is not None and existing_release.get("draft") is not True:
+                  raise SystemExit("RELEASE_APPEARED_AFTER_PREFLIGHT")
+          ref_object = (existing or {}).get("object") or {}
+          if existing is None or ref_object.get("type") != "tag" or not isinstance(ref_object.get("sha"), str):
+              raise SystemExit("TAG_NOT_ANNOTATED")
+          tag_data = api("GET", "/git/tags/" + urllib.parse.quote(ref_object["sha"], safe=""))
+          target = (tag_data.get("object") or {})
+          tagger = tag_data.get("tagger") or {}
+          if (
+              existing.get("ref") != f"refs/tags/{version}"
+              or tag_data.get("tag") != version
+              or tag_data.get("message") != message
+              or target.get("type") != "commit"
+              or target.get("sha") != sha
+              or tagger.get("name") != "github-actions[bot]"
+              or tagger.get("email") != "41898282+github-actions[bot]@users.noreply.github.com"
+          ):
+              raise SystemExit("TAG_CONFLICT")
+          print(f"TAG_READY: {version} -> {sha}")
+          PY
+
+  tagged-qualification:
+    needs: [candidate, tag]
+    if: ${{ always() && needs.candidate.result == 'success' && needs.tag.result == 'success' && (needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume' || needs.candidate.outputs.mode == 'provisional') }}
+    runs-on: windows-2025
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout event SHA read-only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Qualify exact remote tag archive in isolated Windows roots
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.candidate.outputs.version }}
+          RELEASE_SHA: ${{ needs.candidate.outputs.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          pwsh -NoProfile -File ./tests/release/verify-public-install.ps1 `
+            -Version $env:RELEASE_VERSION -ExpectedCommit $env:RELEASE_SHA
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  draft:
+    needs: [candidate, tagged-qualification]
+    if: ${{ always() && needs.candidate.result == 'success' && needs.tagged-qualification.result == 'success' && (needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume' || needs.candidate.outputs.mode == 'provisional') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.attach.outputs.release_id }}
+    steps:
+      - name: Create matching draft and attach exact tagged installer assets
+        id: attach
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_VERSION: ${{ needs.candidate.outputs.version }}
+          RELEASE_SHA: ${{ needs.candidate.outputs.sha }}
+          RELEASE_MODE: ${{ needs.candidate.outputs.mode }}
+          RELEASE_BODY_B64: ${{ needs.candidate.outputs.body_b64 }}
+          RELEASE_BODY_SHA256: ${{ needs.candidate.outputs.body_sha256 }}
+          RELEASE_PS1_SHA256: ${{ needs.candidate.outputs.ps1_sha256 }}
+          RELEASE_SH_SHA256: ${{ needs.candidate.outputs.sh_sha256 }}
+          RELEASE_PS1_SIZE: ${{ needs.candidate.outputs.ps1_size }}
+          RELEASE_SH_SIZE: ${{ needs.candidate.outputs.sh_size }}
+          OLYMPUS_RELEASE_ENABLED: ${{ vars.OLYMPUS_RELEASE_ENABLED }}
+          OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED: ${{ vars.OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          import re
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          repo = "Edulynch/OpenCode-OlympusAgents"
+          if os.environ["REPOSITORY"].casefold() != repo.casefold() or os.environ["OLYMPUS_RELEASE_ENABLED"] != "true":
+              raise SystemExit("RELEASE_CONTEXT_INVALID")
+          version, sha = os.environ["RELEASE_VERSION"], os.environ["RELEASE_SHA"]
+          if not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version):
+              raise SystemExit("RELEASE_VERSION_INVALID")
+          if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", sha):
+              raise SystemExit("RELEASE_SHA_INVALID")
+          asset_sizes = {
+              "install-olympus.ps1": os.environ["RELEASE_PS1_SIZE"],
+              "install-olympus.sh": os.environ["RELEASE_SH_SIZE"],
+          }
+          if any(not re.fullmatch(r"[1-9][0-9]*", value) for value in asset_sizes.values()):
+              raise SystemExit("RELEASE_ASSET_SIZE_INVALID")
+          body = base64.b64decode(os.environ["RELEASE_BODY_B64"], validate=True)
+          body_sha = hashlib.sha256(body).hexdigest()
+          if body_sha != os.environ["RELEASE_BODY_SHA256"]:
+              raise SystemExit("RELEASE_NOTES_DIGEST_MISMATCH")
+          expected = {
+              "install-olympus.ps1": {
+                  "sha256": os.environ["RELEASE_PS1_SHA256"],
+                  "size": int(asset_sizes["install-olympus.ps1"]),
+              },
+              "install-olympus.sh": {
+                  "sha256": os.environ["RELEASE_SH_SHA256"],
+                  "size": int(asset_sizes["install-olympus.sh"]),
+              },
+          }
+          if any(not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) for item in expected.values()):
+              raise SystemExit("RELEASE_ASSET_DIGEST_INVALID")
+          root = f"https://api.github.com/repos/{repo}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+              "User-Agent": "Olympus-release-draft",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+          class ApiError(Exception):
+              def __init__(self, status):
+                  self.status = status
+          def api(method, path, payload=None, raw=None, optional=False, upload_name=None):
+              data = raw if raw is not None else (None if payload is None else json.dumps(payload).encode())
+              request_headers = dict(headers)
+              if payload is not None:
+                  request_headers["Content-Type"] = "application/json"
+              if raw is not None:
+                  request_headers["Content-Type"] = "application/octet-stream"
+              if upload_name is not None:
+                  path += "?name=" + urllib.parse.quote(upload_name, safe="")
+                  request_headers["Accept"] = "application/vnd.github+json"
+              url = path if path.startswith("https://") else root + path
+              request = urllib.request.Request(url, data=data, method=method, headers=request_headers)
+              try:
+                  with urllib.request.urlopen(request, timeout=60) as response:
+                      result = response.read()
+                      payload = json.loads(result) if result else None
+                      if payload is None:
+                          raise SystemExit("GITHUB_API_RESPONSE_INVALID")
+                      return payload
+              except urllib.error.HTTPError as error:
+                  if optional and error.code == 404:
+                      return None
+                  raise ApiError(error.code) from None
+              except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+                  raise SystemExit("GITHUB_API_UNAVAILABLE") from None
+          def matching_releases():
+              matches = []
+              for page in range(1, 11):
+                  releases = api("GET", f"/releases?per_page=100&page={page}")
+                  if not isinstance(releases, list) or len(releases) > 100:
+                      raise SystemExit("RELEASE_LIST_INVALID")
+                  for item in releases:
+                      if (
+                          not isinstance(item, dict)
+                          or not isinstance(item.get("tag_name"), str)
+                          or not isinstance(item.get("draft"), bool)
+                      ):
+                          raise SystemExit("RELEASE_LIST_INVALID")
+                      if item["tag_name"] == version:
+                          matches.append(item)
+                  if len(releases) < 100:
+                      return matches
+              raise SystemExit("RELEASE_LIST_INCOMPLETE")
+          def assert_immutable_setting():
+              try:
+                  setting = api("GET", "/immutable-releases")
+              except ApiError as error:
+                  if error.status == 404 or (error.status in (401, 403) and os.environ["OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED"] != "true"):
+                      raise SystemExit("IMMUTABILITY_NOT_CONFIRMED") from None
+                  if error.status not in (401, 403):
+                      raise SystemExit("IMMUTABILITY_CHECK_FAILED") from None
+                  print("IMMUTABILITY_EVIDENCE: explicit owner precondition (API setting read unavailable)")
+              else:
+                  if not isinstance(setting, dict) or setting.get("enabled") is not True:
+                      raise SystemExit("IMMUTABILITY_DISABLED")
+          current = api("GET", "/git/ref/heads/master")
+          if (current.get("object") or {}).get("sha") != sha:
+              raise SystemExit("STALE_MASTER_SHA")
+          tag_path = "/git/ref/tags/" + urllib.parse.quote(version, safe="")
+          tag_ref = api("GET", tag_path)
+          ref_object = (tag_ref.get("object") or {})
+          if ref_object.get("type") != "tag" or not isinstance(ref_object.get("sha"), str):
+              raise SystemExit("TAG_NOT_ANNOTATED")
+          tag_data = api("GET", "/git/tags/" + urllib.parse.quote(ref_object["sha"], safe=""))
+          tagger = tag_data.get("tagger") or {}
+          if (
+              tag_data.get("tag") != version
+              or tag_data.get("message") != f"Olympus automatic release\nversion: {version}\ncommit: {sha}\n"
+              or (tag_data.get("object") or {}).get("sha") != sha
+              or (tag_data.get("object") or {}).get("type") != "commit"
+              or tagger.get("name") != "github-actions[bot]"
+              or tagger.get("email") != "41898282+github-actions[bot]@users.noreply.github.com"
+          ):
+              raise SystemExit("TAG_CONFLICT")
+          assert_immutable_setting()
+          assets = {}
+          for name, expected_sha in expected.items():
+              response = api(
+                  "GET",
+                  "/contents/" + urllib.parse.quote(name, safe="") + "?ref=" + urllib.parse.quote(sha, safe=""),
+              )
+              if response.get("type") != "file" or response.get("encoding") != "base64":
+                  raise SystemExit("TAGGED_ASSET_SOURCE_INVALID")
+              content = base64.b64decode("".join(response.get("content", "").split()), validate=True)
+              if (
+                  hashlib.sha256(content).hexdigest() != expected_sha["sha256"]
+                  or len(content) != expected_sha["size"]
+              ):
+                  raise SystemExit("TAGGED_ASSET_SOURCE_MISMATCH")
+              assets[name] = content
+          release_path = "/releases/tags/" + urllib.parse.quote(version, safe="")
+          by_tag = api("GET", release_path, optional=True)
+          if by_tag is not None and (
+              not isinstance(by_tag, dict) or by_tag.get("tag_name") != version
+          ):
+              raise SystemExit("RELEASE_METADATA_INVALID")
+          listed = matching_releases()
+          mode = os.environ["RELEASE_MODE"]
+          if mode == "create":
+              if by_tag is not None or listed:
+                  raise SystemExit("RELEASE_APPEARED_AFTER_PREFLIGHT")
+              release = api("POST", "/releases", {
+                  "tag_name": version,
+                  "target_commitish": sha,
+                  "name": version,
+                  "body": body.decode("utf-8"),
+                  "draft": True,
+                  "prerelease": False,
+              })
+          elif mode in ("resume", "provisional"):
+              if by_tag is not None and by_tag.get("draft") is not True:
+                  raise SystemExit("PUBLISHED_RELEASE_CONFLICT")
+              if len(listed) > 1:
+                  raise SystemExit("DRAFT_RELEASE_AMBIGUOUS")
+              if not listed:
+                  raise SystemExit("ORPHAN_TAG_CONFLICT")
+              listed_id = listed[0].get("id")
+              if type(listed_id) is not int or listed_id <= 0:
+                  raise SystemExit("DRAFT_RELEASE_ID_INVALID")
+              if listed[0].get("draft") is not True:
+                  raise SystemExit("DRAFT_STATE_INVALID")
+              if by_tag is not None and by_tag.get("id") != listed_id:
+                  raise SystemExit("DRAFT_RELEASE_CONFLICT")
+              release = api("GET", f"/releases/{listed_id}")
+              if not isinstance(release, dict) or type(release.get("id")) is not int or release["id"] != listed_id:
+                  raise SystemExit("DRAFT_RELEASE_IDENTITY_INVALID")
+          else:
+              raise SystemExit("RELEASE_MODE_INVALID")
+          if (
+              release.get("tag_name") != version
+              or release.get("name") != version
+              or release.get("body") != body.decode("utf-8")
+              or release.get("draft") is not True
+              or release.get("prerelease") is not False
+              or release.get("published_at") is not None
+              or (release.get("author") or {}).get("login") != "github-actions[bot]"
+              or type(release.get("id")) is not int
+              or release.get("id") <= 0
+          ):
+              raise SystemExit("DRAFT_RELEASE_CONFLICT")
+          existing = {}
+          for asset in release.get("assets", []):
+              name = asset.get("name")
+              if (
+                  name not in expected or name in existing
+                  or asset.get("digest") != f"sha256:{expected[name]['sha256']}"
+                  or type(asset.get("size")) is not int
+                  or asset.get("size") != expected[name]["size"]
+              ):
+                  raise SystemExit("DRAFT_ASSET_CONFLICT")
+              existing[name] = asset
+          upload_url = release.get("upload_url", "").split("{", 1)[0]
+          if not upload_url.startswith("https://uploads.github.com/repos/" + repo + "/releases/"):
+              raise SystemExit("DRAFT_UPLOAD_URL_INVALID")
+          upload_root = f"https://uploads.github.com/repos/{repo}/releases/{release['id']}/assets"
+          for name, content in assets.items():
+              if name in existing:
+                  continue
+              result = api("POST", upload_root, raw=content, upload_name=name)
+              if (
+                  result.get("name") != name
+                  or result.get("digest") != f"sha256:{expected[name]['sha256']}"
+                  or result.get("size") != expected[name]["size"]
+              ):
+                  raise SystemExit("DRAFT_ASSET_UPLOAD_MISMATCH")
+          refreshed = api("GET", f"/releases/{release['id']}")
+          if (
+              not isinstance(refreshed, dict)
+              or type(refreshed.get("id")) is not int
+              or refreshed.get("id") != release["id"]
+              or refreshed.get("tag_name") != version
+              or refreshed.get("name") != version
+              or refreshed.get("body") != body.decode("utf-8")
+              or refreshed.get("draft") is not True
+              or refreshed.get("prerelease") is not False
+              or refreshed.get("published_at") is not None
+              or (refreshed.get("author") or {}).get("login") != "github-actions[bot]"
+          ):
+              raise SystemExit("DRAFT_RELEASE_CONFLICT")
+          found = {}
+          for asset in refreshed.get("assets", []):
+              name = asset.get("name")
+              if (
+                  name not in expected or name in found
+                  or asset.get("digest") != f"sha256:{expected[name]['sha256']}"
+                  or type(asset.get("size")) is not int
+                  or asset.get("size") != expected[name]["size"]
+              ):
+                  raise SystemExit("DRAFT_ASSET_CONFLICT")
+              found[name] = asset
+          if set(found) != set(expected):
+              raise SystemExit("DRAFT_ASSET_SET_INCOMPLETE")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"release_id={release['id']}\n")
+          print(f"DRAFT_READY: {version} assets=install-olympus.ps1,install-olympus.sh")
+          PY
+
+  publish:
+    needs: [candidate, draft]
+    if: ${{ always() && needs.candidate.result == 'success' && needs.draft.result == 'success' && (needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume' || needs.candidate.outputs.mode == 'provisional') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Recheck promotion and publish immutable release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_VERSION: ${{ needs.candidate.outputs.version }}
+          RELEASE_SHA: ${{ needs.candidate.outputs.sha }}
+          RELEASE_ID: ${{ needs.draft.outputs.release_id }}
+          RELEASE_BODY_SHA256: ${{ needs.candidate.outputs.body_sha256 }}
+          RELEASE_PS1_SHA256: ${{ needs.candidate.outputs.ps1_sha256 }}
+          RELEASE_SH_SHA256: ${{ needs.candidate.outputs.sh_sha256 }}
+          RELEASE_PS1_SIZE: ${{ needs.candidate.outputs.ps1_size }}
+          RELEASE_SH_SIZE: ${{ needs.candidate.outputs.sh_size }}
+          OLYMPUS_RELEASE_ENABLED: ${{ vars.OLYMPUS_RELEASE_ENABLED }}
+          OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED: ${{ vars.OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from datetime import datetime, timezone, timedelta
+
+          repo = "Edulynch/OpenCode-OlympusAgents"
+          if os.environ["REPOSITORY"].casefold() != repo.casefold() or os.environ["OLYMPUS_RELEASE_ENABLED"] != "true":
+              raise SystemExit("RELEASE_CONTEXT_INVALID")
+          version, sha = os.environ["RELEASE_VERSION"], os.environ["RELEASE_SHA"]
+          release_id_text = os.environ["RELEASE_ID"]
+          if not re.fullmatch(r"[1-9][0-9]*", release_id_text):
+              raise SystemExit("DRAFT_RELEASE_ID_INVALID")
+          release_id = int(release_id_text)
+          asset_sizes = {
+              "install-olympus.ps1": os.environ["RELEASE_PS1_SIZE"],
+              "install-olympus.sh": os.environ["RELEASE_SH_SIZE"],
+          }
+          if any(not re.fullmatch(r"[1-9][0-9]*", value) for value in asset_sizes.values()):
+              raise SystemExit("RELEASE_ASSET_SIZE_INVALID")
+          expected = {
+              "install-olympus.ps1": {
+                  "sha256": os.environ["RELEASE_PS1_SHA256"],
+                  "size": int(asset_sizes["install-olympus.ps1"]),
+              },
+              "install-olympus.sh": {
+                  "sha256": os.environ["RELEASE_SH_SHA256"],
+                  "size": int(asset_sizes["install-olympus.sh"]),
+              },
+          }
+          if not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version):
+              raise SystemExit("RELEASE_VERSION_INVALID")
+          if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", sha):
+              raise SystemExit("RELEASE_SHA_INVALID")
+          if any(not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) for item in expected.values()):
+              raise SystemExit("RELEASE_ASSET_DIGEST_INVALID")
+          root = f"https://api.github.com/repos/{repo}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+              "User-Agent": "Olympus-release-publisher",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+          class ApiError(Exception):
+              def __init__(self, status):
+                  self.status = status
+          def api(method, path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              request = urllib.request.Request(
+                  root + path, data=data, method=method,
+                  headers={**headers, **({"Content-Type": "application/json"} if data else {})},
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      raw = response.read()
+                      result = json.loads(raw) if raw else None
+                      if result is None:
+                          raise SystemExit("GITHUB_API_RESPONSE_INVALID")
+                      return result
+              except urllib.error.HTTPError as error:
+                  raise ApiError(error.code) from None
+              except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+                  raise SystemExit("GITHUB_API_UNAVAILABLE") from None
+          def semver(value):
+              match = re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", value or "")
+              if not match:
+                  raise SystemExit("LATEST_RELEASE_INVALID")
+              return tuple(int(part) for part in match.groups())
+          try:
+              setting = api("GET", "/immutable-releases")
+          except ApiError as error:
+              if error.status == 404 or (error.status in (401, 403) and os.environ["OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED"] != "true"):
+                  raise SystemExit("IMMUTABILITY_NOT_CONFIRMED") from None
+              if error.status not in (401, 403):
+                  raise SystemExit("IMMUTABILITY_CHECK_FAILED") from None
+              print("IMMUTABILITY_EVIDENCE: explicit owner precondition (API setting read unavailable)")
+          else:
+              if not isinstance(setting, dict) or setting.get("enabled") is not True:
+                  raise SystemExit("IMMUTABILITY_DISABLED")
+          current = api("GET", "/git/ref/heads/master")
+          if (current.get("object") or {}).get("sha") != sha:
+              raise SystemExit("STALE_MASTER_SHA")
+          tag_path = "/git/ref/tags/" + urllib.parse.quote(version, safe="")
+          tag_ref = api("GET", tag_path)
+          ref_object = tag_ref.get("object") or {}
+          if ref_object.get("type") != "tag" or not isinstance(ref_object.get("sha"), str):
+              raise SystemExit("TAG_NOT_ANNOTATED")
+          tag_data = api("GET", "/git/tags/" + urllib.parse.quote(ref_object["sha"], safe=""))
+          if (
+              tag_data.get("tag") != version
+              or tag_data.get("message") != f"Olympus automatic release\nversion: {version}\ncommit: {sha}\n"
+              or (tag_data.get("object") or {}).get("sha") != sha
+              or (tag_data.get("object") or {}).get("type") != "commit"
+              or (tag_data.get("tagger") or {}).get("name") != "github-actions[bot]"
+              or (tag_data.get("tagger") or {}).get("email") != "41898282+github-actions[bot]@users.noreply.github.com"
+          ):
+              raise SystemExit("TAG_CONFLICT")
+          release = api("GET", f"/releases/{release_id}")
+          if (
+              not isinstance(release, dict)
+              or type(release.get("id")) is not int
+              or release.get("id") != release_id
+          ):
+              raise SystemExit("DRAFT_RELEASE_IDENTITY_INVALID")
+          body = release.get("body") or ""
+          if hashlib.sha256(body.encode("utf-8")).hexdigest() != os.environ["RELEASE_BODY_SHA256"]:
+              raise SystemExit("RELEASE_NOTES_DIGEST_MISMATCH")
+          if (
+              release.get("tag_name") != version
+              or release.get("name") != version
+              or release.get("draft") is not True
+              or release.get("prerelease") is not False
+              or release.get("published_at") is not None
+              or (release.get("author") or {}).get("login") != "github-actions[bot]"
+          ):
+              raise SystemExit("DRAFT_RELEASE_CONFLICT")
+          found = {}
+          for asset in release.get("assets", []):
+              name = asset.get("name")
+              if (
+                  name not in expected or name in found
+                  or asset.get("digest") != f"sha256:{expected[name]['sha256']}"
+                  or type(asset.get("size")) is not int
+                  or asset.get("size") != expected[name]["size"]
+              ):
+                  raise SystemExit("DRAFT_ASSET_CONFLICT")
+              found[name] = asset
+          if set(found) != set(expected):
+              raise SystemExit("DRAFT_ASSET_SET_INCOMPLETE")
+          try:
+              latest_before = api("GET", "/releases/latest")
+          except ApiError as error:
+              if error.status != 404:
+                  raise SystemExit("LATEST_RELEASE_CHECK_FAILED") from None
+              latest_before = None
+          if latest_before is not None and semver(latest_before.get("tag_name")) >= semver(version):
+              raise SystemExit("RELEASE_VERSION_NOT_LATEST")
+          current = api("GET", "/git/ref/heads/master")
+          if (current.get("object") or {}).get("sha") != sha:
+              raise SystemExit("STALE_MASTER_SHA")
+          published = api("PATCH", f"/releases/{release['id']}", {"draft": False, "make_latest": "true"})
+          latest = api("GET", "/releases/latest")
+          current = api("GET", "/git/ref/heads/master")
+          if (current.get("object") or {}).get("sha") != sha:
+              raise SystemExit("POST_PUBLISH_STALE_SHA")
+          timestamp = published.get("published_at")
+          try:
+              parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+          except (AttributeError, ValueError):
+              raise SystemExit("PUBLISHED_TIMESTAMP_INVALID") from None
+          if parsed.tzinfo is None or parsed.utcoffset() is None or parsed > datetime.now(timezone.utc) + timedelta(minutes=5):
+              raise SystemExit("PUBLISHED_TIMESTAMP_INVALID")
+          if (
+              type(published.get("id")) is not int
+              or published.get("id") != release_id
+              or published.get("tag_name") != version
+              or published.get("draft") is not False
+              or published.get("prerelease") is not False
+              or published.get("immutable") is not True
+              or latest.get("tag_name") != version
+              or latest.get("immutable") is not True
+          ):
+              raise SystemExit("PUBLISHED_RELEASE_VERIFY_FAILED")
+          published_assets = {}
+          for asset in published.get("assets", []):
+              name = asset.get("name")
+              if (
+                  name not in expected or name in published_assets
+                  or asset.get("digest") != f"sha256:{expected[name]['sha256']}"
+                  or type(asset.get("size")) is not int
+                  or asset.get("size") != expected[name]["size"]
+              ):
+                  raise SystemExit("PUBLISHED_ASSET_VERIFY_FAILED")
+              published_assets[name] = asset
+          if set(published_assets) != set(expected):
+              raise SystemExit("PUBLISHED_ASSET_VERIFY_FAILED")
+          print(f"RELEASE_PUBLISHED: {version} sha={sha} immutable=true latest=true")
+          PY
+
+  verify-public:
+    needs: [candidate, tag, tagged-qualification, draft, publish]
+    if: ${{ always() && needs.candidate.result == 'success' && (needs.candidate.outputs.mode == 'published' || ((needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume' || needs.candidate.outputs.mode == 'provisional') && needs.tag.result == 'success' && needs.tagged-qualification.result == 'success' && needs.draft.result == 'success' && needs.publish.result == 'success')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact event source read-only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Verify latest immutable metadata and public asset bytes
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.candidate.outputs.version }}
+          RELEASE_SHA: ${{ needs.candidate.outputs.sha }}
+          RELEASE_BODY_SHA256: ${{ needs.candidate.outputs.body_sha256 }}
+          RELEASE_PS1_SHA256: ${{ needs.candidate.outputs.ps1_sha256 }}
+          RELEASE_SH_SHA256: ${{ needs.candidate.outputs.sh_sha256 }}
+        run: |
+          set -euo pipefail
+          python -B .github/release.py verify-public \
+            --version "$RELEASE_VERSION" \
+            --sha "$RELEASE_SHA" \
+            --body-sha256 "$RELEASE_BODY_SHA256" \
+            --ps1-sha256 "$RELEASE_PS1_SHA256" \
+            --sh-sha256 "$RELEASE_SH_SHA256"

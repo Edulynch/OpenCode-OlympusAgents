@@ -1,5 +1,7 @@
 # Tests and qualification
 
 - Add regression tests to the existing suite for the behavior: Python `unittest` modules belong in the relevant `test_*.py` suite (shared CLI/Core coverage is under `harness-core/`), while Windows-specific integration belongs in the existing PowerShell or `.cmd` checks.
+- For release policy and tagged-source qualifications, follow the [release test instructions](release/AGENTS.md); keep API, tag, and endpoint fixtures offline unless a separate hosted/live test is explicitly assigned.
 - Keep small deterministic fixtures next to the suite that owns them. Use disposable paths for writable state; never reuse a real OpenCode profile, credentials, or a published release when a fixture can establish the contract.
 - Run the smallest affected check first. Preserve CI-required test names and selectors, and distinguish mock and static results from actual native execution. See the [qualification guide](../docs/DEVELOPMENT.md#choosing-qualification-by-change-risk).
+- For CI-covered tests, record the behavioral guarantee and owning job when changing coverage; justify material runtime increases, preserve fixture isolation and check/coverage contracts, and do not move or remove tests solely to meet timing targets.

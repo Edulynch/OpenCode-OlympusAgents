@@ -19,4 +19,5 @@ Use the [index](README.md) to find existing guides and references that still liv
 - Use one descriptive H1, short sections, descriptive link text, relative links for current repository files, and a language label on command blocks. Use a tag or commit for historical evidence.
 - Keep product behavior in its canonical source. For generated docs, edit the source and follow the [renderer workflow](HARNESSES.md) rather than editing the output.
 - Add new Markdown pages to [the index](README.md). Keep the English and Spanish root READMEs aligned when changing shared first-run instructions.
+- Keep release promotion, hosted branch-protection prerequisites, and endpoint evidence in [the development guide](DEVELOPMENT.md); never describe an opt-in or mocked workflow as a completed publication or live install.
 - Run `python -B scripts/check_docs.py` and `git diff --check` from the repository root. The docs checker does not fetch external URLs.

@@ -30,7 +30,7 @@ Issue #91 keeps documentation versioned in this repository. Enabling or publishi
 
 ## Contributing and project status
 
-- [Development](DEVELOPMENT.md) — architecture, qualification, and release procedures.
+- [Development](DEVELOPMENT.md) — architecture, qualification, the manual promotion path, and opt-in immutable Release gates.
 - [Roadmap](ROADMAP.md) — shipped, in-validation, and proposed work; not a release promise or implementation authorization.
 - [Documentation organization](AGENTS.md) — where to put new pages and how to check them. See the conventions for [guides](guide/AGENTS.md), [reference](reference/AGENTS.md), and [assets](assets/AGENTS.md).
 

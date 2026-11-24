@@ -46,7 +46,7 @@ Need parallel work or a performance review? See [OpenCode commands](#task-parall
 
 **Requirements:** `curl`, `sh`, OpenCode V2, and Python 3.11+.
 
-When the [latest release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) includes `install-olympus.sh`, run:
+The [latest stable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) includes the Linux entrypoint:
 
 ```sh
 curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh
@@ -60,13 +60,15 @@ Validated on Ubuntu 24.04 with WSL 2. [Linux setup and verification →](docs/IN
 
 ## Install a specific version
 
-**Windows:** install the pinned `v0.12.4` release:
+Choose a published stable tag and replace `vX.Y.Z` with that exact tag.
+
+**Windows:**
 
 ```powershell
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/v0.12.4/install.ps1')))
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/vX.Y.Z/install.ps1')))
 ```
 
-**Linux:** when the latest release includes the Linux installer, replace `vX.Y.Z` with the tag of a stable release that supports Linux installation:
+**Linux:** use the same selected stable tag when it supports Linux installation:
 
 ```sh
 curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh -s -- vX.Y.Z

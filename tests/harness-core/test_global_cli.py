@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import unittest
 import uuid
 from pathlib import Path
@@ -35,9 +36,38 @@ from olympus import config_apply, config_apply_transaction, global_readonly, mod
 from olympus.cli import load_renderer, main
 
 
+def _iter_tests(suite):
+    for test in suite:
+        if isinstance(test, unittest.TestSuite):
+            yield from _iter_tests(test)
+        else:
+            yield test
+
+
+def load_tests(loader, standard_tests, pattern):
+    shard = os.environ.get("OLYMPUS_GLOBAL_CLI_SHARD")
+    if shard is None:
+        return standard_tests
+    if shard not in {"1", "2", "3"}:
+        raise ValueError(f"OLYMPUS_GLOBAL_CLI_SHARD must be 1, 2, or 3; got {shard!r}")
+
+    tests = sorted(_iter_tests(standard_tests), key=lambda test: test.id())
+    selected = [test for index, test in enumerate(tests) if index % 3 == int(shard) - 1]
+    if not selected:
+        raise ValueError(f"OLYMPUS_GLOBAL_CLI_SHARD={shard} selected no tests")
+    return loader.suiteClass(selected)
+
+
 class GlobalCli(unittest.TestCase):
+    _TIMING_PHASES = (
+        "sandbox_setup", "clean_seed_install", "global_install", "update",
+        "verify", "uninstall", "cli_installer",
+    )
+
     @classmethod
     def setUpClass(cls):
+        cls._timing_enabled = os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
+        cls._phase_timings = {phase: [0, 0.0] for phase in cls._TIMING_PHASES}
         cls.pwsh = shutil.which("pwsh")
         if os.name != "nt" or cls.pwsh is None:
             raise unittest.SkipTest("The global CLI installer is qualified on Windows with PowerShell 7.")
@@ -48,30 +78,52 @@ class GlobalCli(unittest.TestCase):
             cls.test_root = Path(os.environ.get("TEMP", Path.home())) / "opencode"
         cls.test_root.mkdir(parents=True, exist_ok=True)
 
+    @classmethod
+    def tearDownClass(cls):
+        if cls._timing_enabled:
+            # These scoped intervals intentionally do not sum to unittest wall time.
+            phases = []
+            for phase in cls._TIMING_PHASES:
+                count, seconds = cls._phase_timings[phase]
+                elapsed = f"{seconds:.3f}" if count else "unverified"
+                phases.append(f"{phase} count={count} total_seconds={elapsed}")
+            print("OLYMPUS_TEST_PHASE_TIMING " + "; ".join(phases), file=sys.stderr, flush=True)
+
+    @contextlib.contextmanager
+    def _measure_phase(self, phase: str):
+        started = time.perf_counter() if self._timing_enabled else None
+        try:
+            yield
+        finally:
+            if started is not None:
+                count, seconds = self._phase_timings[phase]
+                self._phase_timings[phase] = [count + 1, seconds + time.perf_counter() - started]
+
     def setUp(self):
-        self.sandbox = self.test_root / ("global-cli-" + uuid.uuid4().hex)
-        self.sandbox.mkdir()
-        self.root = self.sandbox / "opencode"
-        self.appdata = self.sandbox / "appdata"
-        self.localappdata = self.sandbox / "localappdata"
-        self.profile = self.sandbox / "profile"
-        for directory in (self.root, self.appdata, self.localappdata, self.profile):
-            directory.mkdir()
-        self.env = os.environ.copy()
-        self.env.update({
-            "OPENCODE_CONFIG_DIR": str(self.root), "APPDATA": str(self.appdata),
-            "LOCALAPPDATA": str(self.localappdata), "USERPROFILE": str(self.profile),
-            "PYTHONDONTWRITEBYTECODE": "1", "OLYMPUS_TEST_ROOT": str(self.test_root),
-            "HOME": str(self.profile), "XDG_CONFIG_HOME": str(self.sandbox / "xdg"),
-            "OLYMPUS_CONFIG_FILE": str(self.appdata / "Olympus" / "config.json"),
-            "OLYMPUS_CLI_ROOT": str(self.sandbox / "cli"),
-            "OLYMPUS_CLI_PATH_STORE": str(self.sandbox / "cli" / "path-store.txt"),
-        })
-        environment = mock.patch.dict(os.environ, self.env)
-        environment.start()
-        self.addCleanup(environment.stop)
-        self.script = ROOT / "scripts/global-install.ps1"
-        initial = self._engine(update=False)
+        with self._measure_phase("sandbox_setup"):
+            self.sandbox = self.test_root / ("global-cli-" + uuid.uuid4().hex)
+            self.sandbox.mkdir()
+            self.root = self.sandbox / "opencode"
+            self.appdata = self.sandbox / "appdata"
+            self.localappdata = self.sandbox / "localappdata"
+            self.profile = self.sandbox / "profile"
+            for directory in (self.root, self.appdata, self.localappdata, self.profile):
+                directory.mkdir()
+            self.env = os.environ.copy()
+            self.env.update({
+                "OPENCODE_CONFIG_DIR": str(self.root), "APPDATA": str(self.appdata),
+                "LOCALAPPDATA": str(self.localappdata), "USERPROFILE": str(self.profile),
+                "PYTHONDONTWRITEBYTECODE": "1", "OLYMPUS_TEST_ROOT": str(self.test_root),
+                "HOME": str(self.profile), "XDG_CONFIG_HOME": str(self.sandbox / "xdg"),
+                "OLYMPUS_CONFIG_FILE": str(self.appdata / "Olympus" / "config.json"),
+                "OLYMPUS_CLI_ROOT": str(self.sandbox / "cli"),
+                "OLYMPUS_CLI_PATH_STORE": str(self.sandbox / "cli" / "path-store.txt"),
+            })
+            environment = mock.patch.dict(os.environ, self.env)
+            environment.start()
+            self.addCleanup(environment.stop)
+            self.script = ROOT / "scripts/global-install.ps1"
+        initial = self._engine(update=False, timing_phase="clean_seed_install")
         self.assertEqual(0, initial.returncode, initial.stdout + initial.stderr)
         self.manifest_path = self.root / "olympus/orchestrator-install.json"
 
@@ -79,7 +131,8 @@ class GlobalCli(unittest.TestCase):
         shutil.rmtree(self.sandbox, ignore_errors=True)
 
     def _engine(self, *, update: bool, answer: str | None = None, noninteractive: bool = False,
-                env: dict[str, str] | None = None, source_root: Path = ROOT):
+                env: dict[str, str] | None = None, source_root: Path = ROOT,
+                timing_phase: str | None = None):
         base = [self.pwsh, "-NoProfile"]
         arguments = ["-Harness", "opencode", "-SourceVersion", RELEASE_VERSION]
         if update:
@@ -97,24 +150,28 @@ class GlobalCli(unittest.TestCase):
         env = (self.env if env is None else env).copy()
         if answer is not None:
             env["OLYMPUS_TEST_ANSWER"] = answer
-        return subprocess.run(command, cwd=source_root, env=env, capture_output=True, text=True,
-                              encoding="utf-8", errors="replace", timeout=60, check=False)
+        phase = timing_phase or ("update" if update else "global_install")
+        with self._measure_phase(phase):
+            return subprocess.run(command, cwd=source_root, env=env, capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", timeout=60, check=False)
 
     def _verify_global(self, env: dict[str, str] | None = None, *, source_root: Path = ROOT):
-        return subprocess.run(
-            [self.pwsh, "-NoProfile", "-NonInteractive", "-File", str(source_root / "scripts/global-install.ps1"),
-             "-Harness", "opencode", "-SourceVersion", RELEASE_VERSION, "-VerifyOnly"],
-            cwd=source_root, env=self.env if env is None else env, capture_output=True,
-            text=True, encoding="utf-8", errors="replace", timeout=60, check=False,
-        )
+        with self._measure_phase("verify"):
+            return subprocess.run(
+                [self.pwsh, "-NoProfile", "-NonInteractive", "-File", str(source_root / "scripts/global-install.ps1"),
+                 "-Harness", "opencode", "-SourceVersion", RELEASE_VERSION, "-VerifyOnly"],
+                cwd=source_root, env=self.env if env is None else env, capture_output=True,
+                text=True, encoding="utf-8", errors="replace", timeout=60, check=False,
+            )
 
     def _uninstall_global(self, env: dict[str, str], *, source_root: Path = ROOT):
-        return subprocess.run(
-            [self.pwsh, "-NoProfile", "-NonInteractive", "-File", str(source_root / "scripts/global-install.ps1"),
-             "-Harness", "opencode", "-SourceVersion", RELEASE_VERSION, "-Uninstall"],
-            cwd=source_root, env=env, capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=60, check=False,
-        )
+        with self._measure_phase("uninstall"):
+            return subprocess.run(
+                [self.pwsh, "-NoProfile", "-NonInteractive", "-File", str(source_root / "scripts/global-install.ps1"),
+                 "-Harness", "opencode", "-SourceVersion", RELEASE_VERSION, "-Uninstall"],
+                cwd=source_root, env=env, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=60, check=False,
+            )
 
     def _downgrade_global_to_v010(self, root: Path):
         manifest_path = root / "olympus/orchestrator-install.json"
@@ -211,13 +268,14 @@ class GlobalCli(unittest.TestCase):
 
     def _cli_installer(self, action: str, install_root: Path, path_store: Path, *, source_root: Path = ROOT):
         source = install_root / "versions" / RELEASE_VERSION if action == "uninstall" else source_root
-        return subprocess.run(
-            [self.pwsh, "-NoProfile", "-NonInteractive", "-File", str(ROOT / "scripts/install-cli.ps1"),
-             "-Action", action, "-Version", RELEASE_VERSION, "-SourceRoot", str(source),
-             "-InstallRoot", str(install_root), "-PathStorePath", str(path_store)],
-            cwd=ROOT, env=self.env, capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=60, check=False,
-        )
+        with self._measure_phase("cli_installer"):
+            return subprocess.run(
+                [self.pwsh, "-NoProfile", "-NonInteractive", "-File", str(ROOT / "scripts/install-cli.ps1"),
+                 "-Action", action, "-Version", RELEASE_VERSION, "-SourceRoot", str(source),
+                 "-InstallRoot", str(install_root), "-PathStorePath", str(path_store)],
+                cwd=ROOT, env=self.env, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=60, check=False,
+            )
 
     def _create_project(self, *, version: str = RELEASE_VERSION) -> Path:
         project = self.sandbox / ("project-" + uuid.uuid4().hex)

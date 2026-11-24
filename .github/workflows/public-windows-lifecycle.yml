@@ -1,0 +1,47 @@
+name: Release / public Windows lifecycle
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.github/workflows/public-windows-lifecycle.yml'
+      - 'tests/release/verify-windows-public-lifecycle.ps1'
+
+permissions: {}
+
+jobs:
+  lifecycle:
+    name: Public latest install / VerifyOnly / uninstall (Windows hosted)
+    if: ${{ github.repository == 'Edulynch/OpenCode-OlympusAgents' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.repo.full_name == github.repository }}
+    runs-on: windows-2025
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact PR head without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Public v0.12.8 Windows lifecycle (ephemeral hosted account; mocked OpenCode)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./tests/release/verify-windows-public-lifecycle.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Confirm source checkout unchanged
+        shell: pwsh
+        run: |
+          $changes = @(git status --porcelain --untracked-files=all)
+          if ($LASTEXITCODE -ne 0) { throw 'Git status failed.' }
+          if ($changes.Count -gt 0) {
+            $changes | Out-Host
+            throw 'The public lifecycle test modified the source checkout.'
+          }

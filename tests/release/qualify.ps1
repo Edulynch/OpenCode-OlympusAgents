@@ -4,7 +4,8 @@ param(
     [switch]$ResumeAtR1,
     [switch]$ResumeAtPermissions,
     [string]$RecoveryRunId = '',
-    [string]$ExpectedVersion
+    [string]$ExpectedVersion,
+    [string]$SourceInventoryPath = ''
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -26,12 +27,98 @@ if ($PSBoundParameters.ContainsKey('ExpectedVersion')) {
     }
     Write-Output "R0_EXPECTED_TARGET_VERSION PASS: expected '$ExpectedVersion' exactly matches candidate '$($script:CandidateVersion)'."
 }
+
+function Test-CanonicalSourceInventoryPath([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path) -or $Path.Contains('\') -or
+        $Path.Contains(':') -or $Path -match '[\x00-\x1f<>:"|?*]' -or
+        [IO.Path]::IsPathRooted($Path)) {
+        return $false
+    }
+    foreach ($segment in $Path.Split('/')) {
+        if ([string]::IsNullOrEmpty($segment) -or $segment -in @('.', '..') -or
+            $segment.EndsWith('.') -or $segment.EndsWith(' ') -or $segment -ieq '.git' -or
+            $segment -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)') {
+            return $false
+        }
+    }
+    return $true
+}
+
+function Read-SourceInventory([string]$InventoryPath, [string]$SourceRoot) {
+    if ([string]::IsNullOrWhiteSpace($InventoryPath) -or
+        -not [IO.Path]::IsPathFullyQualified($InventoryPath) -or
+        -not (Test-Path -LiteralPath $InventoryPath -PathType Leaf)) {
+        throw 'SOURCE_INVENTORY_PATH_INVALID'
+    }
+    $inventoryFullPath = [IO.Path]::GetFullPath($InventoryPath)
+    $root = [IO.Path]::GetFullPath($SourceRoot).TrimEnd([char[]]@('\','/'))
+    $rootPrefix = $root + [IO.Path]::DirectorySeparatorChar
+    if ($inventoryFullPath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'SOURCE_INVENTORY_PATH_INVALID'
+    }
+    if (Test-Path -LiteralPath (Join-Path $root '.git')) {
+        throw 'SOURCE_INVENTORY_GIT_METADATA_PRESENT'
+    }
+    try {
+        $document = [IO.File]::ReadAllText($inventoryFullPath) | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        throw 'SOURCE_INVENTORY_INVALID'
+    }
+    if ($null -eq $document -or $document -is [array]) { throw 'SOURCE_INVENTORY_INVALID' }
+    $propertyNames = @($document.PSObject.Properties.Name)
+    if ($propertyNames.Count -ne 2 -or
+        $propertyNames -cnotcontains 'schema_version' -or $propertyNames -cnotcontains 'files' -or
+        (($document.schema_version -isnot [int]) -and ($document.schema_version -isnot [long])) -or
+        $document.schema_version -ne 1 -or $document.files -isnot [array] -or $document.files.Count -eq 0) {
+        throw 'SOURCE_INVENTORY_INVALID'
+    }
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $validated = [Collections.Generic.List[string]]::new()
+    foreach ($relative in $document.files) {
+        if ($relative -isnot [string] -or -not (Test-CanonicalSourceInventoryPath $relative)) {
+            throw 'SOURCE_INVENTORY_ENTRY_INVALID'
+        }
+        if (-not $seen.Add($relative)) { throw 'SOURCE_INVENTORY_ENTRY_DUPLICATE' }
+        $filePath = [IO.Path]::GetFullPath((Join-Path $root `
+            ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))))
+        if (-not $filePath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'SOURCE_INVENTORY_ENTRY_ESCAPES_SOURCE'
+        }
+        try {
+            $item = Get-Item -LiteralPath $filePath -Force -ErrorAction Stop
+        } catch {
+            throw 'SOURCE_INVENTORY_MEMBER_MISSING'
+        }
+        if ($item.PSIsContainer -or (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+            throw 'SOURCE_INVENTORY_MEMBER_TYPE_INVALID'
+        }
+        $validated.Add($relative)
+    }
+    foreach ($relative in $validated) {
+        $separator = $relative.IndexOf('/')
+        while ($separator -ge 0) {
+            if ($seen.Contains($relative.Substring(0, $separator))) {
+                throw 'SOURCE_INVENTORY_MEMBER_TYPE_COLLISION'
+            }
+            $separator = $relative.IndexOf('/', $separator + 1)
+        }
+    }
+    return $validated.ToArray()
+}
+
+$script:SourceArchiveInventory = $null
+if ($PSBoundParameters.ContainsKey('SourceInventoryPath')) {
+    $script:SourceArchiveInventory = @(Read-SourceInventory $SourceInventoryPath $source)
+    Write-Output "SOURCE_ARCHIVE_INVENTORY: $($script:SourceArchiveInventory.Count) validated file members."
+}
+
 $tempOpencode = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) 'opencode'
 if (-not $RecoveryRunId) { $RecoveryRunId = [guid]::NewGuid().ToString('N') }
 if ($RecoveryRunId -notmatch '^[A-Za-z0-9-]{8,80}$') { throw 'RECOVERY_RUN_ID_INVALID' }
 $run = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId)
 $receiptPath = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId + '.json')
 $transcriptPath = Join-Path $tempOpencode ('olympus-release-qualification-' + $RecoveryRunId + '.log')
+[IO.Directory]::CreateDirectory($tempOpencode) | Out-Null
 $cliInstallRoot = Join-Path $run 'cli-install'
 $cliPathStorePath = Join-Path $cliInstallRoot 'cli-path.json'
 . (Join-Path $PSScriptRoot '../installer-test-environment.ps1')
@@ -93,31 +180,40 @@ function New-Target([string]$name) {
     return $target
 }
 
-function New-SourceArchive([string]$sourceRoot, [string]$tag, [string]$archivePath, [switch]$MisreportVersion) {
+function New-SourceArchive(
+    [string]$sourceRoot, [string]$tag, [string]$archivePath, [switch]$MisreportVersion,
+    [string[]]$SourceInventory = $null, [switch]$ArchiveSource
+) {
     $pack = Join-Path $run ('package-' + [guid]::NewGuid().ToString('N'))
     $top = Join-Path $pack "OpenCode-OlympusAgents-$tag"
     [IO.Directory]::CreateDirectory($top) | Out-Null
-    # Keep the local archive fixture hermetic: unrelated user untracked files
-    # are not release source; deleted tracked files are not current source either.
-    $files = @(& git -C $sourceRoot ls-files --cached)
-    if ($LASTEXITCODE -ne 0 -or $files.Count -eq 0) { throw 'GIT_FIXTURE_SOURCE_INVENTORY_FAIL' }
-    $deletedFiles = @(& git -C $sourceRoot ls-files --deleted)
-    if ($LASTEXITCODE -ne 0) { throw 'GIT_FIXTURE_SOURCE_DELETION_INVENTORY_FAIL' }
-    $files = @($files | Where-Object { $_ -notin $deletedFiles })
-    if ($files.Count -eq 0) { throw 'GIT_FIXTURE_SOURCE_INVENTORY_FAIL' }
-    $installationGuide = 'docs/INSTALLATION.md'
-    if ((Test-Path -LiteralPath (Join-Path $sourceRoot $installationGuide) -PathType Leaf) -and $installationGuide -notin $files) {
-        $files += $installationGuide
-    }
-    # Include only these new release resources before they are committed, not arbitrary untracked files.
-    foreach ($relative in @(
-        'olympus/harnesses/opencode/commands/olympus.ultra.md',
-        'olympus/harnesses/opencode/commands/olympus.performance.md',
-        '.opencode/commands/olympus.ultra.md',
-        '.opencode/commands/olympus.performance.md'
-    )) {
-        if ((Test-Path -LiteralPath (Join-Path $sourceRoot $relative) -PathType Leaf) -and $relative -notin $files) {
-            $files += $relative
+    if ($ArchiveSource) {
+        if ($null -eq $SourceInventory -or $SourceInventory.Count -eq 0) {
+            throw 'SOURCE_INVENTORY_INVALID'
+        }
+        $files = @($SourceInventory)
+    } else {
+        # Keep the local archive fixture hermetic: untracked files are excluded and deletions are omitted.
+        $files = @(& git -C $sourceRoot ls-files --cached)
+        if ($LASTEXITCODE -ne 0 -or $files.Count -eq 0) { throw 'GIT_FIXTURE_SOURCE_INVENTORY_FAIL' }
+        $deletedFiles = @(& git -C $sourceRoot ls-files --deleted)
+        if ($LASTEXITCODE -ne 0) { throw 'GIT_FIXTURE_SOURCE_DELETION_INVENTORY_FAIL' }
+        $files = @($files | Where-Object { $_ -notin $deletedFiles })
+        if ($files.Count -eq 0) { throw 'GIT_FIXTURE_SOURCE_INVENTORY_FAIL' }
+        $installationGuide = 'docs/INSTALLATION.md'
+        if ((Test-Path -LiteralPath (Join-Path $sourceRoot $installationGuide) -PathType Leaf) -and $installationGuide -notin $files) {
+            $files += $installationGuide
+        }
+        # Include only these new release resources before they are committed, not arbitrary untracked files.
+        foreach ($relative in @(
+            'olympus/harnesses/opencode/commands/olympus.ultra.md',
+            'olympus/harnesses/opencode/commands/olympus.performance.md',
+            '.opencode/commands/olympus.ultra.md',
+            '.opencode/commands/olympus.performance.md'
+        )) {
+            if ((Test-Path -LiteralPath (Join-Path $sourceRoot $relative) -PathType Leaf) -and $relative -notin $files) {
+                $files += $relative
+            }
         }
     }
     foreach ($relative in $files) {
@@ -298,11 +394,18 @@ try {
         [IO.File]::ReadAllText($keptArchivePath) -eq "current worktree bytes`n" -and
         -not (Test-Path -LiteralPath (Join-Path $archiveInventoryRoot 'removed.txt')) -and
         -not (Test-Path -LiteralPath (Join-Path $archiveInventoryRoot 'user-untracked.txt')))
-    $candidateArchive = New-SourceArchive $source $script:CandidateVersion (Join-Path $run "candidate-$($script:CandidateVersion).zip")
-    $alphaArchive = New-SourceArchive $source 'v0.3.0-alpha.1' (Join-Path $run 'alpha.zip')
-    $betaArchive = New-SourceArchive $source 'v0.3.0-beta.2' (Join-Path $run 'beta.zip')
-    $rcArchive = New-SourceArchive $source 'v0.3.0-rc.1' (Join-Path $run 'rc.zip')
-    $mismatchArchive = New-SourceArchive $source $script:CandidateVersion (Join-Path $run "mismatch-$($script:CandidateVersion)-to-v020.zip") -MisreportVersion
+    $archiveSourceArguments = @{}
+    if ($null -ne $script:SourceArchiveInventory) {
+        $archiveSourceArguments = @{
+            ArchiveSource = $true
+            SourceInventory = $script:SourceArchiveInventory
+        }
+    }
+    $candidateArchive = New-SourceArchive $source $script:CandidateVersion (Join-Path $run "candidate-$($script:CandidateVersion).zip") @archiveSourceArguments
+    $alphaArchive = New-SourceArchive $source 'v0.3.0-alpha.1' (Join-Path $run 'alpha.zip') @archiveSourceArguments
+    $betaArchive = New-SourceArchive $source 'v0.3.0-beta.2' (Join-Path $run 'beta.zip') @archiveSourceArguments
+    $rcArchive = New-SourceArchive $source 'v0.3.0-rc.1' (Join-Path $run 'rc.zip') @archiveSourceArguments
+    $mismatchArchive = New-SourceArchive $source $script:CandidateVersion (Join-Path $run "mismatch-$($script:CandidateVersion)-to-v020.zip") -MisreportVersion @archiveSourceArguments
 
     $versionText = $installerText
     $releaseIdentityValid = ($versionText -match "(?m)^\s*\[string\]\`$Version\s*=\s*'$($script:CandidateRegex)'" -and

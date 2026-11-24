@@ -8,7 +8,7 @@
 
 🌐 **English · [Español](README.ES.md)**
 
-[![Latest release](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) [![Windows qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](docs/HARNESSES.md) [![MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) [![Windows qualified](https://img.shields.io/badge/Windows-qualified-2563eb?style=flat-square)](docs/HARNESSES.md) [![Linux (WSL 2)](https://img.shields.io/badge/Linux-WSL%202-2563eb?style=flat-square)](docs/INSTALLATION.md#linux-sh-entrypoint) [![OpenCode v2.4.1](https://img.shields.io/badge/OpenCode-v2.4.1-2563eb?style=flat-square)](https://github.com/anomalyco/opencode/releases/tag/v2.4.1) [![MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
 
 **[🎯 Try it](#your-first-task) · [⚡ Install](#fast-install) · [🧩 Team](#the-team) · [🧭 Commands](#task-parallelism) · [🛠️ CLI](#portable-cli) · [📚 Guides](#guides)**
 
@@ -145,10 +145,12 @@ olympus uninstall
 | 📦 **Releases** | [Latest stable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) · [All releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Changelog](CHANGELOG.md) |
 | 📖 **All docs** | [Documentation index](docs/README.md) · [License](LICENSE) |
 
-<sub>Olympus is an independent orchestration system, not a fork. The specialized-team idea was informed in part by [codex-astra-luna-orchestrator](https://github.com/donvito/codex-astra-luna-orchestrator) (Apache-2.0).</sub>
+## 🔗 Mentions
 
-## ⚠️ Use and responsibility
+- [XERJ Corpus Hub](https://hub.xerj.org/corpus/edulynch--opencode-olympusagents) — a catalog of open-source projects that gives AI tools more context.
 
-Agents can modify files and run commands depending on the permissions you grant. Start on a test branch and review changes before merging.
+## ⚖️ Use and responsibility
+
+Agents can modify files and run commands depending on the permissions you grant. Start on a test branch, check that the permissions fit the task, and review suggested changes before applying or merging them. Run relevant checks and confirm the results before relying on them.
 
 Olympus is provided “as is”, without warranty. See the [MIT License](LICENSE) for the full terms, including the limitation of liability.

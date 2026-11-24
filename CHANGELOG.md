@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## v0.12.8
+
+### Highlights
+
+- Since the public v0.12.3 release, add standalone workflows with evidence handling; clarify supported scope and evidence; keep Kael coordinator-only; and distinguish tool results from native permission and user-decision evidence.
+- Carry applicable validation evidence across PR, CI, and release handoffs, requesting only the smallest check for a named gap. Separate `develop` contributor CI from manually merged `develop` → `master` promotion, and add the opt-in provenance-checked immutable GitHub Release path without a migration-time version bump.
+- Fix the numeric release-draft ID handoff and allow a same-SHA draft to resume without repeating an already-completed mutation.
+- Fix Windows release qualification when `TEMP`/`TMP` points to a fresh missing parent by creating the `opencode` temp directory before writing qualification receipts and transcripts.
+- Fix Windows tagged-source qualification by keeping process temporary files at a short runner-temp root and validating the explicit Git archive inventory before running extracted source without `.git` metadata.
+
+### Capability limits
+
+- Mocked candidate qualification does not establish public tagged-archive or public-endpoint install, `VerifyOnly`, or uninstall behavior, and does not exercise a live OpenCode session or native permission decisions. No native Linux/macOS or WSL first-task support is claimed.
+- Hosted contributor CI, human-only manual promotion, public-tag validation, and public-endpoint lifecycle qualification remain separate gates.
+
+## Installation
+
+This PR prepares v0.12.8; it is not publicly available yet. When published, use **Fast Install** or **Fast Uninstall** from the [v0.12.8 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.8/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+After publication, see [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.8/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+
 ## v0.12.7
 
 ### Highlights

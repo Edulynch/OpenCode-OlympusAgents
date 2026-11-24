@@ -145,12 +145,12 @@ olympus uninstall
 | 📦 **Releases** | [Latest stable release](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) · [All releases](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Changelog](CHANGELOG.md) |
 | 📖 **All docs** | [Documentation index](docs/README.md) · [License](LICENSE) |
 
-## Mentions
+## 🔗 Mentions
 
-- [XERJ Corpus Hub](https://hub.xerj.org/corpus/edulynch--opencode-olympusagents)
+- [XERJ Corpus Hub](https://hub.xerj.org/corpus/edulynch--opencode-olympusagents) — a catalog of open-source projects that gives AI tools more context.
 
-## ⚠️ Use and responsibility
+## ⚖️ Use and responsibility
 
-Agents can modify files and run commands depending on the permissions you grant. Start on a test branch and review changes before merging.
+Agents can modify files and run commands depending on the permissions you grant. Start on a test branch, check that the permissions fit the task, and review suggested changes before applying or merging them. Run relevant checks and confirm the results before relying on them.
 
 Olympus is provided “as is”, without warranty. See the [MIT License](LICENSE) for the full terms, including the limitation of liability.

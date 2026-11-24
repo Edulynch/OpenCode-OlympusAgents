@@ -151,12 +151,12 @@ La documentación técnica está en inglés.
 | 📦 **Versiones** | [Última versión estable](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) · [Todas las versiones](https://github.com/Edulynch/OpenCode-OlympusAgents/releases) · [Registro de cambios](CHANGELOG.md) |
 | 📖 **Toda la documentación** | [Índice de guías](docs/README.md) · [Licencia](LICENSE) |
 
-## Menciones
+## 🔗 Menciones
 
-- [XERJ Corpus Hub](https://hub.xerj.org/corpus/edulynch--opencode-olympusagents)
+- [XERJ Corpus Hub](https://hub.xerj.org/corpus/edulynch--opencode-olympusagents) — un catálogo de proyectos de código abierto que da más contexto a las herramientas de IA.
 
-## ⚠️ Uso y responsabilidad
+## ⚖️ Uso y responsabilidad
 
-Los agentes pueden modificar archivos y ejecutar comandos según los permisos que les concedas. Empieza en una rama de prueba y revisa los cambios antes de integrarlos.
+Los agentes pueden modificar archivos y ejecutar comandos según los permisos que les concedas. Empieza en una rama de prueba, comprueba que los permisos correspondan a la tarea y revisa los cambios propuestos antes de aplicarlos o integrarlos. Ejecuta las comprobaciones pertinentes y confirma los resultados antes de confiar en ellos.
 
 Olympus se proporciona «tal cual», sin garantías. Consulta la [licencia MIT](LICENSE) para conocer los términos completos, incluida la limitación de responsabilidad.

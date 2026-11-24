@@ -3,6 +3,12 @@ description: Read-only architect worker for bounded architecture, interfaces, bo
 mode: subagent
 model: "{{opencode_model}}#{{effort}}"
 permissions:
+  - action: automation_*
+    resource: "*"
+    effect: deny
+  - action: browser
+    resource: "*"
+    effect: deny
   - action: edit
     resource: "*"
     effect: deny

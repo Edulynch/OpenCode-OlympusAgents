@@ -416,10 +416,17 @@ project: `debug paths` first confirms isolated paths, then Runtime starts an
 owned loopback OpenCode service on an ephemeral port and verifies its isolated
 XDG state registry. The subsequent `debug config`, authenticated
 `GET /api/integration`, and `debug agents` queries use that same backend. The
-integration request waits for plugin activation and verifies the returned
-`location.directory`; it uses only the service password from the fixture
-registry. Runtime checks that the registry still names the owned process after
-each query and verifies the owned loopback listener before stopping the service.
+integration request verifies only response shape and the returned
+`location.directory`; a 200 may arrive before plugin activation completes
+([upstream regression #63814](https://github.com/anomalyco/opencode/issues/63814)),
+so it is not a readiness signal. `debug agents` uses OpenCode's bounded internal
+wait in V2.3.2/V2.4.0; the fixture adds no polling loop or arbitrary sleep. The
+Authority runtime check requires each of the 11 expected Olympus IDs exactly
+once while allowing additional OpenCode built-ins, and evaluates their effective
+permission rules. The API request uses only the service password from the
+fixture registry. Runtime checks that the registry still names the owned
+process after each query and verifies the owned loopback listener before
+stopping the service.
 Cleanup confirms process exit and drained streams, then removes the fixture;
 cleanup or removal failures fail qualification.
 Offline makes no real OpenCode calls; Both runs Offline plus this same Runtime
@@ -440,7 +447,12 @@ evidence is not current product support.
 A completed RUNTIME profile still does **not** qualify interactive child
 execution, native ASK UI or human approval/rejection, the question race, or
 Activity TUI rendering; those remain separately observed/manual
-evidence.
+evidence. The 2026-11-23 bundled Windows OpenCode V2.4.0 Authority Runtime
+result and its evidence scope and limits are recorded in the
+[V2.4.0 evidence](HARNESSES.md#opencode-240-role-tool-boundaries). That
+effective-rule pass does not establish UI behavior or live result delivery;
+`/api/integration` checks response shape and directory only, not plugin
+readiness.
 
 Use the [Prompt Book](../tests/prompt-book/README.md) for an opt-in automated
 read-only smoke against real Kael and Nox sessions, and for separate manual
@@ -565,7 +577,21 @@ Explicitly bootstrapped projects are treated as trusted. Kovan can edit and use 
 
 ## Activity HUD
 
-The passive, read-only plugin uses native OpenCode child-session list and status to show running agents and their tasks. It appears only when direct children are active; it does not spawn sessions, poll, or alter orchestration.
+The passive, read-only plugin keeps the existing root-only, direct-child rows
+and labels. A row is active when the child session is running or, when the
+reactive TUI store exposes `data.job.list(rootSessionID)`, while that child's
+represented session tree owns a running job of kind `shell`, `subagent`,
+`image`, `video`, or `codemode`; subagent jobs follow `childSessionID`, and
+other kinds follow `sessionID`. OpenCode V2.3.2's TUI `Data` has no job API, so
+feature detection preserves the session-status-only behavior there and on
+other versions without the API. The plugin reads the store inside its existing
+reactive memo; it does not poll, spawn sessions, or alter orchestration. The
+focused Node test covers this union. **USER_REPORTED:** the post-change Windows
+TUI visual check passed for one scenario: a yielded idle child stayed visible
+while its original shell job was pending and disappeared after terminal
+completion. The exact OpenCode version and native shell exit code are
+unavailable; this is not broader runtime qualification (see the
+[HUD evidence](HARNESSES.md#opencode-240-role-tool-boundaries)).
 
 ## External work ownership
 

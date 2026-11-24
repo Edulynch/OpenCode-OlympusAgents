@@ -232,8 +232,8 @@ configuration or grant external access. Static source/render checks establish
 configured rules only—not tool execution, native permission UI or decisions,
 or user/account state. Shell retains host authority and is not an OS sandbox.
 
-**Issue #177 qualification (2026-11-22).** Nox's independent isolated OpenCode
-v2.3.2 run of `pwsh -NoProfile -File ./tests/authority/qualify.ps1 -QualificationSlice Runtime` reported `AUTH14_OPENCODE_EFFECTIVE_RULES PASS` and
+**Historical Issue #177 qualification (OpenCode V2.3.2; 2026-11-22).** Nox's
+independent isolated run of `pwsh -NoProfile -File ./tests/authority/qualify.ps1 -QualificationSlice Runtime` reported `AUTH14_OPENCODE_EFFECTIVE_RULES PASS` and
 fixture cleanup PASS; this evaluated loaded rules only (Kael edit DENY, shell
 DENY except the exact root probe, Serena 6/6 DENY, ten named specialists ALLOW
 and unlisted DENY, inherited external-directory ASK without a Kael-local
@@ -247,6 +247,155 @@ disposable Windows project, the TUI showed Veyra start and finish the read-only
 delegation/completion/answer observation—not independent filesystem-integrity
 evidence, a denied-action attempt, ASK UI/decision evidence, an observed root
 shell probe, or fresh global-scope evidence.
+
+## OpenCode 2.4.0 role tool boundaries
+
+The canonical role metadata denies `automation_*` and `browser`, each on
+resource `*`, for Kael, Kovan, Nox, Orin, Vera, and Veyra. Argus, Atlas, Helios,
+Talos, and Thales already deny every action on every resource in their role
+metadata; they need no duplicate tool-specific rules. OpenCode V2.4.0 maps a
+namespace/tool pair to its effective `namespace_tool` permission ID, so
+`automation_*` covers `automation_create`, `automation_list`,
+`automation_pause`, `automation_resume`, and `automation_delete`, including
+Code Mode calls through those tools. The browser tool uses the `browser` action
+([OpenCode browser documentation](https://opencode.ai/docs/tools#browser)).
+
+These are Olympus role-level native denials only. They do not disable a user's
+manual `/automation` command, block browser use by other agents, or edit root,
+user, or profile permissions. The Authority source/matcher checks evaluate
+both routes with last-matching-rule semantics; the isolated runtime check
+requires each of the 11 expected Olympus IDs exactly once, permits additional
+OpenCode built-ins, and reports each protected action's effective decision.
+Static source checks and isolated fixtures are not evidence of the native
+permission UI, human approval/rejection, or an arbitrary user's effective
+profile.
+
+**OpenCode V2.4.0 evidence (2026-11-23).** The bundled Windows CLI was first
+run at clean source commit `08e328264bbf6f3e66f90d8c6f3d47a210075168`:
+all three baseline invocations exited 0.
+
+- Before the role-metadata edits, `tests/authority/qualify.ps1
+  -QualificationSlice Runtime` passed `AUTH14_OPENCODE_EFFECTIVE_RULES`.
+  This baseline checked existing Kael/Kovan effective rules, not uniqueness
+  of all 11 Olympus IDs or the new automation/browser denials.
+- `tests/global-installer/native-permission-api-smoke.ps1 -NativeToolRead`
+  observed an ASK case rejected programmatically through the API, automatic
+  specific DENY, and a denied fixture read with no sentinel exposure. This was
+  not an interactive permission UI or human decision.
+- `tests/worktree-activation/native-smoke.ps1` exited 0 after validating two
+  native worktrees, their valid manifests, and `default_agent=kael`; it did not
+  validate the full role roster or permission UI.
+
+After the source edits, Authority Runtime ran on a disposable, freshly rendered
+candidate and exited 0 with `AUTH14_OPENCODE_EFFECTIVE_RULES PASS` and owned
+fixture cleanup PASS. It found all 11 Olympus IDs exactly once, plus seven
+additional IDs, and effective DENY for all 66 checks (the five listed
+`automation_*` actions and `browser` across the 11 roles). Existing Kael
+shell/edit/root-only probe/named-subagent assertions and Kovan permission
+assertions also passed. `/api/integration` verified response shape and
+directory only; it did not establish plugin activation/readiness.
+
+Optional direct Code Mode/catalog visibility (including blank-profile checks)
+and browser Desktop invocation were **NOT RUN** and are not required for closure.
+No runtime tool-catalog/availability or browser-UI assertion is made. The
+effective DENY results are permission-rule evidence only; they do not establish
+that a protected action was invoked or blocked at the tool boundary, or that a
+tool is absent from the runtime catalog. Native permission UI and human decisions
+were not observed and remain evidence limits, not closure gates. Interactive HUD
+evidence is limited to the
+user-reported Windows observation below; it does not qualify OpenCode 2.4 runtime
+compatibility. Parent/child report delivery has only the separate partial
+observation recorded below. Docker, real installation, credentials, and
+user-global automation/browser settings were not touched. The deterministic
+local fake provider was not repurposed, and absence of a Desktop run is not a
+product failure finding. The HUD candidate keeps a direct child visible while
+its session is running or while the optional reactive root-tree job list reports
+supported active work owned by that child's represented tree. Static source and
+Node-test evidence remains distinct from the bounded visual observation.
+Preserve authentication and user-global automation/browser settings.
+
+The read-only `python -B scripts/render_harnesses.py check --harness opencode`
+historically exited 1: exactly these six tracked generated agents were stale:
+`.opencode/agents/{kael,kovan,nox,orin,vera,veyra}.md`. No other generated
+output mismatch was reported. **USER_REPORTED:** a subsequent manual
+`python -B scripts/render_harnesses.py render --harness opencode` reported
+`HARNESS_RENDER: PASS (opencode; wrote 6 changed output(s), 12 unchanged)`,
+then `python -B scripts/render_harnesses.py check --harness opencode` reported
+`HARNESS_RENDER_CHECK: PASS (opencode; 18 managed output(s); read-only)`.
+This records the supplied transcript, not an independent rerun or an
+unreported exit code. That pass predates the current canonical HUD edits and is
+not current renderer evidence.
+
+**USER_REPORTED — later manual renderer synchronization after the final HUD
+source change.** `python -B scripts/render_harnesses.py render --harness opencode`
+reported `HARNESS_RENDER: PASS (opencode; wrote 2 changed output(s), 16 unchanged)`,
+followed by
+`python -B scripts/render_harnesses.py check --harness opencode` reporting
+`HARNESS_RENDER_CHECK: PASS (opencode; 18 managed output(s); read-only)`. This
+supplied transcript, not an independent rerun or a separately supplied exit
+code, supersedes the earlier stale-output note as current renderer evidence.
+This documentation task did not render or edit generated outputs.
+
+**USER_REPORTED — separate manual TUI trace; exact runtime version not
+supplied.** A screenshot showed the Activity HUD `1 active` with `Nox — The
+Tester` and task `Validar documentación en segundo plano`, plus the native
+footer `1 subagent`. Kael said Nox's session had started in that frame, but the
+shell-job launch was not yet confirmed. This is a partial visual observation;
+it does not show either the HUD or native subagents view during the critical
+interval when a shell job was active and the child idle. Later pasted output
+from the same conversation said `Nox finished`; Kael reported that Nox ran
+`python -B scripts/check_docs.py` in a native background job and received the
+final report, and the checker printed PASS after 102 Markdown files with six
+historical attachments excluded. Nox's transcript identifies two distinct
+background shell jobs: it reports the native launch and terminal notification
+for the original, and a terminal notification for the accidental duplicate;
+both reportedly printed the same PASS output and finished. Thus exactly-once
+execution was historically recorded **FAILED** for this trace. This job
+attribution and Kael's receipt of the Nox report are user-supplied transcript
+evidence, not independently verified from raw tool results. Neither job's
+terminal command exit code or raw tool result was supplied, so exit status
+remains unknown; no cause for the duplicate is inferred. The conversation
+summary reports no jobs/results pending, and Nox reports the same tracked-path
+status before and after; that does not establish byte-for-byte integrity. This
+trace does not establish the exact OpenCode version and is not a check performed
+by this documentation task.
+
+**USER_REPORTED — later before-change Windows TUI captures; exact version not
+shown.** Both captures initially show Nox as `Running`. After Nox yields with
+the original background job, the root first receives a `Nox finished` notice
+containing only the launch ID; in the following same-root view, the Olympus HUD
+is absent while native Subagents still lists Nox without `Running`. Later, the
+original shell completes with `HUD_PROBE_END`, and Nox's report correlates the
+original shell ID `sh_20e5075be001YhNYEPUanLgJym`. A second `Nox finished`
+notice is the child's resumption result, not evidence of a second shell launch.
+The root's final account says one job and no relaunch; the native shell exit
+value was not exposed, and the native pane later showed no active subagents.
+These captures motivate retaining the idle child row while its original native
+work remains active. They do **not** show a Shell running pane in the critical
+frame, establish the exact OpenCode version, or expose a native shell exit
+code. At that point the candidate UI had not yet been rerun; these before-change
+captures do not qualify its behavior. The earlier two reported duplicate events
+remain historical; their relation to these captures and their causality are
+unconfirmed.
+
+**USER_REPORTED — post-change Windows TUI visual check PASS for this one
+scenario only; exact OpenCode version not shown.** Four screenshots from the
+exact worktree show one probe sequence. After
+the first `Nox finished` progress/yield notice, while the root remained pending
+on the original shell job, the same root frame shows the Olympus HUD `1 active`
+Nox row and a native active Subagents row for Nox without a `Running` label. A
+companion child frame shows one Background shell command,
+`Start-Sleep -Seconds 45; Write-Output 'HUD_PROBE_END'; exit 0`, and a progress
+report with the original job ID. After the second child notice, a later root
+frame shows the terminal report for that original job with `HUD_PROBE_END`; the
+root reports no active task work and the HUD no longer shows Nox. The repeated
+progress report is for the same ID, not a second shell call. This one scenario
+supports the row remaining visible while the yielded child has pending work and
+clearing after completion. The screenshots do not show a Shell pane while the
+job is running or a separate native Subagents pane at the final frame; no exact
+runtime version or native shell exit is shown. The command's `exit 0` text is
+not an observed shell exit status. This does not establish a general fix for
+earlier duplicate events or broader runtime compatibility.
 
 ## Capability evidence
 
@@ -271,7 +420,7 @@ are limited to their stated OpenCode version, platform, and scenario.
 | `ASK` | An applicable native OpenCode ASK rule requests permission; Core instructions require an exact scoped attempt and separate reporting of permission observation. | Static/synthetic authority checks and the isolated [permission API smoke](../tests/global-installer/native-permission-api-smoke.ps1), which programmatically rejects its ASK case. | Programmatic rejection is not human approval, interactive TUI visibility, or evidence that a notice appeared to a user. |
 | `DENY` | Native rules refuse the exact operation, while Core DENY remains a non-elevatable policy boundary. | Effective-rule assertions in [`tests/authority/qualify.ps1`](../tests/authority/qualify.ps1) and the specific automatic-denial case in the isolated [permission API smoke](../tests/global-installer/native-permission-api-smoke.ps1). | This is not general shell/filesystem isolation; shell retains host authority and the fixtures do not establish a universal sandbox. |
 | `CONTEXTUAL_OLYMPUS_MAINTENANCE` | The renderer transcludes canonical maintenance policy into Kael's prompt, which routes by target identity and task intent. | Static [`maintenance-scope` qualification](../tests/maintenance-scope/qualify.py) and the [canonical policy](../olympus/policies/maintenance-context.md). | Static coverage does not establish live, universal routing behavior. |
-| `ACTIVITY_VISIBILITY` | The passive Activity plugin reads native child-session state and presents active children. | Plugin source plus the Node [presentation test](../tests/activity-hud/activity.test.mjs) and [qualification](../tests/activity-hud/qualify.ps1). | Interactive HUD visibility, including low-verbosity presentation, has not been verified. |
+| `ACTIVITY_VISIBILITY` | The passive Activity plugin reads native session status and, when available, the reactive root-tree job list to show a direct child while its session or supported child-tree work is active. | Plugin source and the Node [presentation test](../tests/activity-hud/activity.test.mjs), [qualification](../tests/activity-hud/qualify.ps1), and user-reported before/after captures above. | Static/source evidence does not establish TUI rendering. The before-change captures show the HUD missing while native Subagents listed an idle child; the post-change captures show one Windows scenario where the row remained during a yielded child’s pending job and cleared after completion. The screenshots do not show a Shell pane while running, an exact runtime version, or the native shell exit status; this is not broader runtime qualification. |
 | `GLOBAL_RUNTIME_DISCOVERY` | Isolated OpenCode configuration/data paths are used to check global agent discovery separately from renderer output or file placement. | Historical Windows OpenCode V2.0.26/v0.4.6 evidence found 12 then-current agents and two controls; current-team Windows V2.3.0 (#143) observed 11 Olympus IDs among 18 in [the recorded case](#opencode-23-subagent-compatibility); the V2.3.2 candidate report observed 11 expected IDs, with uniqueness unverified ([#180 evidence](../specs/001-portable-olympus-cli/evidence/issue-180-first-use.md)). | Evidence is limited to recorded Windows versions and isolated paths; it does not establish Unix global install/runtime, model execution, or universal public-install discovery. |
 
 ### OpenCode 2.3 subagent compatibility

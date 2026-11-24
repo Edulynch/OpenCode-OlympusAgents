@@ -4,6 +4,12 @@ description: "Kael — The Master. Primary OpenCode V2 orchestrator for minimal 
 mode: primary
 model: "openai/gpt-6.2-sol#high"
 permissions:
+  - action: automation_*
+    resource: "*"
+    effect: deny
+  - action: browser
+    resource: "*"
+    effect: deny
   # Kael needs shell only for the exact repository-root probe.
   - action: shell
     resource: "*"

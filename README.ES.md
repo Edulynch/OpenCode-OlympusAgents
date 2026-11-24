@@ -8,7 +8,9 @@
 
 🌐 **[English](README.md) · Español**
 
-[![Última versión](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) [![Windows validado](https://img.shields.io/badge/Windows-validado-2563eb?style=flat-square)](docs/HARNESSES.md) [![Licencia MIT](https://img.shields.io/badge/Licencia-MIT-f59e0b?style=flat-square)](LICENSE)
+[![Última versión](https://img.shields.io/github/v/release/Edulynch/OpenCode-OlympusAgents?style=flat-square)](https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest) [![Windows validado](https://img.shields.io/badge/Windows-validado-2563eb?style=flat-square)](docs/HARNESSES.md) [![Linux (WSL 2)](https://img.shields.io/badge/Linux-WSL%202-2563eb?style=flat-square)](docs/INSTALLATION.md#linux-sh-entrypoint) [![OpenCode v2.4.1](https://img.shields.io/badge/OpenCode-v2.4.1-2563eb?style=flat-square)](https://github.com/anomalyco/opencode/releases/tag/v2.4.1) [![Licencia MIT](https://img.shields.io/badge/Licencia-MIT-f59e0b?style=flat-square)](LICENSE)
+
+[Incluido en XERJ Corpus Hub](https://hub.xerj.org/corpus/edulynch--opencode-olympusagents)
 
 **[🎯 Pruébalo](#your-first-task) · [⚡ Instala](#fast-install) · [👥 Equipo](#the-team) · [🧭 Comandos](#task-parallelism) · [🛠️ CLI](#portable-cli) · [📚 Guías](#guides)**
 

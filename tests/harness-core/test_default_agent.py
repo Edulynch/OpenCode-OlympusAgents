@@ -25,6 +25,28 @@ if str(ROOT) not in os.sys.path:
 from olympus.global_readonly import _default_agent_status, _jsonc_without_comments
 
 
+def _iter_tests(suite):
+    for test in suite:
+        if isinstance(test, unittest.TestSuite):
+            yield from _iter_tests(test)
+        else:
+            yield test
+
+
+def load_tests(loader, standard_tests, pattern):
+    shard = os.environ.get("OLYMPUS_DEFAULT_AGENT_SHARD")
+    if shard is None:
+        return standard_tests
+    if shard not in {"1", "2"}:
+        raise ValueError(f"OLYMPUS_DEFAULT_AGENT_SHARD must be 1 or 2; got {shard!r}")
+
+    tests = sorted(_iter_tests(standard_tests), key=lambda test: test.id())
+    selected = [test for index, test in enumerate(tests) if index % 2 == int(shard) - 1]
+    if not selected:
+        raise ValueError(f"OLYMPUS_DEFAULT_AGENT_SHARD={shard} selected no tests")
+    return loader.suiteClass(selected)
+
+
 BASE_CONFIG = (
     "{\n"
     "  // User comment with Unicode: snowman ☃\n"

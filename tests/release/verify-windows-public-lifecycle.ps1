@@ -180,6 +180,100 @@ function Get-TreeSnapshot([string]$Root) {
     return ($records.ToArray() -join "`n")
 }
 
+function Get-TreeSnapshotDifference([string]$Before, [string]$After) {
+    $beforeMap = $null
+    $afterMap = $null
+    $snapshotIndex = 0
+    foreach ($snapshot in @($Before, $After)) {
+        $map = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
+        $records = @()
+        if (-not [string]::IsNullOrEmpty($snapshot)) { $records = @($snapshot -split "`n") }
+        if ($records.Count -gt 4096) { throw 'Snapshot diagnostic record limit exceeded.' }
+        foreach ($record in $records) {
+            if ($record -cmatch '^D:(?<relative>.+)$') {
+                $relative = $Matches.relative
+                $value = 'D'
+            } elseif ($record -cmatch '^F:(?<relative>.+):(?<digest>[0-9a-f]{64})$') {
+                $relative = $Matches.relative
+                $value = 'F:' + $Matches.digest
+            } else {
+                throw 'Snapshot diagnostic record is invalid.'
+            }
+            if ($relative -notmatch '^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$' -or
+                @($relative.Split('/') | Where-Object { $_ -in @('.','..') }).Count -gt 0 -or
+                $relative.Length -gt 240 -or $map.ContainsKey($relative)) {
+                throw 'Snapshot diagnostic path is unsafe or duplicated.'
+            }
+            $map.Add($relative, $value)
+        }
+        if ($snapshotIndex -eq 0) { $beforeMap = $map } else { $afterMap = $map }
+        $snapshotIndex++
+    }
+
+    $added = [Collections.Generic.List[string]]::new()
+    $removed = [Collections.Generic.List[string]]::new()
+    $changed = [Collections.Generic.List[string]]::new()
+    foreach ($relative in $afterMap.Keys) {
+        if (-not $beforeMap.ContainsKey($relative)) {
+            $added.Add($relative)
+        } elseif ($beforeMap[$relative] -cne $afterMap[$relative]) {
+            $changed.Add($relative)
+        }
+    }
+    foreach ($relative in $beforeMap.Keys) {
+        if (-not $afterMap.ContainsKey($relative)) { $removed.Add($relative) }
+    }
+    if ($added.Count -eq 0 -and $removed.Count -eq 0 -and $changed.Count -eq 0 -and
+        $Before -cne $After) {
+        throw 'Snapshot difference cannot be represented as relative path changes.'
+    }
+    $addedPaths = $added.ToArray()
+    $removedPaths = $removed.ToArray()
+    $changedPaths = $changed.ToArray()
+    [Array]::Sort($addedPaths, [StringComparer]::Ordinal)
+    [Array]::Sort($removedPaths, [StringComparer]::Ordinal)
+    [Array]::Sort($changedPaths, [StringComparer]::Ordinal)
+    return [pscustomobject]@{ Added=$addedPaths; Removed=$removedPaths; Changed=$changedPaths }
+}
+
+function Get-VerifyOnlyGuardResults($Lines, $Version, $BeforeTree, $AfterTree,
+    $BeforeUserPath, $AfterUserPath, $BeforeMachinePath, $AfterMachinePath, $ProbeLog, $WorkRoot) {
+    $markerPassed = @($Lines | Where-Object {
+        $_ -match "(?m)^OLYMPUS_GLOBAL_VERIFY: opencode $([regex]::Escape($Version)) PASS\b"
+    }).Count -eq 1
+    return [pscustomobject]@{
+        MarkerPassed = $markerPassed
+        FixtureTreeUnchanged = $AfterTree -ceq $BeforeTree
+        UserPathUnchanged = $AfterUserPath -ceq $BeforeUserPath
+        MachinePathUnchanged = $AfterMachinePath -ceq $BeforeMachinePath
+        ProbeLogAbsent = -not (Test-Path -LiteralPath $ProbeLog)
+        SerenaAbsent = -not (Test-Path -LiteralPath (Join-Path $WorkRoot '.serena'))
+    }
+}
+
+function Write-VerifyOnlyGuardDiagnostic($Results, [string]$BeforeTree, [string]$AfterTree) {
+    $summary = @(
+        "marker=$(if ($Results.MarkerPassed) { 'PASS' } else { 'FAIL' })"
+        "fixture_tree=$(if ($Results.FixtureTreeUnchanged) { 'PASS' } else { 'FAIL' })"
+        "user_path_unchanged=$(if ($Results.UserPathUnchanged) { 'PASS' } else { 'FAIL' })"
+        "machine_path_unchanged=$(if ($Results.MachinePathUnchanged) { 'PASS' } else { 'FAIL' })"
+        "discovery_probe_absent=$(if ($Results.ProbeLogAbsent) { 'PASS' } else { 'FAIL' })"
+        "serena_absent=$(if ($Results.SerenaAbsent) { 'PASS' } else { 'FAIL' })"
+    ) -join ' '
+    Write-Host "PUBLIC_VERIFY_ONLY_GUARD_DIAGNOSTIC: $summary"
+    if (-not $Results.FixtureTreeUnchanged) {
+        try {
+            $difference = Get-TreeSnapshotDifference $BeforeTree $AfterTree
+            $added = if ($difference.Added.Count -eq 0) { '-' } else { $difference.Added -join ',' }
+            $removed = if ($difference.Removed.Count -eq 0) { '-' } else { $difference.Removed -join ',' }
+            $changed = if ($difference.Changed.Count -eq 0) { '-' } else { $difference.Changed -join ',' }
+            Write-Host "PUBLIC_VERIFY_ONLY_GUARD_TREE_DELTA: added=$added removed=$removed changed=$changed"
+        } catch {
+            Write-Host 'PUBLIC_VERIFY_ONLY_GUARD_TREE_DELTA: evidence=UNSAFE_OR_UNAVAILABLE'
+        }
+    }
+}
+
 function Read-And-CheckManifest([string]$ManifestPath, [string]$ConfigRoot) {
     if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
         throw 'PUBLIC_INSTALL_MANIFEST_MISSING: install did not create the global ownership manifest.'
@@ -550,14 +644,16 @@ try {
         $env:OLYMPUS_VERIFYONLY_PROBE = $null
         $env:OLYMPUS_VERIFYONLY_CALL_LOG = $null
     }
-    if (@($verifyResult.Lines | Where-Object {
-            $_ -match "(?m)^OLYMPUS_GLOBAL_VERIFY: opencode $([regex]::Escape($Version)) PASS\b"
-        }).Count -ne 1 -or
-        (Get-TreeSnapshot $fixtureRoot) -cne $beforeVerify -or
-        [Environment]::GetEnvironmentVariable('Path', 'User') -cne $pathBeforeVerify -or
-        [Environment]::GetEnvironmentVariable('Path', 'Machine') -cne $machinePathBeforeVerify -or
-        (Test-Path -LiteralPath $verifyCallLog) -or
-        (Test-Path -LiteralPath (Join-Path $workRoot '.serena'))) {
+    $afterVerify = Get-TreeSnapshot $fixtureRoot
+    $verifyGuard = Get-VerifyOnlyGuardResults $verifyResult.Lines $Version `
+        $beforeVerify $afterVerify `
+        $pathBeforeVerify ([Environment]::GetEnvironmentVariable('Path', 'User')) `
+        $machinePathBeforeVerify ([Environment]::GetEnvironmentVariable('Path', 'Machine')) `
+        $verifyCallLog $workRoot
+    if (-not ($verifyGuard.MarkerPassed -and $verifyGuard.FixtureTreeUnchanged -and
+        $verifyGuard.UserPathUnchanged -and $verifyGuard.MachinePathUnchanged -and
+        $verifyGuard.ProbeLogAbsent -and $verifyGuard.SerenaAbsent)) {
+        Write-VerifyOnlyGuardDiagnostic $verifyGuard $beforeVerify $afterVerify
         throw 'PUBLIC_VERIFY_ONLY_NOT_READ_ONLY: exact tagged VerifyOnly changed state or invoked OpenCode discovery.'
     }
     $installedAgain = Read-And-CheckManifest $globalManifestPath $configRoot

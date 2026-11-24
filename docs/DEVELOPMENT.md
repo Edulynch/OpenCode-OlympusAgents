@@ -777,8 +777,12 @@ An unchanged version is a successful migration no-op even if a historical tag
 exists. A changed version colliding with any existing tag/release—including
 the historical `v0.12.4` tag at its different target—is a hard conflict. Do not
 move, delete, or recreate tags to recover. Only an exact matching draft can
-resume; an orphan or conflicting tag requires maintainer investigation and an
-authorized later version.
+resume. Because the public release-by-tag endpoint may return 404 for drafts, a
+valid matching tag with no public release is only a provisional candidate
+state: the write-enabled draft stage must enumerate the bounded authenticated
+release list and re-read exactly one same-tag draft by numeric ID. A missing,
+duplicate, or unverifiable draft is an orphan/conflict requiring maintainer
+investigation and an authorized later version.
 
 GitHub concurrency is serial but not FIFO: a newer pending run may replace an
 older pending run. If a candidate becomes stale before a write, the workflow

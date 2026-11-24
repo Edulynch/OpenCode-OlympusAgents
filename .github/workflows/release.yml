@@ -26,6 +26,8 @@ jobs:
       body_sha256: ${{ steps.plan.outputs.body_sha256 }}
       ps1_sha256: ${{ steps.plan.outputs.ps1_sha256 }}
       sh_sha256: ${{ steps.plan.outputs.sh_sha256 }}
+      ps1_size: ${{ steps.plan.outputs.ps1_size }}
+      sh_size: ${{ steps.plan.outputs.sh_size }}
       immutability_evidence: ${{ steps.plan.outputs.immutability_evidence }}
     steps:
       - name: Checkout exact push SHA without persisted credentials
@@ -55,7 +57,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Qualify exact candidate and release notes (mocked OpenCode)
-        if: ${{ steps.plan.outputs.mode == 'create' || steps.plan.outputs.mode == 'resume' }}
+        if: ${{ steps.plan.outputs.mode == 'create' || steps.plan.outputs.mode == 'resume' || steps.plan.outputs.mode == 'provisional' }}
         shell: pwsh
         env:
           RELEASE_VERSION: ${{ steps.plan.outputs.version }}
@@ -71,7 +73,7 @@ jobs:
 
   tag:
     needs: candidate
-    if: ${{ needs.candidate.result == 'success' && (needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume') }}
+    if: ${{ needs.candidate.result == 'success' && (needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume' || needs.candidate.outputs.mode == 'provisional') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -106,7 +108,7 @@ jobs:
           if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", sha):
               raise SystemExit("RELEASE_SHA_INVALID")
           mode = os.environ["RELEASE_MODE"]
-          if mode not in ("create", "resume"):
+          if mode not in ("create", "resume", "provisional"):
               raise SystemExit("RELEASE_MODE_INVALID")
           root = f"https://api.github.com/repos/{repo}"
           headers = {
@@ -127,13 +129,34 @@ jobs:
               try:
                   with urllib.request.urlopen(request, timeout=30) as response:
                       raw = response.read()
-                      return json.loads(raw) if raw else None
+                      result = json.loads(raw) if raw else None
+                      if result is None:
+                          raise SystemExit("GITHUB_API_RESPONSE_INVALID")
+                      return result
               except urllib.error.HTTPError as error:
                   if optional and error.code == 404:
                       return None
                   raise ApiError(error.code) from None
               except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
                   raise SystemExit("GITHUB_API_UNAVAILABLE") from None
+          def matching_releases():
+              matches = []
+              for page in range(1, 11):
+                  releases = api("GET", f"/releases?per_page=100&page={page}")
+                  if not isinstance(releases, list) or len(releases) > 100:
+                      raise SystemExit("RELEASE_LIST_INVALID")
+                  for release in releases:
+                      if (
+                          not isinstance(release, dict)
+                          or not isinstance(release.get("tag_name"), str)
+                          or not isinstance(release.get("draft"), bool)
+                      ):
+                          raise SystemExit("RELEASE_LIST_INVALID")
+                      if release["tag_name"] == version:
+                          matches.append(release)
+                  if len(releases) < 100:
+                      return matches
+              raise SystemExit("RELEASE_LIST_INCOMPLETE")
           try:
               immutable = api("GET", "/immutable-releases")
           except ApiError as error:
@@ -164,6 +187,8 @@ jobs:
                   raise SystemExit("RELEASE_STATE_CONFLICT")
               if existing is not None:
                   raise SystemExit("TAG_CONFLICT")
+              if matching_releases():
+                  raise SystemExit("RELEASE_STATE_CONFLICT")
               tag = api("POST", "/git/tags", {
                   "tag": version,
                   "message": message,
@@ -183,10 +208,10 @@ jobs:
                   raise SystemExit("TAG_REF_CREATE_FAILED") from None
               existing = api("GET", tag_path)
           else:
-              if existing_release is None:
-                  raise SystemExit("RESUME_RELEASE_MISSING")
               if existing is None:
                   raise SystemExit("RESUME_TAG_MISSING")
+              if existing_release is not None and existing_release.get("draft") is not True:
+                  raise SystemExit("RELEASE_APPEARED_AFTER_PREFLIGHT")
           ref_object = (existing or {}).get("object") or {}
           if existing is None or ref_object.get("type") != "tag" or not isinstance(ref_object.get("sha"), str):
               raise SystemExit("TAG_NOT_ANNOTATED")
@@ -208,7 +233,7 @@ jobs:
 
   tagged-qualification:
     needs: [candidate, tag]
-    if: ${{ always() && needs.candidate.result == 'success' && needs.tag.result == 'success' && (needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume') }}
+    if: ${{ always() && needs.candidate.result == 'success' && needs.tag.result == 'success' && (needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume' || needs.candidate.outputs.mode == 'provisional') }}
     runs-on: windows-2025
     timeout-minutes: 60
     permissions:
@@ -234,13 +259,16 @@ jobs:
 
   draft:
     needs: [candidate, tagged-qualification]
-    if: ${{ always() && needs.candidate.result == 'success' && needs.tagged-qualification.result == 'success' && (needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume') }}
+    if: ${{ always() && needs.candidate.result == 'success' && needs.tagged-qualification.result == 'success' && (needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume' || needs.candidate.outputs.mode == 'provisional') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
+    outputs:
+      release_id: ${{ steps.attach.outputs.release_id }}
     steps:
       - name: Create matching draft and attach exact tagged installer assets
+        id: attach
         env:
           GITHUB_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -251,6 +279,8 @@ jobs:
           RELEASE_BODY_SHA256: ${{ needs.candidate.outputs.body_sha256 }}
           RELEASE_PS1_SHA256: ${{ needs.candidate.outputs.ps1_sha256 }}
           RELEASE_SH_SHA256: ${{ needs.candidate.outputs.sh_sha256 }}
+          RELEASE_PS1_SIZE: ${{ needs.candidate.outputs.ps1_size }}
+          RELEASE_SH_SIZE: ${{ needs.candidate.outputs.sh_size }}
           OLYMPUS_RELEASE_ENABLED: ${{ vars.OLYMPUS_RELEASE_ENABLED }}
           OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED: ${{ vars.OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED }}
         run: |
@@ -272,15 +302,27 @@ jobs:
               raise SystemExit("RELEASE_VERSION_INVALID")
           if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", sha):
               raise SystemExit("RELEASE_SHA_INVALID")
+          asset_sizes = {
+              "install-olympus.ps1": os.environ["RELEASE_PS1_SIZE"],
+              "install-olympus.sh": os.environ["RELEASE_SH_SIZE"],
+          }
+          if any(not re.fullmatch(r"[1-9][0-9]*", value) for value in asset_sizes.values()):
+              raise SystemExit("RELEASE_ASSET_SIZE_INVALID")
           body = base64.b64decode(os.environ["RELEASE_BODY_B64"], validate=True)
           body_sha = hashlib.sha256(body).hexdigest()
           if body_sha != os.environ["RELEASE_BODY_SHA256"]:
               raise SystemExit("RELEASE_NOTES_DIGEST_MISMATCH")
           expected = {
-              "install-olympus.ps1": os.environ["RELEASE_PS1_SHA256"],
-              "install-olympus.sh": os.environ["RELEASE_SH_SHA256"],
+              "install-olympus.ps1": {
+                  "sha256": os.environ["RELEASE_PS1_SHA256"],
+                  "size": int(asset_sizes["install-olympus.ps1"]),
+              },
+              "install-olympus.sh": {
+                  "sha256": os.environ["RELEASE_SH_SHA256"],
+                  "size": int(asset_sizes["install-olympus.sh"]),
+              },
           }
-          if any(not re.fullmatch(r"[0-9a-f]{64}", value) for value in expected.values()):
+          if any(not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) for item in expected.values()):
               raise SystemExit("RELEASE_ASSET_DIGEST_INVALID")
           root = f"https://api.github.com/repos/{repo}"
           headers = {
@@ -307,13 +349,34 @@ jobs:
               try:
                   with urllib.request.urlopen(request, timeout=60) as response:
                       result = response.read()
-                      return json.loads(result) if result else None
+                      payload = json.loads(result) if result else None
+                      if payload is None:
+                          raise SystemExit("GITHUB_API_RESPONSE_INVALID")
+                      return payload
               except urllib.error.HTTPError as error:
                   if optional and error.code == 404:
                       return None
                   raise ApiError(error.code) from None
               except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
                   raise SystemExit("GITHUB_API_UNAVAILABLE") from None
+          def matching_releases():
+              matches = []
+              for page in range(1, 11):
+                  releases = api("GET", f"/releases?per_page=100&page={page}")
+                  if not isinstance(releases, list) or len(releases) > 100:
+                      raise SystemExit("RELEASE_LIST_INVALID")
+                  for item in releases:
+                      if (
+                          not isinstance(item, dict)
+                          or not isinstance(item.get("tag_name"), str)
+                          or not isinstance(item.get("draft"), bool)
+                      ):
+                          raise SystemExit("RELEASE_LIST_INVALID")
+                      if item["tag_name"] == version:
+                          matches.append(item)
+                  if len(releases) < 100:
+                      return matches
+              raise SystemExit("RELEASE_LIST_INCOMPLETE")
           def assert_immutable_setting():
               try:
                   setting = api("GET", "/immutable-releases")
@@ -355,14 +418,23 @@ jobs:
               if response.get("type") != "file" or response.get("encoding") != "base64":
                   raise SystemExit("TAGGED_ASSET_SOURCE_INVALID")
               content = base64.b64decode("".join(response.get("content", "").split()), validate=True)
-              if hashlib.sha256(content).hexdigest() != expected_sha:
+              if (
+                  hashlib.sha256(content).hexdigest() != expected_sha["sha256"]
+                  or len(content) != expected_sha["size"]
+              ):
                   raise SystemExit("TAGGED_ASSET_SOURCE_MISMATCH")
               assets[name] = content
           release_path = "/releases/tags/" + urllib.parse.quote(version, safe="")
-          release = api("GET", release_path, optional=True)
-          if release is None:
-              if os.environ["RELEASE_MODE"] != "create":
-                  raise SystemExit("RESUME_DRAFT_MISSING")
+          by_tag = api("GET", release_path, optional=True)
+          if by_tag is not None and (
+              not isinstance(by_tag, dict) or by_tag.get("tag_name") != version
+          ):
+              raise SystemExit("RELEASE_METADATA_INVALID")
+          listed = matching_releases()
+          mode = os.environ["RELEASE_MODE"]
+          if mode == "create":
+              if by_tag is not None or listed:
+                  raise SystemExit("RELEASE_APPEARED_AFTER_PREFLIGHT")
               release = api("POST", "/releases", {
                   "tag_name": version,
                   "target_commitish": sha,
@@ -371,22 +443,46 @@ jobs:
                   "draft": True,
                   "prerelease": False,
               })
-          elif os.environ["RELEASE_MODE"] != "resume":
-              raise SystemExit("RELEASE_APPEARED_AFTER_PREFLIGHT")
+          elif mode in ("resume", "provisional"):
+              if by_tag is not None and by_tag.get("draft") is not True:
+                  raise SystemExit("PUBLISHED_RELEASE_CONFLICT")
+              if len(listed) > 1:
+                  raise SystemExit("DRAFT_RELEASE_AMBIGUOUS")
+              if not listed:
+                  raise SystemExit("ORPHAN_TAG_CONFLICT")
+              listed_id = listed[0].get("id")
+              if type(listed_id) is not int or listed_id <= 0:
+                  raise SystemExit("DRAFT_RELEASE_ID_INVALID")
+              if listed[0].get("draft") is not True:
+                  raise SystemExit("DRAFT_STATE_INVALID")
+              if by_tag is not None and by_tag.get("id") != listed_id:
+                  raise SystemExit("DRAFT_RELEASE_CONFLICT")
+              release = api("GET", f"/releases/{listed_id}")
+              if not isinstance(release, dict) or type(release.get("id")) is not int or release["id"] != listed_id:
+                  raise SystemExit("DRAFT_RELEASE_IDENTITY_INVALID")
+          else:
+              raise SystemExit("RELEASE_MODE_INVALID")
           if (
               release.get("tag_name") != version
               or release.get("name") != version
               or release.get("body") != body.decode("utf-8")
               or release.get("draft") is not True
               or release.get("prerelease") is not False
+              or release.get("published_at") is not None
               or (release.get("author") or {}).get("login") != "github-actions[bot]"
-              or not isinstance(release.get("id"), int)
+              or type(release.get("id")) is not int
+              or release.get("id") <= 0
           ):
               raise SystemExit("DRAFT_RELEASE_CONFLICT")
           existing = {}
           for asset in release.get("assets", []):
               name = asset.get("name")
-              if name not in expected or name in existing or asset.get("digest") != f"sha256:{expected[name]}":
+              if (
+                  name not in expected or name in existing
+                  or asset.get("digest") != f"sha256:{expected[name]['sha256']}"
+                  or type(asset.get("size")) is not int
+                  or asset.get("size") != expected[name]["size"]
+              ):
                   raise SystemExit("DRAFT_ASSET_CONFLICT")
               existing[name] = asset
           upload_url = release.get("upload_url", "").split("{", 1)[0]
@@ -397,23 +493,47 @@ jobs:
               if name in existing:
                   continue
               result = api("POST", upload_root, raw=content, upload_name=name)
-              if result.get("name") != name or result.get("digest") != f"sha256:{expected[name]}":
+              if (
+                  result.get("name") != name
+                  or result.get("digest") != f"sha256:{expected[name]['sha256']}"
+                  or result.get("size") != expected[name]["size"]
+              ):
                   raise SystemExit("DRAFT_ASSET_UPLOAD_MISMATCH")
           refreshed = api("GET", f"/releases/{release['id']}")
+          if (
+              not isinstance(refreshed, dict)
+              or type(refreshed.get("id")) is not int
+              or refreshed.get("id") != release["id"]
+              or refreshed.get("tag_name") != version
+              or refreshed.get("name") != version
+              or refreshed.get("body") != body.decode("utf-8")
+              or refreshed.get("draft") is not True
+              or refreshed.get("prerelease") is not False
+              or refreshed.get("published_at") is not None
+              or (refreshed.get("author") or {}).get("login") != "github-actions[bot]"
+          ):
+              raise SystemExit("DRAFT_RELEASE_CONFLICT")
           found = {}
           for asset in refreshed.get("assets", []):
               name = asset.get("name")
-              if name not in expected or name in found or asset.get("digest") != f"sha256:{expected[name]}":
+              if (
+                  name not in expected or name in found
+                  or asset.get("digest") != f"sha256:{expected[name]['sha256']}"
+                  or type(asset.get("size")) is not int
+                  or asset.get("size") != expected[name]["size"]
+              ):
                   raise SystemExit("DRAFT_ASSET_CONFLICT")
               found[name] = asset
           if set(found) != set(expected):
               raise SystemExit("DRAFT_ASSET_SET_INCOMPLETE")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"release_id={release['id']}\n")
           print(f"DRAFT_READY: {version} assets=install-olympus.ps1,install-olympus.sh")
           PY
 
   publish:
     needs: [candidate, draft]
-    if: ${{ always() && needs.candidate.result == 'success' && needs.draft.result == 'success' && (needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume') }}
+    if: ${{ always() && needs.candidate.result == 'success' && needs.draft.result == 'success' && (needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume' || needs.candidate.outputs.mode == 'provisional') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -425,9 +545,12 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           RELEASE_VERSION: ${{ needs.candidate.outputs.version }}
           RELEASE_SHA: ${{ needs.candidate.outputs.sha }}
+          RELEASE_ID: ${{ needs.draft.outputs.release_id }}
           RELEASE_BODY_SHA256: ${{ needs.candidate.outputs.body_sha256 }}
           RELEASE_PS1_SHA256: ${{ needs.candidate.outputs.ps1_sha256 }}
           RELEASE_SH_SHA256: ${{ needs.candidate.outputs.sh_sha256 }}
+          RELEASE_PS1_SIZE: ${{ needs.candidate.outputs.ps1_size }}
+          RELEASE_SH_SIZE: ${{ needs.candidate.outputs.sh_size }}
           OLYMPUS_RELEASE_ENABLED: ${{ vars.OLYMPUS_RELEASE_ENABLED }}
           OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED: ${{ vars.OLYMPUS_RELEASE_IMMUTABILITY_CONFIRMED }}
         run: |
@@ -445,15 +568,31 @@ jobs:
           if os.environ["REPOSITORY"].casefold() != repo.casefold() or os.environ["OLYMPUS_RELEASE_ENABLED"] != "true":
               raise SystemExit("RELEASE_CONTEXT_INVALID")
           version, sha = os.environ["RELEASE_VERSION"], os.environ["RELEASE_SHA"]
+          release_id_text = os.environ["RELEASE_ID"]
+          if not re.fullmatch(r"[1-9][0-9]*", release_id_text):
+              raise SystemExit("DRAFT_RELEASE_ID_INVALID")
+          release_id = int(release_id_text)
+          asset_sizes = {
+              "install-olympus.ps1": os.environ["RELEASE_PS1_SIZE"],
+              "install-olympus.sh": os.environ["RELEASE_SH_SIZE"],
+          }
+          if any(not re.fullmatch(r"[1-9][0-9]*", value) for value in asset_sizes.values()):
+              raise SystemExit("RELEASE_ASSET_SIZE_INVALID")
           expected = {
-              "install-olympus.ps1": os.environ["RELEASE_PS1_SHA256"],
-              "install-olympus.sh": os.environ["RELEASE_SH_SHA256"],
+              "install-olympus.ps1": {
+                  "sha256": os.environ["RELEASE_PS1_SHA256"],
+                  "size": int(asset_sizes["install-olympus.ps1"]),
+              },
+              "install-olympus.sh": {
+                  "sha256": os.environ["RELEASE_SH_SHA256"],
+                  "size": int(asset_sizes["install-olympus.sh"]),
+              },
           }
           if not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version):
               raise SystemExit("RELEASE_VERSION_INVALID")
           if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", sha):
               raise SystemExit("RELEASE_SHA_INVALID")
-          if any(not re.fullmatch(r"[0-9a-f]{64}", value) for value in expected.values()):
+          if any(not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) for item in expected.values()):
               raise SystemExit("RELEASE_ASSET_DIGEST_INVALID")
           root = f"https://api.github.com/repos/{repo}"
           headers = {
@@ -474,7 +613,10 @@ jobs:
               try:
                   with urllib.request.urlopen(request, timeout=30) as response:
                       raw = response.read()
-                      return json.loads(raw) if raw else None
+                      result = json.loads(raw) if raw else None
+                      if result is None:
+                          raise SystemExit("GITHUB_API_RESPONSE_INVALID")
+                      return result
               except urllib.error.HTTPError as error:
                   raise ApiError(error.code) from None
               except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
@@ -513,8 +655,13 @@ jobs:
               or (tag_data.get("tagger") or {}).get("email") != "41898282+github-actions[bot]@users.noreply.github.com"
           ):
               raise SystemExit("TAG_CONFLICT")
-          release_path = "/releases/tags/" + urllib.parse.quote(version, safe="")
-          release = api("GET", release_path)
+          release = api("GET", f"/releases/{release_id}")
+          if (
+              not isinstance(release, dict)
+              or type(release.get("id")) is not int
+              or release.get("id") != release_id
+          ):
+              raise SystemExit("DRAFT_RELEASE_IDENTITY_INVALID")
           body = release.get("body") or ""
           if hashlib.sha256(body.encode("utf-8")).hexdigest() != os.environ["RELEASE_BODY_SHA256"]:
               raise SystemExit("RELEASE_NOTES_DIGEST_MISMATCH")
@@ -523,13 +670,19 @@ jobs:
               or release.get("name") != version
               or release.get("draft") is not True
               or release.get("prerelease") is not False
+              or release.get("published_at") is not None
               or (release.get("author") or {}).get("login") != "github-actions[bot]"
           ):
               raise SystemExit("DRAFT_RELEASE_CONFLICT")
           found = {}
           for asset in release.get("assets", []):
               name = asset.get("name")
-              if name not in expected or name in found or asset.get("digest") != f"sha256:{expected[name]}":
+              if (
+                  name not in expected or name in found
+                  or asset.get("digest") != f"sha256:{expected[name]['sha256']}"
+                  or type(asset.get("size")) is not int
+                  or asset.get("size") != expected[name]["size"]
+              ):
                   raise SystemExit("DRAFT_ASSET_CONFLICT")
               found[name] = asset
           if set(found) != set(expected):
@@ -558,7 +711,9 @@ jobs:
           if parsed.tzinfo is None or parsed.utcoffset() is None or parsed > datetime.now(timezone.utc) + timedelta(minutes=5):
               raise SystemExit("PUBLISHED_TIMESTAMP_INVALID")
           if (
-              published.get("tag_name") != version
+              type(published.get("id")) is not int
+              or published.get("id") != release_id
+              or published.get("tag_name") != version
               or published.get("draft") is not False
               or published.get("prerelease") is not False
               or published.get("immutable") is not True
@@ -569,7 +724,12 @@ jobs:
           published_assets = {}
           for asset in published.get("assets", []):
               name = asset.get("name")
-              if name not in expected or name in published_assets or asset.get("digest") != f"sha256:{expected[name]}":
+              if (
+                  name not in expected or name in published_assets
+                  or asset.get("digest") != f"sha256:{expected[name]['sha256']}"
+                  or type(asset.get("size")) is not int
+                  or asset.get("size") != expected[name]["size"]
+              ):
                   raise SystemExit("PUBLISHED_ASSET_VERIFY_FAILED")
               published_assets[name] = asset
           if set(published_assets) != set(expected):
@@ -579,7 +739,7 @@ jobs:
 
   verify-public:
     needs: [candidate, tag, tagged-qualification, draft, publish]
-    if: ${{ always() && needs.candidate.result == 'success' && (needs.candidate.outputs.mode == 'published' || ((needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume') && needs.tag.result == 'success' && needs.tagged-qualification.result == 'success' && needs.draft.result == 'success' && needs.publish.result == 'success')) }}
+    if: ${{ always() && needs.candidate.result == 'success' && (needs.candidate.outputs.mode == 'published' || ((needs.candidate.outputs.mode == 'create' || needs.candidate.outputs.mode == 'resume' || needs.candidate.outputs.mode == 'provisional') && needs.tag.result == 'success' && needs.tagged-qualification.result == 'success' && needs.draft.result == 'success' && needs.publish.result == 'success')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

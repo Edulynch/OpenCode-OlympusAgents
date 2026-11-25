@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [switch]$DryRun,
-    [switch]$Update
+    [switch]$Update,
+    [switch]$Force
 )
 
 Set-StrictMode -Version Latest
@@ -67,6 +68,8 @@ function ConvertTo-ReleasePublishedTimestamp([object]$Value) {
 }
 
 try {
+    if ($Force -and $DryRun) { throw 'UPDATE_FORCE_MODE_INVALID: -Force cannot be combined with -DryRun.' }
+    if ($Force) { $Update = $true }
     if ($DryRun -and $Update) { throw 'UPDATE_MODE_INVALID: -Update cannot be combined with -DryRun.' }
     $pwsh = @(Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue)
     if ($pwsh.Count -eq 0) {
@@ -105,7 +108,9 @@ try {
     Invoke-WebRequest -Uri $launcherUrl -OutFile $ownedLauncher -Headers $headers -ErrorAction Stop
     $launcherText = [IO.File]::ReadAllText($ownedLauncher)
     $requiredLauncherMarkers = @('Assert-ReleaseBoolean', 'LATEST_RELEASE_MUTABLE',
-        'LATEST_RELEASE_NOT_PUBLISHED', 'LATEST_RELEASE_IDENTITY_MISMATCH', "'global'", "'opencode'", 'published_at')
+        'LATEST_RELEASE_NOT_PUBLISHED', 'LATEST_RELEASE_IDENTITY_MISMATCH',
+        'UPDATE_FORCE_MODE_INVALID', 'UPDATE_DOWNGRADE_BLOCKED', '[switch]$Force',
+        "'global'", "'opencode'", 'published_at')
     $missingLauncherMarkers = @($requiredLauncherMarkers | Where-Object { -not $launcherText.Contains($_) })
     if ($missingLauncherMarkers.Count -gt 0) {
         throw "LAUNCHER_BOOTSTRAP_CONTRACT_MISSING: Release '$tag' launcher lacks immutable global/OpenCode checks ($($missingLauncherMarkers -join ', ')); no older launcher fallback is attempted."
@@ -117,6 +122,7 @@ try {
     )
     if ($DryRun) { $launcherArgs += '-DryRun' }
     if ($Update) { $launcherArgs += '-Update' }
+    if ($Force) { $launcherArgs += '-Force' }
     & $pwsh[0].Source @launcherArgs
     if ($LASTEXITCODE -ne 0) {
         throw "OLYMPUS_ENTRYPOINT_FAILED: launcher returned exit code $LASTEXITCODE."

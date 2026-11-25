@@ -85,9 +85,14 @@ def parser() -> Parser:
     update = commands.add_parser(
         "update", aliases=["upgrade"], help="update the global OpenCode installation",
         allow_abbrev=False,
-        description="Update the fixed global OpenCode installation. This can change global files.",
+        description=(
+            "Update the fixed global OpenCode installation. --force requests a full reinstall of "
+            "manifest-owned files and permits replacing drift only on those paths."
+        ),
     )
-    _set_help(update, update.description, "olympus update --verbose")
+    update.add_argument("--force", action="store_true",
+                        help="reinstall proven managed files; replace drift only on those paths")
+    _set_help(update, update.description, "olympus update --force")
     update.set_defaults(command="update")
     completion = commands.add_parser("completion", help="print session-local shell completion registration",
                                      allow_abbrev=False,
@@ -1261,7 +1266,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "update":
             from . import system_cli
 
-            return system_cli.update(source, verbose=bool(args.verbose))
+            return system_cli.update(source, verbose=bool(args.verbose), force=bool(args.force))
         if args.command == "agents" and args.action == "list":
             from . import user_config
 

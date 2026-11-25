@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import contextlib
 import io
 import os
 import shutil
 import subprocess
+import struct
 import sys
 import tempfile
 import unittest
@@ -21,6 +23,19 @@ if str(ROOT) not in sys.path:
 
 from olympus import config_apply_transaction, global_install, global_readonly, source_edit, user_config
 from olympus.cli import load_renderer, main
+
+
+def _extended_posix_acl_xattr() -> bytes:
+    undefined = 0xFFFFFFFF
+    named_user = (os.getuid() + 1) & undefined
+    entries = (
+        (0x01, 0x06, undefined), (0x02, 0x04, named_user),
+        (0x04, 0x04, undefined), (0x10, 0x04, undefined),
+        (0x20, 0x00, undefined),
+    )
+    return struct.pack("<I", 0x0002) + b"".join(
+        struct.pack("<HHI", *entry) for entry in entries
+    )
 
 
 class LinuxGlobalBackend(unittest.TestCase):
@@ -65,6 +80,23 @@ class LinuxGlobalBackend(unittest.TestCase):
             (path.read_bytes(), path.stat().st_mtime_ns)
             for path in self.root.rglob("*") if path.is_file()
         }
+
+    def _require_acl_free_fixture(self, *roots: Path) -> None:
+        if not hasattr(os, "listxattr"):
+            self.skipTest("force ACL regression requires Linux ACL xattr inspection")
+        unsupported = {
+            getattr(errno, name, None) for name in ("ENOTSUP", "EOPNOTSUPP", "ENOSYS")
+        } - {None}
+        for root in roots:
+            for path in (root, *root.rglob("*")):
+                try:
+                    attributes = set(os.listxattr(path))
+                except OSError as error:
+                    if error.errno in unsupported:
+                        self.skipTest("fixture storage does not support POSIX ACL xattr inspection")
+                    raise
+                if attributes & {"system.posix_acl_access", "system.posix_acl_default"}:
+                    self.skipTest("ACL regression fixture already has POSIX ACL policy")
 
     def _safe_user_config(self, default_agent: str = "other") -> bytes:
         return (
@@ -195,6 +227,207 @@ class LinuxGlobalBackend(unittest.TestCase):
         with self.assertRaisesRegex(global_install.GlobalInstallError, "downgrade"):
             global_install.update(first, version="v1.0.0", commit="source-one")
         self.assertEqual(before, self._files())
+
+    def test_force_same_version_repairs_only_manifest_owned_files_and_preserves_user_config(self):
+        self.root.mkdir()
+        config_path = self.root / "opencode.jsonc"
+        config_path.write_bytes(self._safe_user_config())
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        if sys.platform.startswith("linux"):
+            self._require_acl_free_fixture(self.root)
+
+        user_config = config_path.read_bytes().replace(b'"theme": "dark"', b'"theme": "light"')
+        config_path.write_bytes(user_config)
+        managed = self.root / "agents/kael.md"
+        if sys.platform.startswith("linux"):
+            try:
+                self.assertNotIn("system.posix_acl_access", os.listxattr(managed))
+                self.assertNotIn("system.posix_acl_default", os.listxattr(self.root))
+            except OSError as error:
+                unsupported = {
+                    getattr(errno, name, None) for name in ("ENOTSUP", "EOPNOTSUPP", "ENOSYS")
+                } - {None}
+                if error.errno in unsupported:
+                    self.skipTest("mode-only force repair requires ACL-capable fixture storage")
+                raise
+        damaged = b"damaged managed resource\n"
+        managed.write_bytes(damaged)
+        missing = self.root / "commands/olympus.ultra.md"
+        expected_missing = missing.read_bytes()
+        missing.unlink()
+
+        with self.assertRaisesRegex(global_install.GlobalInstallError, "drifted"):
+            global_install.update(ROOT, version="local", commit="fixture-local")
+        self.assertEqual(damaged, managed.read_bytes())
+        self.assertFalse(missing.exists())
+
+        real_replace = os.replace
+        interrupted = False
+
+        def interrupt_owned_replace(source, destination):
+            nonlocal interrupted
+            if Path(destination) == managed and not interrupted:
+                interrupted = True
+                raise OSError("fixture force-repair interruption")
+            return real_replace(source, destination)
+
+        with mock.patch("olympus.global_install.os.replace", side_effect=interrupt_owned_replace):
+            with self.assertRaisesRegex(global_install.GlobalInstallError, "rollback was confirmed"):
+                global_install.update(
+                    ROOT, version="local", commit="fixture-local", force=True,
+                )
+        self.assertTrue(interrupted)
+        self.assertEqual(damaged, managed.read_bytes())
+        self.assertFalse(config_apply_transaction.pending(self.root))
+
+        result = global_install.update(
+            ROOT, version="local", commit="fixture-local", force=True,
+        )
+        self.assertEqual("committed", result.result)
+        self.assertNotEqual(b"damaged managed resource\n", managed.read_bytes())
+        self.assertEqual(expected_missing, missing.read_bytes())
+        self.assertEqual(user_config, config_path.read_bytes())
+        self.assertEqual("verified", global_install.verify(
+            ROOT, version="local", commit="fixture-local",
+        ).result)
+        no_op = global_install.update(ROOT, version="local", commit="fixture-local", force=True)
+        self.assertEqual(("no_changes", ()), (no_op.result, no_op.changed_paths))
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "native POSIX ACL xattrs require Linux.")
+    def test_force_acl_preflights_all_global_targets_before_any_write(self):
+        self.root.mkdir()
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        self._require_acl_free_fixture(self.root)
+        earlier = self.root / "commands/olympus.ultra.md"
+        later = self.root / "agents/veyra.md"
+        earlier.write_bytes(b"earlier managed drift\n")
+        later.write_bytes(b"later managed drift\n")
+        try:
+            os.setxattr(later, "system.posix_acl_access", _extended_posix_acl_xattr())
+        except OSError as error:
+            unsupported = {
+                getattr(errno, name, None) for name in ("ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EPERM")
+            } - {None}
+            if error.errno in unsupported:
+                self.skipTest("fixture storage/user cannot create POSIX access ACL xattrs")
+            raise
+        self.assertIn("system.posix_acl_access", os.listxattr(later))
+        before = self._files()
+        old_manifest = (self.root / global_readonly._MANIFEST).read_bytes()
+
+        with self.assertRaisesRegex(global_install.GlobalInstallError, "access-ACL-bearing"):
+            global_install.update(ROOT, version="local", commit="fixture-local", force=True)
+
+        self.assertEqual(before, self._files())
+        self.assertEqual(b"earlier managed drift\n", earlier.read_bytes())
+        self.assertEqual(b"later managed drift\n", later.read_bytes())
+        self.assertEqual(old_manifest, (self.root / global_readonly._MANIFEST).read_bytes())
+        self.assertIn("system.posix_acl_access", os.listxattr(later))
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "native POSIX ACL xattrs require Linux.")
+    def test_force_rollback_preserves_journal_when_replaced_target_gains_acl(self):
+        self.root.mkdir()
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        self._require_acl_free_fixture(self.root)
+        first = self.root / "agents/kael.md"
+        second = self.root / "commands/olympus.ultra.md"
+        first.write_bytes(b"first managed drift\n")
+        second.write_bytes(b"second managed drift\n")
+        real_replace = os.replace
+        replaced = []
+
+        def add_acl_then_interrupt(source, destination):
+            target = Path(destination)
+            if target == first:
+                result = real_replace(source, destination)
+                os.setxattr(target, "system.posix_acl_access", _extended_posix_acl_xattr())
+                replaced.append(target)
+                return result
+            if target == second:
+                raise OSError("fixture interruption after first global replacement")
+            return real_replace(source, destination)
+
+        with mock.patch(
+            "olympus.global_install.os.replace", side_effect=add_acl_then_interrupt,
+        ):
+            with self.assertRaisesRegex(
+                global_install.GlobalInstallError, "recovery is unconfirmed",
+            ):
+                global_install.update(
+                    ROOT, version="local", commit="fixture-local", force=True,
+                )
+
+        self.assertEqual([first], replaced)
+        self.assertNotEqual(b"first managed drift\n", first.read_bytes())
+        self.assertEqual(b"second managed drift\n", second.read_bytes())
+        self.assertIn("system.posix_acl_access", os.listxattr(first))
+        self.assertTrue(config_apply_transaction.pending(self.root))
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "native POSIX ACL xattrs require Linux.")
+    def test_force_rejects_default_acl_on_global_staging_parent_before_write(self):
+        self.root.mkdir()
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        self._require_acl_free_fixture(self.root)
+        earlier = self.root / "commands/olympus.ultra.md"
+        earlier.write_bytes(b"managed drift\n")
+        try:
+            os.setxattr(self.root, "system.posix_acl_default", _extended_posix_acl_xattr())
+        except OSError as error:
+            unsupported = {
+                getattr(errno, name, None) for name in ("ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EPERM")
+            } - {None}
+            if error.errno in unsupported:
+                self.skipTest("fixture storage/user cannot create POSIX default ACL xattrs")
+            raise
+        self.assertIn("system.posix_acl_default", os.listxattr(self.root))
+        before = self._files()
+        old_manifest = (self.root / global_readonly._MANIFEST).read_bytes()
+
+        with self.assertRaisesRegex(global_install.GlobalInstallError, "default-ACL-bearing"):
+            global_install.update(ROOT, version="local", commit="fixture-local", force=True)
+
+        self.assertEqual(before, self._files())
+        self.assertEqual(b"managed drift\n", earlier.read_bytes())
+        self.assertEqual(old_manifest, (self.root / global_readonly._MANIFEST).read_bytes())
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "native POSIX ACL xattrs require Linux.")
+    def test_force_acl_probe_errors_fail_closed_before_any_write(self):
+        self.root.mkdir()
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        managed = self.root / "agents/kael.md"
+        managed.write_bytes(b"managed drift\n")
+        before = self._files()
+        unsupported = getattr(errno, "ENOTSUP", getattr(errno, "EOPNOTSUPP", 95))
+        with mock.patch.object(
+            global_install.os, "listxattr",
+            side_effect=OSError(unsupported, "fixture unsupported ACL probe"),
+            create=True,
+        ):
+            with self.assertRaisesRegex(
+                global_install.GlobalInstallError, "Cannot establish Linux ACL state",
+            ):
+                global_install.update(ROOT, version="local", commit="fixture-local", force=True)
+        self.assertEqual(before, self._files())
+        self.assertEqual(b"managed drift\n", managed.read_bytes())
+
+    def test_force_update_rejects_unowned_or_unsafe_owned_nodes(self):
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        package_note = self.root / "user-owned-note"
+        package_note.write_bytes(b"keep\n")
+        before = package_note.read_bytes()
+        global_install.update(ROOT, version="local", commit="fixture-local", force=True)
+        self.assertEqual(before, package_note.read_bytes())
+        package_note.unlink()
+
+        managed = self.root / "agents/kael.md"
+        outside = self.sandbox / "outside.txt"
+        outside.write_bytes(b"outside\n")
+        managed.unlink()
+        managed.symlink_to(outside)
+        with self.assertRaises(global_install.GlobalInstallError):
+            global_install.update(ROOT, version="local", commit="fixture-local", force=True)
+        self.assertTrue(managed.is_symlink())
+        self.assertEqual(b"outside\n", outside.read_bytes())
 
     def test_user_default_change_or_deletion_survives_update_verify_drift_and_uninstall(self):
         first = self._source("preferences-v1")

@@ -30,7 +30,7 @@ olympus uninstall
 
 Invoke the downloaded script block with `&` as shown.
 
-Both source entrypoints, `install-olympus.ps1` and `uninstall-olympus.ps1`, are fixed to global OpenCode. Install accepts `-DryRun` or `-Update`; uninstall has no selection arguments. No interactive selection is required.
+Both source entrypoints, `install-olympus.ps1` and `uninstall-olympus.ps1`, are fixed to global OpenCode. Install accepts `-DryRun`, `-Update`, or `-Force`; `-Force` selects update. Uninstall has no selection arguments. No interactive selection is required.
 
 ## Linux `sh` entrypoint
 
@@ -213,7 +213,7 @@ below do not inherit that rule.
 | Command | Scope and target | Effect |
 |---|---|---|
 | `olympus version` (`--version`) | The release selected by the CLI, or by `--source` if supplied | Prints one version line. Does not verify the OpenCode installation. |
-| `olympus update` (`upgrade`) | Fixed global OpenCode; CWD does not select a project | Installs a newer immutable stable release. When both installed versions match the latest, it reports that Olympus is up to date without downloading the release archive or running the installer. There is no preview mode. |
+| `olympus update` (`upgrade`) | Fixed global OpenCode; CWD does not select a project | Installs a newer immutable stable release. When both installed versions match the latest, it reports that Olympus is up to date without downloading the release archive or running the installer. `--force` (Windows/Linux only) requests a full reinstall of manifest-proven managed files; drift replacement is limited to those paths. No backup, unknown-file cleanup, adoption, or downgrade. There is no preview mode. |
 | `olympus install` | Fixed global OpenCode; no scope/harness/target/version selectors | `--dry-run` previews. Otherwise the installer executes; `--execute` makes that intent explicit. `--json` captures native output. |
 | `olympus uninstall` | Fixed global OpenCode | `--dry-run` previews; otherwise removes unchanged manifest-owned resources, reverses the still-owned default field, and removes the active CLI. PATH entry cleanup applies only to Windows. |
 | `olympus <role> set-model <id>` / `set-effort <value>` | `<role>`: `kael`, `veyra`, `orin`, `atlas`, `kovan`, `argus`, `nox`, `vera`, `talos`, `thales`, or `helios`; auto-detects or accepts scope/target | Writes the user override immediately and updates a managed installed OpenCode agent when applicable. Global setters require a safely resolved root and honor the shared lock and pending-recovery controls above. This is not a canonical source edit and has no dry-run flag. |
@@ -246,9 +246,37 @@ that the installed CLI version matches the global OpenCode version, it stops
 and suggests a next step instead of reinstalling. Use `olympus doctor --scope
 global` to investigate; an up-to-date message is not an integrity check.
 
-When an update runs, it preserves the override file. If managed agents have
-changed, it lists them and asks once: `y` permits the update, while `n`, Enter,
-or non-interactive input preserve the changes and stop.
+On Windows and Linux, `olympus update --force` explicitly requests a full
+reinstall of the manifest-proven managed files. It may replace drifted content
+only on paths whose ownership is verified; it does not adopt or overwrite
+unowned files, remove unknown files, create backups, or authorize a downgrade.
+User-owned/custom configuration, authentication, and permissions remain outside
+the force scope. macOS is not supported.
+
+If an older installed CLI does not recognize `--force`, or its CLI/global
+version preflight blocks the update, use the official latest-release bootstrap
+when its selected release is v0.12.10 or later. The bootstrap performs the
+update without invoking the installed CLI parser:
+
+```powershell
+& ([scriptblock]::Create((irm 'https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.ps1'))) -Force
+```
+
+```sh
+curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/download/install-olympus.sh | sh -s -- --force
+```
+
+Windows `-Force` implies update; Linux `--force` selects update and is not
+combined with an exact-version positional tag or `--dry-run`. These bootstraps
+select the latest eligible stable release and do not pin the product version;
+use the exact-tag `install.ps1` instructions above when pinning is required.
+Earlier bootstrap releases do not recognize these force options.
+
+When a normal update runs, it preserves the override file. If managed agents
+have changed, it lists them and asks once: `y` permits the update, while `n`,
+Enter, or non-interactive input preserve the changes and stop. `--force` is the
+explicit alternative for drift on verified manifest-owned files; it does not
+create a backup.
 
 `olympus <agent> set-model` accepts a syntactically valid `provider/model-id`. Known models are checked against the bundled [Models.dev](https://models.dev) catalog and their declared effort levels; newer or custom IDs absent from the snapshot are allowed with a compatibility warning. Olympus does not test model access. Values are saved to the per-user Olympus configuration shown by `olympus config list`; installed global OpenCode agents consume those values. The catalog is checked in for offline, reproducible validation, so listing and diagnostics do not make a provider request. Olympus never checks API keys, subscriptions, quotas, or model access.
 

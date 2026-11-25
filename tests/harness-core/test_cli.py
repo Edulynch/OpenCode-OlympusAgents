@@ -343,6 +343,8 @@ class SliceA(unittest.TestCase):
         self.assertNotIn("--version", install_help.stdout)
         self.assertNotIn("--scope", install_help.stdout)
         self.assertIn("Preview may leave temporary/cache effects", install_help.stdout)
+        update_help = self.query("update", "--help")
+        self.assertIn("--force", update_help.stdout)
         uninstall_help = self.query("uninstall", "--help")
         self.assertIn("--execute", uninstall_help.stdout)
         self.assertIn("Remove unchanged manifest-owned", uninstall_help.stdout)
@@ -355,14 +357,23 @@ class SliceA(unittest.TestCase):
 
     def test_slice_a_update_and_upgrade_share_update_handler(self):
         for command in ("update", "upgrade"):
-            self.assertEqual("update", cli_parser().parse_args([command]).command)
-            for code in (0, 3):
-                for verbose in (False, True):
-                    arguments = (command, "--verbose") if verbose else (command,)
-                    with self.subTest(command=command, code=code, verbose=verbose):
-                        with mock.patch("olympus.system_cli.update", return_value=code) as update:
-                            self.assertEqual((code, "", ""), self.call_main(*arguments))
-                            update.assert_called_once_with(self.source, verbose=verbose)
+            for force in (False, True):
+                for code in (0, 3):
+                    for verbose in (False, True):
+                        arguments = [command]
+                        if force:
+                            arguments.append("--force")
+                        if verbose:
+                            arguments.append("--verbose")
+                        with self.subTest(command=command, code=code, verbose=verbose, force=force):
+                            parsed = cli_parser().parse_args(arguments)
+                            self.assertEqual("update", parsed.command)
+                            self.assertEqual(force, parsed.force)
+                            with mock.patch("olympus.system_cli.update", return_value=code) as update:
+                                self.assertEqual((code, "", ""), self.call_main(*arguments))
+                                update.assert_called_once_with(
+                                    self.source, verbose=verbose, force=force,
+                                )
 
     def test_slice_a_completion_candidates_are_argparse_derived_and_source_free(self):
         cli = cli_parser()
@@ -1719,22 +1730,57 @@ test ! -e "{sentinel}"
             },
             "issues": [],
         }
-        stdout, stderr = io.StringIO(), io.StringIO()
-        with mock.patch("olympus.system_cli.sys.platform", "linux"), \
-             mock.patch("olympus.system_cli.os.name", "posix"), \
-             mock.patch(
-                 "olympus.install_routing.subprocess.run",
-                 return_value=subprocess.CompletedProcess([], 0, json.dumps(native), ""),
-             ) as run_process, \
-             mock.patch("olympus.install_routing.shutil.which") as find_pwsh, \
-             redirect_stdout(stdout), redirect_stderr(stderr):
-            code = system_cli.update(self.source)
-        self.assertEqual(0, code)
-        self.assertIn("olympus update: ok", stdout.getvalue())
-        self.assertEqual("", stderr.getvalue())
-        self.assertEqual("update", run_process.call_args.args[0][5])
-        self.assertIn("--_response", run_process.call_args.args[0])
-        find_pwsh.assert_not_called()
+        for force in (False, True):
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with mock.patch("olympus.system_cli.sys.platform", "linux"), \
+                 mock.patch("olympus.system_cli.os.name", "posix"), \
+                 mock.patch(
+                     "olympus.install_routing.subprocess.run",
+                     return_value=subprocess.CompletedProcess([], 0, json.dumps(native), ""),
+                 ) as run_process, \
+                 mock.patch("olympus.install_routing.shutil.which") as find_pwsh, \
+                 redirect_stdout(stdout), redirect_stderr(stderr):
+                if force:
+                    code = system_cli.update(self.source, force=True)
+                else:
+                    code = system_cli.update(self.source)
+            command = run_process.call_args.args[0]
+            expected = [
+                sys.executable, "-I", "-S", "-B",
+                str(self.source / "scripts/launch-latest.py"), "update", "--_response",
+            ]
+            if force:
+                expected.append("--force")
+            self.assertEqual(0, code)
+            self.assertIn("olympus update: ok", stdout.getvalue())
+            self.assertEqual("", stderr.getvalue())
+            self.assertEqual(expected, command)
+            find_pwsh.assert_not_called()
+
+    def test_slice_c5_windows_force_update_reaches_release_launcher(self):
+        from olympus import system_cli
+
+        for force in (False, True):
+            with mock.patch("olympus.system_cli.sys.platform", "win32"), \
+                 mock.patch("olympus.system_cli.shutil.which", return_value="pwsh.exe"), \
+                 mock.patch("olympus.system_cli.install_routing._powershell_version",
+                            return_value=(True, "PowerShell 7.5.0", "")), \
+                 mock.patch(
+                     "olympus.system_cli.subprocess.run",
+                     return_value=subprocess.CompletedProcess([], 0),
+                 ) as run_process:
+                if force:
+                    code = system_cli.update(self.source, force=True)
+                else:
+                    code = system_cli.update(self.source)
+            expected = [
+                "pwsh.exe", "-NoProfile", "-File", str(self.source / "scripts/launch-latest.ps1"),
+                "-Action", "install", "-Update",
+            ]
+            if force:
+                expected.append("-Force")
+            self.assertEqual(0, code)
+            self.assertEqual(expected, run_process.call_args.args[0])
 
     def test_slice_c5_powershell_probe_is_bounded_and_requires_v7(self):
         with mock.patch("olympus.install_routing.subprocess.run",

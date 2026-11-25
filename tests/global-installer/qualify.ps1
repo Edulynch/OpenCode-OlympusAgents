@@ -115,6 +115,35 @@ function Snapshot([string]$Root) {
     ) -join "`n"
 }
 
+function Get-AccessDaclSnapshot([string]$Path) {
+    $acl = [IO.FileSystemAclExtensions]::GetAccessControl(
+        [IO.FileInfo]::new($Path), [Security.AccessControl.AccessControlSections]::Access)
+    $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+    return [pscustomobject]@{
+        Sddl = $acl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::Access)
+        Protected = $acl.AreAccessRulesProtected
+        ExplicitCount = @($rules | Where-Object { -not $_.IsInherited }).Count
+        InheritedCount = @($rules | Where-Object { $_.IsInherited }).Count
+    }
+}
+
+function Set-ProtectedFixtureDacl([string]$Path) {
+    $acl = [IO.FileSystemAclExtensions]::GetAccessControl(
+        [IO.FileInfo]::new($Path), [Security.AccessControl.AccessControlSections]::Access)
+    $acl.SetAccessRuleProtection($true, $false)
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $rule = [Security.AccessControl.FileSystemAccessRule]::new(
+        $sid, [Security.AccessControl.FileSystemRights]::FullControl,
+        [Security.AccessControl.AccessControlType]::Allow)
+    $acl.SetAccessRule($rule)
+    [IO.FileSystemAclExtensions]::SetAccessControl([IO.FileInfo]::new($Path), $acl)
+    $snapshot = Get-AccessDaclSnapshot $Path
+    if (-not $snapshot.Protected -or $snapshot.ExplicitCount -eq 0 -or $snapshot.InheritedCount -ne 0) {
+        throw "FIXTURE_DACL_SETUP_FAILED: $Path"
+    }
+    return $snapshot
+}
+
 function Get-ExternalFallback([string]$ConfigPath) {
     # Model only the V2 last-matching wildcard fallback; runtime ASK and user
     # approval must still be observed separately in a native host smoke test.
@@ -399,7 +428,7 @@ try {
         [IO.File]::WriteAllText($malformedManifestPath, ($malformedManifest | ConvertTo-Json -Depth 30), $utf8)
         $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $malformedRoot
         $beforeMalformed = Snapshot $malformedRoot
-        foreach ($operation in @('Update','Uninstall','VerifyOnly')) {
+        foreach ($operation in @('Update','Force','Uninstall','VerifyOnly')) {
             $rejected = Run-Installer $project @('-Scope','global','-Harness','opencode',('-' + $operation))
             Check ('GLOBAL_MALFORMED_LEGACY_' + $operation.ToUpperInvariant() + '_PRESERVES_USER_COMMAND') (
                 $rejected.Code -ne 0 -and $rejected.Text -match 'GLOBAL_MANIFEST_INVALID' -and
@@ -634,6 +663,11 @@ try {
         (Snapshot $obsoleteRoot) -ceq $obsoleteBefore -and
         (Test-Path (Join-Path $obsoleteRoot 'agents/aegis.md')) -and
         (Test-Path (Join-Path $obsoleteRoot 'commands/maintain.md')))
+    $obsoleteForce = Run-Installer $project @('-Scope','global','-Harness','opencode','-Force')
+    Check 'GLOBAL_FORCE_DOES_NOT_BYPASS_EXACT_INVENTORY' (
+        $obsoleteForce.Code -ne 0 -and $obsoleteForce.Text -match 'GLOBAL_MANIFEST_INVALID' -and
+        (Snapshot $obsoleteRoot) -ceq $obsoleteBefore
+    ) ("exit=$($obsoleteForce.Code)`n$($obsoleteForce.Text)")
 
     $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeOnlyRoot
     $openCodeOnlyManifestPath = Join-Path $openCodeOnlyRoot 'olympus/orchestrator-install.json'
@@ -695,8 +729,122 @@ try {
     Check 'GLOBAL_MANAGED_DRIFT_DETECTED' ($openDrift.Code -ne 0 -and $openDrift.Text -match 'GLOBAL_MANAGED_FILE_DRIFT')
     [IO.File]::WriteAllText($openAgentPath, $openAgentBefore, $utf8)
 
+    $missingAgentPath = Join-Path $openCodeRoot 'agents/nox.md'
+    $openUserConfigBeforeForce = [IO.File]::ReadAllBytes($openUserConfig)
+    $userNotePath = Join-Path $openCodeRoot 'user-note.txt'
+    [IO.File]::WriteAllText($userNotePath, 'preserve during force repair', $utf8)
+    $forceManifest = [IO.File]::ReadAllText($openManifestPath) | ConvertFrom-Json -Depth 20
+    $forceManifest.installed_version = 'v0.3.0-beta.4'
+    [IO.File]::WriteAllText($openManifestPath, (($forceManifest | ConvertTo-Json -Depth 20) + "`n"), $utf8)
+    $manifestDaclBeforeForce = Set-ProtectedFixtureDacl $openManifestPath
+    $manifestBytesBeforeFault = [IO.File]::ReadAllBytes($openManifestPath)
+    $cliPointerPath = Join-Path $cliInstallRoot 'current.txt'
+    $cliPointerBytesBeforeFault = [IO.File]::ReadAllBytes($cliPointerPath)
+    $cliManifestPath = Join-Path $cliInstallRoot "versions/$candidateVersion/olympus-cli-manifest.json"
+    $cliManifestBytesBeforeFault = [IO.File]::ReadAllBytes($cliManifestPath)
+
+    $agentDaclBeforeForce = Set-ProtectedFixtureDacl $openAgentPath
+    $hardLinkAlias = Join-Path $run 'unowned-managed-agent-hardlink.md'
+    New-Item -ItemType HardLink -Path $hardLinkAlias -Target $openAgentPath -ErrorAction Stop | Out-Null
+    [IO.File]::AppendAllText($openAgentPath, "`n# qualification force drift`n", $utf8)
+    $hardLinkBytesBeforeForce = [IO.File]::ReadAllBytes($hardLinkAlias)
+    $hardLinkDaclBeforeForce = Get-AccessDaclSnapshot $hardLinkAlias
+    [IO.File]::Delete($missingAgentPath)
+    $beforeNonForceRepair = Snapshot $openCodeRoot
+    $nonForceRepair = Run-Installer $project @('-Scope','global','-Harness','opencode','-Update')
+    Check 'GLOBAL_NONFORCE_UPDATE_PRESERVES_CHANGED_AND_MISSING_RESOURCES' (
+            $nonForceRepair.Code -ne 0 -and $nonForceRepair.Text -match 'GLOBAL_MANAGED_FILE_DRIFT' -and
+            (Snapshot $openCodeRoot) -ceq $beforeNonForceRepair
+    ) ("exit=$($nonForceRepair.Code)`n$($nonForceRepair.Text)")
+
+    $faultRoot = Join-Path $run 'force-interruption-source'
+    $faultScripts = Join-Path $faultRoot 'scripts'
+    [IO.Directory]::CreateDirectory($faultRoot) | Out-Null
+    foreach ($relative in @('olympus','.opencode')) {
+        Copy-Item -LiteralPath (Join-Path $source $relative) -Destination $faultRoot -Recurse
+    }
+    Copy-Item -LiteralPath (Join-Path $source 'scripts') -Destination $faultRoot -Recurse
+    Copy-Item -LiteralPath (Join-Path $source 'opencode.jsonc') -Destination $faultRoot
+    $faultWriterPath = Join-Path $faultScripts 'global-install.ps1'
+    $faultWriterText = [IO.File]::ReadAllText($globalInstaller)
+    $faultAnchor = 'Write-GlobalResource $destination ([string]$outputs[$relative])'
+    if (($faultWriterText.Split(@($faultAnchor), [StringSplitOptions]::None).Count - 1) -ne 1) {
+        throw 'FORCE_INTERRUPTION_FIXTURE_ANCHOR_INVALID'
+    }
+    $faultNewline = if ($faultWriterText.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $faultInjection = $faultAnchor + $faultNewline +
+        "            if (`$env:OLYMPUS_GLOBAL_FAIL_AFTER_MANAGED_WRITE -ceq '1') { throw 'QUALIFICATION_INTERRUPTED_AFTER_MANAGED_WRITE' }"
+    $faultWriterText = $faultWriterText.Replace($faultAnchor, $faultInjection)
+    [IO.File]::WriteAllText($faultWriterPath, $faultWriterText, $utf8)
+    $previousOpenCodeRoot = $env:OPENCODE_CONFIG_DIR
+    $previousFaultSwitch = $env:OLYMPUS_GLOBAL_FAIL_AFTER_MANAGED_WRITE
+    $previousPreference = $ErrorActionPreference
+    try {
+        $env:OPENCODE_CONFIG_DIR = $openCodeRoot
+        $env:OLYMPUS_GLOBAL_FAIL_AFTER_MANAGED_WRITE = '1'
+        $ErrorActionPreference = 'Continue'
+        $faultOutput = (& pwsh -NoProfile -File $faultWriterPath -Harness opencode `
+            -SourceVersion $candidateVersion -ProjectTarget $project -Update -Force 2>&1 | Out-String)
+        $faultCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+        if ($null -eq $previousOpenCodeRoot) { Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue }
+        else { $env:OPENCODE_CONFIG_DIR = $previousOpenCodeRoot }
+        if ($null -eq $previousFaultSwitch) { Remove-Item Env:OLYMPUS_GLOBAL_FAIL_AFTER_MANAGED_WRITE -ErrorAction SilentlyContinue }
+        else { $env:OLYMPUS_GLOBAL_FAIL_AFTER_MANAGED_WRITE = $previousFaultSwitch }
+    }
+    $manifestAfterFault = [IO.File]::ReadAllBytes($openManifestPath)
+    $cliManifestAfterFault = [IO.File]::ReadAllBytes($cliManifestPath)
+    $cliPointerAfterFault = [IO.File]::ReadAllBytes($cliPointerPath)
+    $hardLinkDaclAfterFault = Get-AccessDaclSnapshot $hardLinkAlias
+    Check 'GLOBAL_FORCE_INTERRUPTION_AFTER_WRITE_RETAINS_RECEIPT_AND_RETRY_STATE' (
+        $faultCode -ne 0 -and $faultOutput -match 'QUALIFICATION_INTERRUPTED_AFTER_MANAGED_WRITE' -and
+        [Convert]::ToBase64String($manifestBytesBeforeFault) -ceq [Convert]::ToBase64String($manifestAfterFault) -and
+        [Convert]::ToBase64String($cliManifestBytesBeforeFault) -ceq [Convert]::ToBase64String($cliManifestAfterFault) -and
+        [Convert]::ToBase64String($cliPointerBytesBeforeFault) -ceq [Convert]::ToBase64String($cliPointerAfterFault) -and
+        [IO.File]::ReadAllText($openAgentPath) -ceq [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/kael.md')) -and
+        -not (Test-Path -LiteralPath $missingAgentPath) -and
+        [Convert]::ToBase64String($hardLinkBytesBeforeForce) -ceq
+            [Convert]::ToBase64String([IO.File]::ReadAllBytes($hardLinkAlias)) -and
+        $hardLinkDaclAfterFault.Sddl -ceq $hardLinkDaclBeforeForce.Sddl -and
+        [Convert]::ToBase64String($openUserConfigBeforeForce) -ceq
+            [Convert]::ToBase64String([IO.File]::ReadAllBytes($openUserConfig))
+    ) ("exit=$faultCode`n$faultOutput")
+
+    $forceRepair = Run-Installer $project @('-Scope','global','-Harness','opencode','-Update','-Force')
+    $manifestAfterForce = if (Test-Path -LiteralPath $openManifestPath) {
+        [IO.File]::ReadAllText($openManifestPath) | ConvertFrom-Json -Depth 20
+    } else { $null }
+    $allManagedHashesMatch = $null -ne $manifestAfterForce -and @($manifestAfterForce.managed_files | Where-Object {
+        $managedPath = Join-Path $openCodeRoot ($_.path -replace '/', [IO.Path]::DirectorySeparatorChar)
+        -not (Test-Path -LiteralPath $managedPath -PathType Leaf) -or
+        (Get-FileHash -LiteralPath $managedPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne [string]$_.sha256
+    }).Count -eq 0
+    Check 'GLOBAL_FORCE_REPAIRS_RECEIPTED_DRIFT_AND_PRESERVES_USER_STATE' (
+        $forceRepair.Code -eq 0 -and
+        [IO.File]::ReadAllText($openAgentPath) -ceq
+            [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/kael.md')) -and
+        [IO.File]::ReadAllText($missingAgentPath) -ceq
+            [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/nox.md')) -and
+        [Convert]::ToBase64String($openUserConfigBeforeForce) -ceq
+            [Convert]::ToBase64String([IO.File]::ReadAllBytes($openUserConfig)) -and
+        [IO.File]::ReadAllText($userNotePath) -ceq 'preserve during force repair' -and
+        $null -ne $manifestAfterForce -and
+        $manifestAfterForce.installed_version -ceq $candidateVersion -and
+        $allManagedHashesMatch -and
+        (Get-AccessDaclSnapshot $openManifestPath).Sddl -ceq $manifestDaclBeforeForce.Sddl -and
+        (Get-AccessDaclSnapshot $openManifestPath).Protected -and
+        (Get-AccessDaclSnapshot $openAgentPath).Sddl -ceq $agentDaclBeforeForce.Sddl -and
+        [Convert]::ToBase64String($hardLinkBytesBeforeForce) -ceq
+            [Convert]::ToBase64String([IO.File]::ReadAllBytes($hardLinkAlias)) -and
+        (Get-AccessDaclSnapshot $hardLinkAlias).Sddl -ceq $hardLinkDaclBeforeForce.Sddl -and
+        [Convert]::ToBase64String($cliPointerBytesBeforeFault) -ceq
+            [Convert]::ToBase64String([IO.File]::ReadAllBytes($cliPointerPath)) -and
+        (Global-Verify $project 'opencode').Code -eq 0
+    ) ("exit=$($forceRepair.Code)`n$($forceRepair.Text)")
+
     # Uninstall removes only manifest-owned resources, keeping unrelated global state.
-    [IO.File]::WriteAllText((Join-Path $openCodeRoot 'user-note.txt'), 'preserve', $utf8)
+    [IO.File]::WriteAllText($userNotePath, 'preserve', $utf8)
     $uninstall = Run-Installer $project @('-Scope','global','-Harness','opencode','-Uninstall')
     Check 'GLOBAL_UNINSTALL_ONLY_OWNED_RESOURCES' ($uninstall.Code -eq 0 -and
         -not (Test-Path (Join-Path $openCodeRoot 'agents/kael.md')) -and

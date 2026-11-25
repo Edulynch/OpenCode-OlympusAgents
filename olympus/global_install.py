@@ -38,6 +38,64 @@ class GlobalInstallError(RuntimeError):
         self.code = code
 
 
+def _require_no_posix_acl(path: Path, kind: str, *,
+                          expected_identity: tuple[int, int] | None = None,
+                          code: int = 3) -> None:
+    """Fail closed before force replaces or chmods Linux resources with ACL policy."""
+    if not sys.platform.startswith("linux"):
+        return
+    attribute = {
+        "access": "system.posix_acl_access",
+        "default": "system.posix_acl_default",
+    }.get(kind)
+    if attribute is None:
+        raise GlobalInstallError("Unsupported Linux ACL inspection kind.", code)
+    listxattr = getattr(os, "listxattr", None)
+    if not callable(listxattr):
+        raise GlobalInstallError(f"Cannot establish Linux ACL state for {path}.", code)
+    descriptor = -1
+    try:
+        before = os.lstat(path)
+        if (stat.S_ISLNK(before.st_mode)
+                or getattr(before, "st_file_attributes", 0) & global_readonly._REPARSE
+                or not (stat.S_ISREG(before.st_mode) or stat.S_ISDIR(before.st_mode))
+                or kind == "default" and not stat.S_ISDIR(before.st_mode)):
+            raise GlobalInstallError(f"Unsafe Linux ACL inspection target: {path}", code)
+        identity = (before.st_dev, before.st_ino)
+        if expected_identity is not None and identity != expected_identity:
+            raise GlobalInstallError(f"Linux ACL inspection target changed: {path}", code)
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        if stat.S_ISDIR(before.st_mode):
+            flags |= getattr(os, "O_DIRECTORY", 0)
+        descriptor = os.open(path, flags)
+        opened = os.fstat(descriptor)
+        if (opened.st_dev, opened.st_ino) != identity:
+            raise GlobalInstallError(f"Linux ACL inspection target changed while opening: {path}", code)
+        try:
+            attributes = set(listxattr(descriptor))
+        except (OSError, TypeError, NotImplementedError) as error:
+            raise GlobalInstallError(
+                f"Cannot establish Linux ACL state for {path}: {error}", code,
+            ) from error
+        placed = os.lstat(path)
+        if ((placed.st_dev, placed.st_ino) != identity
+                or (os.fstat(descriptor).st_dev, os.fstat(descriptor).st_ino) != identity):
+            raise GlobalInstallError(f"Linux ACL inspection target changed during inspection: {path}", code)
+        if attribute in attributes:
+            raise GlobalInstallError(
+                f"Force repair refuses to alter {kind}-ACL-bearing managed resource: {path}", code,
+            )
+    except GlobalInstallError:
+        raise
+    except (OSError, TypeError, NotImplementedError) as error:
+        raise GlobalInstallError(
+            f"Cannot establish Linux ACL state for {path}: {error}", code,
+        ) from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
 @dataclass(frozen=True, slots=True)
 class LifecycleOutcome:
     operation: str
@@ -421,13 +479,17 @@ def _manifest(root: Path, candidate: _Candidate) -> tuple[dict | None, dict[str,
     return data, entries, raw, metadata
 
 
-def _validate_owned_files(root: Path, entries: dict[str, str]) -> dict[str, tuple[bytes, os.stat_result]]:
-    result: dict[str, tuple[bytes, os.stat_result]] = {}
+def _validate_owned_files(root: Path, entries: dict[str, str], *,
+                          allow_drift: bool = False) -> dict[str, tuple[bytes | None, os.stat_result | None]]:
+    result: dict[str, tuple[bytes | None, os.stat_result | None]] = {}
     for relative, expected_hash in sorted(entries.items()):
         raw, metadata = _read(root, relative)
         if raw is None or metadata is None:
+            if allow_drift:
+                result[relative] = (None, None)
+                continue
             raise GlobalInstallError(f"Manifest-owned global resource is missing: {relative}", 1)
-        if _digest(raw) != expected_hash:
+        if _digest(raw) != expected_hash and not allow_drift:
             raise GlobalInstallError(f"Manifest-owned global resource drifted: {relative}", 1)
         result[relative] = (raw, metadata)
     return result
@@ -472,7 +534,58 @@ def _sort_changes(changes: list[_Change]) -> tuple[_Change, ...]:
                  + [item for item in changes if item.path == _MANIFEST])
 
 
-def _build_install(root: Path, candidate: _Candidate, *, update: bool) -> tuple[_Change, ...]:
+def _require_default_acl_for_missing_parents(root: Path, relative: str, *,
+                                            root_identity: tuple[int, int],
+                                            code: int) -> None:
+    current = root
+    metadata = os.lstat(root)
+    if (metadata.st_dev, metadata.st_ino) != root_identity:
+        raise GlobalInstallError("Global root changed before ACL parent preflight.", code)
+    for part in source_edit._relative_parts(relative)[:-1]:
+        child = current / part
+        try:
+            child_metadata = os.lstat(child)
+        except FileNotFoundError:
+            _require_no_posix_acl(
+                current, "default",
+                expected_identity=(metadata.st_dev, metadata.st_ino), code=code,
+            )
+            return
+        except OSError as error:
+            raise GlobalInstallError(f"Cannot inspect global resource parent {child}: {error}", code) from error
+        if (stat.S_ISLNK(child_metadata.st_mode)
+                or getattr(child_metadata, "st_file_attributes", 0) & global_readonly._REPARSE
+                or not stat.S_ISDIR(child_metadata.st_mode)
+                or child_metadata.st_dev != metadata.st_dev):
+            raise GlobalInstallError(f"Unsafe global resource parent: {child}", code)
+        current = child
+        metadata = child_metadata
+
+
+def _force_acl_preflight(root: Path, root_identity: tuple[int, int],
+                         changes: tuple[_Change, ...], *, code: int = 3) -> None:
+    if not sys.platform.startswith("linux") or not changes:
+        return
+    _require_no_posix_acl(root, "default", expected_identity=root_identity, code=code)
+    for item in changes:
+        if item.old is not None:
+            current, metadata = _read(root, item.path)
+            if (current != item.old or metadata is None
+                    or stat.S_IMODE(metadata.st_mode) != item.old_mode):
+                raise GlobalInstallError(
+                    f"Global resource changed before ACL preflight: {item.path}", code,
+                )
+            _require_no_posix_acl(
+                root / item.path, "access",
+                expected_identity=(metadata.st_dev, metadata.st_ino), code=code,
+            )
+        _require_default_acl_for_missing_parents(
+            root, item.path, root_identity=root_identity, code=code,
+        )
+
+
+def _build_install(root: Path, candidate: _Candidate, *, update: bool,
+                   force: bool = False) -> tuple[_Change, ...]:
     manifest, old_entries, old_manifest, manifest_meta = _manifest(root, candidate)
     if manifest is None:
         if update:
@@ -538,13 +651,49 @@ def _build_install(root: Path, candidate: _Candidate, *, update: bool) -> tuple[
             f"OpenCode default-agent receipt is {receipt['state']}; recover its owning lifecycle first."
         )
     old_version = manifest["installed_version"]
+    if force and old_version == candidate.version and manifest["installed_from_commit"] != candidate.commit:
+        raise GlobalInstallError("Same-version force repair requires the exact manifest commit identity.")
     comparison = _version_compare(candidate.version, old_version)
     if comparison is None:
         raise GlobalInstallError("Local and release versions cannot be ordered; refusing an implicit version transition.")
     if comparison < 0:
         raise GlobalInstallError(f"Refusing to downgrade OpenCode global installation from {old_version} to {candidate.version}.")
-    current = _validate_owned_files(root, old_entries)
+    owns_guard = "opencode.jsonc" in old_entries
+    current = _validate_owned_files(root, old_entries, allow_drift=force)
+    if force and owns_guard:
+        guard, _ = _read(root, "opencode.jsonc")
+        if guard is None or _digest(guard) != old_entries["opencode.jsonc"]:
+            raise GlobalInstallError(
+                "Force repair will not overwrite a changed or missing receipt-owned OpenCode config."
+            )
     if comparison == 0:
+        if force:
+            desired_entries = _inventory_for_receipt(candidate.expected, owns_guard)
+            if (set(desired_entries) != set(old_entries)
+                    or any(_digest(desired_entries[path]) != old_entries[path]
+                           for path in desired_entries)):
+                raise GlobalInstallError(
+                    "Same-version source differs from the installed manifest; refusing force repair."
+                )
+            changes = []
+            for relative, desired in sorted(desired_entries.items()):
+                old, metadata = current[relative]
+                change = _make_change(relative, old, metadata, desired)
+                if change:
+                    changes.append(change)
+            if changes:
+                manifest_new = _manifest_bytes(
+                    candidate.version, candidate.commit, desired_entries, receipt,
+                )
+                if manifest_new == old_manifest:
+                    manifest_new += b"\n"
+                change = _make_change(
+                    _MANIFEST, old_manifest, manifest_meta, manifest_new, default_mode=0o600,
+                )
+                if change is None:
+                    raise GlobalInstallError("Force repair could not preserve manifest-last transaction ordering.", 4)
+                changes.append(change)
+            return _sort_changes(changes)
         if not all(raw == candidate.expected.get(path) for path, (raw, _) in current.items()):
             raise GlobalInstallError(
                 "Same-version source differs from installed managed bytes; refusing an implicit repair."
@@ -559,7 +708,6 @@ def _build_install(root: Path, candidate: _Candidate, *, update: bool) -> tuple[
             raise GlobalInstallError(str(error), error.code) from error
         if "opencode.jsonc" in old_entries and config_path == "opencode.json":
             raise GlobalInstallError("An unowned opencode.json conflicts with the owned opencode.jsonc guard.")
-    owns_guard = "opencode.jsonc" in old_entries
     desired_entries = _inventory_for_receipt(candidate.expected, owns_guard)
     changes = []
     for relative, desired in sorted(desired_entries.items()):
@@ -669,16 +817,21 @@ def _record_for(root: Path, candidate: _Candidate, operation: str,
 
 
 def _persist_record(root: Path, scratch: Path, record: dict, lock, identity,
-                    previous: tuple[dict, bytes, os.stat_result] | None = None):
+                    previous: tuple[dict, bytes, os.stat_result] | None = None,
+                    *, force: bool = False):
     temporary_relative = f"{_SCRATCH}/.record.json.tmp"
     record_relative = f"{_SCRATCH}/{_RECORD}"
     temporary = root / temporary_relative
     payload = _canonical(record)
     try:
+        if force:
+            _require_no_posix_acl(scratch, "default", code=4)
         source_edit._write_private_file(
             temporary, root, temporary_relative, payload, 0o600 if os.name != "nt" else 0o666,
             lock, identity,
         )
+        if force:
+            _require_no_posix_acl(temporary, "access", code=4)
         if previous is None:
             try:
                 os.lstat(root / record_relative)
@@ -692,12 +845,25 @@ def _persist_record(root: Path, scratch: Path, record: dict, lock, identity,
                 metadata.st_dev, metadata.st_ino
             ) != (previous[2].st_dev, previous[2].st_ino):
                 raise GlobalInstallError("Lifecycle record changed before state transition.", 4)
+            if force:
+                _require_no_posix_acl(
+                    root / record_relative, "access",
+                    expected_identity=(metadata.st_dev, metadata.st_ino), code=4,
+                )
+        if force:
+            _require_no_posix_acl(scratch, "default", code=4)
+            _require_no_posix_acl(temporary, "access", code=4)
         source_edit._lock_identity(lock, identity)
         os.replace(temporary, root / record_relative)
         source_edit._sync_directory(scratch)
         written, metadata = _read(root, record_relative)
         if written != payload or metadata is None:
             raise GlobalInstallError("Persisted lifecycle record failed verification.", 4)
+        if force:
+            _require_no_posix_acl(
+                root / record_relative, "access",
+                expected_identity=(metadata.st_dev, metadata.st_ino), code=4,
+            )
         return record, written, metadata
     except GlobalInstallError:
         raise
@@ -898,6 +1064,7 @@ def _validate_record(root: Path, candidate: _Candidate, lock, record: Any, scrat
         raise GlobalInstallError("Uninstall journal unexpectedly has a new manifest.", 4)
     old_entries = manifest_maps["old"] or {}
     new_entries = manifest_maps["new"] or {}
+    same_version_repair = False
     if record["operation"] == "install":
         receipt = manifest_values["new"][global_readonly._DEFAULT_AGENT_RECEIPT]
         expected_inventory = set(_inventory_for_receipt(
@@ -916,18 +1083,26 @@ def _validate_record(root: Path, candidate: _Candidate, lock, record: Any, scrat
         old_value, new_value = manifest_values["old"], manifest_values["new"]
         if old_value[global_readonly._DEFAULT_AGENT_RECEIPT] != new_value[global_readonly._DEFAULT_AGENT_RECEIPT]:
             raise GlobalInstallError("Update journal changed default-agent ownership history.", 4)
-        if _version_compare(candidate.version, old_value["installed_version"]) not in (1,):
-            raise GlobalInstallError("Update journal is not a strictly newer release transition.", 4)
         receipt = new_value[global_readonly._DEFAULT_AGENT_RECEIPT]
         expected_inventory = set(_inventory_for_receipt(
             candidate.expected, "opencode.jsonc" in new_entries,
         ))
         if set(new_entries) != expected_inventory:
             raise GlobalInstallError("Update journal inventory differs from the staged source.", 4)
-        changed_managed = {
-            path for path in set(old_entries) | set(new_entries)
-            if old_entries.get(path) != new_entries.get(path)
-        }
+        comparison = _version_compare(candidate.version, old_value["installed_version"])
+        if comparison == 1:
+            changed_managed = {
+                path for path in set(old_entries) | set(new_entries)
+                if old_entries.get(path) != new_entries.get(path)
+            }
+        elif (comparison == 0
+              and old_value["installed_from_commit"] == candidate.commit
+              and new_value["installed_from_commit"] == candidate.commit
+              and old_entries == new_entries):
+            changed_managed = set(old_entries)
+            same_version_repair = True
+        else:
+            raise GlobalInstallError("Update journal is not a verified newer release or same-version repair.", 4)
     else:
         receipt = manifest_values["old"][global_readonly._DEFAULT_AGENT_RECEIPT]
         changed_managed = set(old_entries)
@@ -938,8 +1113,30 @@ def _validate_record(root: Path, candidate: _Candidate, lock, record: Any, scrat
         if actual_paths != changed_managed | allowed_extra:
             raise GlobalInstallError("Install journal write-set contradicts manifest ownership.", 4)
     elif record["operation"] == "update":
-        if actual_paths != changed_managed:
-            raise GlobalInstallError("Update journal contains a non-manifest user-config write.", 4)
+        if same_version_repair:
+            if (not actual_paths or not actual_paths <= changed_managed
+                    or any(
+                        not file_map[path]["new_present"]
+                        or file_map[path]["new_sha256"] != new_entries[path]
+                        or file_map[path]["old_present"]
+                        and file_map[path]["old_sha256"] == old_entries[path]
+                        for path in actual_paths
+                    )):
+                raise GlobalInstallError("Same-version repair journal is outside its manifest receipt.", 4)
+        else:
+            unchanged_owned = {
+                path for path in set(old_entries) & set(new_entries)
+                if old_entries[path] == new_entries[path]
+            }
+            repair_paths = actual_paths - changed_managed
+            if (not actual_paths <= changed_managed | unchanged_owned
+                    or any(
+                        file_map[path]["new_sha256"] != new_entries[path]
+                        or file_map[path]["old_present"]
+                        and file_map[path]["old_sha256"] == old_entries[path]
+                        for path in repair_paths
+                    )):
+                raise GlobalInstallError("Update journal contains a non-manifest user-config write.", 4)
     else:
         allowed_extra = ({receipt["config_path"]} if receipt["config_path"] not in old_entries else set())
         if actual_paths not in (changed_managed, changed_managed | allowed_extra):
@@ -1006,7 +1203,10 @@ def _validate_record(root: Path, candidate: _Candidate, lock, record: Any, scrat
     for relative, item in file_map.items():
         if relative == _MANIFEST:
             continue
-        if item["old_present"]:
+        if item["old_present"] and not (
+            record["operation"] == "update" and relative in actual_paths
+            and relative in old_entries
+        ):
             old_hash = (manifest_maps["old"] or {}).get(relative)
             if old_hash is not None and old_hash != item["old_sha256"]:
                 raise GlobalInstallError(f"Old manifest hash contradicts lifecycle backup: {relative}", 4)
@@ -1118,7 +1318,7 @@ def _cleanup(root: Path, lock, identity, root_identity: tuple[int, int],
 
 
 def _rollback(root: Path, lock, identity, root_identity: tuple[int, int],
-              file_map: dict[str, dict]) -> None:
+              file_map: dict[str, dict], *, guard_acl: bool = False) -> None:
     for relative, entry in reversed(list(file_map.items())):
         state = _target_state(root, relative, entry)
         if state == "foreign":
@@ -1131,19 +1331,46 @@ def _rollback(root: Path, lock, identity, root_identity: tuple[int, int],
             if backup is None:
                 raise GlobalInstallError(f"Missing rollback evidence for {relative}", 4)
             _verify_root(root, root_identity)
+            if guard_acl:
+                _require_default_acl_for_missing_parents(
+                    root, relative, root_identity=root_identity, code=4,
+                )
             _ensure_parent(root, relative, lock, identity)
             source_edit._lock_identity(lock, identity)
             _verify_root(root, root_identity)
+            if guard_acl:
+                current, metadata = _read(root, relative)
+                if metadata is not None:
+                    _require_no_posix_acl(
+                        root / relative, "access",
+                        expected_identity=(metadata.st_dev, metadata.st_ino), code=4,
+                    )
+                _require_no_posix_acl(root / backup_relative, "access", code=4)
             try:
                 os.replace(root / backup_relative, root / relative)
             except OSError as error:
                 raise GlobalInstallError(f"Cannot restore lifecycle target {relative}: {error}", 4) from error
+            if guard_acl:
+                restored, restored_metadata = _read(root, relative)
+                if restored is None or restored_metadata is None:
+                    raise GlobalInstallError(
+                        f"Cannot verify ACL state of restored global resource {relative}", 4,
+                    )
+                _require_no_posix_acl(
+                    root / relative, "access",
+                    expected_identity=(restored_metadata.st_dev, restored_metadata.st_ino), code=4,
+                )
         else:
             raw, metadata = _read(root, relative)
             if raw is None or metadata is None or _digest(raw) != entry["new_sha256"]:
                 raise GlobalInstallError(f"Lifecycle target changed before rollback: {relative}", 4)
             _verify_root(root, root_identity)
             source_edit._lock_identity(lock, identity)
+            if guard_acl:
+                _require_no_posix_acl(
+                    root / relative, "access",
+                    expected_identity=(metadata.st_dev, metadata.st_ino), code=4,
+                )
             try:
                 os.unlink(root / relative)
             except OSError as error:
@@ -1154,7 +1381,7 @@ def _rollback(root: Path, lock, identity, root_identity: tuple[int, int],
 
 
 def _recover_locked(root: Path, candidate: _Candidate, lock, context,
-                    root_identity: tuple[int, int]) -> str:
+                    root_identity: tuple[int, int], *, guard_acl: bool = False) -> str:
     if context is None:
         return "no_changes"
     record, record_raw, record_meta, scratch_meta, top = context
@@ -1176,7 +1403,7 @@ def _recover_locked(root: Path, candidate: _Candidate, lock, context,
         _cleanup(root, lock, identity, root_identity, record, record_raw, record_meta,
                  file_map, artifacts)
         return "committed_cleanup"
-    _rollback(root, lock, identity, root_identity, file_map)
+    _rollback(root, lock, identity, root_identity, file_map, guard_acl=guard_acl)
     if any(_target_state(root, relative, entry) != "old" for relative, entry in file_map.items()):
         raise GlobalInstallError("Lifecycle rollback left a non-old target state.", 4)
     context = _record_context(root, lock)
@@ -1189,7 +1416,7 @@ def _recover_locked(root: Path, candidate: _Candidate, lock, context,
 
 
 def _commit(root: Path, root_identity: tuple[int, int], candidate: _Candidate, operation: str,
-            changes: tuple[_Change, ...], lock=None) -> str:
+            changes: tuple[_Change, ...], lock=None, *, force: bool = False) -> str:
     if not changes and lock is None:
         raise GlobalInstallError("A lifecycle no-op requires the existing stable global writer lock.")
     if changes and changes[-1].path != _MANIFEST:
@@ -1208,13 +1435,17 @@ def _commit(root: Path, root_identity: tuple[int, int], candidate: _Candidate, o
             raise GlobalInstallError("A global apply, lifecycle, or source-edit journal is pending; recover it first.")
         # Rebuild the candidate plan after acquiring the shared lock.
         latest = (_build_uninstall(root, candidate) if operation == "uninstall"
-                  else _build_install(root, candidate, update=operation == "update"))
+                  else _build_install(
+                      root, candidate, update=operation == "update", force=force,
+                  ))
         if [(item.path, item.old, item.new, item.old_mode, item.new_mode) for item in latest] != [
             (item.path, item.old, item.new, item.old_mode, item.new_mode) for item in changes
         ]:
             raise GlobalInstallError("Global installation changed before locked revalidation.")
         if not changes:
             return "no_changes"
+        if force:
+            _force_acl_preflight(root, root_identity, changes)
         for item in changes:
             _verify_root(root, root_identity)
             current, metadata = _read(root, item.path)
@@ -1234,40 +1465,94 @@ def _commit(root: Path, root_identity: tuple[int, int], candidate: _Candidate, o
         record["scratch_identity"] = {"st_dev": scratch_meta.st_dev, "st_ino": scratch_meta.st_ino}
         source_edit._sync_directory(root)
         _verify_root(root, root_identity)
-        record, record_raw, record_meta = _persist_record(root, scratch, record, lock, identity)
+        record, record_raw, record_meta = _persist_record(
+            root, scratch, record, lock, identity, force=force,
+        )
         try:
             _verify_root(root, root_identity)
+            if force:
+                _require_no_posix_acl(scratch, "default", code=4)
             source_edit._make_directory(scratch / "backups", root, lock, identity)
+            if force:
+                _require_no_posix_acl(scratch / "backups", "access", code=4)
+                _require_no_posix_acl(scratch / "backups", "default", code=4)
             _verify_root(root, root_identity)
+            if force:
+                _require_no_posix_acl(scratch, "default", code=4)
             source_edit._make_directory(scratch / "staged", root, lock, identity)
+            if force:
+                _require_no_posix_acl(scratch / "staged", "access", code=4)
+                _require_no_posix_acl(scratch / "staged", "default", code=4)
             for index, item in enumerate(changes):
                 if item.old is not None:
                     relative = f"{_SCRATCH}/backups/file-{index:04d}.old"
                     _verify_root(root, root_identity)
-                    source_edit._write_private_file(
+                    if force:
+                        _require_no_posix_acl(scratch / "backups", "default", code=4)
+                    backup_identity = source_edit._write_private_file(
                         root / relative, root, relative, item.old, item.old_mode or 0o600, lock, identity,
                     )
+                    if force:
+                        _require_no_posix_acl(
+                            root / relative, "access",
+                            expected_identity=backup_identity, code=4,
+                        )
                 if item.new is not None:
                     relative = f"{_SCRATCH}/staged/file-{index:04d}.new"
                     _verify_root(root, root_identity)
-                    source_edit._write_private_file(
+                    if force:
+                        _require_no_posix_acl(scratch / "staged", "default", code=4)
+                    staged_identity = source_edit._write_private_file(
                         root / relative, root, relative, item.new, item.new_mode or 0o600, lock, identity,
                     )
+                    if force:
+                        _require_no_posix_acl(
+                            root / relative, "access",
+                            expected_identity=staged_identity, code=4,
+                        )
             _verify_root(root, root_identity)
             record, record_raw, record_meta = _persist_record(
                 root, scratch, {**record, "state": "PREPARED"}, lock, identity,
-                previous=(record, record_raw, record_meta),
+                previous=(record, record_raw, record_meta), force=force,
             )
             context = _record_context(root, lock)
             file_map, _ = _validate_record(root, candidate, lock, context[0], context[3], context[4])
-            for item in changes:
+            if force:
+                _force_acl_preflight(root, root_identity, changes, code=4)
+                for index, item in enumerate(changes):
+                    if item.old is not None:
+                        _require_no_posix_acl(
+                            root / _SCRATCH / "backups" / f"file-{index:04d}.old",
+                            "access", code=4,
+                        )
+                    if item.new is not None:
+                        _require_no_posix_acl(
+                            root / _SCRATCH / "staged" / f"file-{index:04d}.new",
+                            "access", code=4,
+                        )
+            for index, item in enumerate(changes):
                 _verify_root(root, root_identity)
+                if force:
+                    _require_default_acl_for_missing_parents(
+                        root, item.path, root_identity=root_identity, code=4,
+                    )
                 _ensure_parent(root, item.path, lock, identity)
                 current, metadata = _read(root, item.path)
                 if current != item.old or (
                     current is not None and (metadata is None or stat.S_IMODE(metadata.st_mode) != item.old_mode)
                 ):
                     raise GlobalInstallError(f"Global target changed before replacement: {item.path}", 4)
+                if force:
+                    if metadata is not None:
+                        _require_no_posix_acl(
+                            root / item.path, "access",
+                            expected_identity=(metadata.st_dev, metadata.st_ino), code=4,
+                        )
+                    if item.new is not None:
+                        _require_no_posix_acl(
+                            root / _SCRATCH / "staged" / f"file-{index:04d}.new",
+                            "access", code=4,
+                        )
                 _verify_root(root, root_identity)
                 source_edit._lock_identity(lock, identity)
                 if item.new is None:
@@ -1276,7 +1561,7 @@ def _commit(root: Path, root_identity: tuple[int, int], candidate: _Candidate, o
                     except OSError as error:
                         raise GlobalInstallError(f"Cannot remove global resource {item.path}: {error}", 4) from error
                 else:
-                    staged = root / _SCRATCH / "staged" / f"file-{changes.index(item):04d}.new"
+                    staged = root / _SCRATCH / "staged" / f"file-{index:04d}.new"
                     try:
                         if item.old is None:
                             os.link(staged, root / item.path)
@@ -1289,10 +1574,21 @@ def _commit(root: Path, root_identity: tuple[int, int], candidate: _Candidate, o
                 source_edit._sync_directory((root / item.path).parent)
                 if _target_state(root, item.path, file_map[item.path]) != "new":
                     raise GlobalInstallError(f"Published global resource failed verification: {item.path}", 4)
+                if force and item.new is not None:
+                    _, published_metadata = _read(root, item.path)
+                    if published_metadata is None:
+                        raise GlobalInstallError(
+                            f"Published global resource identity is unavailable: {item.path}", 4,
+                        )
+                    _require_no_posix_acl(
+                        root / item.path, "access",
+                        expected_identity=(published_metadata.st_dev, published_metadata.st_ino),
+                        code=4,
+                    )
             _verify_root(root, root_identity)
             record, record_raw, record_meta = _persist_record(
                 root, scratch, {**record, "state": "COMMITTED"}, lock, identity,
-                previous=(record, record_raw, record_meta),
+                previous=(record, record_raw, record_meta), force=force,
             )
             context = _record_context(root, lock)
             file_map, artifacts = _validate_record(root, candidate, lock, context[0], context[3], context[4])
@@ -1306,10 +1602,14 @@ def _commit(root: Path, root_identity: tuple[int, int], candidate: _Candidate, o
                     raise GlobalInstallError("Lifecycle journal disappeared during execution.", 4)
                 state = context[0]["state"]
                 if state == "COMMITTED":
-                    recovered = _recover_locked(root, candidate, lock, context, root_identity)
+                    recovered = _recover_locked(
+                        root, candidate, lock, context, root_identity, guard_acl=force,
+                    )
                     if recovered == "committed_cleanup":
                         return "committed"
-                recovered = _recover_locked(root, candidate, lock, context, root_identity)
+                recovered = _recover_locked(
+                    root, candidate, lock, context, root_identity, guard_acl=force,
+                )
                 if recovered in ("discarded_incomplete_prepare", "rolled_back"):
                     raise GlobalInstallError(f"Lifecycle failed; rollback was confirmed: {error}", 1) from error
             except GlobalInstallError as recovery_error:
@@ -1327,7 +1627,8 @@ def _commit(root: Path, root_identity: tuple[int, int], candidate: _Candidate, o
                 raise GlobalInstallError(f"Global writer lock identity became unconfirmed: {error}", 4) from error
 
 
-def _operate(source: Path, version: str, commit: str, operation: str) -> LifecycleOutcome:
+def _operate(source: Path, version: str, commit: str, operation: str, *,
+             force: bool = False) -> LifecycleOutcome:
     candidate = _candidate(source, version, commit)
     root, root_identity = _resolve_root(create=operation in ("install", "update"))
     _check_roots(candidate.source, root)
@@ -1362,15 +1663,21 @@ def _operate(source: Path, version: str, commit: str, operation: str) -> Lifecyc
         if operation == "uninstall":
             changes = _build_uninstall(root, candidate)
         else:
-            changes = _build_install(root, candidate, update=operation == "update")
+            changes = _build_install(
+                root, candidate, update=operation == "update", force=force,
+            )
 
         if lock is not None:
             _verify_root(root, root_identity)
             if config_apply_transaction.pending(root):
                 raise GlobalInstallError("A global lifecycle/apply or source-edit journal is pending; recover it first.")
-            result = _commit(root, root_identity, candidate, operation, changes, lock=lock)
+            result = _commit(
+                root, root_identity, candidate, operation, changes, lock=lock, force=force,
+            )
         elif changes:
-            result = _commit(root, root_identity, candidate, operation, changes)
+            result = _commit(
+                root, root_identity, candidate, operation, changes, force=force,
+            )
         else:
             # An absent uninstall is the only legitimate no-op without an installed lock.
             lock = _existing_lock(root, root_identity)
@@ -1388,7 +1695,9 @@ def _operate(source: Path, version: str, commit: str, operation: str) -> Lifecyc
                     )
                 result = "no_changes"
             else:
-                result = _commit(root, root_identity, candidate, operation, changes, lock=lock)
+                result = _commit(
+                    root, root_identity, candidate, operation, changes, lock=lock, force=force,
+                )
         return LifecycleOutcome(operation, result, str(root), candidate.version,
                                 tuple(item.path for item in changes))
     finally:
@@ -1399,14 +1708,36 @@ def _operate(source: Path, version: str, commit: str, operation: str) -> Lifecyc
                 raise GlobalInstallError(f"Global writer lock identity became unconfirmed: {error}", 4) from error
 
 
+def _preflight_force_update(source: Path, *, version: str, commit: str) -> None:
+    """Inspect global targets before a coordinated CLI force mutation."""
+    candidate = _candidate(source, version, commit)
+    root, root_identity = _resolve_root(create=False)
+    _check_roots(candidate.source, root)
+    lock = _existing_lock(root, root_identity)
+    if lock is None:
+        raise GlobalInstallError("Force preflight requires the existing stable global writer lock.", 4)
+    try:
+        _verify_root(root, root_identity)
+        if config_apply_transaction.pending(root):
+            raise GlobalInstallError("A pending global transaction blocks force repair.")
+        changes = _build_install(root, candidate, update=True, force=True)
+        _force_acl_preflight(root, root_identity, changes)
+    finally:
+        try:
+            source_edit._release_lock(lock)
+        except source_edit.LockError as error:
+            raise GlobalInstallError(f"Global writer lock identity is unconfirmed: {error}", 4) from error
+
+
 def install(source: Path, *, version: str = "local", commit: str = "unknown") -> LifecycleOutcome:
     """Install one staged source, refusing collisions or an unrequested transition."""
     return _operate(source, version, commit, "install")
 
 
-def update(source: Path, *, version: str = "local", commit: str = "unknown") -> LifecycleOutcome:
-    """Update only a strictly newer tagged source, or verify a same-version no-op."""
-    return _operate(source, version, commit, "update")
+def update(source: Path, *, version: str = "local", commit: str = "unknown",
+           force: bool = False) -> LifecycleOutcome:
+    """Update a newer source, or repair only receipt-owned files when explicitly forced."""
+    return _operate(source, version, commit, "update", force=force)
 
 
 def uninstall(source: Path, *, version: str = "local", commit: str = "unknown") -> LifecycleOutcome:

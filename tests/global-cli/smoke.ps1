@@ -8,7 +8,8 @@ param(
     [string]$Target,
     [string]$Version,
     [switch]$DryRun,
-    [switch]$Update
+    [switch]$Update,
+    [switch]$Force
 )
 
 Set-StrictMode -Version Latest
@@ -25,6 +26,16 @@ function Invoke-PowerShell([string[]]$Arguments) {
     $code = $LASTEXITCODE
     if ($code -ne 0) { throw "POWERSHELL_FAILED: exit=$code`n$output" }
     return $output
+}
+
+function Invoke-PowerShellResult([string[]]$Arguments) {
+    $previousPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = (& $script:Pwsh -NoProfile -NonInteractive @Arguments 2>&1 | Out-String)
+        $code = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $previousPreference }
+    return [pscustomobject]@{ Text=$output; Code=$code }
 }
 
 function Invoke-Olympus([string]$Name, [string[]]$CommandArguments, [string]$Expected) {
@@ -54,6 +65,37 @@ function Get-TreeSnapshot([string]$Root) {
     })
 }
 
+function Get-AccessDaclSnapshot([string]$Path) {
+    $acl = [IO.FileSystemAclExtensions]::GetAccessControl(
+        [IO.FileInfo]::new($Path), [Security.AccessControl.AccessControlSections]::Access)
+    $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+    return [pscustomobject]@{
+        Sddl = $acl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::Access)
+        Protected = $acl.AreAccessRulesProtected
+        ExplicitCount = @($rules | Where-Object { -not $_.IsInherited }).Count
+        InheritedCount = @($rules | Where-Object { $_.IsInherited }).Count
+    }
+}
+
+function Set-ProtectedFixtureDacl([string]$Path) {
+    $acl = [IO.FileSystemAclExtensions]::GetAccessControl(
+        [IO.FileInfo]::new($Path), [Security.AccessControl.AccessControlSections]::Access)
+    $acl.SetAccessRuleProtection($true, $false)
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $rule = [Security.AccessControl.FileSystemAccessRule]::new(
+        $sid, [Security.AccessControl.FileSystemRights]::FullControl,
+        [Security.AccessControl.AccessControlType]::Allow)
+    $acl.SetAccessRule($rule)
+    [IO.FileSystemAclExtensions]::SetAccessControl([IO.FileInfo]::new($Path), $acl)
+    $snapshot = Get-AccessDaclSnapshot $Path
+    if (-not $snapshot.Protected -or $snapshot.ExplicitCount -eq 0 -or $snapshot.InheritedCount -ne 0) {
+        throw "FIXTURE_DACL_SETUP_FAILED: $Path"
+    }
+    return $snapshot
+}
+
+$script:Pwsh = (Get-Command pwsh -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+
 if ($MockLatest) {
     function global:Invoke-RestMethod {
         [CmdletBinding()]
@@ -75,7 +117,7 @@ if ($MockLatest) {
 
     if (-not $env:OLYMPUS_SMOKE_LAUNCHER) { throw 'SMOKE_LAUNCHER_MISSING' }
     $launchArguments = @{}
-    foreach ($name in @('Action', 'DryRun', 'Update')) {
+    foreach ($name in @('Action', 'DryRun', 'Update', 'Force')) {
         if ($PSBoundParameters.ContainsKey($name)) { $launchArguments[$name] = $PSBoundParameters[$name] }
     }
     if ($PSBoundParameters.ContainsKey('Verbose')) { $launchArguments['Verbose'] = $true }
@@ -97,6 +139,7 @@ if ($Child) {
 
     $oldPythonPath = [Environment]::GetEnvironmentVariable('PYTHONPATH', 'Process')
     $oldHook = [Environment]::GetEnvironmentVariable('OLYMPUS_SMOKE_UPDATE_HOOK', 'Process')
+    $manifestDaclBeforeStableUpdate = Get-AccessDaclSnapshot $env:OLYMPUS_SMOKE_GLOBAL_MANIFEST
     try {
         $env:PYTHONPATH = $env:OLYMPUS_SMOKE_HOOK_DIR
         $env:OLYMPUS_SMOKE_UPDATE_HOOK = '1'
@@ -110,6 +153,10 @@ if ($Child) {
             $updateOutput -notmatch '(?m)^OLYMPUS_(SOURCE|RELEASE_SELECTED|ENTRYPOINT|RELEASE_EXECUTING|RELEASE_EXECUTED|GLOBAL_INSTALL|CLI|CLI_PATH):' -and
             $updateOutput -match 'GLOBAL_DEFAULT_AGENT:'
         ) $updateOutput
+        Assert 'STABLE_UPDATE_PRESERVES_PROTECTED_MANIFEST_DACL' (
+            (Get-AccessDaclSnapshot $env:OLYMPUS_SMOKE_GLOBAL_MANIFEST).Sddl -ceq
+                $manifestDaclBeforeStableUpdate.Sddl
+        )
     } finally {
         [Environment]::SetEnvironmentVariable('PYTHONPATH', $oldPythonPath, 'Process')
         [Environment]::SetEnvironmentVariable('OLYMPUS_SMOKE_UPDATE_HOOK', $oldHook, 'Process')
@@ -246,6 +293,352 @@ exit 23
         $requestsAfterInstallerFailure.Count -eq ($requestCountBeforeInstallerFailure + 4)
     )
 
+    $wrapper = Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT 'bin/olympus.cmd'
+    $sourceWrapper = [IO.File]::ReadAllText((Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT 'scripts/olympus.cmd'))
+    $alternateWrapper = if ($sourceWrapper.Contains("`r`n")) {
+        $sourceWrapper.Replace("`r`n", "`n")
+    } else {
+        $sourceWrapper.Replace("`n", "`r`n")
+    }
+    if ($alternateWrapper -ceq $sourceWrapper) { throw 'SMOKE_NEWLINE_VARIANT_UNAVAILABLE' }
+    [IO.File]::WriteAllText($wrapper, $alternateWrapper, [Text.Encoding]::ASCII)
+    $alternateWrapperBytes = [IO.File]::ReadAllBytes($wrapper)
+    $normalCliReinstall = Invoke-PowerShell @('-File',
+        (Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT 'scripts/install-cli.ps1'),
+        '-Action','install','-Version',$env:OLYMPUS_SMOKE_RELEASE_VERSION,
+        '-SourceRoot',$env:OLYMPUS_SMOKE_SOURCE_ROOT,
+        '-InstallRoot',$env:OLYMPUS_SMOKE_INSTALL_ROOT,'-PathStorePath',$env:OLYMPUS_SMOKE_PATH_STORE)
+    Assert 'CLI_LAUNCHER_ACCEPTS_AND_PRESERVES_LF_CRLF_EQUIVALENCE' (
+        $normalCliReinstall -match 'OLYMPUS_CLI: READY' -and
+        [Convert]::ToBase64String($alternateWrapperBytes) -ceq
+            [Convert]::ToBase64String([IO.File]::ReadAllBytes($wrapper))
+    )
+
+    $globalAgent = Join-Path $env:OPENCODE_CONFIG_DIR 'agents/kael.md'
+    $missingGlobalAgent = Join-Path $env:OPENCODE_CONFIG_DIR 'agents/nox.md'
+    $cliManagedFile = Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT `
+        ("versions/$($env:OLYMPUS_SMOKE_RELEASE_VERSION)/olympus/cli.py")
+    $expectedGlobalNox = [IO.File]::ReadAllText($missingGlobalAgent)
+    [IO.File]::AppendAllText($globalAgent, "`n# fixture-only managed drift`n", $Utf8NoBom)
+    [IO.File]::Delete($missingGlobalAgent)
+    [IO.File]::AppendAllText($cliManagedFile, "`n# fixture-only managed drift`n", $Utf8NoBom)
+    $manifest = [IO.File]::ReadAllText($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST) |
+        ConvertFrom-Json -AsHashtable -Depth 20
+    $manifest.installed_version = $env:OLYMPUS_SMOKE_SOURCE_VERSION
+    [IO.File]::WriteAllText($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST,
+        ($manifest | ConvertTo-Json -Depth 20) + "`n", $Utf8NoBom)
+
+    $globalBeforeForceChecks = @(Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)
+    $cliBeforeForceChecks = @(Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)
+    $nonForceGlobalRepair = Invoke-PowerShellResult @('-File',
+        (Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT 'scripts/global-install.ps1'),
+        '-Harness','opencode','-SourceVersion',$env:OLYMPUS_SMOKE_RELEASE_VERSION,'-Update')
+    Assert 'GLOBAL_NONFORCE_UPDATE_REFUSES_MANAGED_DRIFT' (
+        $nonForceGlobalRepair.Code -ne 0 -and $nonForceGlobalRepair.Text -match 'GLOBAL_MANAGED_FILE_DRIFT' -and
+        @(Compare-Object $globalBeforeForceChecks (Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)).Count -eq 0
+    ) $nonForceGlobalRepair.Text
+    $nonForceCliRepair = Invoke-PowerShellResult @('-File',
+        (Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT 'scripts/install-cli.ps1'),
+        '-Action','install','-Version',$env:OLYMPUS_SMOKE_RELEASE_VERSION,
+        '-SourceRoot',$env:OLYMPUS_SMOKE_SOURCE_ROOT,
+        '-InstallRoot',$env:OLYMPUS_SMOKE_INSTALL_ROOT,'-PathStorePath',$env:OLYMPUS_SMOKE_PATH_STORE)
+    Assert 'CLI_NONFORCE_INSTALL_REFUSES_MANAGED_DRIFT' (
+        $nonForceCliRepair.Code -ne 0 -and $nonForceCliRepair.Text -match 'CLI_VERSION_CONFLICT' -and
+        @(Compare-Object $cliBeforeForceChecks (Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)).Count -eq 0
+    ) $nonForceCliRepair.Text
+
+    $userConfigBeforeForce = [IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_OPENCODE_CONFIG)
+    $globalMarkerBeforeForce = [IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_GLOBAL_MARKER)
+    $binMarkerBeforeForce = [IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_BIN_MARKER)
+    $versionMarkerBeforeForce = [IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_VERSION_MARKER)
+    [IO.File]::WriteAllText($wrapper, '@echo off' + "`n" + 'rem unproven user launcher' + "`n",
+        [Text.Encoding]::ASCII)
+    $globalBeforeLauncherConflict = @(Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)
+    $cliBeforeLauncherConflict = @(Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)
+    $env:OLYMPUS_SMOKE_LAUNCHER = Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT 'scripts/launch-latest.ps1'
+    $forceLauncherConflict = Invoke-PowerShellResult @('-File',$env:OLYMPUS_SMOKE_SCRIPT,
+        '-MockLatest','-Action','install','-Update','-Force')
+    Assert 'UNPROVEN_LAUNCHER_BLOCKS_FORCE_BEFORE_OPENCODE_WRITES' (
+        $forceLauncherConflict.Code -ne 0 -and $forceLauncherConflict.Text -match 'CLI_LAUNCHER_CONFLICT' -and
+        @(Compare-Object $globalBeforeLauncherConflict (Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)).Count -eq 0 -and
+        @(Compare-Object $cliBeforeLauncherConflict (Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)).Count -eq 0
+    ) $forceLauncherConflict.Text
+    [IO.File]::WriteAllBytes($wrapper, $alternateWrapperBytes)
+
+    $forceRepair = Invoke-PowerShellResult @('-File',$env:OLYMPUS_SMOKE_SCRIPT,
+        '-MockLatest','-Action','install','-Update','-Force')
+    Assert 'FORCE_UPDATE_SUCCEEDED_FROM_RECOGNIZED_SPLIT' (
+        $forceRepair.Code -eq 0 -and $forceRepair.Text -match 'Updated to'
+    ) $forceRepair.Text
+    $forcedGlobalManifest = [IO.File]::ReadAllText($env:OLYMPUS_SMOKE_GLOBAL_MANIFEST) |
+        ConvertFrom-Json -Depth 20
+    Assert 'FORCE_REPAIRS_GLOBAL_VERSION_MARKER' (
+        $forcedGlobalManifest.installed_version -ceq $env:OLYMPUS_SMOKE_RELEASE_VERSION
+    ) ([string]$forcedGlobalManifest.installed_version)
+    Assert 'FORCE_REPAIRS_CHANGED_GLOBAL_AGENT' (
+        [IO.File]::ReadAllText($globalAgent) -ceq
+            [IO.File]::ReadAllText((Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT '.opencode/agents/kael.md'))
+    )
+    Assert 'FORCE_RESTORES_MISSING_GLOBAL_AGENT' (
+        [IO.File]::ReadAllText($missingGlobalAgent) -ceq $expectedGlobalNox
+    )
+    Assert 'FORCE_REPAIRS_CLI_VERSIONED_FILES' (
+        [IO.File]::ReadAllText((Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT 'current.txt')).Trim() -ceq
+            $env:OLYMPUS_SMOKE_RELEASE_VERSION -and
+        [IO.File]::ReadAllText($cliManagedFile) -ceq
+            [IO.File]::ReadAllText((Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT 'olympus/cli.py'))
+    )
+    Assert 'FORCE_PRESERVES_USER_FILES_AND_NEWLINE_EQUIVALENT_LAUNCHER' (
+        [Convert]::ToBase64String($userConfigBeforeForce) -ceq
+            [Convert]::ToBase64String([IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_OPENCODE_CONFIG)) -and
+        [Convert]::ToBase64String($globalMarkerBeforeForce) -ceq
+            [Convert]::ToBase64String([IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_GLOBAL_MARKER)) -and
+        [Convert]::ToBase64String($binMarkerBeforeForce) -ceq
+            [Convert]::ToBase64String([IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_BIN_MARKER)) -and
+        [Convert]::ToBase64String($versionMarkerBeforeForce) -ceq
+            [Convert]::ToBase64String([IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_VERSION_MARKER)) -and
+        [Convert]::ToBase64String($alternateWrapperBytes) -ceq
+        [Convert]::ToBase64String([IO.File]::ReadAllBytes($wrapper))
+    )
+
+    $unprovenCliRoot = Join-Path (Split-Path -Parent $env:OLYMPUS_SMOKE_OTHER_DIR) 'cli-current-without-receipt'
+    $unprovenCliBin = Join-Path $unprovenCliRoot 'bin'
+    [IO.Directory]::CreateDirectory($unprovenCliBin) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $unprovenCliRoot 'current.txt'),
+        $env:OLYMPUS_SMOKE_RELEASE_VERSION + "`n", $Utf8NoBom)
+    [IO.File]::WriteAllText((Join-Path $unprovenCliBin 'olympus.cmd'), $sourceWrapper, [Text.Encoding]::ASCII)
+    $unprovenCliBefore = @(Get-TreeSnapshot $unprovenCliRoot)
+    $unprovenCliForce = Invoke-PowerShellResult @('-File',
+        (Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT 'scripts/install-cli.ps1'),
+        '-Action','install','-Version',$env:OLYMPUS_SMOKE_RELEASE_VERSION,'-Force',
+        '-SourceRoot',$env:OLYMPUS_SMOKE_SOURCE_ROOT,
+        '-InstallRoot',$unprovenCliRoot,'-PathStorePath',(Join-Path $unprovenCliRoot 'path-store.txt'))
+    Assert 'FORCE_REFUSES_MISSING_CLI_RECEIPT_WITHOUT_WRITES' (
+        $unprovenCliForce.Code -ne 0 -and $unprovenCliForce.Text -match 'CLI_VERSION_CONFLICT' -and
+        @(Compare-Object $unprovenCliBefore (Get-TreeSnapshot $unprovenCliRoot)).Count -eq 0
+    ) $unprovenCliForce.Text
+
+    $globalBeforeMissingLauncher = @(Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)
+    [IO.File]::Delete($wrapper)
+    $missingLauncherForce = Invoke-PowerShellResult @('-File',
+        (Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT 'scripts/install-cli.ps1'),
+        '-Action','install','-Version',$env:OLYMPUS_SMOKE_RELEASE_VERSION,'-Force',
+        '-SourceRoot',$env:OLYMPUS_SMOKE_SOURCE_ROOT,
+        '-InstallRoot',$env:OLYMPUS_SMOKE_INSTALL_ROOT,'-PathStorePath',$env:OLYMPUS_SMOKE_PATH_STORE)
+    Assert 'FORCE_RESTORES_ABSENT_RECEIPTED_LAUNCHER' (
+        $missingLauncherForce.Code -eq 0 -and
+        [IO.File]::ReadAllText($wrapper) -ceq $sourceWrapper -and
+        @(Compare-Object $globalBeforeMissingLauncher (Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)).Count -eq 0
+    ) $missingLauncherForce.Text
+
+    $currentPath = Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT 'current.txt'
+    $currentDacl = Set-ProtectedFixtureDacl $currentPath
+    $activeReleaseRoot = Join-Path $env:OLYMPUS_SMOKE_INSTALL_ROOT `
+        "versions/$($env:OLYMPUS_SMOKE_RELEASE_VERSION)"
+    $missingActiveLauncher = Join-Path $activeReleaseRoot 'scripts/launch-latest.ps1'
+    [IO.File]::Delete($missingActiveLauncher)
+    $missingPayloadRepair = Invoke-PowerShellResult @('-File',$env:OLYMPUS_SMOKE_SCRIPT,
+        '-MockLatest','-Action','install','-Update','-Force')
+    $currentDaclAfterRepair = Get-AccessDaclSnapshot $currentPath
+    Assert 'FORCE_PREFLIGHT_REPAIRS_MISSING_RECEIPTED_ACTIVE_PAYLOAD' (
+        $missingPayloadRepair.Code -eq 0 -and
+        (Test-Path -LiteralPath $missingActiveLauncher -PathType Leaf) -and
+        [IO.File]::ReadAllText($currentPath).Trim() -ceq $env:OLYMPUS_SMOKE_RELEASE_VERSION -and
+        $currentDaclAfterRepair.Sddl -ceq $currentDacl.Sddl -and
+        $currentDaclAfterRepair.Protected -and
+        $currentDaclAfterRepair.ExplicitCount -eq $currentDacl.ExplicitCount -and
+        $currentDaclAfterRepair.InheritedCount -eq $currentDacl.InheritedCount
+    ) $missingPayloadRepair.Text
+
+    $fixtureRoot = Split-Path -Parent $env:OLYMPUS_SMOKE_OTHER_DIR
+    $bootstrapLauncherFixture = Join-Path $fixtureRoot 'official-bootstrap-launcher.ps1'
+    $bootstrapSourceText = [IO.File]::ReadAllText((Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT 'scripts/launch-latest.ps1'))
+    $bootstrapNewline = if ($bootstrapSourceText.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $bootstrapLauncherMock = @'
+function global:Invoke-RestMethod {
+    [CmdletBinding()]
+    param([string]$Uri, [hashtable]$Headers)
+    return [pscustomobject]@{
+        immutable=$true; draft=$false; prerelease=$false
+        tag_name=$env:OLYMPUS_SMOKE_RELEASE_VERSION
+        published_at=[DateTimeOffset]::UtcNow.AddMinutes(-1)
+    }
+}
+function global:Invoke-WebRequest {
+    [CmdletBinding()]
+    param([string]$Uri, [string]$OutFile, [hashtable]$Headers)
+    $expected = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($env:OLYMPUS_SMOKE_RELEASE_VERSION)/install.ps1"
+    if ($Uri -cne $expected) { throw "Unexpected fixture installer request: $Uri" }
+    [IO.File]::Copy($env:OLYMPUS_SMOKE_BOOTSTRAP_INSTALLER, $OutFile, $true)
+}
+'@
+    $bootstrapLauncherMock = $bootstrapLauncherMock.Replace("`n", $bootstrapNewline) + $bootstrapNewline
+    $launcherTry = [regex]::Match($bootstrapSourceText, '(?m)^try \{\r?\n')
+    if (-not $launcherTry.Success) { throw 'BOOTSTRAP_LAUNCHER_FIXTURE_ANCHOR_MISSING' }
+    $launcherTry = $launcherTry.Index + $launcherTry.Length
+    $bootstrapSourceText = $bootstrapSourceText.Insert($launcherTry, $bootstrapLauncherMock)
+    [IO.File]::WriteAllText($bootstrapLauncherFixture, $bootstrapSourceText, $Utf8NoBom)
+
+    $bootstrapInstallerFixture = Join-Path $fixtureRoot 'official-bootstrap-installer.ps1'
+    $bootstrapInstallerLog = Join-Path $fixtureRoot 'official-bootstrap-installer.log'
+    $bootstrapInstallerText = @'
+[CmdletBinding()]
+param(
+    [string]$Version = '__OLYMPUS_SMOKE_RELEASE_VERSION__',
+    [string]$Scope,
+    [string]$Harness,
+    [switch]$Update,
+    [switch]$Force
+)
+$ReleaseVersion = '__OLYMPUS_SMOKE_RELEASE_VERSION__'
+if (-not $Force) { exit 41 }
+[IO.File]::WriteAllText($env:OLYMPUS_SMOKE_BOOTSTRAP_LOG, "force=$($Force.IsPresent);version=$Version")
+$cliArgs = @(
+    '-NoProfile','-File',(Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT 'scripts/install-cli.ps1'),
+    '-Action','install','-Version',$Version,'-SourceRoot',$env:OLYMPUS_SMOKE_SOURCE_ROOT,
+    '-InstallRoot',$env:OLYMPUS_SMOKE_INSTALL_ROOT,'-PathStorePath',$env:OLYMPUS_SMOKE_PATH_STORE,'-Force'
+)
+& $env:OLYMPUS_SMOKE_PWSH @cliArgs
+exit $LASTEXITCODE
+'@
+    $bootstrapInstallerText = $bootstrapInstallerText.Replace(
+        '__OLYMPUS_SMOKE_RELEASE_VERSION__', $env:OLYMPUS_SMOKE_RELEASE_VERSION)
+    [IO.File]::WriteAllText($bootstrapInstallerFixture, $bootstrapInstallerText, $Utf8NoBom)
+
+    $bootstrapFixture = Join-Path $fixtureRoot 'official-install-olympus.ps1'
+    $bootstrapEntryText = [IO.File]::ReadAllText((Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT 'install-olympus.ps1'))
+    $bootstrapEntryMock = @'
+function global:Invoke-RestMethod {
+    [CmdletBinding()]
+    param([string]$Uri, [hashtable]$Headers)
+    return [pscustomobject]@{
+        immutable=$true; draft=$false; prerelease=$false
+        tag_name=$env:OLYMPUS_SMOKE_RELEASE_VERSION
+        published_at=[DateTimeOffset]::UtcNow.AddMinutes(-1)
+    }
+}
+function global:Invoke-WebRequest {
+    [CmdletBinding()]
+    param([string]$Uri, [string]$OutFile, [hashtable]$Headers)
+    $expected = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$($env:OLYMPUS_SMOKE_RELEASE_VERSION)/scripts/launch-latest.ps1"
+    if ($Uri -cne $expected) { throw "Unexpected fixture launcher request: $Uri" }
+    [IO.File]::Copy($env:OLYMPUS_SMOKE_BOOTSTRAP_LAUNCHER, $OutFile, $true)
+}
+'@
+    $bootstrapEntryNewline = if ($bootstrapEntryText.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $bootstrapEntryMock = $bootstrapEntryMock.Replace("`n", $bootstrapEntryNewline) + $bootstrapEntryNewline
+    $entryTry = [regex]::Match($bootstrapEntryText, '(?m)^try \{\r?\n')
+    if (-not $entryTry.Success) { throw 'OFFICIAL_BOOTSTRAP_FIXTURE_ANCHOR_MISSING' }
+    $entryTry = $entryTry.Index + $entryTry.Length
+    $bootstrapEntryText = $bootstrapEntryText.Insert($entryTry, $bootstrapEntryMock)
+    [IO.File]::WriteAllText($bootstrapFixture, $bootstrapEntryText, $Utf8NoBom)
+
+    $missingCliPayload = Join-Path $activeReleaseRoot 'scripts/olympus_cli.py'
+    [IO.File]::Delete($missingCliPayload)
+    $env:OLYMPUS_SMOKE_BOOTSTRAP_LAUNCHER = $bootstrapLauncherFixture
+    $env:OLYMPUS_SMOKE_BOOTSTRAP_INSTALLER = $bootstrapInstallerFixture
+    $env:OLYMPUS_SMOKE_BOOTSTRAP_LOG = $bootstrapInstallerLog
+    $officialBootstrap = Invoke-PowerShellResult @('-File',$bootstrapFixture,'-Force')
+    $currentDaclAfterBootstrap = Get-AccessDaclSnapshot $currentPath
+    Assert 'OFFICIAL_BOOTSTRAP_REPAIRS_WITH_OLD_CLI_PAYLOAD_ABSENT' (
+        $officialBootstrap.Code -eq 0 -and
+        (Test-Path -LiteralPath $missingCliPayload -PathType Leaf) -and
+        [IO.File]::ReadAllText($bootstrapInstallerLog) -match '^force=True;' -and
+        [IO.File]::ReadAllText($currentPath).Trim() -ceq $env:OLYMPUS_SMOKE_RELEASE_VERSION -and
+        $currentDaclAfterBootstrap.Sddl -ceq $currentDacl.Sddl -and
+        $currentDaclAfterBootstrap.Protected -and
+        $currentDaclAfterBootstrap.ExplicitCount -eq $currentDacl.ExplicitCount -and
+        $currentDaclAfterBootstrap.InheritedCount -eq $currentDacl.InheritedCount
+    ) $officialBootstrap.Text
+    foreach ($name in @('OLYMPUS_SMOKE_BOOTSTRAP_LAUNCHER','OLYMPUS_SMOKE_BOOTSTRAP_INSTALLER',
+            'OLYMPUS_SMOKE_BOOTSTRAP_LOG')) {
+        [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+    }
+
+    $activeIdentityPath = Join-Path $activeReleaseRoot 'install.ps1'
+    $activeIdentityBytes = [IO.File]::ReadAllBytes($activeIdentityPath)
+    try {
+        [IO.File]::AppendAllText($activeIdentityPath, "`n# fixture-only identity drift`n", $Utf8NoBom)
+        $globalBeforeActiveIdentityDrift = @(Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)
+        $cliBeforeActiveIdentityDrift = @(Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)
+        $requestsBeforeActiveIdentityDrift = [IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_REQUEST_LOG)
+        $activeIdentityDrift = Invoke-PowerShellResult @('-File',$env:OLYMPUS_SMOKE_SCRIPT,
+            '-MockLatest','-Action','install','-Update','-Force')
+        Assert 'FORCE_PREFLIGHT_REJECTS_ACTIVE_CLI_IDENTITY_RECEIPT_MISMATCH' (
+            $activeIdentityDrift.Code -ne 0 -and
+            $activeIdentityDrift.Text -match 'UPDATE_CLI_VERSION_UNKNOWN' -and
+            @(Compare-Object $globalBeforeActiveIdentityDrift (Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)).Count -eq 0 -and
+            @(Compare-Object $cliBeforeActiveIdentityDrift (Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)).Count -eq 0 -and
+            [Convert]::ToBase64String($requestsBeforeActiveIdentityDrift) -ceq
+                [Convert]::ToBase64String([IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_REQUEST_LOG))
+        ) $activeIdentityDrift.Text
+
+        [IO.File]::Delete($activeIdentityPath)
+        $globalBeforeMissingActiveIdentity = @(Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)
+        $cliBeforeMissingActiveIdentity = @(Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)
+        $requestsBeforeMissingActiveIdentity = [IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_REQUEST_LOG)
+        $missingActiveIdentity = Invoke-PowerShellResult @('-File',$env:OLYMPUS_SMOKE_SCRIPT,
+            '-MockLatest','-Action','install','-Update','-Force')
+        Assert 'FORCE_PREFLIGHT_REJECTS_MISSING_ACTIVE_CLI_IDENTITY' (
+            $missingActiveIdentity.Code -ne 0 -and
+            $missingActiveIdentity.Text -match 'UPDATE_CLI_VERSION_UNKNOWN' -and
+            @(Compare-Object $globalBeforeMissingActiveIdentity (Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)).Count -eq 0 -and
+            @(Compare-Object $cliBeforeMissingActiveIdentity (Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)).Count -eq 0 -and
+            [Convert]::ToBase64String($requestsBeforeMissingActiveIdentity) -ceq
+                [Convert]::ToBase64String([IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_REQUEST_LOG))
+        ) $missingActiveIdentity.Text
+    } finally {
+        [IO.File]::WriteAllBytes($activeIdentityPath, $activeIdentityBytes)
+    }
+
+    $cliManifestPath = Join-Path $activeReleaseRoot 'olympus-cli-manifest.json'
+    $validCliManifestBytes = [IO.File]::ReadAllBytes($cliManifestPath)
+    try {
+        $malformedCliManifest = [IO.File]::ReadAllText($cliManifestPath) |
+            ConvertFrom-Json -AsHashtable -Depth 20
+        $malformedCliManifest.files[0].sha256 = 'not-a-sha256'
+        [IO.File]::WriteAllText($cliManifestPath,
+            ($malformedCliManifest | ConvertTo-Json -Depth 20) + "`n", $Utf8NoBom)
+        $globalBeforeMalformedReceipt = @(Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)
+        $cliBeforeMalformedReceipt = @(Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)
+        $malformedReceiptUpdate = Invoke-PowerShellResult @('-File',$env:OLYMPUS_SMOKE_SCRIPT,
+            '-MockLatest','-Action','install','-Update','-Force')
+        Assert 'FORCE_PREFLIGHT_REJECTS_MALFORMED_ACTIVE_CLI_RECEIPT' (
+            $malformedReceiptUpdate.Code -ne 0 -and
+            $malformedReceiptUpdate.Text -match 'UPDATE_CLI_VERSION_UNKNOWN' -and
+            @(Compare-Object $globalBeforeMalformedReceipt (Get-TreeSnapshot $env:OPENCODE_CONFIG_DIR)).Count -eq 0 -and
+            @(Compare-Object $cliBeforeMalformedReceipt (Get-TreeSnapshot $env:OLYMPUS_SMOKE_INSTALL_ROOT)).Count -eq 0
+        ) $malformedReceiptUpdate.Text
+    } finally {
+        [IO.File]::WriteAllBytes($cliManifestPath, $validCliManifestBytes)
+    }
+
+    $originalFixtureMetadataBytes = [IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_METADATA_FIXTURE)
+    try {
+        $lowerRelease = [IO.File]::ReadAllText($env:OLYMPUS_SMOKE_METADATA_FIXTURE) |
+            ConvertFrom-Json -AsHashtable -Depth 10
+        $lowerRelease.tag_name = $env:OLYMPUS_SMOKE_SOURCE_VERSION
+        [IO.File]::WriteAllText($env:OLYMPUS_SMOKE_METADATA_FIXTURE,
+            ($lowerRelease | ConvertTo-Json -Depth 10), $Utf8NoBom)
+        $requestsBeforeDowngradeBlock = @([IO.File]::ReadAllText($env:OLYMPUS_SMOKE_REQUEST_LOG) -split "`n" |
+            Where-Object { $_ })
+        $downgradeBlocked = Invoke-PowerShellResult @('-File',$env:OLYMPUS_SMOKE_SCRIPT,
+            '-MockLatest','-Action','install','-Update','-Force')
+        $requestsAfterDowngradeBlock = @([IO.File]::ReadAllText($env:OLYMPUS_SMOKE_REQUEST_LOG) -split "`n" |
+            Where-Object { $_ })
+        Assert 'FORCE_REJECTS_RELEASE_BELOW_EITHER_INSTALLED_IDENTITY' (
+            $downgradeBlocked.Code -ne 0 -and $downgradeBlocked.Text -match 'UPDATE_DOWNGRADE_BLOCKED' -and
+            @($requestsAfterDowngradeBlock | Where-Object { $_ -like 'installer *' }).Count -eq
+                @($requestsBeforeDowngradeBlock | Where-Object { $_ -like 'installer *' }).Count -and
+            @($requestsAfterDowngradeBlock | Where-Object { $_ -like 'archive *' }).Count -eq
+                @($requestsBeforeDowngradeBlock | Where-Object { $_ -like 'archive *' }).Count
+        ) $downgradeBlocked.Text
+    } finally {
+        [IO.File]::WriteAllBytes($env:OLYMPUS_SMOKE_METADATA_FIXTURE, $originalFixtureMetadataBytes)
+    }
+    [IO.File]::WriteAllText($wrapper, $sourceWrapper, [Text.Encoding]::ASCII)
+    [Environment]::SetEnvironmentVariable('OLYMPUS_SMOKE_LAUNCHER', $null, 'Process')
+
     try {
         $env:PYTHONPATH = $env:OLYMPUS_SMOKE_HOOK_DIR
         $env:OLYMPUS_SMOKE_UPDATE_HOOK = '1'
@@ -265,7 +658,6 @@ exit 23
 }
 
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$script:Pwsh = (Get-Command pwsh -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 $python = (Get-Command python.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 $git = (Get-Command git.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'PLATFORM_UNQUALIFIED: This smoke requires Windows.' }
@@ -305,11 +697,12 @@ $environmentNames = @(
     'APPDATA', 'LOCALAPPDATA', 'USERPROFILE', 'HOME', 'OPENCODE_CONFIG_DIR', 'OLYMPUS_CONFIG_HOME',
     'OLYMPUS_CONFIG_FILE', 'PYTHONDONTWRITEBYTECODE', 'OLYMPUS_SMOKE_INSTALL_ROOT',
     'OLYMPUS_SMOKE_PATH_STORE', 'OLYMPUS_SMOKE_RELEASE_VERSION', 'OLYMPUS_SMOKE_RELEASE_INSTALLER',
-    'OLYMPUS_SMOKE_RELEASE_ARCHIVE', 'OLYMPUS_SMOKE_METADATA_FIXTURE', 'OLYMPUS_SMOKE_REQUEST_LOG',
+    'OLYMPUS_SMOKE_RELEASE_ARCHIVE', 'OLYMPUS_SMOKE_SOURCE_ROOT', 'OLYMPUS_SMOKE_METADATA_FIXTURE', 'OLYMPUS_SMOKE_REQUEST_LOG',
     'OLYMPUS_SMOKE_METADATA_URI', 'OLYMPUS_SMOKE_RAW_BASE', 'OLYMPUS_SMOKE_ARCHIVE_URI', 'OLYMPUS_SMOKE_PWSH',
     'OLYMPUS_SMOKE_METADATA_FAIL', 'OLYMPUS_SMOKE_SOURCE_VERSION',
     'OLYMPUS_UPDATE_COMPACT', 'OLYMPUS_CLI_UPDATE_COMPACT',
     'OLYMPUS_SMOKE_SCRIPT', 'OLYMPUS_SMOKE_HOOK_DIR', 'OLYMPUS_SMOKE_OTHER_DIR', 'OLYMPUS_SMOKE_LAUNCHER_PATH',
+    'OLYMPUS_SMOKE_LAUNCHER',
     'OLYMPUS_SMOKE_OPENCODE_CONFIG', 'OLYMPUS_SMOKE_GLOBAL_MARKER', 'OLYMPUS_SMOKE_BIN_MARKER',
     'OLYMPUS_SMOKE_VERSION_MARKER', 'OLYMPUS_SMOKE_GLOBAL_MANIFEST', 'OLYMPUS_SMOKE_USER_CONFIG',
     'OLYMPUS_CLI_ROOT', 'OLYMPUS_CLI_PATH_STORE', 'XDG_CONFIG_HOME'
@@ -381,6 +774,7 @@ try {
     }
     Copy-Item -LiteralPath (Join-Path $source 'opencode.jsonc') -Destination $releaseSource
     Copy-Item -LiteralPath (Join-Path $source 'install.ps1') -Destination $releaseSource
+    Copy-Item -LiteralPath (Join-Path $source 'install-olympus.ps1') -Destination $releaseSource
 
     $fixtureInstallerPath = Join-Path $releaseSource 'install.ps1'
     $fixtureInstaller = [IO.File]::ReadAllText($fixtureInstallerPath)
@@ -480,6 +874,7 @@ subprocess.run = _run
     $env:OLYMPUS_SMOKE_SOURCE_VERSION = $sourceVersion
     $env:OLYMPUS_SMOKE_RELEASE_INSTALLER = $fixtureInstallerPath
     $env:OLYMPUS_SMOKE_RELEASE_ARCHIVE = $releaseArchive
+    $env:OLYMPUS_SMOKE_SOURCE_ROOT = $releaseSource
     $env:OLYMPUS_SMOKE_METADATA_FIXTURE = $metadataFixture
     $env:OLYMPUS_SMOKE_REQUEST_LOG = $requestLog
     $env:OLYMPUS_SMOKE_METADATA_URI = $apiUri
@@ -570,12 +965,12 @@ subprocess.run = _run
     $start.Environment['PYTHONDONTWRITEBYTECODE'] = '1'
     $start.Environment['OLYMPUS_PYTHON'] = [IO.Path]::GetFullPath($python)
     foreach ($name in @('OLYMPUS_SMOKE_INSTALL_ROOT', 'OLYMPUS_SMOKE_PATH_STORE', 'OLYMPUS_SMOKE_RELEASE_VERSION',
-            'OLYMPUS_SMOKE_RELEASE_INSTALLER', 'OLYMPUS_SMOKE_RELEASE_ARCHIVE', 'OLYMPUS_SMOKE_METADATA_FIXTURE',
+            'OLYMPUS_SMOKE_RELEASE_INSTALLER', 'OLYMPUS_SMOKE_RELEASE_ARCHIVE', 'OLYMPUS_SMOKE_SOURCE_ROOT', 'OLYMPUS_SMOKE_METADATA_FIXTURE',
             'OLYMPUS_SMOKE_REQUEST_LOG', 'OLYMPUS_SMOKE_METADATA_URI', 'OLYMPUS_SMOKE_RAW_BASE',
             'OLYMPUS_SMOKE_ARCHIVE_URI', 'OLYMPUS_SMOKE_PWSH', 'OLYMPUS_SMOKE_METADATA_FAIL',
             'OLYMPUS_SMOKE_SOURCE_VERSION',
             'OLYMPUS_SMOKE_SCRIPT', 'OLYMPUS_SMOKE_HOOK_DIR',
-            'OLYMPUS_SMOKE_OTHER_DIR', 'OLYMPUS_SMOKE_LAUNCHER_PATH', 'OLYMPUS_SMOKE_OPENCODE_CONFIG',
+            'OLYMPUS_SMOKE_OTHER_DIR', 'OLYMPUS_SMOKE_LAUNCHER_PATH', 'OLYMPUS_SMOKE_LAUNCHER', 'OLYMPUS_SMOKE_OPENCODE_CONFIG',
             'OLYMPUS_SMOKE_GLOBAL_MARKER', 'OLYMPUS_SMOKE_BIN_MARKER', 'OLYMPUS_SMOKE_VERSION_MARKER',
             'OLYMPUS_SMOKE_GLOBAL_MANIFEST', 'OLYMPUS_SMOKE_USER_CONFIG')) {
         $start.Environment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
@@ -602,11 +997,11 @@ subprocess.run = _run
     Assert 'MOCKED_RELEASE_INSTALLER' ($requests -match ('(?m)^installer ' + [regex]::Escape("$rawBase/$nextVersion/install.ps1") + '$'))
     Assert 'MOCKED_RELEASE_ARCHIVE' ($requests -match ('(?m)^archive ' + [regex]::Escape($archiveUri) + '$'))
     Assert 'ALL_RELEASE_REQUESTS_FIXTURED' (
-        $requestLines.Count -eq 10 -and
-        @($requestLines | Where-Object { $_ -like 'metadata *' }).Count -eq 6 -and
-        @($requestLines | Where-Object { $_ -like 'installer *' }).Count -eq 3 -and
-        @($requestLines | Where-Object { $_ -like 'archive *' }).Count -eq 1
-    )
+        $requestLines.Count -eq 20 -and
+        @($requestLines | Where-Object { $_ -like 'metadata *' }).Count -eq 10 -and
+        @($requestLines | Where-Object { $_ -like 'installer *' }).Count -eq 6 -and
+        @($requestLines | Where-Object { $_ -like 'archive *' }).Count -eq 4
+    ) ("total=$($requestLines.Count); metadata=$(@($requestLines | Where-Object { $_ -like 'metadata *' }).Count); installer=$(@($requestLines | Where-Object { $_ -like 'installer *' }).Count); archive=$(@($requestLines | Where-Object { $_ -like 'archive *' }).Count)")
 
     Assert 'USER_OPENCODE_CONFIG_UNCHANGED' ([Convert]::ToBase64String($savedOpenCodeConfig) -ceq
         [Convert]::ToBase64String([IO.File]::ReadAllBytes($opencodeConfig)))

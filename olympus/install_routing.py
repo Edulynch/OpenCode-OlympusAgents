@@ -82,7 +82,7 @@ def _timeout_output(value) -> str:
     return str(value)
 
 
-def _run_linux_launcher(source: Path, operation: str, *, dry_run: bool) -> tuple[dict, int]:
+def _run_linux_launcher(source: Path, operation: str, *, dry_run: bool, force: bool = False) -> tuple[dict, int]:
     from .cli import CLIError
 
     launcher = source / "scripts" / "launch-latest.py"
@@ -93,6 +93,8 @@ def _run_linux_launcher(source: Path, operation: str, *, dry_run: bool) -> tuple
     ]
     if dry_run:
         command.append("--dry-run")
+    if force:
+        command.append("--force")
     environment = os.environ.copy()
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     try:

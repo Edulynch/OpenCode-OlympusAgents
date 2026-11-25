@@ -7,7 +7,8 @@ param(
     [switch]$VerifyOnly,
     [switch]$DryRun,
     [switch]$Uninstall,
-    [switch]$Update
+    [switch]$Update,
+    [switch]$Force
 )
 
 Set-StrictMode -Version Latest
@@ -26,6 +27,25 @@ $script:ConfirmedModifiedAgentPaths = @()
 $script:LegacyGlobalInventory = $false
 
 function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
+
+function Compare-ReleaseTag([string]$Left, [string]$Right) {
+    $pattern = '^v(?<major>0|[1-9][0-9]*)\.(?<minor>0|[1-9][0-9]*)\.(?<patch>0|[1-9][0-9]*)(?:-(?<stage>alpha|beta|rc)\.(?<sequence>0|[1-9][0-9]*))?$'
+    $a = [regex]::Match($Left, $pattern)
+    $b = [regex]::Match($Right, $pattern)
+    if (-not $a.Success -or -not $b.Success) { Fail 'GLOBAL_VERSION_UNKNOWN' 'Cannot compare an unrecognized Olympus release tag.' }
+    foreach ($part in @('major','minor','patch')) {
+        $comparison = ([long]$a.Groups[$part].Value).CompareTo([long]$b.Groups[$part].Value)
+        if ($comparison -ne 0) { return $comparison }
+    }
+    $aStable = -not $a.Groups['stage'].Success
+    $bStable = -not $b.Groups['stage'].Success
+    if ($aStable -ne $bStable) { return $(if ($aStable) { 1 } else { -1 }) }
+    if ($aStable) { return 0 }
+    $stageOrder = @{ alpha=1; beta=2; rc=3 }
+    $stageComparison = ([int]$stageOrder[$a.Groups['stage'].Value]).CompareTo([int]$stageOrder[$b.Groups['stage'].Value])
+    if ($stageComparison -ne 0) { return $stageComparison }
+    return ([long]$a.Groups['sequence'].Value).CompareTo([long]$b.Groups['sequence'].Value)
+}
 
 function Normalize-Relative([string]$Path) {
     $value = $Path.Replace('\','/')
@@ -402,7 +422,7 @@ function Add-OpenCodeGlobalGuard([string]$Root, [System.Collections.IDictionary]
         } else {
             if ($snapshot.DefaultPresent -and $snapshot.DefaultValue -ceq 'kael') {
                 if ($null -eq $OldManifest -or -not $OldEntries.ContainsKey('agents/kael.md') -or
-                    'kael' -in $script:ModifiedManagedAgents) {
+                    ('kael' -in $script:ModifiedManagedAgents -and -not $Force)) {
                     Fail 'GLOBAL_DEFAULT_AGENT_OWNERSHIP_UNKNOWN' 'Existing default_agent is already kael but no intact old Olympus Kael agent proves ownership; refusing adoption.'
                 }
                 $script:DefaultAgentReceipt = New-DefaultAgentReceipt $configRelative $true $snapshot.DefaultRaw
@@ -758,6 +778,157 @@ function Assert-OpenCodeConfigFieldState($Snapshot, [bool]$ExpectedPresent, [str
     }
 }
 
+function Assert-SafeAtomicFilePath([string]$Path) {
+    if (-not [IO.Path]::IsPathFullyQualified($Path)) {
+        Fail 'GLOBAL_PATH_UNSAFE' "Atomic file path is not absolute: $Path"
+    }
+    $full = [IO.Path]::GetFullPath($Path)
+    $volume = [IO.Path]::GetPathRoot($full)
+    $cursor = $volume
+    $parts = @($full.Substring($volume.Length) -split '[\\/]' | Where-Object { $_ })
+    for ($index = 0; $index -lt $parts.Count; $index++) {
+        $cursor = Join-Path $cursor $parts[$index]
+        $item = Get-ExistingItemOrNull $cursor
+        if ($null -eq $item) { break }
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            Fail 'GLOBAL_PATH_UNSAFE' "Atomic file path traverses a reparse point: $Path"
+        }
+        $isLeaf = $index -eq ($parts.Count - 1)
+        if (-not $isLeaf -and -not $item.PSIsContainer) {
+            Fail 'GLOBAL_PATH_UNSAFE' "Atomic file path has a non-directory parent: $Path"
+        }
+        if ($isLeaf -and $item.PSIsContainer) {
+            Fail 'GLOBAL_PATH_UNSAFE' "Atomic file destination is a directory: $Path"
+        }
+    }
+    return $full
+}
+
+function Get-GlobalAccessControl([string]$Path) {
+    return [IO.FileSystemAclExtensions]::GetAccessControl(
+        [IO.FileInfo]::new($Path), [Security.AccessControl.AccessControlSections]::Access)
+}
+
+function Get-GlobalAccessSddl($AccessControl) {
+    return $AccessControl.GetSecurityDescriptorSddlForm(
+        [Security.AccessControl.AccessControlSections]::Access)
+}
+
+function New-GlobalAtomicStream([string]$Path, $AccessControl) {
+    try {
+        if ($null -eq $AccessControl) {
+            return [IO.FileStream]::new($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write,
+                [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough)
+        }
+        $rights = [Security.AccessControl.FileSystemRights]::WriteData -bor
+            [Security.AccessControl.FileSystemRights]::ReadPermissions -bor
+            [Security.AccessControl.FileSystemRights]::ChangePermissions
+        return [IO.FileSystemAclExtensions]::Create([IO.FileInfo]::new($Path),
+            [IO.FileMode]::CreateNew, $rights, [IO.FileShare]::None, 4096,
+            [IO.FileOptions]::WriteThrough, $AccessControl)
+    } catch {
+        Fail 'GLOBAL_FILE_ACCESS_UNVERIFIABLE' "Cannot safely create staged file '$Path' with the destination access rules: $($_.Exception.Message)"
+    }
+}
+
+function Assert-GlobalStagedAccess($Stream, [string]$ExpectedSddl, [string]$Path) {
+    try {
+        $stagedAccess = [IO.FileSystemAclExtensions]::GetAccessControl($Stream)
+        if ((Get-GlobalAccessSddl $stagedAccess) -cne $ExpectedSddl) {
+            # Creation applies the source DACL before bytes exist; this handles
+            # descriptor control flags that FileSecurity.Create normalizes.
+            $stagedAccess.SetSecurityDescriptorSddlForm(
+                $ExpectedSddl, [Security.AccessControl.AccessControlSections]::Access)
+            [IO.FileSystemAclExtensions]::SetAccessControl($Stream, $stagedAccess)
+            $stagedAccess = [IO.FileSystemAclExtensions]::GetAccessControl($Stream)
+        }
+        if ((Get-GlobalAccessSddl $stagedAccess) -cne $ExpectedSddl) {
+            Fail 'GLOBAL_FILE_ACCESS_UNVERIFIABLE' "The access rules cannot be retained for: $Path"
+        }
+    } catch {
+        if ($_.Exception.Message -match '^GLOBAL_FILE_ACCESS_UNVERIFIABLE:') { throw }
+        Fail 'GLOBAL_FILE_ACCESS_UNVERIFIABLE' "Cannot safely retain access rules for '$Path': $($_.Exception.Message)"
+    }
+}
+
+function Test-GlobalAtomicWriteReady([string]$Path) {
+    $full = Assert-SafeAtomicFilePath $Path
+    $parent = Split-Path -Parent $full
+    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
+        Fail 'GLOBAL_FILE_ACCESS_UNVERIFIABLE' "Atomic file parent is unavailable: $parent"
+    }
+    $existing = Get-ExistingItemOrNull $full
+    $access = if ($null -ne $existing) { Get-GlobalAccessControl $full } else { $null }
+    $expectedSddl = if ($null -ne $access) { Get-GlobalAccessSddl $access } else { $null }
+    $temporary = Join-Path $parent ('.olympus-preflight-' + [guid]::NewGuid().ToString('N') + '.tmp')
+    $stream = $null
+    try {
+        $stream = New-GlobalAtomicStream $temporary $access
+        if ($null -ne $access) {
+            Assert-GlobalStagedAccess $stream $expectedSddl $full
+        }
+    } catch {
+        if ($_.Exception.Message -match '^GLOBAL_FILE_ACCESS_UNVERIFIABLE:') { throw }
+        Fail 'GLOBAL_FILE_ACCESS_UNVERIFIABLE' "Cannot safely stage '$full': $($_.Exception.Message)"
+    } finally {
+        if ($null -ne $stream) { $stream.Dispose() }
+        if (Test-Path -LiteralPath $temporary) { [IO.File]::Delete($temporary) }
+    }
+}
+
+function Write-GlobalAtomicFile([string]$Path, [byte[]]$Bytes) {
+    $full = Assert-SafeAtomicFilePath $Path
+    $parent = Split-Path -Parent $full
+    [IO.Directory]::CreateDirectory($parent) | Out-Null
+    $existing = Get-ExistingItemOrNull $full
+    $access = if ($null -ne $existing) { Get-GlobalAccessControl $full } else { $null }
+    $expectedSddl = if ($null -ne $access) { Get-GlobalAccessSddl $access } else { $null }
+    $originalHash = if ($null -ne $existing) { Get-FileHashText $full } else { $null }
+    $attributes = if ($null -ne $existing) { $existing.Attributes } else { [IO.FileAttributes]::Normal }
+    $temporary = Join-Path $parent ('.olympus-write-' + [guid]::NewGuid().ToString('N') + '.tmp')
+    $stream = $null
+    try {
+        $stream = New-GlobalAtomicStream $temporary $access
+        if ($null -ne $access) {
+            Assert-GlobalStagedAccess $stream $expectedSddl $full
+        }
+        $stream.Write($Bytes, 0, $Bytes.Length)
+        $stream.Flush($true)
+        $stream.Dispose()
+        $stream = $null
+        if ($null -ne $existing) {
+            [void](Assert-SafeAtomicFilePath $full)
+            $current = Get-ExistingItemOrNull $full
+            if ($null -eq $current -or $current.PSIsContainer -or
+                (Get-GlobalAccessSddl (Get-GlobalAccessControl $full)) -cne $expectedSddl -or
+                (Get-FileHashText $full) -cne $originalHash) {
+                Fail 'GLOBAL_FILE_CHANGED_DURING_WRITE' "Managed file changed while it was staged: $full"
+            }
+            [IO.File]::SetAttributes($temporary, ($attributes -band (-bnot [IO.FileAttributes]::ReparsePoint)))
+            # ReplaceFile marks protected DACLs auto-inherited; same-directory
+            # rename preserves the staged security descriptor exactly.
+            [IO.File]::Move($temporary, $full, $true)
+        } else {
+            [void](Assert-SafeAtomicFilePath $full)
+            if ($null -ne (Get-ExistingItemOrNull $full)) {
+                Fail 'GLOBAL_FILE_CHANGED_DURING_WRITE' "A file appeared while it was staged: $full"
+            }
+            [IO.File]::Move($temporary, $full)
+        }
+        $resultSddl = Get-GlobalAccessSddl (Get-GlobalAccessControl $full)
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try { $expectedHash = ([BitConverter]::ToString($sha.ComputeHash($Bytes))).Replace('-', '').ToLowerInvariant() }
+        finally { $sha.Dispose() }
+        if (($null -ne $expectedSddl -and $resultSddl -cne $expectedSddl) -or
+            (Get-FileHashText $full) -cne $expectedHash) {
+            Fail 'GLOBAL_FILE_RESULT_UNCONFIRMED' "Atomic file replacement did not preserve access rules or bytes: $full"
+        }
+    } finally {
+        if ($null -ne $stream) { $stream.Dispose() }
+        if (Test-Path -LiteralPath $temporary) { [IO.File]::Delete($temporary) }
+    }
+}
+
 function Write-OpenCodeConfigField([string]$Path, [string]$RawValue,
     [bool]$ExpectedPresent, [string]$ExpectedRaw, [switch]$Remove) {
     $snapshot = Read-OpenCodeConfig $Path
@@ -769,23 +940,7 @@ function Write-OpenCodeConfigField([string]$Path, [string]$RawValue,
     $newBytes = [byte[]]::new($snapshot.Preamble.Length + $encoded.Length)
     if ($snapshot.Preamble.Length) { [Array]::Copy($snapshot.Preamble, 0, $newBytes, 0, $snapshot.Preamble.Length) }
     [Array]::Copy($encoded, 0, $newBytes, $snapshot.Preamble.Length, $encoded.Length)
-    $parent = Split-Path -Parent $Path
-    $temporary = Join-Path $parent ('.olympus-default-agent-' + [guid]::NewGuid().ToString('N') + '.tmp')
-    $item = Get-Item -LiteralPath $Path -Force
-    $acl = Get-Acl -LiteralPath $Path
-    try {
-        $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write,
-            [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough)
-        try { $stream.Write($newBytes, 0, $newBytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
-        Set-Acl -LiteralPath $temporary -AclObject $acl
-        [IO.File]::SetAttributes($temporary, ($item.Attributes -band (-bnot [IO.FileAttributes]::ReparsePoint)))
-        # PowerShell coerces $null to ""; Replace requires an actual null backup.
-        [IO.File]::Replace($temporary, $Path, [System.Management.Automation.Language.NullString]::Value)
-    } catch {
-        Fail 'GLOBAL_DEFAULT_AGENT_WRITE_FAILED' 'Could not atomically update the OpenCode default_agent field while preserving file permissions.'
-    } finally {
-        if (Test-Path -LiteralPath $temporary) { [IO.File]::Delete($temporary) }
-    }
+    Write-GlobalAtomicFile $Path $newBytes
     return $true
 }
 
@@ -946,7 +1101,7 @@ function Test-ManagedDefaultConfigChange([string]$Path) {
 
 function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
     [System.Collections.IDictionary]$RecoverOutputs = $null, [switch]$AllowModifiedAgents,
-    [System.Collections.IDictionary]$ExpectedOutputs = $null) {
+    [System.Collections.IDictionary]$ExpectedOutputs = $null, [switch]$ForceManagedDrift) {
     if ($Harness -cne 'opencode') { Fail 'GLOBAL_MANIFEST_INVALID' "Unsupported harness '$Harness'." }
     $script:ModifiedManagedAgents = @()
     $script:DefaultAgentManagedUserChange = $false
@@ -1034,7 +1189,7 @@ function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
             $pendingOwnedConfig = $null -ne $receipt -and
                 (($receipt.state -ceq 'pending_uninstall') -or
                  ($receipt.state -ceq 'pending_set' -and $relative -ceq $receipt.config_path))
-            if ($pendingOwnedConfig) { continue }
+            if ($pendingOwnedConfig -or $ForceManagedDrift) { continue }
             Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Managed global file is missing: $relative"
         }
         if ((Get-FileHashText $full) -cne ([string]$entry.sha256).ToLowerInvariant()) {
@@ -1052,7 +1207,7 @@ function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
                 $receipt.state -in @('committed','pending_uninstall') -and
                 (Test-ManagedDefaultConfigChange $full)
             if ($preservedDefaultConfig) { $script:DefaultAgentManagedUserChange = $true }
-            if (-not $recoverDefaultConfig -and -not $preservedDefaultConfig -and
+            if (-not $ForceManagedDrift -and -not $recoverDefaultConfig -and -not $preservedDefaultConfig -and
                 ($null -eq $RecoverOutputs -or -not $RecoverOutputs.Contains($relative) -or
                  (Get-FileHashText $full) -cne (Get-TextHash ([string]$RecoverOutputs[$relative])))) {
                 Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Managed global file changed: $relative"
@@ -1077,6 +1232,10 @@ function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
 function Confirm-ModifiedManagedAgents {
     $roles = @($script:ModifiedManagedAgents | Sort-Object -Unique)
     if ($roles.Count -eq 0) { return }
+    if ($Force) {
+        $script:ConfirmedModifiedAgentPaths = @($roles | ForEach-Object { "agents/$_.md" })
+        return
+    }
     if (-not $Update) { Fail 'GLOBAL_MANAGED_FILE_DRIFT' 'A managed OpenCode agent was changed; no file was overwritten.' }
     $names = @($roles | ForEach-Object {
         $parts = $_ -split '[-_]'
@@ -1104,9 +1263,7 @@ function Get-ManifestEntryMap($Manifest) {
 }
 
 function Write-GlobalResource([string]$Path, [string]$Content) {
-    $parent = Split-Path -Parent $Path
-    [IO.Directory]::CreateDirectory($parent) | Out-Null
-    [IO.File]::WriteAllText($Path, $Content, $Utf8NoBom)
+    Write-GlobalAtomicFile $Path $Utf8NoBom.GetBytes($Content)
 }
 
 function Write-NewOpenCodeGuard([string]$Path, [string]$Content) {
@@ -1133,20 +1290,7 @@ function Assert-NoOpenCodeConfigCollision([string]$Root) {
 }
 
 function Write-GlobalManifest([string]$Path, [string]$Content) {
-    $parent = Split-Path -Parent $Path
-    [IO.Directory]::CreateDirectory($parent) | Out-Null
-    $staged = Join-Path $parent ('.olympus-manifest-' + [guid]::NewGuid().ToString('N') + '.tmp')
-    # Flush a complete manifest in the same directory before replacing the
-    # ownership record. An interruption must never leave half a JSON manifest.
-    $stream = [IO.FileStream]::new($staged, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write,
-        [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough)
-    try {
-        $bytes = $Utf8NoBom.GetBytes($Content)
-        $stream.Write($bytes, 0, $bytes.Length)
-        $stream.Flush($true)
-    } finally { $stream.Dispose() }
-    try { [IO.File]::Move($staged, $Path, $true) }
-    finally { if (Test-Path -LiteralPath $staged) { [IO.File]::Delete($staged) } }
+    Write-GlobalAtomicFile $Path $Utf8NoBom.GetBytes($Content)
 }
 
 function Get-ProjectOverride([string]$GlobalVersion) {
@@ -1258,8 +1402,13 @@ function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]
     }
     $recoverOutputs = if ($null -ne $guardIntent -and -not $VerifyOnly) { $outputs } else { $null }
     $allowModifiedAgents = $Update -and $SelectedHarness -eq 'opencode'
-    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:$VerifyOnly `
-        -RecoverOutputs $recoverOutputs -AllowModifiedAgents:$allowModifiedAgents -ExpectedOutputs $outputs
+    $manifest = Read-GlobalManifest $root $SelectedHarness -Required:($VerifyOnly -or $Force) `
+        -RecoverOutputs $recoverOutputs -AllowModifiedAgents:$allowModifiedAgents `
+        -ExpectedOutputs $outputs -ForceManagedDrift:$Force
+    if ($Force -and $null -ne $manifest -and
+        (Compare-ReleaseTag $SourceVersion ([string]$manifest.installed_version)) -lt 0) {
+        Fail 'GLOBAL_NO_DOWNGRADE' "Refusing to select $SourceVersion below the installed global version $($manifest.installed_version)."
+    }
     Confirm-ModifiedManagedAgents
     $oldEntries = Get-ManifestEntryMap $manifest
     if ($SelectedHarness -eq 'opencode') {
@@ -1291,7 +1440,7 @@ function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]
                 (Get-FileHashText $full) -ceq (Get-TextHash (Get-OpenCodeDefaultGuard))
             if ((Get-FileHashText $full) -cne ([string]$oldEntries[$relative].sha256).ToLowerInvariant()) {
                 $confirmedAgent = $relative -in $script:ConfirmedModifiedAgentPaths
-                if (-not $pendingDefaultGuard -and -not $confirmedAgent -and
+                if (-not $Force -and -not $pendingDefaultGuard -and -not $confirmedAgent -and
                     ($null -eq $recoverOutputs -or (Get-FileHashText $full) -cne (Get-TextHash ([string]$outputs[$relative])))) {
                     Fail 'GLOBAL_MANAGED_FILE_DRIFT' "Refusing to overwrite modified managed global resource: $relative"
                 }
@@ -1349,6 +1498,27 @@ function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]
     $manifestText = ($writeRecord | ConvertTo-Json -Depth 30) + "`n"
     $manifestHash = Get-TextHash $manifestText
     $manifestChanged = -not (Test-Path -LiteralPath $manifestPath) -or (Get-FileHashText $manifestPath) -cne $manifestHash
+
+    $preflightWrites = [System.Collections.Generic.List[string]]::new()
+    foreach ($relative in @($create) + @($update)) {
+        $preflightWrites.Add((Assert-SafeDestination $root $relative))
+    }
+    $manifestWillWrite = $manifestChanged -or $script:DefaultAgentNeedsSet
+    if ($manifestWillWrite) { $preflightWrites.Add($manifestPath) }
+    if ($script:DefaultAgentNeedsSet -and -not $script:DefaultAgentConfigManagedPath) {
+        $preflightWrites.Add((Assert-SafeDestination $root $script:DefaultAgentReceipt.config_path))
+    }
+    if ($null -eq $guardIntent -and $OpenCodeConfigRelative -in $create) {
+        $intentPath = Assert-SafeDestination $root $OpenCodeGuardIntentRelative
+        if (Test-Path -LiteralPath $intentPath) {
+            Fail 'GLOBAL_GUARD_RECOVERY_CONFLICT' 'Pending guard intent appeared during update preflight.'
+        }
+    }
+    foreach ($path in @($preflightWrites | Sort-Object -Unique)) {
+        [IO.Directory]::CreateDirectory((Split-Path -Parent $path)) | Out-Null
+        Test-GlobalAtomicWriteReady $path
+    }
+
     if ($SelectedHarness -eq 'opencode' -and $null -eq $guardIntent -and $OpenCodeConfigRelative -in $create) {
         # A crash between writing an unowned config and the manifest used to
         # orphan the guard. This durable intent makes that state recoverable.
@@ -1399,6 +1569,30 @@ function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]
         # Manifest ownership is now durable; the recovery marker is redundant.
         [IO.File]::Delete((Assert-SafeDestination $root $OpenCodeGuardIntentRelative))
     }
+    $verifiedManifest = Read-GlobalManifest $root $SelectedHarness -Required `
+        -ExpectedOutputs $outputs -ForceManagedDrift
+    if ([string]$verifiedManifest.installed_version -cne $SourceVersion -or
+        $verifiedManifest._validated_default_agent_receipt.state -cne 'committed') {
+        Fail 'GLOBAL_RESULT_UNCONFIRMED' 'The written global manifest does not identify the selected release with a committed default_agent receipt.'
+    }
+    $verifiedEntries = Get-ManifestEntryMap $verifiedManifest
+    if ($verifiedEntries.Count -ne $newEntries.Count) {
+        Fail 'GLOBAL_RESULT_UNCONFIRMED' 'The written global manifest has an unexpected managed resource inventory.'
+    }
+    foreach ($relative in @($newEntries.Keys)) {
+        if (-not $verifiedEntries.ContainsKey($relative) -or
+            ([string]$verifiedEntries[$relative].sha256).ToLowerInvariant() -cne
+                ([string]$newEntries[$relative].sha256).ToLowerInvariant()) {
+            Fail 'GLOBAL_RESULT_UNCONFIRMED' "The written global manifest does not record the selected resource: $relative"
+        }
+        if ($script:DefaultAgentPreserveUserChange -and
+            $relative -ceq $script:DefaultAgentConfigManagedPath) { continue }
+        $full = Assert-SafeDestination $root $relative
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf) -or
+            (Get-FileHashText $full) -cne ([string]$newEntries[$relative].sha256).ToLowerInvariant()) {
+            Fail 'GLOBAL_RESULT_UNCONFIRMED' "The written global resource does not match the selected release: $relative"
+        }
+    }
     Get-ProjectOverride $SourceVersion
     $status = if (-not ($create.Count -or $update.Count -or $remove.Count -or $manifestChanged)) { 'NO_CHANGES' } else { 'READY' }
     if (-not $compactUpdateOutput) {
@@ -1410,6 +1604,10 @@ function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]
 
 try {
     if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { Fail 'PLATFORM_UNQUALIFIED' 'Global installation currently requires Windows; Unix path layouts are documented but not installer-qualified.' }
+    if ($Force -and ($DryRun -or $VerifyOnly -or $Uninstall)) {
+        Fail 'GLOBAL_FORCE_MODE_INVALID' '-Force cannot be combined with dry-run, VerifyOnly, or uninstall.'
+    }
+    if ($Force) { $Update = $true }
     if ($VerifyOnly -and $DryRun) { Fail 'VERIFY_MODE_INVALID' '-VerifyOnly and -DryRun cannot be combined.' }
     if ($VerifyOnly -and $Uninstall) { Fail 'VERIFY_MODE_INVALID' '-VerifyOnly and -Uninstall cannot be combined.' }
     $selected = @('opencode')

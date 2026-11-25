@@ -5,7 +5,8 @@ param(
     [ValidateSet('install', 'uninstall')]
     [string]$Action,
     [switch]$DryRun,
-    [switch]$Update
+    [switch]$Update,
+    [switch]$Force
 )
 
 Set-StrictMode -Version Latest
@@ -92,7 +93,55 @@ function Compare-ReleaseTag([string]$Left, [string]$Right) {
     return ([long]$a.Groups['sequence'].Value).CompareTo([long]$b.Groups['sequence'].Value)
 }
 
-function Get-InstalledGlobalVersion {
+function Test-UpdateManagedCliRelative([string]$Relative) {
+    $value = $Relative.Replace('\','/')
+    return (-not [IO.Path]::IsPathRooted($value) -and
+        $value -notmatch '[\x00-\x1f:*?"<>|]' -and $value -notmatch '(^|/)/' -and
+        $value -notmatch '(^|/)\.\.?(/|$)' -and $value -notmatch '(^|/)$' -and
+        ($value.StartsWith('olympus/') -or $value.StartsWith('scripts/') -or
+         $value -ceq 'install.ps1' -or $value -ceq 'opencode.jsonc' -or
+         $value -match '^\.opencode/'))
+}
+
+function Get-ExistingUpdateCliItem([string]$Path) {
+    try { return Get-Item -LiteralPath $Path -Force -ErrorAction Stop }
+    catch {
+        if ($_.Exception -is [Management.Automation.ItemNotFoundException] -or
+            $_.FullyQualifiedErrorId -like 'PathNotFound,*') { return $null }
+        throw 'UPDATE_CLI_VERSION_UNKNOWN: An active CLI path could not be inspected safely.'
+    }
+}
+
+function Assert-SafeUpdateCliPath([string]$Path, [string]$Expected = 'Any') {
+    if (-not [IO.Path]::IsPathFullyQualified($Path)) {
+        throw 'UPDATE_CLI_VERSION_UNKNOWN: An active CLI path is not absolute.'
+    }
+    $full = [IO.Path]::GetFullPath($Path)
+    $volume = [IO.Path]::GetPathRoot($full)
+    $cursor = $volume
+    $parts = @($full.Substring($volume.Length) -split '[\\/]' | Where-Object { $_ })
+    for ($index = 0; $index -lt $parts.Count; $index++) {
+        $cursor = Join-Path $cursor $parts[$index]
+        $item = Get-ExistingUpdateCliItem $cursor
+        if ($null -eq $item) { break }
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI path traverses a reparse point.'
+        }
+        $isLeaf = $index -eq ($parts.Count - 1)
+        if (-not $isLeaf -and -not $item.PSIsContainer) {
+            throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI path has a non-directory parent.'
+        }
+        if ($isLeaf -and $Expected -eq 'Container' -and -not $item.PSIsContainer) {
+            throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI path is not a directory.'
+        }
+        if ($isLeaf -and $Expected -eq 'Leaf' -and $item.PSIsContainer) {
+            throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI path is not a file.'
+        }
+    }
+    return $full
+}
+
+function Get-InstalledGlobalVersion([switch]$AllowSplit, [switch]$AllowMissingCliPayload) {
     $root = $null
     if ($env:OPENCODE_CONFIG_DIR) { $root = [IO.Path]::GetFullPath($env:OPENCODE_CONFIG_DIR) }
     else {
@@ -140,6 +189,7 @@ function Get-InstalledGlobalVersion {
     }
     Write-Verbose "Active global CLI installation path: $cliRoot"
     $currentPath = Join-Path $cliRoot 'current.txt'
+    [void](Assert-SafeUpdateCliPath $currentPath 'Leaf')
     if (-not (Test-Path -LiteralPath $currentPath -PathType Leaf)) {
         throw 'UPDATE_CLI_VERSION_UNKNOWN: The global CLI current.txt pointer is missing; run olympus install to repair it before updating.'
     }
@@ -151,47 +201,83 @@ function Get-InstalledGlobalVersion {
     $cliVersion = $pointerMatch.Groups['version'].Value
     $versionRoot = Join-Path $cliRoot ("versions/" + $cliVersion)
     $cliManifestPath = Join-Path $versionRoot 'olympus-cli-manifest.json'
+    [void](Assert-SafeUpdateCliPath $versionRoot 'Container')
+    [void](Assert-SafeUpdateCliPath $cliManifestPath 'Leaf')
     if (-not (Test-Path -LiteralPath $versionRoot -PathType Container) -or
         -not (Test-Path -LiteralPath $cliManifestPath -PathType Leaf)) {
         throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI release or its ownership marker is missing; run olympus install to repair it before updating.'
     }
     try { $cliManifest = [IO.File]::ReadAllText($cliManifestPath) | ConvertFrom-Json -Depth 30 -ErrorAction Stop }
     catch { throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI ownership marker is unreadable; run olympus doctor before updating.' }
-    if ($null -eq $cliManifest -or $null -eq $cliManifest.PSObject.Properties['schema_version'] -or
-        $null -eq $cliManifest.PSObject.Properties['version'] -or
-        $null -eq $cliManifest.PSObject.Properties['files'] -or
-        $cliManifest.schema_version -ne 1 -or [string]$cliManifest.version -cne $cliVersion -or
-        @($cliManifest.files).Count -eq 0) {
+    $manifestProperties = if ($null -ne $cliManifest) {
+        @($cliManifest.PSObject.Properties | ForEach-Object Name)
+    } else { @() }
+    if ($manifestProperties.Count -ne 3 -or
+        @('schema_version','version','files' | Where-Object { $_ -cnotin $manifestProperties }).Count -gt 0 -or
+        ($cliManifest.schema_version -isnot [int] -and $cliManifest.schema_version -isnot [long]) -or
+        $cliManifest.schema_version -ne 1 -or $cliManifest.version -isnot [string] -or
+        $cliManifest.version -cne $cliVersion -or
+        $cliManifest.files -isnot [System.Collections.IList] -or @($cliManifest.files).Count -eq 0) {
         throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI ownership marker does not match current.txt; run olympus doctor before updating.'
     }
 
-    $cliFiles = foreach ($entry in @($cliManifest.files)) {
-        if ($null -eq $entry -or $null -eq $entry.PSObject.Properties['path']) {
-            throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI ownership marker has an incomplete file list; run olympus doctor before updating.'
+    $cliFileMap = @{}
+    $seenCliFiles = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in @($cliManifest.files)) {
+        $entryProperties = if ($null -ne $entry) {
+            @($entry.PSObject.Properties | ForEach-Object Name)
+        } else { @() }
+        if ($entryProperties.Count -ne 2 -or
+            @('path','sha256' | Where-Object { $_ -cnotin $entryProperties }).Count -gt 0 -or
+            $entry.path -isnot [string] -or $entry.sha256 -isnot [string]) {
+            throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI ownership marker has an incomplete file receipt; run olympus doctor before updating.'
         }
-        [string]$entry.path
+        $relative = ([string]$entry.path).Replace('\','/')
+        if (-not (Test-UpdateManagedCliRelative $relative) -or
+            -not $seenCliFiles.Add($relative) -or $entry.sha256 -notmatch '^(?i:[0-9a-f]{64})$') {
+            throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI ownership marker contains an unsafe or duplicate file receipt.'
+        }
+        $cliFileMap[$relative] = ([string]$entry.sha256).ToLowerInvariant()
     }
     foreach ($relative in @('install.ps1', 'scripts/olympus_cli.py', 'scripts/launch-latest.ps1')) {
-        if (@($cliFiles | Where-Object { $_ -ceq $relative }).Count -ne 1 -or
-            -not (Test-Path -LiteralPath (Join-Path $versionRoot ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)) -PathType Leaf)) {
+        if (-not $cliFileMap.ContainsKey($relative)) {
+            throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI ownership marker does not prove a required release file; run olympus install to repair it before updating.'
+        }
+        $identityPath = Join-Path $versionRoot ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+        [void](Assert-SafeUpdateCliPath $identityPath 'Leaf')
+        if (-not (Test-Path -LiteralPath $identityPath -PathType Leaf)) {
+            if ($AllowMissingCliPayload -and $relative -cne 'install.ps1') { continue }
             throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI ownership marker is missing a required release file; run olympus install to repair it before updating.'
         }
     }
-    # This is a version decision, not a full integrity check; the installer and doctor retain file-hash validation.
-    $identityText = [IO.File]::ReadAllText((Join-Path $versionRoot 'install.ps1'))
-    $defaultMatch = [regex]::Match($identityText, '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''\s*,?\s*$')
-    $releaseMatch = [regex]::Match($identityText, '(?m)^\s*\$ReleaseVersion\s*=\s*''([^'']+)''\s*(?:#.*)?$')
-    if (-not $defaultMatch.Success -or -not $releaseMatch.Success -or
-        $defaultMatch.Groups[1].Value -cne $cliVersion -or $releaseMatch.Groups[1].Value -cne $cliVersion) {
-        throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI release identity does not match current.txt; run olympus doctor before updating.'
+    $identityPath = Join-Path $versionRoot 'install.ps1'
+    if (Test-Path -LiteralPath $identityPath -PathType Leaf) {
+        $identityHash = (Get-FileHash -LiteralPath $identityPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($identityHash -ceq $cliFileMap['install.ps1']) {
+            $identityText = [IO.File]::ReadAllText($identityPath)
+            $defaultMatch = [regex]::Match($identityText, '(?m)^\s*\[string\]\$Version\s*=\s*''([^'']+)''\s*,?\s*$')
+            $releaseMatch = [regex]::Match($identityText, '(?m)^\s*\$ReleaseVersion\s*=\s*''([^'']+)''\s*(?:#.*)?$')
+            if (-not $defaultMatch.Success -or -not $releaseMatch.Success -or
+                $defaultMatch.Groups[1].Value -cne $cliVersion -or $releaseMatch.Groups[1].Value -cne $cliVersion) {
+                throw 'UPDATE_CLI_VERSION_UNKNOWN: The receipt-bound active CLI identity does not match current.txt; run olympus doctor before updating.'
+            }
+        } else {
+            throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI identity file differs from its ownership receipt; run olympus doctor before updating.'
+        }
+    } else {
+        throw 'UPDATE_CLI_VERSION_UNKNOWN: The active CLI identity file is missing; run olympus doctor before updating.'
     }
-    if ($installed -cne $cliVersion) {
+    if ($installed -cne $cliVersion -and -not $AllowSplit) {
         throw "UPDATE_VERSION_MISMATCH: Global OpenCode is $installed but the active CLI is $cliVersion; run olympus doctor and repair the installation before updating."
     }
-    return $installed
+    return [pscustomobject]@{ GlobalVersion=$installed; CliVersion=$cliVersion }
 }
 
 try {
+    if ($Force -and ($Action -ne 'install' -or $DryRun)) {
+        throw 'UPDATE_FORCE_MODE_INVALID: -Force is available only for a non-dry-run install/update.'
+    }
+    if ($Force) { $Update = $true }
     if ($DryRun -and $Action -ne 'install') {
         throw 'DRY_RUN_UNSUPPORTED: -DryRun is available only for install.'
     }
@@ -200,9 +286,13 @@ try {
     }
     $installed = $null
     if ($Update) {
-        $installed = Get-InstalledGlobalVersion
+        $installed = Get-InstalledGlobalVersion -AllowSplit:$Force -AllowMissingCliPayload:$Force
         $script:CompactUpdate = $env:OLYMPUS_UPDATE_COMPACT -ceq '1'
-        Write-Verbose "Global OpenCode and active CLI version markers match at $installed; update preflight does not verify file integrity."
+        if ($installed.GlobalVersion -ceq $installed.CliVersion) {
+            Write-Verbose "Global OpenCode and active CLI version markers match at $($installed.GlobalVersion); update preflight does not verify file integrity."
+        } else {
+            Write-Verbose "Global OpenCode version is $($installed.GlobalVersion); active CLI version is $($installed.CliVersion); force repair preflight does not verify file integrity."
+        }
     }
     $pwsh = @(Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue)
     if ($pwsh.Count -eq 0) {
@@ -241,15 +331,30 @@ try {
     }
 
     if ($Action -eq 'install' -and $Update) {
-        $comparison = Compare-ReleaseTag $tag $installed
+        $installedForComparison = $installed.GlobalVersion
+        if ($Force) {
+            $splitComparison = Compare-ReleaseTag $installed.GlobalVersion $installed.CliVersion
+            if ($splitComparison -ge 0) { $installedForComparison = $installed.GlobalVersion }
+            else { $installedForComparison = $installed.CliVersion }
+            foreach ($identity in @($installed.GlobalVersion, $installed.CliVersion)) {
+                if ((Compare-ReleaseTag $tag $identity) -lt 0) {
+                    throw "UPDATE_DOWNGRADE_BLOCKED: Latest stable release $tag is older than installed $identity; no downgrade was started."
+                }
+            }
+        }
+        $comparison = Compare-ReleaseTag $tag $installedForComparison
         Write-Verbose "Latest stable release tag is $tag."
-        if ($comparison -le 0) {
-            if ($comparison -eq 0) { Write-Output "Already up to date ($installed)." }
-            else { Write-Output "Already up to date ($installed is newer than latest stable $tag)." }
+        if ($comparison -le 0 -and -not $Force) {
+            if ($comparison -eq 0) { Write-Output "Already up to date ($($installed.GlobalVersion))." }
+            else { Write-Output "Already up to date ($installedForComparison is newer than latest stable $tag)." }
             $global:LASTEXITCODE = 0
             return
         }
-        Write-Output "Updating Olympus from $installed to $tag..."
+        if ($Force) {
+            Write-Output "Repairing Olympus from global=$($installed.GlobalVersion) cli=$($installed.CliVersion) to $tag..."
+        } else {
+            Write-Output "Updating Olympus from $($installed.GlobalVersion) to $tag..."
+        }
     }
     if (-not $script:CompactUpdate) {
         Write-Output "OLYMPUS_RELEASE_SELECTED: tag=$tag immutable=true published_at=$($publishedTimestamp.ToUniversalTime().ToString('o'))"
@@ -285,6 +390,7 @@ try {
     )
     if ($Action -eq 'uninstall') { $args += '-Uninstall' }
     if ($Update) { $args += '-Update' }
+    if ($Force) { $args += '-Force' }
     if ($DryRun) { $args += '-DryRun' }
 
     if (-not $script:CompactUpdate) {
@@ -304,7 +410,7 @@ try {
     }
     if ($Update) {
         $installed = Get-InstalledGlobalVersion
-        if ($installed -cne $tag) {
+        if ($installed.GlobalVersion -cne $tag -or $installed.CliVersion -cne $tag) {
             throw "UPDATE_RESULT_UNCONFIRMED: The installer returned success, but global OpenCode and CLI are not both $tag."
         }
         Write-Output "Updated to $tag."

@@ -608,6 +608,15 @@ try {
     Check 'R25_CURRENT_GLOBAL_OPENCODE_WRAPPERS' ($wrapperIssues.Count -eq 0) ($wrapperIssues -join ', ')
 
     function Test-UnifiedEntrypointSource([string]$Content, [string]$Action) {
+        $forceContract = $true
+        if ($Action -eq 'install') {
+            $forceContract = $Content.Contains('[switch]$Force') -and
+                $Content.Contains('UPDATE_FORCE_MODE_INVALID') -and
+                $Content.Contains("'UPDATE_DOWNGRADE_BLOCKED'") -and
+                $Content.Contains('[switch]$Force') -and
+                $Content.Contains("`$launcherArgs += '-Force'") -and
+                $Content.Contains("`$requiredLauncherMarkers")
+        }
         return ($Content.Contains('$launcherUrl = "https://raw.githubusercontent.com/Edulynch/OpenCode-OlympusAgents/$tag/scripts/launch-latest.ps1"') -and
             $Content.Contains('https://api.github.com/repos/Edulynch/OpenCode-OlympusAgents/releases/latest') -and
             $Content.Contains("Assert-BootstrapReleaseBoolean `$release 'immutable' `$true") -and
@@ -618,7 +627,8 @@ try {
             -not $Content.Contains('/master/scripts/launch-latest.ps1') -and
             $Content.Contains('Invoke-WebRequest -Uri $launcherUrl -OutFile $ownedLauncher -Headers $headers -ErrorAction Stop') -and
             $Content.Contains("'-Action', '$Action'") -and
-            -not $Content.Contains('$selectedHarness') -and -not $Content.Contains("'-Target'"))
+            -not $Content.Contains('$selectedHarness') -and -not $Content.Contains("'-Target'") -and
+            $forceContract)
     }
     $unifiedEntrypointIssues = @()
     foreach ($entry in @(@('install-olympus.ps1','install'), @('uninstall-olympus.ps1','uninstall'))) {
@@ -633,7 +643,20 @@ try {
     Check 'R25_UNIFIED_ENTRYPOINT_MUTATIONS_REJECTED' (
         -not (Test-UnifiedEntrypointSource ($installEntryText.Replace('/$tag/scripts/launch-latest.ps1', '/master/scripts/launch-latest.ps1')) 'install') -and
         -not (Test-UnifiedEntrypointSource ($installEntryText.Replace("'-Action', 'install'", "'-Action', 'uninstall'")) 'install') -and
+        -not (Test-UnifiedEntrypointSource ($installEntryText.Replace("`$launcherArgs += '-Force'", "`$launcherArgs += '-Update'")) 'install') -and
         -not (Test-UnifiedEntrypointSource ($uninstallEntryText.Replace("'-Action', 'uninstall'", "'-Action', 'install'")) 'uninstall'))
+
+    $launcherSource = [IO.File]::ReadAllText((Join-Path $source 'scripts/launch-latest.ps1'))
+    Check 'R25_FORCE_REQUIRES_IMMUTABLE_BOOTSTRAP_AND_NO_DOWNGRADE' (
+        $installEntryText.Contains('[switch]$Force') -and
+        $installEntryText.Contains('UPDATE_FORCE_MODE_INVALID') -and
+        $installEntryText.Contains('UPDATE_DOWNGRADE_BLOCKED') -and
+        $launcherSource.Contains('[switch]$Force') -and
+        $launcherSource.Contains('UPDATE_FORCE_MODE_INVALID') -and
+        $launcherSource.Contains('UPDATE_DOWNGRADE_BLOCKED') -and
+        $launcherSource.Contains("`$args += '-Force'") -and
+        $launcherSource.Contains("`$Update = `$true")
+    )
 
     $sample = [IO.File]::ReadAllText((Join-Path $source 'install/global/opencode.ps1'))
     $badMutable = $sample.Replace('/releases/latest/download/install-olympus.ps1',

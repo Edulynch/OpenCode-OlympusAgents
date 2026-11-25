@@ -815,6 +815,114 @@ def _validate_package(package_root: Path, *, version: str | None = None,
     return InstalledIdentity(actual_version, actual_commit, package_root, digest)
 
 
+def _known_package_paths() -> set[str]:
+    return (
+        set(_PACKAGE_INPUTS) | set(_OUTPUT_FIXED)
+        | {f".opencode/agents/{role}.md" for role in _ROLE_NAMES}
+    )
+
+
+def _validate_force_package(package_root: Path, *, version: str | None = None,
+                            commit: str | None = None,
+                            receipt_sha256: str | None = None) -> InstalledIdentity:
+    """Recognize a damaged package only through its intact exact receipt and bounded tree."""
+    info = _ensure_directory(package_root, create=False)
+    if info is None:
+        raise GlobalCliError(f"CLI package directory is missing: {package_root}")
+    package_root, identity = info
+    _verify_directory(package_root, identity)
+    raw_receipt, receipt_meta = _safe_read(package_root, _RECEIPT, limit=2_000_000)
+    actual_version, actual_commit, recorded, digest = _parse_package_receipt(
+        raw_receipt, receipt_meta, version=version, commit=commit,
+        receipt_sha256=receipt_sha256,
+    )
+    if set(recorded) != _known_package_paths():
+        raise GlobalCliError("CLI package receipt differs from the bounded Olympus package inventory.")
+    files, directories = _scan_package_tree(package_root)
+    expected_files = set(recorded) | {_RECEIPT}
+    expected_directories = {""}
+    for path in expected_files:
+        parts = path.split("/")[:-1]
+        expected_directories.update("/".join(parts[:index]) for index in range(1, len(parts) + 1))
+    if not set(files) <= expected_files or not set(directories) <= expected_directories:
+        raise GlobalCliError("CLI package contains unenumerated resources.")
+    if sum(len(raw) for raw, _ in files.values()) > _MAX_PACKAGE_BYTES:
+        raise GlobalCliError("CLI package exceeds its bounded byte inventory.")
+    return InstalledIdentity(actual_version, actual_commit, package_root, digest)
+
+
+def _preflight_force_package_repair(package_root: Path, payload: dict[str, bytes], *,
+                                    version: str, commit: str,
+                                    receipt_sha256: str) -> bool:
+    identity = _validate_force_package(
+        package_root, version=version, commit=commit, receipt_sha256=receipt_sha256,
+    )
+    if not _payload_matches_package(payload, identity):
+        raise GlobalCliError("Installed CLI package receipt differs from the verified source payload.")
+    files, directories = _scan_package_tree(package_root)
+    expected_files = set(payload) | {_RECEIPT}
+    expected_directories = {""}
+    for relative in expected_files:
+        parts = relative.split("/")[:-1]
+        expected_directories.update("/".join(parts[:index]) for index in range(1, len(parts) + 1))
+    if not set(files) <= expected_files or not set(directories) <= expected_directories:
+        raise GlobalCliError("CLI package contains unenumerated resources.")
+    changed = tuple(
+        relative for relative, desired in sorted(payload.items())
+        if relative not in files
+        or files[relative][0] != desired
+        or stat.S_IMODE(files[relative][1].st_mode) != 0o444
+    )
+    needs_repair = (
+        bool(changed) or set(directories) != expected_directories
+        or any(stat.S_IMODE(item.st_mode) != 0o555 for item in directories.values())
+    )
+    if not needs_repair or not sys.platform.startswith("linux"):
+        return needs_repair
+
+    versions_info = _ensure_directory(package_root.parent, create=False)
+    if versions_info is None or package_root != versions_info[0] / version:
+        raise GlobalCliError("CLI package repair target is not its exact version directory.")
+    versions_root, versions_identity = versions_info
+    global_install._require_no_posix_acl(
+        versions_root, "default", expected_identity=versions_identity,
+    )
+    for relative in changed:
+        old = files.get(relative)
+        if old is not None:
+            global_install._require_no_posix_acl(
+                package_root / relative, "access",
+                expected_identity=(old[1].st_dev, old[1].st_ino),
+            )
+    # Repair changes directory modes as a set; inspect every affected directory first.
+    for relative, metadata in directories.items():
+        global_install._require_no_posix_acl(
+            package_root / relative, "access",
+            expected_identity=(metadata.st_dev, metadata.st_ino),
+        )
+    for relative in sorted(expected_directories - set(directories)):
+        current = package_root
+        parent_relative = ""
+        for part in relative.split("/"):
+            child = current / part
+            try:
+                child_metadata = os.lstat(child)
+            except FileNotFoundError:
+                parent_metadata = directories.get(parent_relative)
+                if parent_metadata is None:
+                    raise GlobalCliError("CLI package repair parent changed during ACL preflight.", 4)
+                global_install._require_no_posix_acl(
+                    current, "default",
+                    expected_identity=(parent_metadata.st_dev, parent_metadata.st_ino),
+                )
+                break
+            if not stat.S_ISDIR(child_metadata.st_mode) or stat.S_ISLNK(child_metadata.st_mode):
+                raise GlobalCliError(f"Unsafe CLI package repair parent: {child}", 4)
+            current = child
+            parent_relative = f"{parent_relative}/{part}".strip("/")
+    return True
+
+
 def _package_input_paths(source: Path) -> list[str]:
     """Recompute only the fixed package layout; never adopt arbitrary files."""
     from . import cli
@@ -832,11 +940,31 @@ def _package_input_paths(source: Path) -> list[str]:
 
 def _stage_package(data_root: Path, source_payload: dict[str, bytes],
                    version: str, commit: str, data_identity: tuple[int, int],
-                   lock, lock_identity: tuple[int, int]) -> Path:
+                   lock, lock_identity: tuple[int, int], *,
+                   force: bool = False) -> Path:
     relative_stage = f"versions/.staging-{uuid.uuid4().hex}"
     stage = data_root / relative_stage
     try:
+        versions_identity = None
+        if force:
+            versions_info = _ensure_directory(data_root / "versions", create=False)
+            if versions_info is None:
+                raise GlobalCliError("Versioned CLI package directory is missing.")
+            versions_root, versions_identity = versions_info
+            global_install._require_no_posix_acl(
+                versions_root, "default", expected_identity=versions_identity,
+            )
+            _verify_directory(versions_root, versions_identity)
         source_edit._make_directory(stage, data_root, lock, lock_identity)
+        metadata = os.lstat(stage)
+        staged_identities = {relative_stage: (metadata.st_dev, metadata.st_ino)}
+        if force:
+            global_install._require_no_posix_acl(
+                stage, "access", expected_identity=staged_identities[relative_stage],
+            )
+            global_install._require_no_posix_acl(
+                stage, "default", expected_identity=staged_identities[relative_stage],
+            )
         directories = {relative_stage}
         for relative in sorted(source_payload):
             package_relative = f"{relative_stage}/{relative}"
@@ -851,21 +979,64 @@ def _stage_package(data_root: Path, source_payload: dict[str, bytes],
                 try:
                     os.lstat(directory)
                 except FileNotFoundError:
+                    if force:
+                        parent_relative = Path(item).parent.as_posix()
+                        parent_identity = (
+                            versions_identity if parent_relative == "versions"
+                            else staged_identities.get(parent_relative)
+                        )
+                        if parent_identity is None:
+                            raise GlobalCliError("CLI package staging parent identity is unavailable.", 4)
+                        global_install._require_no_posix_acl(
+                            directory.parent, "default",
+                            expected_identity=parent_identity,
+                        )
                     source_edit._make_directory(directory, data_root, lock, lock_identity)
+                    metadata = os.lstat(directory)
+                    staged_identities[item] = (metadata.st_dev, metadata.st_ino)
+                    if force:
+                        global_install._require_no_posix_acl(
+                            directory, "access", expected_identity=staged_identities[item],
+                        )
+                        global_install._require_no_posix_acl(
+                            directory, "default", expected_identity=staged_identities[item],
+                        )
                 directories.add(item)
-            source_edit._write_private_file(
+            if force:
+                parent_identity = staged_identities.get(parent)
+                if parent_identity is None:
+                    raise GlobalCliError("CLI package staging parent identity is unavailable.", 4)
+                global_install._require_no_posix_acl(
+                    data_root / parent, "default", expected_identity=parent_identity,
+                )
+            written_identity = source_edit._write_private_file(
                 data_root / package_relative, data_root, package_relative,
                 source_payload[relative], 0o444, lock, lock_identity,
             )
+            if force:
+                global_install._require_no_posix_acl(
+                    data_root / package_relative, "access",
+                    expected_identity=written_identity,
+                )
         receipt = _package_receipt(version, commit, source_payload)
         receipt_relative = f"{relative_stage}/{_RECEIPT}"
-        source_edit._write_private_file(
+        if force:
+            global_install._require_no_posix_acl(
+                stage, "default", expected_identity=staged_identities[relative_stage],
+            )
+        receipt_identity = source_edit._write_private_file(
             data_root / receipt_relative, data_root, receipt_relative, receipt, 0o444,
             lock, lock_identity,
         )
+        if force:
+            global_install._require_no_posix_acl(
+                data_root / receipt_relative, "access",
+                expected_identity=receipt_identity,
+            )
         for relative in sorted(directories, key=lambda item: item.count("/"), reverse=True):
             _set_directory_mode(
                 data_root, relative, 0o555, data_identity, lock, lock_identity, sync=True,
+                reject_acl=force,
             )
         package_root = data_root / relative_stage
         _validate_package(
@@ -883,7 +1054,8 @@ def _stage_package(data_root: Path, source_payload: dict[str, bytes],
 
 def _set_directory_mode(root: Path, relative: str, mode: int,
                         root_identity: tuple[int, int], lock,
-                        lock_identity: tuple[int, int], *, sync: bool = False) -> None:
+                        lock_identity: tuple[int, int], *, sync: bool = False,
+                        reject_acl: bool = False) -> None:
     path = root / relative
     _verify_directory(root, root_identity)
     source_edit._lock_identity(lock, lock_identity)
@@ -898,6 +1070,10 @@ def _set_directory_mode(root: Path, relative: str, mode: int,
             opened = os.fstat(descriptor)
             if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
                 raise GlobalCliError(f"CLI package directory changed before mode change: {relative}", 4)
+            if reject_acl:
+                global_install._require_no_posix_acl(
+                    path, "access", expected_identity=(before.st_dev, before.st_ino), code=4,
+                )
             os.fchmod(descriptor, mode)
             after = os.fstat(descriptor)
             placed = os.lstat(path)
@@ -928,6 +1104,390 @@ def _set_directory_mode(root: Path, relative: str, mode: int,
         raise
     except OSError as error:
         raise GlobalCliError(f"Cannot set CLI package directory mode for {relative}: {error}", 4) from error
+
+
+def _repair_package_files(package_root: Path, payload: dict[str, bytes], *,
+                          version: str, commit: str, receipt_sha256: str,
+                          lock, lock_identity: tuple[int, int]) -> tuple[str, ...]:
+    _preflight_force_package_repair(
+        package_root, payload, version=version, commit=commit,
+        receipt_sha256=receipt_sha256,
+    )
+    identity = _validate_force_package(
+        package_root, version=version, commit=commit, receipt_sha256=receipt_sha256,
+    )
+    if not _payload_matches_package(payload, identity):
+        raise GlobalCliError("Installed CLI package receipt differs from the verified source payload.")
+    files, directories = _scan_package_tree(package_root)
+    expected_files = set(payload) | {_RECEIPT}
+    expected_directories = {""}
+    for relative in expected_files:
+        parts = relative.split("/")[:-1]
+        expected_directories.update("/".join(parts[:index]) for index in range(1, len(parts) + 1))
+    if not set(files) <= expected_files or not set(directories) <= expected_directories:
+        raise GlobalCliError("CLI package contains unenumerated resources.")
+
+    changed = tuple(
+        relative for relative, desired in sorted(payload.items())
+        if relative not in files
+        or files[relative][0] != desired
+        or stat.S_IMODE(files[relative][1].st_mode) != 0o444
+    )
+    changed_directories = (
+        set(expected_directories) - set(directories)
+        | {
+            relative for relative, metadata in directories.items()
+            if stat.S_IMODE(metadata.st_mode) != 0o555
+        }
+    )
+    if (not changed and set(directories) == expected_directories
+            and all(stat.S_IMODE(item.st_mode) == 0o555 for item in directories.values())):
+        return ()
+
+    versions_info = _ensure_directory(package_root.parent, create=False)
+    if versions_info is None:
+        raise GlobalCliError("CLI package repair has no verified versions directory.")
+    versions_root, versions_identity = versions_info
+    if package_root != versions_root / version:
+        raise GlobalCliError("CLI package repair target is not its exact version directory.")
+    package_metadata = os.lstat(package_root)
+    package_identity = (package_metadata.st_dev, package_metadata.st_ino)
+    stage_name = f".staging-{uuid.uuid4().hex}"
+    stage = versions_root / stage_name
+    staged_directories: dict[str, tuple[int, int]] = {}
+    target_started = False
+    try:
+        global_install._require_no_posix_acl(
+            versions_root, "default", expected_identity=versions_identity,
+        )
+        source_edit._make_directory(stage, versions_root, lock, lock_identity)
+        metadata = os.lstat(stage)
+        staged_directories[stage_name] = (metadata.st_dev, metadata.st_ino)
+        global_install._require_no_posix_acl(
+            stage, "access", expected_identity=staged_directories[stage_name],
+        )
+        global_install._require_no_posix_acl(
+            stage, "default", expected_identity=staged_directories[stage_name],
+        )
+        for relative in changed:
+            parts = relative.split("/")[:-1]
+            for index in range(1, len(parts) + 1):
+                staged_relative = f"{stage_name}/{'/'.join(parts[:index])}"
+                if staged_relative in staged_directories:
+                    continue
+                staged_path = versions_root / staged_relative
+                parent_relative = str(Path(staged_relative).parent)
+                parent_identity = staged_directories.get(parent_relative)
+                if parent_identity is None:
+                    raise GlobalCliError("CLI package staging parent identity is unavailable.", 4)
+                global_install._require_no_posix_acl(
+                    staged_path.parent, "default", expected_identity=parent_identity,
+                )
+                source_edit._make_directory(staged_path, versions_root, lock, lock_identity)
+                metadata = os.lstat(staged_path)
+                staged_directories[staged_relative] = (metadata.st_dev, metadata.st_ino)
+                global_install._require_no_posix_acl(
+                    staged_path, "access",
+                    expected_identity=staged_directories[staged_relative],
+                )
+                global_install._require_no_posix_acl(
+                    staged_path, "default",
+                    expected_identity=staged_directories[staged_relative],
+                )
+            staged_relative = f"{stage_name}/{relative}"
+            parent_identity = staged_directories.get(str(Path(staged_relative).parent))
+            if parent_identity is None:
+                raise GlobalCliError("CLI package staging parent identity is unavailable.", 4)
+            global_install._require_no_posix_acl(
+                (versions_root / staged_relative).parent, "default",
+                expected_identity=parent_identity,
+            )
+            staged_identity = source_edit._write_private_file(
+                versions_root / staged_relative, versions_root, staged_relative,
+                payload[relative], 0o444, lock, lock_identity,
+            )
+            global_install._require_no_posix_acl(
+                versions_root / staged_relative, "access",
+                expected_identity=staged_identity,
+            )
+        for relative, staged_identity in sorted(
+            staged_directories.items(), key=lambda item: item[0].count("/"), reverse=True,
+        ):
+            _sync_directory_strict(
+                versions_root / relative, staged_identity, lock, lock_identity,
+            )
+
+        _verify_directory(package_root, package_identity)
+        current_files, current_directories = _scan_package_tree(package_root)
+        if (set(current_files) != set(files) or set(current_directories) != set(directories)
+                or any(current_files[name][0] != files[name][0]
+                       or _signature(current_files[name][1]) != _signature(files[name][1])
+                       for name in files)
+                or any(_durability_signature(current_directories[name])
+                       != _durability_signature(directories[name]) for name in directories)):
+            raise GlobalCliError("CLI package changed during force-repair staging.", 4)
+
+        _preflight_force_package_repair(
+            package_root, payload, version=version, commit=commit,
+            receipt_sha256=receipt_sha256,
+        )
+        target_started = True
+        for relative in sorted(directories, key=lambda item: (item.count("/"), item)):
+            _set_directory_mode(
+                package_root, relative, 0o700, package_identity, lock, lock_identity,
+                reject_acl=True,
+            )
+        for relative in sorted(expected_directories - set(directories),
+                               key=lambda item: (item.count("/"), item)):
+            target_directory = package_root / relative
+            global_install._require_no_posix_acl(target_directory.parent, "default", code=4)
+            source_edit._make_directory(target_directory, package_root, lock, lock_identity)
+            global_install._require_no_posix_acl(target_directory, "access", code=4)
+            global_install._require_no_posix_acl(target_directory, "default", code=4)
+
+        for relative in changed:
+            target = package_root / relative
+            staged_relative = f"{stage_name}/{relative}"
+            staged_path = versions_root / staged_relative
+            try:
+                staged_metadata = os.lstat(staged_path)
+            except OSError as error:
+                raise GlobalCliError(
+                    f"Cannot inspect staged CLI repair resource {relative}: {error}", 4,
+                ) from error
+            old = files.get(relative)
+            if old is None:
+                try:
+                    os.lstat(target)
+                except FileNotFoundError:
+                    pass
+                else:
+                    raise GlobalCliError(
+                        f"CLI package repair target appeared before publication: {relative}", 4,
+                    )
+            else:
+                current, current_metadata = _safe_read(package_root, relative)
+                if current != old[0] or _signature(current_metadata) != _signature(old[1]):
+                    raise GlobalCliError(
+                        f"CLI package repair target changed before publication: {relative}", 4,
+                    )
+                global_install._require_no_posix_acl(
+                    target, "access",
+                    expected_identity=(current_metadata.st_dev, current_metadata.st_ino),
+                    code=4,
+                )
+            global_install._require_no_posix_acl(
+                staged_path, "access",
+                expected_identity=(staged_metadata.st_dev, staged_metadata.st_ino), code=4,
+            )
+            source_edit._lock_identity(lock, lock_identity)
+            try:
+                if old is None:
+                    os.link(staged_path, target)
+                    os.unlink(staged_path)
+                else:
+                    os.replace(staged_path, target)
+            except OSError as error:
+                raise GlobalCliError(
+                    f"Cannot atomically restore CLI package resource {relative}: {error}", 4,
+                ) from error
+            source_edit._sync_directory(target.parent)
+            restored, restored_metadata = _safe_read(package_root, relative)
+            if (restored != payload[relative]
+                    or (restored_metadata.st_dev, restored_metadata.st_ino)
+                    != (staged_metadata.st_dev, staged_metadata.st_ino)
+                    or stat.S_IMODE(restored_metadata.st_mode) != 0o444):
+                raise GlobalCliError(
+                    f"Restored CLI package resource failed verification: {relative}", 4,
+                )
+            global_install._require_no_posix_acl(
+                target, "access",
+                expected_identity=(restored_metadata.st_dev, restored_metadata.st_ino),
+                code=4,
+            )
+
+        for relative in sorted(
+            expected_directories, key=lambda item: (item.count("/"), item), reverse=True,
+        ):
+            _set_directory_mode(
+                package_root, relative, 0o555, package_identity, lock, lock_identity,
+                sync=True, reject_acl=True,
+            )
+        for relative, staged_identity in sorted(
+            staged_directories.items(), key=lambda item: item[0].count("/"), reverse=True,
+        ):
+            path = versions_root / relative
+            metadata = os.lstat(path)
+            if ((metadata.st_dev, metadata.st_ino) != staged_identity
+                    or not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode)
+                    or metadata.st_uid != os.geteuid()):
+                raise GlobalCliError(
+                    f"Staging directory identity changed during CLI repair: {relative}", 4,
+                )
+            source_edit._lock_identity(lock, lock_identity)
+            os.rmdir(path)
+        _sync_directory_strict(versions_root, versions_identity, lock, lock_identity)
+        _validate_package(
+            package_root, version=version, commit=commit, receipt_sha256=receipt_sha256,
+        )
+        return tuple(sorted((*changed, *changed_directories)))
+    except GlobalCliError as error:
+        if target_started and error.code != 4:
+            raise GlobalCliError(f"CLI package force repair is unconfirmed: {error}", 4) from error
+        raise
+    except BaseException as error:
+        code = 4 if target_started else 3
+        state = "is unconfirmed" if target_started else "could not be staged"
+        raise GlobalCliError(f"CLI package force repair {state}: {error}", code) from error
+
+
+def _repair_stable_launcher(data_root: Path, bin_root: Path,
+                            bin_identity: tuple[int, int], lock,
+                            lock_identity: tuple[int, int]) -> bool:
+    expected = _launcher_bytes(data_root)
+    try:
+        old, old_metadata = _safe_read(bin_root, "olympus", limit=64 * 1024)
+    except GlobalCliError as error:
+        try:
+            os.lstat(bin_root / "olympus")
+        except FileNotFoundError:
+            old, old_metadata = None, None
+        else:
+            raise error
+    if (old == expected and old_metadata is not None
+            and stat.S_IMODE(old_metadata.st_mode) == 0o755):
+        return False
+
+    temporary_relative = f".olympus-{uuid.uuid4().hex}.tmp"
+    temporary = bin_root / temporary_relative
+    global_install._require_no_posix_acl(
+        bin_root, "default", expected_identity=bin_identity,
+    )
+    if old_metadata is not None:
+        global_install._require_no_posix_acl(
+            bin_root / "olympus", "access",
+            expected_identity=(old_metadata.st_dev, old_metadata.st_ino),
+        )
+    staged_identity = source_edit._write_private_file(
+        temporary, bin_root, temporary_relative, expected, 0o755, lock, lock_identity,
+    )
+    global_install._require_no_posix_acl(
+        bin_root, "default", expected_identity=bin_identity, code=4,
+    )
+    global_install._require_no_posix_acl(
+        temporary, "access", expected_identity=staged_identity, code=4,
+    )
+    staged_metadata = os.lstat(temporary)
+    if old_metadata is None:
+        try:
+            os.lstat(bin_root / "olympus")
+        except FileNotFoundError:
+            pass
+        else:
+            raise GlobalCliError("Stable CLI launcher appeared before force repair.", 4)
+    else:
+        current, current_metadata = _safe_read(bin_root, "olympus", limit=64 * 1024)
+        if current != old or _signature(current_metadata) != _signature(old_metadata):
+            raise GlobalCliError("Stable CLI launcher changed before force repair.", 4)
+        global_install._require_no_posix_acl(
+            bin_root / "olympus", "access",
+            expected_identity=(current_metadata.st_dev, current_metadata.st_ino), code=4,
+        )
+    global_install._require_no_posix_acl(temporary, "access", code=4)
+    source_edit._lock_identity(lock, lock_identity)
+    try:
+        if old_metadata is None:
+            os.link(temporary, bin_root / "olympus")
+            os.unlink(temporary)
+        else:
+            os.replace(temporary, bin_root / "olympus")
+    except OSError as error:
+        raise GlobalCliError(f"Cannot atomically restore the stable CLI launcher: {error}", 4) from error
+    _sync_directory_strict(bin_root, bin_identity, lock, lock_identity)
+    restored, restored_metadata = _safe_read(bin_root, "olympus", limit=64 * 1024)
+    if (restored != expected
+            or (restored_metadata.st_dev, restored_metadata.st_ino)
+            != (staged_metadata.st_dev, staged_metadata.st_ino)
+            or stat.S_IMODE(restored_metadata.st_mode) != 0o755):
+        raise GlobalCliError("Restored stable CLI launcher failed verification.", 4)
+    global_install._require_no_posix_acl(
+        bin_root / "olympus", "access",
+        expected_identity=(restored_metadata.st_dev, restored_metadata.st_ino), code=4,
+    )
+    return True
+
+
+def _preflight_force_launcher(data_root: Path, bin_root: Path,
+                              bin_identity: tuple[int, int]) -> bool:
+    expected = _launcher_bytes(data_root)
+    try:
+        old, metadata = _safe_read(bin_root, "olympus", limit=64 * 1024)
+    except GlobalCliError as error:
+        try:
+            os.lstat(bin_root / "olympus")
+        except FileNotFoundError:
+            old, metadata = None, None
+        else:
+            raise error
+    if (old == expected and metadata is not None
+            and stat.S_IMODE(metadata.st_mode) == 0o755):
+        return False
+    global_install._require_no_posix_acl(
+        bin_root, "default", expected_identity=bin_identity,
+    )
+    if metadata is not None:
+        global_install._require_no_posix_acl(
+            bin_root / "olympus", "access",
+            expected_identity=(metadata.st_dev, metadata.st_ino),
+        )
+    return True
+
+
+def _preflight_force_cli_update(data_root: Path, data_identity: tuple[int, int],
+                                bin_root: Path, bin_identity: tuple[int, int],
+                                previous: InstalledIdentity, *,
+                                version: str, commit: str,
+                                payload: dict[str, bytes]) -> None:
+    versions_info = _ensure_directory(data_root / "versions", create=False)
+    if versions_info is None:
+        raise GlobalCliError("Versioned CLI package directory is missing.")
+    versions_root, _ = versions_info
+    destination = versions_root / version
+    try:
+        os.lstat(destination)
+    except FileNotFoundError:
+        destination_exists = False
+    except OSError as error:
+        raise GlobalCliError(f"Cannot inspect CLI package destination: {error}") from error
+    else:
+        destination_exists = True
+
+    if destination_exists:
+        identity = _validate_force_package(destination, version=version, commit=commit)
+        if not _payload_matches_package(payload, identity):
+            raise GlobalCliError("Existing CLI update package differs from the verified source payload.")
+        _preflight_force_package_repair(
+            destination, payload, version=version, commit=commit,
+            receipt_sha256=identity.receipt_sha256,
+        )
+    else:
+        global_install._require_no_posix_acl(
+            versions_root, "default", expected_identity=versions_info[1],
+        )
+
+    if (version, commit) != (previous.version, previous.commit):
+        current, metadata = _safe_read(data_root, _CURRENT, limit=1024)
+        expected = _current_bytes(previous.version, previous.commit, previous.receipt_sha256)
+        if current != expected:
+            raise GlobalCliError("Current CLI marker changed before force-update ACL preflight.", 4)
+        global_install._require_no_posix_acl(
+            data_root, "default", expected_identity=data_identity,
+        )
+        global_install._require_no_posix_acl(
+            data_root / _CURRENT, "access",
+            expected_identity=(metadata.st_dev, metadata.st_ino),
+        )
+    _preflight_force_launcher(data_root, bin_root, bin_identity)
 
 
 def _publish_package_noreplace(versions_root: Path, staging_name: str, version: str,
@@ -1002,7 +1562,8 @@ def _publish_package_noreplace(versions_root: Path, staging_name: str, version: 
 
 
 def _read_state(data_root: Path, bin_root: Path, *,
-                allow_cleanup_pending: bool = False) -> InstalledIdentity | None:
+                allow_cleanup_pending: bool = False,
+                allow_managed_drift: bool = False) -> InstalledIdentity | None:
     data_info = _ensure_directory(data_root, create=False)
     bin_info = _ensure_directory(bin_root, create=False)
     if data_info is None:
@@ -1043,15 +1604,30 @@ def _read_state(data_root: Path, bin_root: Path, *,
         raise GlobalCliError("The current CLI marker has an unexpected mode.")
     version, commit, receipt_hash = _parse_current(raw_current)
     package_root = data_root / "versions" / version
-    identity = _validate_package(
-        package_root, version=version, commit=commit, receipt_sha256=receipt_hash,
+    identity = (
+        _validate_force_package(
+            package_root, version=version, commit=commit, receipt_sha256=receipt_hash,
+        )
+        if allow_managed_drift else _validate_package(
+            package_root, version=version, commit=commit, receipt_sha256=receipt_hash,
+        )
     )
     if bin_info is None:
         raise GlobalCliError("The current CLI package has no safe ~/.local/bin directory.")
     bin_root, _ = bin_info
-    launcher, launcher_meta = _safe_read(bin_root, "olympus", limit=64 * 1024)
-    if launcher != _launcher_bytes(data_root) or stat.S_IMODE(launcher_meta.st_mode) != 0o755:
-        raise GlobalCliError("The stable CLI launcher is changed or does not match its package root.")
+    if allow_managed_drift:
+        try:
+            os.lstat(bin_root / "olympus")
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            raise GlobalCliError(f"Cannot inspect the stable CLI launcher: {error}") from error
+        else:
+            _safe_read(bin_root, "olympus", limit=64 * 1024)
+    else:
+        launcher, launcher_meta = _safe_read(bin_root, "olympus", limit=64 * 1024)
+        if launcher != _launcher_bytes(data_root) or stat.S_IMODE(launcher_meta.st_mode) != 0o755:
+            raise GlobalCliError("The stable CLI launcher is changed or does not match its package root.")
     return identity
 
 
@@ -1140,9 +1716,11 @@ def _stage_and_transition(source: Path, version: str, commit: str, operation: st
                           versions_root: Path, versions_identity: tuple[int, int],
                           bin_root: Path, bin_identity: tuple[int, int],
                            lock, lock_identity: tuple[int, int],
-                           previous: InstalledIdentity | None) -> CliOutcome:
+                           previous: InstalledIdentity | None, *,
+                           force: bool = False) -> CliOutcome:
     destination = versions_root / version
     package_published = False
+    package_repaired: tuple[str, ...] = ()
     if operation == "install":
         try:
             os.lstat(destination)
@@ -1177,7 +1755,8 @@ def _stage_and_transition(source: Path, version: str, commit: str, operation: st
         target_pair = (version, commit)
         installed_pair = _global_identity_without_package()
         if installed_pair == previous_pair:
-            _require_global(previous.package_root, previous.version, previous.commit)
+            if not force:
+                _require_global(previous.package_root, previous.version, previous.commit)
             target_already_committed = False
         elif installed_pair == target_pair:
             target_already_committed = True
@@ -1201,13 +1780,26 @@ def _stage_and_transition(source: Path, version: str, commit: str, operation: st
                 "The committed global update has no intact local target package to activate.", 4,
             )
         if destination_exists:
-            package_identity = _validate_package(
-                destination, version=version, commit=commit, sync_durable=True,
-                lock=lock, lock_identity=lock_identity,
+            package_identity = (
+                _validate_force_package(destination, version=version, commit=commit)
+                if force else _validate_package(
+                    destination, version=version, commit=commit, sync_durable=True,
+                    lock=lock, lock_identity=lock_identity,
+                )
             )
             if not _payload_matches_package(payload, package_identity):
                 raise GlobalCliError(
                     "Existing CLI update package differs from the verified source payload.",
+                )
+            if force:
+                package_repaired = _repair_package_files(
+                    destination, payload, version=version, commit=commit,
+                    receipt_sha256=package_identity.receipt_sha256,
+                    lock=lock, lock_identity=lock_identity,
+                )
+                package_identity = _validate_package(
+                    destination, version=version, commit=commit, sync_durable=True,
+                    lock=lock, lock_identity=lock_identity,
                 )
             _sync_directory_strict(
                 versions_root, versions_identity, lock, lock_identity,
@@ -1215,6 +1807,7 @@ def _stage_and_transition(source: Path, version: str, commit: str, operation: st
         else:
             staged = _stage_package(
                 data_root, payload, version, commit, data_identity, lock, lock_identity,
+                force=force,
             )
             _verify_directory(data_root, data_identity)
             _verify_directory(versions_root, versions_identity)
@@ -1234,12 +1827,18 @@ def _stage_and_transition(source: Path, version: str, commit: str, operation: st
         _verify_directory(versions_root, versions_identity)
         installed_pair = _global_identity_without_package()
         if installed_pair == previous_pair:
-            _require_global(previous.package_root, previous.version, previous.commit)
-            lifecycle = global_install.update(destination, version=version, commit=commit)
+            if not force:
+                _require_global(previous.package_root, previous.version, previous.commit)
+            lifecycle = global_install.update(
+                destination, version=version, commit=commit, force=force,
+            )
             target_already_committed = False
         elif installed_pair == target_pair:
             target_already_committed = True
-            lifecycle = None
+            lifecycle = (
+                global_install.update(destination, version=version, commit=commit, force=True)
+                if force else None
+            )
         else:
             raise GlobalCliError(
                 "Global OpenCode identity changed to an unrelated release during update.", 4,
@@ -1300,7 +1899,11 @@ def _stage_and_transition(source: Path, version: str, commit: str, operation: st
             )
         _activate_current(
             data_root, data_identity, package_identity, lock, lock_identity,
-            bin_root, bin_identity, previous,
+            bin_root, bin_identity, previous, force=force,
+        )
+        launcher_repaired = (
+            _repair_stable_launcher(data_root, bin_root, bin_identity, lock, lock_identity)
+            if force else False
         )
         _verify_directory(data_root, data_identity)
         activated = _read_state(data_root, bin_root)
@@ -1324,6 +1927,10 @@ def _stage_and_transition(source: Path, version: str, commit: str, operation: st
     changed = [str(data_root / _CURRENT)]
     if package_published:
         changed.insert(0, str(destination))
+    if force:
+        changed.extend(str(destination / item) for item in package_repaired)
+        if launcher_repaired:
+            changed.append(str(bin_root / "olympus"))
     if previous is None:
         changed.append(str(bin_root / "olympus"))
     if lifecycle is not None:
@@ -1342,7 +1949,8 @@ def _stage_and_transition(source: Path, version: str, commit: str, operation: st
 def _activate_current(data_root: Path, data_identity: tuple[int, int],
                       package_identity: InstalledIdentity, lock,
                       lock_identity: tuple[int, int], bin_root: Path,
-                      bin_identity: tuple[int, int], previous: InstalledIdentity | None) -> None:
+                      bin_identity: tuple[int, int], previous: InstalledIdentity | None,
+                      *, force: bool = False) -> None:
     _verify_directory(data_root, data_identity)
     _verify_directory(bin_root, bin_identity)
     payload = _current_bytes(
@@ -1360,16 +1968,34 @@ def _activate_current(data_root: Path, data_identity: tuple[int, int],
     old_expected = _current_bytes(previous.version, previous.commit, previous.receipt_sha256)
     if old_raw != old_expected:
         raise GlobalCliError("Current CLI marker changed before activation.", 4)
+    if force:
+        global_install._require_no_posix_acl(
+            data_root, "default", expected_identity=data_identity, code=4,
+        )
+        global_install._require_no_posix_acl(
+            current_path, "access",
+            expected_identity=(old_meta.st_dev, old_meta.st_ino), code=4,
+        )
     temporary_relative = f".current-{uuid.uuid4().hex}.tmp"
     temporary = data_root / temporary_relative
-    source_edit._write_private_file(
+    staged_identity = source_edit._write_private_file(
         temporary, data_root, temporary_relative, payload, 0o600, lock, lock_identity,
     )
+    if force:
+        global_install._require_no_posix_acl(
+            temporary, "access", expected_identity=staged_identity, code=4,
+        )
     staged_meta = os.lstat(temporary)
     current_again, current_meta = _safe_read(data_root, _CURRENT, limit=1024)
     if (current_again != old_raw or current_meta.st_dev != old_meta.st_dev
             or current_meta.st_ino != old_meta.st_ino):
         raise GlobalCliError("Current CLI marker changed before atomic activation.", 4)
+    if force:
+        global_install._require_no_posix_acl(
+            current_path, "access",
+            expected_identity=(current_meta.st_dev, current_meta.st_ino), code=4,
+        )
+        global_install._require_no_posix_acl(temporary, "access", code=4)
     _verify_directory(data_root, data_identity)
     source_edit._lock_identity(lock, lock_identity)
     os.replace(temporary, current_path)
@@ -1377,6 +2003,11 @@ def _activate_current(data_root: Path, data_identity: tuple[int, int],
     if (written != payload or (written_meta.st_dev, written_meta.st_ino)
             != (staged_meta.st_dev, staged_meta.st_ino)):
         raise GlobalCliError("Atomic current CLI marker activation could not be verified.", 4)
+    if force:
+        global_install._require_no_posix_acl(
+            current_path, "access",
+            expected_identity=(written_meta.st_dev, written_meta.st_ino), code=4,
+        )
     _sync_directory_strict(data_root, data_identity, lock, lock_identity)
 
 
@@ -1624,7 +2255,7 @@ def _ensure_current_durable(*, version: str, commit: str) -> InstalledIdentity:
         _release_package_lock(lock)
 
 
-def _update_recovery_identity() -> InstalledIdentity | None:
+def _update_recovery_identity(*, force: bool = False) -> InstalledIdentity | None:
     """Read-only recognition of an exact package/global split from an interrupted update."""
     _require_linux()
     data_root, bin_root = _user_paths()
@@ -1636,7 +2267,7 @@ def _update_recovery_identity() -> InstalledIdentity | None:
 
     lock, _ = _acquire_package_lock(data_root, create=False)
     try:
-        current = _read_state(data_root, bin_root)
+        current = _read_state(data_root, bin_root, allow_managed_drift=force)
         if current is None:
             return None
         if current.package_root != data_root / "versions" / current.version:
@@ -1651,14 +2282,50 @@ def _update_recovery_identity() -> InstalledIdentity | None:
                 "The split global identity is not a strictly newer recoverable update.", 4,
             )
 
-        target = _validate_package(
-            data_root / "versions" / installed[0],
-            version=installed[0], commit=installed[1],
+        target = (
+            _validate_force_package(
+                data_root / "versions" / installed[0],
+                version=installed[0], commit=installed[1],
+            )
+            if force else _validate_package(
+                data_root / "versions" / installed[0],
+                version=installed[0], commit=installed[1],
+            )
         )
-        _require_global(target.package_root, target.version, target.commit)
+        if not force:
+            _require_global(target.package_root, target.version, target.commit)
         if _read_state(data_root, bin_root) != current:
             raise GlobalCliError("Per-user CLI identity changed during update recovery inspection.", 4)
         return target
+    finally:
+        _release_package_lock(lock)
+
+
+def _force_update_identity() -> InstalledIdentity | None:
+    """Read the current identity from its marker and exact package receipt, allowing managed drift."""
+    _require_linux()
+    data_root, bin_root = _user_paths()
+    global_root = _configured_global_root()
+    _check_path_separation(None, data_root, bin_root, global_root)
+    if _ensure_directory(data_root, create=False) is None:
+        current = _read_state(data_root, bin_root, allow_managed_drift=True)
+        if current is None and _global_identity_without_package() is not None:
+            raise GlobalCliError("A global Olympus installation exists without its matching CLI package.")
+        return None
+    lock, _ = _acquire_package_lock(data_root, create=False)
+    try:
+        current = _read_state(data_root, bin_root, allow_managed_drift=True)
+        if current is None:
+            if _global_identity_without_package() is not None:
+                raise GlobalCliError("A global Olympus installation exists without its matching CLI package.")
+            return None
+        if current.package_root != data_root / "versions" / current.version:
+            raise GlobalCliError("Verified CLI package is not the exact installed version directory.")
+        if _global_identity_without_package() != (current.version, current.commit):
+            raise GlobalCliError("Global OpenCode identity differs from the receipt-bound CLI identity.")
+        if _read_state(data_root, bin_root, allow_managed_drift=True) != current:
+            raise GlobalCliError("Per-user CLI identity changed during force-update preflight.", 4)
+        return current
     finally:
         _release_package_lock(lock)
 
@@ -1756,8 +2423,8 @@ def install(source: Path, *, version: str, commit: str) -> CliOutcome:
         _release_package_lock(lock)
 
 
-def update(source: Path, *, version: str, commit: str) -> CliOutcome:
-    """Stage a newer release and switch current only after global commit verifies."""
+def update(source: Path, *, version: str, commit: str, force: bool = False) -> CliOutcome:
+    """Stage a newer release, or explicitly restore only receipted managed resources."""
     _require_linux()
     version, commit = _identity(version, commit)
     source, payload, source_identity = _validated_source(source, version, commit)
@@ -1767,12 +2434,12 @@ def update(source: Path, *, version: str, commit: str) -> CliOutcome:
     if (source_edit._safe_root_metadata(source).st_dev,
             source_edit._safe_root_metadata(source).st_ino) != source_identity:
         raise GlobalCliError("Staged source root identity changed before update.", 4)
-    existing = _read_state(data_root, bin_root)
+    existing = _read_state(data_root, bin_root, allow_managed_drift=force)
     if existing is None:
         raise GlobalCliError("Update requires an existing verified per-user CLI package.")
     lock, lock_identity = _acquire_package_lock(data_root, create=False)
     try:
-        previous = _read_state(data_root, bin_root)
+        previous = _read_state(data_root, bin_root, allow_managed_drift=force)
         if previous is None or previous != existing:
             raise GlobalCliError("Per-user CLI package changed during update preflight.", 4)
         data_info = _ensure_directory(data_root, create=False)
@@ -1783,6 +2450,49 @@ def update(source: Path, *, version: str, commit: str) -> CliOutcome:
         bin_root, bin_identity = bin_info
         _check_path_separation(source, data_root, bin_root, global_root)
         if (version, commit) == (previous.version, previous.commit):
+            if force:
+                if not _payload_matches_package(payload, previous):
+                    raise GlobalCliError(
+                        "Same-version CLI source differs from its installed package receipt; refusing repair."
+                    )
+                if _global_identity_without_package() != (version, commit):
+                    raise GlobalCliError(
+                        "Same-version force repair requires the exact global manifest identity."
+                    )
+                global_install._preflight_force_update(
+                    source, version=version, commit=commit,
+                )
+                _preflight_force_cli_update(
+                    data_root, data_identity, bin_root, bin_identity, previous,
+                    version=version, commit=commit,
+                    payload=payload,
+                )
+                lifecycle = global_install.update(
+                    source, version=version, commit=commit, force=True,
+                )
+                package_changed = _repair_package_files(
+                    previous.package_root, payload, version=version, commit=commit,
+                    receipt_sha256=previous.receipt_sha256,
+                    lock=lock, lock_identity=lock_identity,
+                )
+                launcher_changed = _repair_stable_launcher(
+                    data_root, bin_root, bin_identity, lock, lock_identity,
+                )
+                repaired = _read_state(data_root, bin_root)
+                if repaired is None or (repaired.version, repaired.commit) != (version, commit):
+                    raise GlobalCliError("Force-repaired CLI package identity did not verify.", 4)
+                global_root, _ = _require_global(repaired.package_root, version, commit)
+                _sync_directory_strict(data_root, data_identity, lock, lock_identity)
+                changed = [
+                    *(str(previous.package_root / relative) for relative in package_changed),
+                    *((str(bin_root / "olympus"),) if launcher_changed else ()),
+                    *lifecycle.changed_paths,
+                ]
+                return CliOutcome(
+                    "update", "committed" if changed else "no_changes", version, commit,
+                    str(repaired.package_root), str(global_root), tuple(changed),
+                    "Receipt-owned package, launcher, global resources, and identities verified.",
+                )
             if not _payload_matches_package(payload, previous):
                 raise GlobalCliError("Same-version CLI source differs from the installed package; refusing repair.")
             _require_global(previous.package_root, version, commit)
@@ -1795,10 +2505,19 @@ def update(source: Path, *, version: str, commit: str) -> CliOutcome:
         if versions_info is None:
             raise GlobalCliError("Versioned CLI package directory is missing.")
         versions_root, versions_identity = versions_info
+        if force:
+            global_install._preflight_force_update(
+                source, version=version, commit=commit,
+            )
+            _preflight_force_cli_update(
+                data_root, data_identity, bin_root, bin_identity, previous,
+                version=version, commit=commit,
+                payload=payload,
+            )
         return _stage_and_transition(
             source, version, commit, "update", payload, data_root, data_identity,
             versions_root, versions_identity, bin_root, bin_identity,
-            lock, lock_identity, previous,
+            lock, lock_identity, previous, force=force,
         )
     finally:
         _release_package_lock(lock)

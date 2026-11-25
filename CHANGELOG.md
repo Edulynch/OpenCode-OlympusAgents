@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## v0.12.10
+
+### Highlights
+
+- Add `olympus update --force` on Windows and Linux to request a full reinstall of manifest-proven managed files and permit replacing drift only on those owned paths; preserve the normal update default and alias.
+- Provide official Windows and Linux bootstrap force-update routes for installations whose older CLI cannot dispatch the option, without authorizing changes to unowned files, user-owned configuration/authentication/permissions, or newer installations.
+
+### Capability limits
+
+- Forced update is limited to manifest-proven managed paths. It does not adopt or remove unowned resources, create backups, authorize downgrades, or add macOS support.
+
+## Installation
+
+Use **Fast Install** or **Fast Uninstall** from the [v0.12.10 installation guide](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.10/docs/INSTALLATION.md). Public installation remains global and OpenCode-only.
+
+## Verify installation
+
+See [release selection, identity, and executable source](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/v0.12.10/docs/INSTALLATION.md#release-selection-identity-and-executable-source) for read-only `VerifyOnly` and source-validation guidance.
+
 ## v0.12.9
 
 ### Highlights

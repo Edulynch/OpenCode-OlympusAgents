@@ -436,6 +436,73 @@ class LinuxReleaseLauncher(unittest.TestCase):
                 namespace["main"]()
         selected_release.assert_not_called()
 
+    def test_embedded_shell_force_uses_latest_update_and_requires_supported_launcher(self):
+        installer = (ROOT / "install-olympus.sh").read_text(encoding="utf-8")
+        marker = "exec python3 -I -S -B - \"$@\" <<'PY'\n"
+        body = installer.split(marker, 1)[1].rsplit("\nPY", 1)[0]
+        body, entry, _ = body.rpartition("\nraise SystemExit(main())")
+        self.assertTrue(entry, "expected the shell's embedded Python entry point")
+        namespace = {"__name__": "linux_installer_fixture"}
+        exec(compile(body, "install-olympus.sh", "exec"), namespace)
+        launcher = (ROOT / "scripts" / "launch-latest.py").read_bytes()
+        payload = {
+            "schema_version": 1, "operation": "update", "result": "ok",
+            "context": {}, "data": {}, "issues": [],
+        }
+        selected = mock.Mock(
+            return_value=(self.version, self.commit, "d" * 40, launcher),
+        )
+        dispatch = mock.Mock(return_value=SimpleNamespace(
+            stdout=json.dumps(payload), stderr="", returncode=0,
+        ))
+        with (
+            mock.patch.object(namespace["sys"], "argv", ["-", "--force", "--json"]),
+            mock.patch.object(namespace["subprocess"], "run", dispatch),
+            mock.patch.dict(namespace, {"selected_release": selected}),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(0, namespace["main"]())
+        selected.assert_called_once_with(None)
+        command = dispatch.call_args.args[0]
+        self.assertEqual("update", command[5])
+        self.assertIn("--force", command)
+        self.assertNotIn("--_pinned", command)
+        self.assertNotIn("--dry-run", command)
+
+        for arguments in (
+            ["-", self.version, "--force"],
+            ["-", "uninstall", "--force"],
+            ["-", "--force", "--dry-run"],
+        ):
+            selected.reset_mock()
+            with (
+                mock.patch.object(namespace["sys"], "argv", arguments),
+                mock.patch.dict(namespace, {"selected_release": selected}),
+                redirect_stderr(io.StringIO()),
+            ):
+                with self.assertRaises(SystemExit):
+                    namespace["main"]()
+            selected.assert_not_called()
+
+        selected.reset_mock(return_value=True)
+        dispatch.reset_mock()
+        with (
+            mock.patch.object(namespace["sys"], "argv", ["-", "--force", "--json"]),
+            mock.patch.object(namespace["subprocess"], "run", dispatch),
+            mock.patch.dict(namespace, {
+                "selected_release": mock.Mock(return_value=(
+                    self.version, self.commit, "d" * 40, b"unsupported old launcher\n",
+                )),
+            }),
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            self.assertEqual(3, namespace["main"]())
+        self.assertIn(
+            "force-update-not-supported",
+            json.loads(output.getvalue())["issues"][0]["message"],
+        )
+        dispatch.assert_not_called()
+
     def test_pinned_coordinator_option_is_bound_to_bootstrap_install(self):
         blob_sha = "d" * 40
         response = LAUNCHER._response("install", False, None)
@@ -453,6 +520,15 @@ class LinuxReleaseLauncher(unittest.TestCase):
         with redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 LAUNCHER.main(["install", "--_pinned"])
+        response = LAUNCHER._response("update", False, None)
+        with mock.patch.object(LAUNCHER, "run_action", return_value=(response, 0)) as route:
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(0, LAUNCHER.main([
+                    "update", "--force", "--_response",
+                ]))
+        route.assert_called_once_with(
+            "update", dry_run=False, bootstrap=None, pinned_bootstrap=False, force=True,
+        )
 
         transport = FakeTransport()
         with self.assertRaisesRegex(LAUNCHER.ReleaseError, "stable bootstrap install identity"):
@@ -604,6 +680,165 @@ class LinuxReleaseLauncher(unittest.TestCase):
                           f"{LAUNCHER._API}/commits/{version}"], transport.urls)
         verify.assert_called_once_with(version=version, commit=commit)
         ensure_durable.assert_called_once_with(version=version, commit=commit)
+
+    def test_force_update_acquires_and_repairs_when_latest_identity_is_already_installed(self):
+        from olympus import global_cli
+
+        transport, _ = self._bootstrap_transport(include_tree=True, archive=True)
+        identity = SimpleNamespace(
+            version=self.version, commit=self.commit, package_root=Path("/fixture/package"),
+        )
+        outcome = SimpleNamespace(
+            operation="update", result="committed", version=self.version, commit=self.commit,
+            package_root="/fixture/package", global_root="/fixture/global",
+            changed_paths=(), detail="repaired",
+        )
+        global_cli = SimpleNamespace(
+            __package__="olympus",
+            _update_recovery_identity=mock.Mock(return_value=None),
+            _force_update_identity=mock.Mock(return_value=identity),
+            update=mock.Mock(return_value=outcome),
+            verify=mock.Mock(return_value=outcome),
+        )
+        global_install = SimpleNamespace(_version_compare=lambda left, right: 0)
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            with (
+                mock.patch.object(Path, "home", return_value=temporary_path / "home"),
+                mock.patch.dict(os.environ, {
+                    "XDG_DATA_HOME": str(temporary_path / "data"),
+                    "OPENCODE_CONFIG_DIR": str(temporary_path / "global"),
+                }),
+                mock.patch.object(
+                    LAUNCHER, "_load_lifecycle",
+                    return_value=(global_cli, global_install, None),
+                ),
+                mock.patch.object(LAUNCHER, "_validate_source"),
+            ):
+                response, code = LAUNCHER.run_action(
+                    "update", force=True, source_root=ROOT, transport=transport,
+                    temp_parent=temporary_path,
+                )
+        self.assertEqual(0, code, response["data"]["native_stderr"])
+        self.assertEqual("ok", response["result"])
+        global_cli._force_update_identity.assert_called_once_with()
+        global_cli.update.assert_called_once()
+        self.assertTrue(global_cli.update.call_args.kwargs["force"])
+        global_cli.verify.assert_called_once_with(version=self.version, commit=self.commit)
+        self.assertIn(
+            LAUNCHER._archive_root_name(self.commit)[1],
+            transport.urls,
+            "force must acquire the selected immutable source rather than take the default no-op",
+        )
+
+    def test_official_force_bootstrap_routes_to_update_and_validates_existing_state(self):
+        transport, bootstrap = self._bootstrap_transport(include_tree=True, archive=True)
+        outcome = SimpleNamespace(
+            operation="update", result="committed", version=self.version, commit=self.commit,
+            package_root="/fixture/package", global_root="/fixture/global",
+            changed_paths=(), detail="repaired",
+        )
+        global_cli = SimpleNamespace(
+            _update_recovery_identity=mock.Mock(return_value=None),
+            update=mock.Mock(return_value=outcome),
+            verify=mock.Mock(return_value=outcome),
+        )
+        global_install = SimpleNamespace(_version_compare=lambda left, right: 0)
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            launcher_path = self._public_script_path(temporary_path)
+            with (
+                mock.patch.object(Path, "home", return_value=temporary_path / "home"),
+                mock.patch.dict(os.environ, {
+                    "XDG_DATA_HOME": str(temporary_path / "data"),
+                    "OPENCODE_CONFIG_DIR": str(temporary_path / "global"),
+                }),
+                mock.patch.object(LAUNCHER, "__file__", str(launcher_path)),
+                mock.patch.object(
+                    LAUNCHER, "_load_lifecycle",
+                    return_value=(global_cli, global_install, None),
+                ),
+                mock.patch.object(LAUNCHER, "_validate_source"),
+            ):
+                response, code = LAUNCHER.run_action(
+                    "update", force=True, bootstrap=bootstrap, transport=transport,
+                    temp_parent=temporary_path,
+                )
+        self.assertEqual(0, code, response["data"]["native_stderr"])
+        self.assertEqual("ok", response["result"])
+        global_cli._update_recovery_identity.assert_called_once_with(force=True)
+        global_cli.update.assert_called_once()
+        self.assertTrue(global_cli.update.call_args.kwargs["force"])
+        self.assertIn(
+            f"{LAUNCHER._API}/contents/scripts/launch-latest.py?ref={self.commit}",
+            transport.urls,
+        )
+
+    def test_force_split_recovery_then_progresses_to_latest(self):
+        from olympus import global_cli
+
+        target_commit = self.commit
+        latest_version = "v1.2.4"
+        latest_commit = "c" * 40
+        documents = self._documents(
+            release_changes={"tag_name": latest_version}, commit=latest_commit,
+        )
+        documents.update(self._documents(tag=self.version))
+        transport = FakeTransport(documents)
+        target = SimpleNamespace(
+            version=self.version, commit=target_commit, package_root=Path("/fixture/target"),
+        )
+        recovered = SimpleNamespace(
+            operation="update", result="committed", version=self.version, commit=target_commit,
+            package_root="/fixture/target", global_root="/fixture/global",
+            changed_paths=("recovered",), detail="recovered",
+        )
+        progressed = SimpleNamespace(
+            operation="update", result="committed", version=latest_version, commit=latest_commit,
+            package_root="/fixture/latest", global_root="/fixture/global",
+            changed_paths=("latest",), detail="progressed",
+        )
+        global_cli = SimpleNamespace(
+            _update_recovery_identity=mock.Mock(return_value=target),
+            update=mock.Mock(side_effect=(recovered, progressed)),
+            verify=mock.Mock(side_effect=(recovered, progressed, progressed)),
+        )
+        global_install = SimpleNamespace(
+            _version_compare=lambda left, right: (left > right) - (left < right),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            with (
+                mock.patch.object(
+                    LAUNCHER, "_load_lifecycle",
+                    return_value=(global_cli, global_install, None),
+                ),
+                mock.patch.object(LAUNCHER, "_validate_source"),
+                mock.patch.object(LAUNCHER, "_fetch_tree", return_value={}),
+                mock.patch.object(
+                    LAUNCHER, "_download_source",
+                    side_effect=(temporary_path / "latest-source", temporary_path / "target-source"),
+                ) as download,
+            ):
+                response, code = LAUNCHER.run_action(
+                    "update", force=True, source_root=ROOT, transport=transport,
+                    temp_parent=temporary_path,
+                )
+        self.assertEqual(0, code, response["data"]["native_stderr"])
+        self.assertEqual("ok", response["result"])
+        self.assertEqual(2, global_cli.update.call_count)
+        self.assertEqual(
+            [(self.version, target_commit), (latest_version, latest_commit)],
+            [(call.kwargs["version"], call.kwargs["commit"])
+             for call in global_cli.update.call_args_list],
+        )
+        self.assertTrue(all(call.kwargs["force"] for call in global_cli.update.call_args_list))
+        self.assertEqual(2, download.call_count)
+        self.assertEqual(
+            "Recovered the exact interrupted update, then progressed to the latest release.",
+            response["data"]["detail"],
+        )
+        self.assertEqual(["recovered", "latest"], response["data"]["changed_paths"])
 
     def test_update_recovery_uses_exact_tag_when_latest_has_advanced_then_public_verify(self):
         from olympus import global_cli

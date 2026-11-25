@@ -186,7 +186,7 @@ $OpenCodeGuardIntentRelative = 'olympus/opencode-guard-pending.json'
 $GlobalApplyScratch = '.olympus-cli-config-apply'
 $SourceVersion = 'local'
 $Harness = 'opencode'
-$DryRun = $false; $VerifyOnly = $false; $Uninstall = $false; $Update = $false
+$DryRun = $false; $Force = $false; $VerifyOnly = $false; $Uninstall = $false; $Update = $false
 $ProjectTarget = $env:USERPROFILE
 $script:ModifiedManagedAgents = @(); $script:ConfirmedModifiedAgentPaths = @()
 . (Join-Path $SourceRoot 'scripts/target-writer-lock.ps1')

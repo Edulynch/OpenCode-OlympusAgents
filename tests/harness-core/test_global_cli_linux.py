@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -19,8 +20,21 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from olympus import global_cli, global_install, source_edit
+from olympus import config_apply_transaction, global_cli, global_install, source_edit
 from olympus.cli import load_renderer, release_version
+
+
+def _extended_posix_acl_xattr() -> bytes:
+    undefined = 0xFFFFFFFF
+    named_user = (os.getuid() + 1) & undefined
+    entries = (
+        (0x01, 0x06, undefined), (0x02, 0x04, named_user),
+        (0x04, 0x04, undefined), (0x10, 0x04, undefined),
+        (0x20, 0x00, undefined),
+    )
+    return struct.pack("<I", 0x0002) + b"".join(
+        struct.pack("<HHI", *entry) for entry in entries
+    )
 
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "Linux CLI package lifecycle requires Linux.")
@@ -134,6 +148,24 @@ class LinuxGlobalCli(unittest.TestCase):
 
     def _scope_snapshot(self, *sources: Path) -> dict[str, dict[str, tuple]]:
         return {str(path): self._snapshot(path) for path in sources}
+
+    def _require_acl_free_fixture(self, *roots: Path) -> None:
+        if not hasattr(os, "listxattr"):
+            self.skipTest("mode-only force repair requires Linux ACL xattr inspection")
+        unsupported = {
+            getattr(errno, name, None) for name in ("ENOTSUP", "EOPNOTSUPP", "ENOSYS")
+        } - {None}
+        for root in roots:
+            candidates = [root, *(path for path in root.rglob("*"))]
+            for path in candidates:
+                try:
+                    attributes = set(os.listxattr(path))
+                except OSError as error:
+                    if error.errno in unsupported:
+                        self.skipTest("mode-only force repair requires ACL-capable fixture storage")
+                    raise
+                if attributes & {"system.posix_acl_access", "system.posix_acl_default"}:
+                    self.skipTest("mode-only force repair fixture already has POSIX ACL policy")
 
     def test_fresh_package_runs_externally_and_omits_unowned_assets(self):
         source = self._source("source-v1", self.v1)
@@ -287,6 +319,295 @@ class LinuxGlobalCli(unittest.TestCase):
         self.assertEqual((self.v2, self.commit2), (installed.version, installed.commit))
         with self.assertRaises(global_cli.GlobalCliError):
             global_cli.verify(version=self.v2, commit=self.commit1)
+
+    def test_force_same_latest_repairs_receipt_owned_package_launcher_and_global_files(self):
+        source = self._source("source-v1", self.v1)
+        self._run(source, self.v1, self.commit1)
+        data_root = self.data / "olympus"
+        package = data_root / "versions" / self.v1
+        self._require_acl_free_fixture(
+            package, data_root, self.home / ".local/bin", self.global_root,
+        )
+
+        earlier_package_file = package / "olympus/cli.py"
+        earlier_expected = earlier_package_file.read_bytes()
+        earlier_package_file.chmod(0o644)
+        earlier_package_file.write_bytes(b"earlier damaged package resource\n")
+        earlier_package_file.chmod(0o444)
+        package_file = package / "olympus/global_cli.py"
+        expected_package_file = package_file.read_bytes()
+        package_file.chmod(0o644)
+        package_file.write_bytes(b"damaged package resource\n")
+        package_file.chmod(0o444)
+        missing_package_file = package / "olympus/doctor.py"
+        package_file_parent = missing_package_file.parent
+        package_file_parent_mode = stat.S_IMODE(package_file_parent.stat().st_mode)
+        try:
+            package_file_parent.chmod(package_file_parent_mode | stat.S_IWUSR)
+            missing_package_file.unlink()
+        finally:
+            package_file_parent.chmod(package_file_parent_mode)
+
+        global_file = self.global_root / "agents/kael.md"
+        global_file.write_bytes(b"damaged global resource\n")
+        missing_global_file = self.global_root / "commands/olympus.ultra.md"
+        expected_global = missing_global_file.read_bytes()
+        missing_global_file.unlink()
+        launcher = self.home / ".local/bin/olympus"
+        launcher.write_bytes(b"damaged stable launcher\n")
+        user_note = data_root / "user-note.txt"
+        user_note.write_bytes(b"preserve user data\n")
+        preferences_before = self.preferences.read_bytes()
+
+        real_replace = os.replace
+        replacements = []
+
+        def interrupt_after_first_package_replace(source_path, destination_path):
+            destination = Path(destination_path)
+            if destination in {earlier_package_file, package_file}:
+                replacements.append(destination)
+                if destination == package_file:
+                    raise OSError("fixture package ACL-safe repair interruption")
+            return real_replace(source_path, destination_path)
+
+        with mock.patch("olympus.global_cli.os.replace", side_effect=interrupt_after_first_package_replace):
+            with self.assertRaisesRegex(
+                global_cli.GlobalCliError, "Cannot atomically restore CLI package resource",
+            ):
+                global_cli.update(source, version=self.v1, commit=self.commit1, force=True)
+        self.assertEqual([earlier_package_file, package_file], replacements)
+        self.assertEqual(earlier_expected, earlier_package_file.read_bytes())
+        self.assertEqual(b"damaged package resource\n", package_file.read_bytes())
+        self.assertTrue(missing_package_file.is_file())
+
+        retry_source = self._source("source-v1-retry", self.v1)
+        repaired = global_cli.update(
+            retry_source, version=self.v1, commit=self.commit1, force=True,
+        )
+        self.assertEqual(("committed", self.v1, self.commit1),
+                         (repaired.result, repaired.version, repaired.commit))
+        self.assertEqual(expected_package_file, package_file.read_bytes())
+        self.assertTrue(missing_package_file.is_file())
+        self.assertNotEqual(b"damaged global resource\n", global_file.read_bytes())
+        self.assertEqual(expected_global, missing_global_file.read_bytes())
+        self.assertEqual(global_cli._launcher_bytes(data_root), launcher.read_bytes())
+        self.assertEqual(b"preserve user data\n", user_note.read_bytes())
+        self.assertEqual(preferences_before, self.preferences.read_bytes())
+        self.assertEqual("verified", global_cli.verify(
+            version=self.v1, commit=self.commit1,
+        ).result)
+        self.assertEqual("verified", global_install.verify(
+            retry_source, version=self.v1, commit=self.commit1,
+        ).result)
+        launcher.unlink()
+        restored_launcher = global_cli.update(
+            retry_source, version=self.v1, commit=self.commit1, force=True,
+        )
+        self.assertEqual("committed", restored_launcher.result)
+        self.assertEqual(global_cli._launcher_bytes(data_root), launcher.read_bytes())
+        no_op = global_cli.update(retry_source, version=self.v1, commit=self.commit1, force=True)
+        self.assertEqual(("no_changes", ()), (no_op.result, no_op.changed_paths))
+
+    def test_force_repair_preserves_unknown_package_files_and_fails_closed(self):
+        source = self._source("source-v1", self.v1)
+        self._run(source, self.v1, self.commit1)
+        package = self.data / "olympus/versions" / self.v1
+        package.chmod(0o755)
+        unknown = package / "user-owned-note.txt"
+        unknown.write_bytes(b"keep\n")
+        package.chmod(0o555)
+        before = self._scope_snapshot(
+            package, self.home / ".local/bin", self.global_root,
+        )
+
+        with self.assertRaises(global_cli.GlobalCliError):
+            global_cli.update(source, version=self.v1, commit=self.commit1, force=True)
+        self.assertEqual(b"keep\n", unknown.read_bytes())
+        self.assertEqual(
+            before,
+            self._scope_snapshot(package, self.home / ".local/bin", self.global_root),
+        )
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "native POSIX ACL xattrs require Linux.")
+    def test_force_preflights_later_package_acl_before_earlier_replacement_or_mode_change(self):
+        source = self._source("source-v1", self.v1)
+        self._run(source, self.v1, self.commit1)
+        package = self.data / "olympus/versions" / self.v1
+        earlier = package / "olympus/cli.py"
+        later = package / "olympus/global_cli.py"
+        earlier.chmod(0o644)
+        earlier.write_bytes(b"earlier package drift\n")
+        earlier.chmod(0o444)
+        later.chmod(0o644)
+        later.write_bytes(b"later package drift\n")
+        later.chmod(0o444)
+        try:
+            os.setxattr(later, "system.posix_acl_access", _extended_posix_acl_xattr())
+        except OSError as error:
+            unsupported = {
+                getattr(errno, name, None) for name in ("ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EPERM")
+            } - {None}
+            if error.errno in unsupported:
+                self.skipTest("fixture storage/user cannot create POSIX access ACL xattrs")
+            raise
+        self.assertIn("system.posix_acl_access", os.listxattr(later))
+        before = self._scope_snapshot(
+            package, self.home / ".local/bin", self.global_root,
+        )
+
+        with self.assertRaisesRegex(global_install.GlobalInstallError, "access-ACL-bearing"):
+            global_cli.update(source, version=self.v1, commit=self.commit1, force=True)
+
+        self.assertEqual(
+            before,
+            self._scope_snapshot(package, self.home / ".local/bin", self.global_root),
+        )
+        self.assertEqual(b"earlier package drift\n", earlier.read_bytes())
+        self.assertEqual(b"later package drift\n", later.read_bytes())
+        self.assertIn("system.posix_acl_access", os.listxattr(later))
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "native POSIX ACL xattrs require Linux.")
+    def test_force_rejects_package_stage_parent_default_acl_before_any_repair(self):
+        source = self._source("source-v1", self.v1)
+        self._run(source, self.v1, self.commit1)
+        package = self.data / "olympus/versions" / self.v1
+        managed = package / "olympus/global_cli.py"
+        managed.chmod(0o644)
+        managed.write_bytes(b"managed package drift\n")
+        managed.chmod(0o444)
+        versions_root = package.parent
+        try:
+            os.setxattr(
+                versions_root, "system.posix_acl_default", _extended_posix_acl_xattr(),
+            )
+        except OSError as error:
+            unsupported = {
+                getattr(errno, name, None) for name in ("ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EPERM")
+            } - {None}
+            if error.errno in unsupported:
+                self.skipTest("fixture storage/user cannot create POSIX default ACL xattrs")
+            raise
+        self.assertIn("system.posix_acl_default", os.listxattr(versions_root))
+        before = self._scope_snapshot(
+            package, self.home / ".local/bin", self.global_root,
+        )
+
+        with self.assertRaisesRegex(global_install.GlobalInstallError, "default-ACL-bearing"):
+            global_cli.update(source, version=self.v1, commit=self.commit1, force=True)
+
+        self.assertEqual(
+            before,
+            self._scope_snapshot(package, self.home / ".local/bin", self.global_root),
+        )
+        self.assertEqual(b"managed package drift\n", managed.read_bytes())
+        self.assertIn("system.posix_acl_default", os.listxattr(versions_root))
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "native POSIX ACL xattrs require Linux.")
+    def test_force_preflights_launcher_parent_default_acl_before_any_managed_repair(self):
+        source = self._source("source-v1", self.v1)
+        self._run(source, self.v1, self.commit1)
+        data_root = self.data / "olympus"
+        package = data_root / "versions" / self.v1
+        bin_root = self.home / ".local/bin"
+        self._require_acl_free_fixture(data_root, bin_root, self.global_root)
+
+        global_file = self.global_root / "agents/kael.md"
+        global_file.write_bytes(b"managed global drift\n")
+        package_file = package / "olympus/cli.py"
+        package_file.chmod(0o644)
+        package_file.write_bytes(b"managed package drift\n")
+        package_file.chmod(0o444)
+        launcher = bin_root / "olympus"
+        launcher_sentinel = b"preserve launcher sentinel\n"
+        launcher.write_bytes(launcher_sentinel)
+
+        try:
+            os.setxattr(
+                bin_root, "system.posix_acl_default", _extended_posix_acl_xattr(),
+            )
+        except OSError as error:
+            unsupported = {
+                getattr(errno, name, None) for name in ("ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EPERM")
+            } - {None}
+            if error.errno in unsupported:
+                self.skipTest("fixture storage/user cannot create POSIX default ACL xattrs")
+            raise
+        self.assertIn("system.posix_acl_default", os.listxattr(bin_root))
+
+        before = self._scope_snapshot(data_root, bin_root, self.global_root)
+        current_before = (data_root / global_cli._CURRENT).read_bytes()
+        receipt_before = (package / global_cli._RECEIPT).read_bytes()
+        manifest_before = (self.global_root / global_install._MANIFEST).read_bytes()
+
+        with self.assertRaisesRegex(global_install.GlobalInstallError, "default-ACL-bearing"):
+            global_cli.update(source, version=self.v1, commit=self.commit1, force=True)
+
+        self.assertEqual(before, self._scope_snapshot(data_root, bin_root, self.global_root))
+        self.assertEqual(launcher_sentinel, launcher.read_bytes())
+        self.assertEqual(b"managed global drift\n", global_file.read_bytes())
+        self.assertEqual(b"managed package drift\n", package_file.read_bytes())
+        self.assertEqual(current_before, (data_root / global_cli._CURRENT).read_bytes())
+        self.assertEqual(receipt_before, (package / global_cli._RECEIPT).read_bytes())
+        self.assertEqual(manifest_before, (self.global_root / global_install._MANIFEST).read_bytes())
+        self.assertIn("system.posix_acl_default", os.listxattr(bin_root))
+
+    def test_force_repairs_acl_free_package_directory_mode_without_file_drift(self):
+        source = self._source("source-v1", self.v1)
+        self._run(source, self.v1, self.commit1)
+        package = self.data / "olympus/versions" / self.v1
+        self._require_acl_free_fixture(
+            package, self.data / "olympus", self.home / ".local/bin", self.global_root,
+        )
+        managed_directory = package / "olympus"
+        managed_directory.chmod(0o755)
+
+        repaired = global_cli.update(
+            source, version=self.v1, commit=self.commit1, force=True,
+        )
+
+        self.assertEqual("committed", repaired.result)
+        self.assertEqual(0o555, stat.S_IMODE(managed_directory.stat().st_mode))
+        self.assertIn(str(managed_directory), repaired.changed_paths)
+        self.assertEqual("verified", global_cli.verify(
+            version=self.v1, commit=self.commit1,
+        ).result)
+
+    def test_force_newer_upgrade_resumes_after_global_commit_before_cli_activation(self):
+        source_v1 = self._source("source-v1", self.v1)
+        self._run(source_v1, self.v1, self.commit1)
+        self._require_acl_free_fixture(
+            self.data / "olympus", self.home / ".local/bin", self.global_root,
+        )
+        source_v2 = self._source("source-v2", self.v2)
+        real_update = global_install.update
+
+        def commit_then_interrupt(*args, **kwargs):
+            real_update(*args, **kwargs)
+            raise RuntimeError("fixture interruption after global commit")
+
+        with mock.patch(
+            "olympus.global_cli.global_install.update", side_effect=commit_then_interrupt,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "after global commit"):
+                global_cli.update(
+                    source_v2, version=self.v2, commit=self.commit2, force=True,
+                )
+
+        previous = global_cli._read_state(self.data / "olympus", self.home / ".local/bin")
+        self.assertEqual((self.v1, self.commit1), (previous.version, previous.commit))
+        self.assertEqual((self.v2, self.commit2), global_cli._global_identity_without_package())
+        resumed = global_cli.update(
+            source_v2, version=self.v2, commit=self.commit2, force=True,
+        )
+
+        self.assertEqual("committed", resumed.result)
+        self.assertEqual("verified", global_cli.verify(
+            version=self.v2, commit=self.commit2,
+        ).result)
+        self.assertEqual("verified", global_install.verify(
+            source_v2, version=self.v2, commit=self.commit2,
+        ).result)
+        self.assertFalse(config_apply_transaction.pending(self.global_root))
 
     def test_uninstall_preserves_user_xdg_preferences_and_unknown_siblings(self):
         source = self._source("source-v1", self.v1)

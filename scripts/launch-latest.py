@@ -5,6 +5,8 @@ from __future__ import annotations
 
 # Olympus pinned-install protocol: 1
 # Keep this exact column-zero line to advertise support for bootstrap --_pinned.
+# Olympus force-update protocol: 1
+# Keep this exact column-zero line to advertise support for bootstrap --force.
 
 import argparse
 import base64
@@ -26,7 +28,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
 
@@ -743,7 +745,8 @@ def _release_version_compare(global_install, left: str, right: str) -> int:
     return comparison
 
 
-def _change_plan(global_install, source_root: Path, release: Release, operation: str) -> list[dict]:
+def _change_plan(global_install, source_root: Path, release: Release, operation: str,
+                 *, force: bool = False) -> list[dict]:
     candidate = global_install._candidate(source_root, release.version, release.commit)
     try:
         root, root_identity = global_install._resolve_root(create=False)
@@ -772,7 +775,9 @@ def _change_plan(global_install, source_root: Path, release: Release, operation:
         changes = (
             global_install._build_uninstall(root, candidate)
             if operation == "uninstall"
-            else global_install._build_install(root, candidate, update=operation == "update")
+            else global_install._build_install(
+                root, candidate, update=operation == "update", force=force,
+            )
         )
         return [
             {
@@ -890,8 +895,12 @@ def _failure(response: dict, error: BaseException, *, effects_started: bool) -> 
     return response, code
 
 
-def _check_local_install(global_cli, release: Release, *, action: str):
-    identity = global_cli.recorded_identity()
+def _check_local_install(global_cli, release: Release, *, action: str,
+                          force: bool = False):
+    identity = (
+        global_cli._force_update_identity() if force and action == "update"
+        else global_cli.recorded_identity()
+    )
     if action == "install":
         if identity is None:
             return None
@@ -916,7 +925,8 @@ def _check_local_install(global_cli, release: Release, *, action: str):
                     "Latest stable release has the installed version but a different commit; refusing repair.",
                     kind="lifecycle_blocked",
                 )
-            global_cli.verify(version=release.version, commit=release.commit)
+            if not force:
+                global_cli.verify(version=release.version, commit=release.commit)
             return identity
         if comparison < 0:
             raise ReleaseError("Latest stable release is older than the installed identity; downgrade blocked.",
@@ -961,10 +971,15 @@ def _local_uninstall(global_cli, *, dry_run: bool, lifecycle) -> tuple[dict | No
 
 def run_action(action: str, *, dry_run: bool = False, source_root: Path | None = None,
                bootstrap: tuple[str, str, str] | None = None, transport=None,
-               temp_parent: Path | None = None, pinned_bootstrap: bool = False) -> tuple[dict, int]:
+               temp_parent: Path | None = None, pinned_bootstrap: bool = False,
+               force: bool = False) -> tuple[dict, int]:
     """Execute one route; tests inject a trusted transport directly, never endpoint flags."""
     if action not in ("install", "update", "verify", "uninstall"):
         raise ReleaseError("Unsupported Linux lifecycle operation.")
+    if force and action != "update":
+        raise ReleaseError("Force repair is available only for an update.")
+    if force and (pinned_bootstrap or bootstrap is not None and dry_run):
+        raise ReleaseError("Force repair cannot be combined with a pinned install or bootstrap dry-run.")
     if bootstrap is not None and len(bootstrap) != 3:
         raise ReleaseError("Bootstrap identity is incomplete.")
     if pinned_bootstrap and (
@@ -980,6 +995,8 @@ def run_action(action: str, *, dry_run: bool = False, source_root: Path | None =
     preserve_stage = False
     release: Release | None = None
     release_selection_tag = bootstrap[0] if pinned_bootstrap else None
+    recovery_target = None
+    recovery_checked = False
     try:
         if bootstrap is not None or action in ("install", "update") or (
             action in ("verify", "uninstall") and source_root is None
@@ -1028,22 +1045,46 @@ def run_action(action: str, *, dry_run: bool = False, source_root: Path | None =
             local_cli = local_lifecycle[0]
             recovery = None
             if action == "update" and not dry_run:
-                recovery = local_cli._update_recovery_identity()
+                recovery = (
+                    local_cli._update_recovery_identity(force=True)
+                    if force else local_cli._update_recovery_identity()
+                )
+                recovery_checked = True
             if recovery is not None:
-                if (release.version, release.commit) != (recovery.version, recovery.commit):
+                if force:
+                    comparison = _release_version_compare(
+                        local_lifecycle[1], release.version, recovery.version,
+                    )
+                    if comparison < 0:
+                        raise ReleaseError(
+                            "Latest stable release is older than the recorded interrupted update.",
+                            kind="lifecycle_blocked",
+                        )
+                    if comparison == 0 and release.commit != recovery.commit:
+                        raise ReleaseError(
+                            "Latest release commit differs from the recorded interrupted update.",
+                            kind="lifecycle_blocked",
+                        )
+                    recovery_target = recovery
+                    current = recovery
+                elif (release.version, release.commit) != (recovery.version, recovery.commit):
                     release_selection_tag = recovery.version
                     release = _select_tag(transport, release_selection_tag)
-                if (release.version, release.commit) != (recovery.version, recovery.commit):
-                    raise ReleaseError(
-                        "The immutable release does not match the recorded interrupted update.",
-                        kind="lifecycle_blocked",
-                    )
-                current = recovery
+                    if (release.version, release.commit) != (recovery.version, recovery.commit):
+                        raise ReleaseError(
+                            "The immutable release does not match the recorded interrupted update.",
+                            kind="lifecycle_blocked",
+                        )
+                    current = recovery
+                else:
+                    current = recovery
             else:
-                current = _check_local_install(local_cli, release, action=action)
+                current = _check_local_install(
+                    local_cli, release, action=action, force=force,
+                )
             if recovery is None and current is not None and (current.version, current.commit) == (
                 release.version, release.commit,
-            ):
+            ) and not force:
                 if action == "update" and not dry_run:
                     local_cli._ensure_current_durable(
                         version=release.version, commit=release.commit,
@@ -1058,7 +1099,7 @@ def run_action(action: str, *, dry_run: bool = False, source_root: Path | None =
                         f"OLYMPUS_UPDATE: Already up to date ({release.version}).\n"
                     )
                 return response, code
-        elif action == "update":
+        elif action == "update" and (bootstrap is None or not force):
             raise ReleaseError("The bootstrap entry supports install and uninstall; run update via installed olympus.",
                                kind="lifecycle_blocked")
 
@@ -1076,10 +1117,26 @@ def run_action(action: str, *, dry_run: bool = False, source_root: Path | None =
 
         global_cli, global_install, _ = lifecycle
         if action in ("install", "update"):
+            if action == "update" and force and not recovery_checked and not dry_run:
+                recovery_target = global_cli._update_recovery_identity(force=True)
+                if recovery_target is not None:
+                    comparison = _release_version_compare(
+                        global_install, release.version, recovery_target.version,
+                    )
+                    if comparison < 0:
+                        raise ReleaseError(
+                            "Latest stable release is older than the recorded interrupted update.",
+                            kind="lifecycle_blocked",
+                        )
+                    if comparison == 0 and release.commit != recovery_target.commit:
+                        raise ReleaseError(
+                            "Latest release commit differs from the recorded interrupted update.",
+                            kind="lifecycle_blocked",
+                        )
             if dry_run:
                 if action == "update" and current is None:
                     raise ReleaseError("Update requires a verified installed identity.", kind="lifecycle_blocked")
-                plan = _change_plan(global_install, staged_source, release, action)
+                plan = _change_plan(global_install, staged_source, release, action, force=force)
                 data_root, bin_root = global_cli._user_paths()
                 if action == "install" and current is None:
                     plan.extend([
@@ -1091,15 +1148,72 @@ def run_action(action: str, *, dry_run: bool = False, source_root: Path | None =
                     plan.extend([
                         {"action": "create", "path": str(data_root / "versions" / release.version)},
                         {"action": "update", "path": str(data_root / global_cli._CURRENT)},
-                    ])
+                ])
                 return _success(response, release, dry_run=True, result="preview", plan=plan)
+            recovered_outcome = None
+            if action == "update" and force and recovery_target is not None:
+                target_release = _select_tag(transport, recovery_target.version)
+                if (target_release.version, target_release.commit) != (
+                    recovery_target.version, recovery_target.commit,
+                ):
+                    raise ReleaseError(
+                        "The immutable release does not match the recorded interrupted update.",
+                        kind="lifecycle_blocked",
+                    )
+                if (target_release.version, target_release.commit) != (release.version, release.commit):
+                    comparison = _release_version_compare(
+                        global_install, release.version, target_release.version,
+                    )
+                    if comparison <= 0:
+                        raise ReleaseError(
+                            "Latest stable release cannot safely progress beyond the interrupted update.",
+                            kind="lifecycle_blocked",
+                        )
+                    recovery_tree = _fetch_tree(transport, target_release)
+                    recovery_source = _download_source(
+                        transport, target_release, recovery_tree, stage_root / "recovery",
+                    )
+                    _validate_source(recovery_source, lifecycle, target_release)
+                    if _select_tag(transport, target_release.version) != target_release:
+                        raise ReleaseError(
+                            "Recorded interrupted release changed during acquisition; no recovery was started.",
+                        )
+                    effects_started = True
+                    recovered_outcome = global_cli.update(
+                        recovery_source, version=target_release.version,
+                        commit=target_release.commit, force=True,
+                    )
+                    global_cli.verify(
+                        version=target_release.version, commit=target_release.commit,
+                    )
+                    if _select_latest(transport) != release:
+                        raise ReleaseError(
+                            "Latest stable release changed during split recovery; retry update.",
+                            kind="lifecycle_blocked",
+                        )
             effects_started = True
             outcome = (
                 global_cli.install(staged_source, version=release.version, commit=release.commit)
                 if action == "install"
-                else global_cli.update(staged_source, version=release.version, commit=release.commit)
+                else global_cli.update(
+                    staged_source, version=release.version, commit=release.commit, force=True,
+                ) if force else global_cli.update(
+                    staged_source, version=release.version, commit=release.commit,
+                )
             )
             global_cli.verify(version=release.version, commit=release.commit)
+            if recovered_outcome is not None:
+                values = {
+                    "changed_paths": tuple(dict.fromkeys((
+                        *recovered_outcome.changed_paths, *outcome.changed_paths,
+                    ))),
+                    "detail": "Recovered the exact interrupted update, then progressed to the latest release.",
+                }
+                try:
+                    outcome = replace(outcome, **values)
+                except TypeError:
+                    outcome.changed_paths = values["changed_paths"]
+                    outcome.detail = values["detail"]
             return _success(response, release, dry_run=False, result="ok", outcome=outcome)
 
         if action == "uninstall":
@@ -1162,6 +1276,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("action", choices=("install", "update", "verify", "uninstall"))
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--force", action="store_true",
+                        help="repair only receipt-owned managed files during update")
     parser.add_argument("--_response", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--_bootstrap", nargs=3, metavar=("VERSION", "COMMIT", "BLOB_SHA"),
                         help=argparse.SUPPRESS)
@@ -1173,12 +1289,16 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args._pinned and (args.action != "install" or args._bootstrap is None):
         _parser().error("--_pinned is only valid for a bootstrap install.")
-    response, code = run_action(
-        args.action,
-        dry_run=args.dry_run,
-        bootstrap=tuple(args._bootstrap) if args._bootstrap else None,
-        pinned_bootstrap=args._pinned,
-    )
+    if args.force and args.action != "update":
+        _parser().error("--force is only valid for update.")
+    options = {
+        "dry_run": args.dry_run,
+        "bootstrap": tuple(args._bootstrap) if args._bootstrap else None,
+        "pinned_bootstrap": args._pinned,
+    }
+    if args.force:
+        options["force"] = True
+    response, code = run_action(args.action, **options)
     if args._response:
         print(json.dumps(response, ensure_ascii=False, separators=(",", ":")))
     else:

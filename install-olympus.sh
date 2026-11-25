@@ -6,11 +6,12 @@ case " $* " in
     cat <<'HELP'
 Olympus Linux installer
 
-Usage: sh install-olympus.sh [install|uninstall|vX.Y.Z] [--dry-run] [--execute] [--json]
+Usage: sh install-olympus.sh [install|uninstall|vX.Y.Z] [--force] [--dry-run] [--execute] [--json]
 
 Uses Python 3.11 or newer and official immutable GitHub release metadata.
 Install is the default action. Uninstall is safe to repeat after an interrupted cleanup.
 An optional stable vX.Y.Z tag selects that exact release for installation.
+--force explicitly updates to latest and repairs only receipt-owned managed files.
 No administrator privileges, Bash, PowerShell, curl, or package installation is used.
 HELP
     exit 0
@@ -52,6 +53,7 @@ OFFICIAL_HOSTS = {"api.github.com", "github.com", "codeload.github.com"}
 RELEASE_TAG = re.compile(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 PINNED_INSTALL_MARKER = b"# Olympus pinned-install protocol: 1"
+FORCE_UPDATE_MARKER = b"# Olympus force-update protocol: 1"
 
 
 class OfficialRedirect(urllib.request.HTTPRedirectHandler):
@@ -224,6 +226,10 @@ def main() -> int:
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--dry-run", action="store_true", help="validate and print a read-only plan")
     modes.add_argument("--execute", action="store_true", help="explicitly execute the lifecycle operation")
+    parser.add_argument(
+        "--force", action="store_true",
+        help="update to latest and repair only receipt-owned managed files",
+    )
     parser.add_argument("--json", action="store_true", help="emit one JSON result")
     args = parser.parse_args()
     if args.target in ("install", "uninstall"):
@@ -234,6 +240,12 @@ def main() -> int:
         requested_version = args.target
     else:
         parser.error("expected install, uninstall, or an exact stable vX.Y.Z tag")
+    if args.force:
+        if action != "install" or requested_version is not None:
+            parser.error("--force is only valid for an unpinned install/update route")
+        if args.dry_run:
+            parser.error("--force cannot be combined with --dry-run")
+        action = "update"
     try:
         version, commit, blob_sha, launcher = selected_release(requested_version)
     except (OSError, ValueError, urllib.error.URLError, urllib.error.HTTPError) as error:
@@ -243,6 +255,13 @@ def main() -> int:
             action,
             "pinned-install-not-supported: selected release launcher lacks protocol marker "
             "'# Olympus pinned-install protocol: 1'.",
+            args.json,
+        )
+    if args.force and FORCE_UPDATE_MARKER not in launcher.splitlines():
+        return emit_error(
+            action,
+            "force-update-not-supported: selected release launcher lacks protocol marker "
+            "'# Olympus force-update protocol: 1'.",
             args.json,
         )
 
@@ -260,6 +279,8 @@ def main() -> int:
             ]
             if requested_version is not None:
                 command.append("--_pinned")
+            if args.force:
+                command.append("--force")
             if args.dry_run:
                 command.append("--dry-run")
             try:

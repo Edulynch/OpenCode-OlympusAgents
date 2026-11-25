@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$')]
-    [string]$Version = 'v0.12.9',
+    [string]$Version = 'v0.12.10',
     [ValidateSet('global')]
     [string]$Scope = 'global',
     [ValidateSet('opencode')]
@@ -11,6 +11,7 @@ param(
     [switch]$VerifyOnly,
     [switch]$Uninstall,
     [switch]$Update,
+    [switch]$Force,
     # Qualification-only source overrides. Source identity is always checked.
     [string]$SourceRoot,
     [string]$SourceArchive,
@@ -21,7 +22,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$ReleaseVersion = 'v0.12.9' # Must equal this installer's default and the release target tag.
+$ReleaseVersion = 'v0.12.10' # Must equal this installer's default and the release target tag.
 $owned = $null
 
 function Get-DeclaredReleaseVersion([string]$Source) {
@@ -44,13 +45,16 @@ function Get-DeclaredReleaseVersion([string]$Source) {
 }
 
 function Set-UpGlobalCli([string]$Source, [string]$Version, [string]$Action,
-                         [string]$InstallRoot, [string]$PathStorePath, [bool]$CompactUpdate = $false) {
+                         [string]$InstallRoot, [string]$PathStorePath, [bool]$CompactUpdate = $false,
+                         [bool]$Force = $false, [bool]$ValidateOnly = $false) {
     $cliInstaller = Join-Path $Source 'scripts/install-cli.ps1'
     if (-not (Test-Path -LiteralPath $cliInstaller -PathType Leaf)) { throw 'SOURCE_INVALID: Global CLI installer is missing.' }
     $cliArgs = @('-NoProfile', '-File', $cliInstaller, '-Action', $Action,
         '-Version', $Version, '-SourceRoot', $Source)
     if ($InstallRoot) { $cliArgs += @('-InstallRoot', $InstallRoot) }
     if ($PathStorePath) { $cliArgs += @('-PathStorePath', $PathStorePath) }
+    if ($Force) { $cliArgs += '-Force' }
+    if ($ValidateOnly) { $cliArgs += '-ValidateOnly' }
     $previousCompact = [Environment]::GetEnvironmentVariable('OLYMPUS_CLI_UPDATE_COMPACT', 'Process')
     try {
         [Environment]::SetEnvironmentVariable(
@@ -81,6 +85,10 @@ try {
     if ($Version -cne $Version.Trim()) { throw 'VERSION_INVALID: Whitespace is not allowed.' }
     if ($VerifyOnly -and $DryRun) { throw 'VERIFY_MODE_INVALID: -VerifyOnly and -DryRun cannot be combined.' }
     if ($VerifyOnly -and $Uninstall) { throw 'VERIFY_MODE_INVALID: -VerifyOnly and -Uninstall cannot be combined.' }
+    if ($Force -and ($Uninstall -or $DryRun -or $VerifyOnly)) {
+        throw 'UPDATE_FORCE_MODE_INVALID: -Force cannot be combined with uninstall, dry-run, or VerifyOnly.'
+    }
+    if ($Force) { $Update = $true }
     if ($Update -and ($Uninstall -or $DryRun -or $VerifyOnly)) {
         throw 'UPDATE_MODE_INVALID: -Update cannot be combined with uninstall, dry-run, or VerifyOnly.'
     }
@@ -138,13 +146,20 @@ try {
     if ($DryRun) { $globalArgs += '-DryRun' }
     if ($Uninstall) { $globalArgs += '-Uninstall' }
     if ($Update) { $globalArgs += '-Update' }
+    if ($Force) { $globalArgs += '-Force' }
+    if (-not $Uninstall -and -not $DryRun -and -not $VerifyOnly) {
+        Set-UpGlobalCli -Source $source -Version $resolvedVersion -Action 'install' `
+            -InstallRoot $CliInstallRoot -PathStorePath $CliPathStorePath `
+            -CompactUpdate ($Update -and $env:OLYMPUS_UPDATE_COMPACT -ceq '1') `
+            -Force $Force -ValidateOnly $true
+    }
     & $pwsh.Source @globalArgs
     if ($LASTEXITCODE -ne 0) { throw "GLOBAL_BOOTSTRAP_FAILED: global installer exited $LASTEXITCODE." }
     if (-not $DryRun -and -not $VerifyOnly) {
         $cliAction = if ($Uninstall) { 'uninstall' } else { 'install' }
         Set-UpGlobalCli -Source $source -Version $resolvedVersion -Action $cliAction `
             -InstallRoot $CliInstallRoot -PathStorePath $CliPathStorePath `
-            -CompactUpdate ($Update -and $env:OLYMPUS_UPDATE_COMPACT -ceq '1')
+            -CompactUpdate ($Update -and $env:OLYMPUS_UPDATE_COMPACT -ceq '1') -Force $Force
     }
     exit 0
 } catch {

@@ -11,13 +11,18 @@ from pathlib import Path
 from . import install_routing
 
 
-def update(source: Path, *, verbose: bool = False) -> int:
+def update(source: Path, *, verbose: bool = False, force: bool = False) -> int:
     if sys.platform.startswith("linux") and os.name == "posix":
         from . import cli
 
-        response, code = install_routing._run_linux_launcher(
-            source, "update", dry_run=False,
-        )
+        if force:
+            response, code = install_routing._run_linux_launcher(
+                source, "update", dry_run=False, force=True,
+            )
+        else:
+            response, code = install_routing._run_linux_launcher(
+                source, "update", dry_run=False,
+            )
         if verbose:
             cli.emit(response, False, verbose=True)
             return code
@@ -48,6 +53,8 @@ def update(source: Path, *, verbose: bool = False) -> int:
         executable, "-NoProfile", "-File", str(launcher),
         "-Action", "install", "-Update",
     ]
+    if force:
+        command.append("-Force")
     if verbose:
         command.append("-Verbose")
     environment = os.environ.copy()

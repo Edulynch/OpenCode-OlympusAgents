@@ -6,7 +6,9 @@ param(
     [string]$Version,
     [string]$SourceRoot,
     [string]$InstallRoot,
-    [string]$PathStorePath
+    [string]$PathStorePath,
+    [switch]$Force,
+    [switch]$ValidateOnly
 )
 
 Set-StrictMode -Version Latest
@@ -134,20 +136,136 @@ function Test-ManagedRelative([string]$Relative) {
            $value -match '^\.opencode/agents/[^/]+\.md$' -or
            $value -match '^\.opencode/plugins/olympus-activity/(activity\.ts|tui\.tsx)$' -or
            $value -ceq '.opencode/scripts/worktree-setup.ps1' -or
-           $value -ceq 'opencode.jsonc' -or
-           $script:CliGeneratedCommandFiles -ccontains $value))
+            $value -ceq 'opencode.jsonc' -or
+            $script:CliGeneratedCommandFiles -ccontains $value))
+}
+
+function Get-CliAccessControl([string]$Path) {
+    return [IO.FileSystemAclExtensions]::GetAccessControl(
+        [IO.FileInfo]::new($Path), [Security.AccessControl.AccessControlSections]::Access)
+}
+
+function Get-CliAccessSddl($AccessControl) {
+    return $AccessControl.GetSecurityDescriptorSddlForm(
+        [Security.AccessControl.AccessControlSections]::Access)
+}
+
+function New-CliAtomicStream([string]$Path, $AccessControl) {
+    try {
+        if ($null -eq $AccessControl) {
+            return [IO.FileStream]::new($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write,
+                [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough)
+        }
+        $rights = [Security.AccessControl.FileSystemRights]::WriteData -bor
+            [Security.AccessControl.FileSystemRights]::ReadPermissions -bor
+            [Security.AccessControl.FileSystemRights]::ChangePermissions
+        return [IO.FileSystemAclExtensions]::Create([IO.FileInfo]::new($Path),
+            [IO.FileMode]::CreateNew, $rights, [IO.FileShare]::None, 4096,
+            [IO.FileOptions]::WriteThrough, $AccessControl)
+    } catch {
+        Fail 'CLI_FILE_ACCESS_UNVERIFIABLE' "Cannot safely create staged file '$Path' with the destination access rules: $($_.Exception.Message)"
+    }
+}
+
+function Assert-CliStagedAccess($Stream, [string]$ExpectedSddl, [string]$Path) {
+    try {
+        $stagedAccess = [IO.FileSystemAclExtensions]::GetAccessControl($Stream)
+        if ((Get-CliAccessSddl $stagedAccess) -cne $ExpectedSddl) {
+            # Creation applies the source DACL before bytes exist; this handles
+            # descriptor control flags that FileSecurity.Create normalizes.
+            $stagedAccess.SetSecurityDescriptorSddlForm(
+                $ExpectedSddl, [Security.AccessControl.AccessControlSections]::Access)
+            [IO.FileSystemAclExtensions]::SetAccessControl($Stream, $stagedAccess)
+            $stagedAccess = [IO.FileSystemAclExtensions]::GetAccessControl($Stream)
+        }
+        if ((Get-CliAccessSddl $stagedAccess) -cne $ExpectedSddl) {
+            Fail 'CLI_FILE_ACCESS_UNVERIFIABLE' "The access rules cannot be retained for: $Path"
+        }
+    } catch {
+        if ($_.Exception.Message -match '^CLI_FILE_ACCESS_UNVERIFIABLE:') { throw }
+        Fail 'CLI_FILE_ACCESS_UNVERIFIABLE' "Cannot safely retain access rules for '$Path': $($_.Exception.Message)"
+    }
+}
+
+function Get-ByteArraySha256([byte[]]$Bytes) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash($Bytes))).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+}
+
+function Test-AtomicWriteReady([string]$Path) {
+    $full = Assert-SafeCliPath $Path 'Leaf'
+    $parent = Split-Path -Parent $full
+    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
+        Fail 'CLI_FILE_ACCESS_UNVERIFIABLE' "Atomic file parent is unavailable: $parent"
+    }
+    $existing = Get-ExistingCliItem $full
+    $access = if ($null -ne $existing) { Get-CliAccessControl $full } else { $null }
+    $expectedSddl = if ($null -ne $access) { Get-CliAccessSddl $access } else { $null }
+    $temporary = Join-Path $parent ('.olympus-preflight-' + [guid]::NewGuid().ToString('N') + '.tmp')
+    $stream = $null
+    try {
+        $stream = New-CliAtomicStream $temporary $access
+        if ($null -ne $access) {
+            Assert-CliStagedAccess $stream $expectedSddl $full
+        }
+    } catch {
+        if ($_.Exception.Message -match '^CLI_FILE_ACCESS_UNVERIFIABLE:') { throw }
+        Fail 'CLI_FILE_ACCESS_UNVERIFIABLE' "Cannot safely stage '$full': $($_.Exception.Message)"
+    } finally {
+        if ($null -ne $stream) { $stream.Dispose() }
+        if (Test-Path -LiteralPath $temporary) { [IO.File]::Delete($temporary) }
+    }
 }
 
 function Write-Atomic([string]$Path, [byte[]]$Bytes) {
-    $parent = Split-Path -Parent $Path
+    $full = Assert-SafeCliPath $Path 'Leaf'
+    $parent = Split-Path -Parent $full
     [IO.Directory]::CreateDirectory($parent) | Out-Null
     $temporary = Join-Path $parent ('.olympus-' + [guid]::NewGuid().ToString('N') + '.tmp')
+    $existing = Get-ExistingCliItem $full
+    $access = if ($null -ne $existing) { Get-CliAccessControl $full } else { $null }
+    $expectedSddl = if ($null -ne $access) { Get-CliAccessSddl $access } else { $null }
+    $originalHash = if ($null -ne $existing) { Get-FileSha256 $full } else { $null }
+    $attributes = if ($null -ne $existing) { $existing.Attributes } else { [IO.FileAttributes]::Normal }
+    $stream = $null
     try {
-        $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write,
-            [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough)
-        try { $stream.Write($Bytes, 0, $Bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
-        [IO.File]::Move($temporary, $Path, $true)
-    } finally { if (Test-Path -LiteralPath $temporary) { [IO.File]::Delete($temporary) } }
+        $stream = New-CliAtomicStream $temporary $access
+        if ($null -ne $access) {
+            Assert-CliStagedAccess $stream $expectedSddl $full
+        }
+        $stream.Write($Bytes, 0, $Bytes.Length)
+        $stream.Flush($true)
+        $stream.Dispose()
+        $stream = $null
+        if ($null -ne $existing) {
+            [void](Assert-SafeCliPath $full 'Leaf')
+            $current = Get-ExistingCliItem $full
+            if ($null -eq $current -or $current.PSIsContainer -or
+                (Get-CliAccessSddl (Get-CliAccessControl $full)) -cne $expectedSddl -or
+                (Get-FileSha256 $full) -cne $originalHash) {
+                Fail 'CLI_FILE_CHANGED_DURING_WRITE' "CLI file changed while it was staged: $full"
+            }
+            [IO.File]::SetAttributes($temporary, ($attributes -band (-bnot [IO.FileAttributes]::ReparsePoint)))
+            # ReplaceFile marks protected DACLs auto-inherited; same-directory
+            # rename preserves the staged security descriptor exactly.
+            [IO.File]::Move($temporary, $full, $true)
+        } else {
+            [void](Assert-SafeCliPath $full 'Leaf')
+            if ($null -ne (Get-ExistingCliItem $full)) {
+                Fail 'CLI_FILE_CHANGED_DURING_WRITE' "A file appeared while it was staged: $full"
+            }
+            [IO.File]::Move($temporary, $full)
+        }
+        $resultSddl = Get-CliAccessSddl (Get-CliAccessControl $full)
+        if (($null -ne $expectedSddl -and $resultSddl -cne $expectedSddl) -or
+            (Get-FileSha256 $full) -cne (Get-ByteArraySha256 $Bytes)) {
+            Fail 'CLI_FILE_RESULT_UNCONFIRMED' "Atomic file replacement did not preserve access rules or bytes: $full"
+        }
+    } finally {
+        if ($null -ne $stream) { $stream.Dispose() }
+        if (Test-Path -LiteralPath $temporary) { [IO.File]::Delete($temporary) }
+    }
 }
 
 function Get-PathValue {
@@ -278,6 +396,90 @@ function Get-SourceFiles([string]$Root) {
     return @($files)
 }
 
+function Get-SourceFileMap([string]$Root) {
+    $fullRoot = [IO.Path]::GetFullPath($Root)
+    $prefix = $fullRoot.TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
+    $files = @{}
+    foreach ($path in (Get-SourceFiles $fullRoot)) {
+        $relative = $path.Substring($prefix.Length).Replace('\','/')
+        $files[$relative] = $path
+    }
+    return $files
+}
+
+function Assert-ExactVersionInventory([string]$Path, $Manifest,
+    [System.Collections.IDictionary]$SourceFiles, [switch]$VerifyInstalledFiles) {
+    $properties = @($Manifest.PSObject.Properties | ForEach-Object Name)
+    if ($properties.Count -ne 3 -or
+        @('schema_version','version','files' | Where-Object { $_ -cnotin $properties }).Count -gt 0 -or
+        ($Manifest.schema_version -isnot [int] -and $Manifest.schema_version -isnot [long]) -or
+        $Manifest.schema_version -ne 1 -or $Manifest.files -isnot [System.Collections.IList] -or
+        [string]$Manifest.version -cne [IO.Path]::GetFileName($Path)) {
+        Fail 'CLI_VERSION_CONFLICT' "The CLI ownership marker is not a valid release receipt: $Path"
+    }
+    if (@($Manifest.files).Count -ne $SourceFiles.Count) {
+        Fail 'CLI_VERSION_CONFLICT' "The CLI ownership marker has an unexpected file inventory: $Path"
+    }
+    $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($entry in @($Manifest.files)) {
+        $entryProperties = @($entry.PSObject.Properties | ForEach-Object Name)
+        if ($null -eq $entry -or $entry.path -isnot [string] -or
+            $entryProperties.Count -ne 2 -or
+            @('path','sha256' | Where-Object { $_ -cnotin $entryProperties }).Count -gt 0) {
+            Fail 'CLI_VERSION_CONFLICT' 'The CLI ownership marker contains an incomplete file receipt.'
+        }
+        $relative = ([string]$entry.path).Replace('\','/')
+        if (-not (Test-ManagedRelative $relative) -or -not $seen.Add($relative) -or
+            -not $SourceFiles.Contains($relative) -or
+            [string]$entry.sha256 -notmatch '^(?i:[0-9a-f]{64})$') {
+            Fail 'CLI_VERSION_CONFLICT' 'The CLI ownership marker does not match the exact release file inventory.'
+        }
+        $destination = Join-Path $Path ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+        [void](Assert-SafeCliPath $destination 'Leaf')
+        if ($VerifyInstalledFiles -and
+            (-not (Test-Path -LiteralPath $destination -PathType Leaf) -or
+             (Get-FileSha256 $destination) -cne ([string]$entry.sha256).ToLowerInvariant())) {
+            Fail 'CLI_VERSION_CONFLICT' "A managed CLI release file does not match its receipt: $relative"
+        }
+    }
+    if ($seen.Count -ne $SourceFiles.Count) {
+        Fail 'CLI_VERSION_CONFLICT' "The CLI ownership marker is missing a release file: $Path"
+    }
+}
+
+function Get-InstalledOfficialWrapper([string]$ReleaseVersion) {
+    $releaseRoot = Join-Path $versionsRoot $ReleaseVersion
+    [void](Assert-SafeCliPath $releaseRoot 'Container')
+    if (-not (Test-Path -LiteralPath $releaseRoot -PathType Container)) {
+        Fail 'CLI_VERSION_CONFLICT' "The active CLI release is missing: $ReleaseVersion"
+    }
+    $manifest = Get-VersionManifest $releaseRoot
+    if ($null -eq $manifest -or [string]$manifest.version -cne $ReleaseVersion -or
+        (Get-ReleaseIdentity $releaseRoot) -cne $ReleaseVersion) {
+        Fail 'CLI_VERSION_CONFLICT' "The active CLI release receipt does not prove version $ReleaseVersion."
+    }
+    $entries = @($manifest.files | Where-Object { ([string]$_.path).Replace('\','/') -ceq 'scripts/olympus.cmd' })
+    if ($entries.Count -ne 1 -or [string]$entries[0].sha256 -notmatch '^(?i:[0-9a-f]{64})$') {
+        Fail 'CLI_VERSION_CONFLICT' 'The active CLI release receipt does not prove ownership of its official launcher.'
+    }
+    $path = Join-Path $releaseRoot 'scripts/olympus.cmd'
+    [void](Assert-SafeCliPath $path 'Leaf')
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
+        (Get-FileSha256 $path) -cne ([string]$entries[0].sha256).ToLowerInvariant()) {
+        Fail 'CLI_VERSION_CONFLICT' 'The active CLI release launcher does not match its ownership receipt.'
+    }
+    return [IO.File]::ReadAllText($path)
+}
+
+function Normalize-WindowsNewlines([string]$Text) {
+    return $Text.Replace("`r`n", "`n")
+}
+
+function Test-NewlineEquivalent([string]$Left, [string]$Right) {
+    return [string]::Equals((Normalize-WindowsNewlines $Left),
+        (Normalize-WindowsNewlines $Right), [StringComparison]::Ordinal)
+}
+
 function Get-VersionManifest([string]$Path) {
     $manifestPath = Join-Path $Path 'olympus-cli-manifest.json'
     if ($Action -eq 'uninstall') { [void](Assert-SafeCliPath $manifestPath) }
@@ -378,6 +580,8 @@ function Assert-SafeCliUninstallPaths([string]$VersionsRoot) {
 
 try {
     if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { Fail 'PLATFORM_UNQUALIFIED' 'The global Olympus CLI is currently qualified only on Windows.' }
+    if ($Force -and $Action -ne 'install') { Fail 'CLI_FORCE_MODE_INVALID' '-Force is available only for install/update.' }
+    if ($ValidateOnly -and $Action -ne 'install') { Fail 'CLI_VALIDATE_MODE_INVALID' '-ValidateOnly is available only for install.' }
     if (-not $InstallRoot) {
         if (-not $env:LOCALAPPDATA) { Fail 'CLI_PATH_INVALID' 'LOCALAPPDATA is unavailable; no global CLI path was changed.' }
         $InstallRoot = Join-Path $env:LOCALAPPDATA 'Programs/Olympus'
@@ -390,6 +594,7 @@ try {
         if (-not $PathStorePath.StartsWith($InstallRoot.TrimEnd('\','/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
             Fail 'CLI_TEST_PATH_STORE_INVALID' 'An isolated PATH store must be inside the selected CLI installation root.'
         }
+        [void](Assert-SafeCliPath $PathStorePath 'Leaf')
     }
     $bin = Join-Path $InstallRoot 'bin'
     $wrapper = Join-Path $bin 'olympus.cmd'
@@ -432,10 +637,17 @@ try {
     $sourceVersion = Get-ReleaseIdentity $source
     if (-not $Version) { $Version = $sourceVersion }
     if ($Version -cne $sourceVersion) { Fail 'SOURCE_VERSION_MISMATCH' "Requested $Version but source identifies as $sourceVersion." }
-    [IO.Directory]::CreateDirectory($InstallRoot) | Out-Null
+    $sourceFiles = @(Get-SourceFiles $source)
+    $sourcePrefix = $source.TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
+    [void](Assert-SafeCliPath $InstallRoot 'Container')
+    [void](Assert-SafeCliPath $versionsRoot 'Container')
+    [void](Assert-SafeCliPath $currentPath 'Leaf')
     $previous = if (Test-Path -LiteralPath $currentPath -PathType Leaf) { [IO.File]::ReadAllText($currentPath).Trim() } else { '' }
     if ($previous -and $previous -notmatch '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9][0-9]*))?$') {
         Fail 'CLI_VERSION_CONFLICT' 'The current CLI version marker is unknown; it was preserved.'
+    }
+    if ($previous -and (Compare-ReleaseTag $Version $previous) -lt 0 -and ($Force -or $ValidateOnly)) {
+        Fail 'CLI_NO_DOWNGRADE' "Refusing to select $Version below the installed CLI $previous."
     }
     if ($previous -and $previous -cne $Version -and (Compare-ReleaseTag $Version $previous) -lt 0) {
         Write-Output "OLYMPUS_CLI: NO_DOWNGRADE current=$previous requested=$Version"
@@ -444,14 +656,116 @@ try {
     }
 
     $versionPath = Join-Path $versionsRoot $Version
-    if (Test-Path -LiteralPath $versionPath) {
+    [void](Assert-SafeCliPath $versionPath 'Container')
+    $repairTargetVersion = $false
+    if (Test-Path -LiteralPath $versionPath -PathType Container) {
         $manifest = Get-VersionManifest $versionPath
         if ($null -eq $manifest -or [string]$manifest.version -cne $Version) { Fail 'CLI_VERSION_CONFLICT' "The version directory is not owned by Olympus: $versionPath" }
-        Assert-VersionFiles $versionPath $manifest
-    } else {
-        $sourceFiles = @(Get-SourceFiles $source)
-        $sourcePrefix = $source.TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
-        [IO.Directory]::CreateDirectory($versionsRoot) | Out-Null
+        if ($Force) {
+            $sourceFileMap = Get-SourceFileMap $source
+            Assert-ExactVersionInventory $versionPath $manifest $sourceFileMap
+            $repairTargetVersion = $true
+        } else {
+            Assert-VersionFiles $versionPath $manifest
+        }
+    } elseif (Test-Path -LiteralPath $versionPath) {
+        Fail 'CLI_VERSION_CONFLICT' "The version path is not an Olympus-owned directory: $versionPath"
+    } elseif ($Force -and $previous -ceq $Version) {
+        Fail 'CLI_VERSION_CONFLICT' "The current CLI release receipt is missing; refusing to reconstruct unproven managed files: $Version"
+    }
+
+    $sourceWrapper = Join-Path $source 'scripts/olympus.cmd'
+    if (-not (Test-Path -LiteralPath $sourceWrapper -PathType Leaf)) { Fail 'SOURCE_INVALID' 'The global CLI launcher is missing.' }
+    [void](Assert-SafeCliPath $wrapper 'Leaf')
+    $sourceWrapperText = [IO.File]::ReadAllText($sourceWrapper)
+    $replaceWrapper = $false
+    if (Test-Path -LiteralPath $wrapper -PathType Leaf) {
+        $existingWrapperText = [IO.File]::ReadAllText($wrapper)
+        if (-not (Test-NewlineEquivalent $existingWrapperText $sourceWrapperText)) {
+            if (-not $Force -or -not $previous) {
+                Fail 'CLI_LAUNCHER_CONFLICT' 'A different unreceipted olympus.cmd exists; it was preserved.'
+            }
+            $officialWrapper = Get-InstalledOfficialWrapper $previous
+            if (-not (Test-NewlineEquivalent $existingWrapperText $officialWrapper)) {
+                Fail 'CLI_LAUNCHER_CONFLICT' 'A different unreceipted olympus.cmd exists; it was preserved even under force.'
+            }
+            $replaceWrapper = $true
+        }
+    } elseif ($previous) {
+        [void](Get-InstalledOfficialWrapper $previous)
+    }
+    [void](Test-OwnsPathEntry $bin)
+    $pathOwnershipPath = Get-PathOwnershipPath
+    [void](Assert-SafeCliPath $pathOwnershipPath 'Leaf')
+    $ownsPath = Test-OwnsPathEntry $bin
+
+    if ($ValidateOnly) {
+        if ($env:OLYMPUS_CLI_UPDATE_COMPACT -cne '1') {
+            Write-Output 'OLYMPUS_CLI: VALIDATED launcher and CLI targets; no files or PATH entries changed.'
+        }
+        exit 0
+    }
+
+    [IO.Directory]::CreateDirectory($InstallRoot) | Out-Null
+    [IO.Directory]::CreateDirectory($versionsRoot) | Out-Null
+    if ($replaceWrapper -or -not (Test-Path -LiteralPath $wrapper -PathType Leaf)) {
+        [IO.Directory]::CreateDirectory($bin) | Out-Null
+    }
+    $repairWrites = [System.Collections.Generic.List[object]]::new()
+    $manifestChanged = $false
+    $repairManifestText = $null
+    if ($repairTargetVersion) {
+        $manifestByPath = @{}
+        foreach ($entry in @($manifest.files)) {
+            $manifestByPath[([string]$entry.path).Replace('\','/')] = $entry
+        }
+        foreach ($sourceFile in $sourceFiles) {
+            $relative = $sourceFile.Substring($sourcePrefix.Length).Replace('\','/')
+            $destination = Join-Path $versionPath ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+            $expectedHash = Get-FileSha256 $sourceFile
+            if ([string]$manifestByPath[$relative].sha256 -cne $expectedHash) {
+                $manifestByPath[$relative].sha256 = $expectedHash
+                $manifestChanged = $true
+            }
+            if (-not (Test-Path -LiteralPath $destination -PathType Leaf) -or
+                (Get-FileSha256 $destination) -cne $expectedHash) {
+                [void](Assert-SafeCliPath $destination 'Leaf')
+                $repairWrites.Add([pscustomobject]@{
+                    Path=$destination; Bytes=[IO.File]::ReadAllBytes($sourceFile)
+                })
+            }
+        }
+        if ($manifestChanged) {
+            $repairManifestText = ($manifest | ConvertTo-Json -Depth 10) + "`n"
+        }
+    }
+    $currentPathBytes = $Utf8NoBom.GetBytes($Version + "`n")
+    $writeTargets = [System.Collections.Generic.List[string]]::new()
+    $writeTargets.Add($currentPath)
+    foreach ($repairWrite in $repairWrites) { $writeTargets.Add([string]$repairWrite.Path) }
+    if ($manifestChanged) { $writeTargets.Add((Join-Path $versionPath 'olympus-cli-manifest.json')) }
+    if ($replaceWrapper -or -not (Test-Path -LiteralPath $wrapper -PathType Leaf)) {
+        $writeTargets.Add($wrapper)
+    }
+    $pathItems = @(([string](Get-PathValue) -split ';') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $willAddPath = @($pathItems | Where-Object {
+        [string]::Equals((Normalize-PathEntry $_), (Normalize-PathEntry $bin), [StringComparison]::OrdinalIgnoreCase)
+    }).Count -eq 0
+    if ($willAddPath -and $PathStorePath) { $writeTargets.Add($PathStorePath) }
+    if ($willAddPath -and -not $ownsPath) { $writeTargets.Add($pathOwnershipPath) }
+    foreach ($path in @($writeTargets | Sort-Object -Unique)) {
+        [void](Assert-SafeCliPath $path 'Leaf')
+        Test-AtomicWriteReady $path
+    }
+
+    foreach ($repairWrite in $repairWrites) {
+        Write-Atomic ([string]$repairWrite.Path) ([byte[]]$repairWrite.Bytes)
+    }
+    if ($manifestChanged) {
+        Write-Atomic (Join-Path $versionPath 'olympus-cli-manifest.json') $Utf8NoBom.GetBytes($repairManifestText)
+    }
+
+    if (-not $repairTargetVersion -and -not (Test-Path -LiteralPath $versionPath -PathType Container)) {
         $stage = Join-Path $versionsRoot ('.stage-' + [guid]::NewGuid().ToString('N'))
         try {
             [IO.Directory]::CreateDirectory($stage) | Out-Null
@@ -470,20 +784,29 @@ try {
         }
     }
 
-    $sourceWrapper = Join-Path $source 'scripts/olympus.cmd'
-    if (-not (Test-Path -LiteralPath $sourceWrapper -PathType Leaf)) { Fail 'SOURCE_INVALID' 'The global CLI launcher is missing.' }
     if (Test-Path -LiteralPath $wrapper -PathType Leaf) {
-        if ([IO.File]::ReadAllText($wrapper) -cne [IO.File]::ReadAllText($sourceWrapper)) { Fail 'CLI_LAUNCHER_CONFLICT' 'A different user-owned olympus.cmd already exists; it was preserved.' }
+        if ($replaceWrapper) { Write-Atomic $wrapper $Utf8NoBom.GetBytes($sourceWrapperText) }
     } else {
-        [IO.Directory]::CreateDirectory($bin) | Out-Null
-        [IO.File]::WriteAllText($wrapper, [IO.File]::ReadAllText($sourceWrapper), $Utf8NoBom)
+        Write-Atomic $wrapper $Utf8NoBom.GetBytes($sourceWrapperText)
     }
-    Write-Atomic $currentPath $Utf8NoBom.GetBytes($Version + "`n")
-    $ownsPath = Test-OwnsPathEntry $bin
+    Write-Atomic $currentPath $currentPathBytes
     $addedPath = Set-UserPathEntry $bin $true
     if ($addedPath -and -not $ownsPath) {
         Write-Atomic (Get-PathOwnershipPath) $Utf8NoBom.GetBytes($bin)
     }
+    $installedPointer = [IO.File]::ReadAllText($currentPath).Trim()
+    $installedManifest = Get-VersionManifest $versionPath
+    if ($installedPointer -cne $Version -or $null -eq $installedManifest -or
+        [string]$installedManifest.version -cne $Version) {
+        Fail 'CLI_RESULT_UNCONFIRMED' 'The CLI version marker and ownership receipt do not match the selected release.'
+    }
+    $sourceFileMap = Get-SourceFileMap $source
+    Assert-ExactVersionInventory $versionPath $installedManifest $sourceFileMap -VerifyInstalledFiles
+    if (-not (Test-Path -LiteralPath $wrapper -PathType Leaf) -or
+        -not (Test-NewlineEquivalent ([IO.File]::ReadAllText($wrapper)) $sourceWrapperText)) {
+        Fail 'CLI_RESULT_UNCONFIRMED' 'The installed CLI launcher does not match the selected release.'
+    }
+    [void](Test-OwnsPathEntry $bin)
     $result = if ($previous -and $previous -cne $Version) { "UPDATED from=$previous to=$Version" } elseif ($previous) { "READY version=$Version" } else { "INSTALLED version=$Version" }
     if ($env:OLYMPUS_CLI_UPDATE_COMPACT -cne '1') {
         Write-Output "OLYMPUS_CLI: $result root=$InstallRoot"

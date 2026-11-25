@@ -43,6 +43,21 @@ removing an old file by hand, verify that Olympus generated it. Generated
 files contain a parser-safe marker; **edit Core/adapter source, not generated
 outputs**.
 
+For detached candidate generation, `--output-root` relocates every managed
+output while `--root` (or the script checkout by default) remains the source:
+
+```powershell
+python -B scripts/render_harnesses.py render --harness opencode --output-root D:\staging\olympus-candidate
+python -B scripts/render_harnesses.py check --harness opencode --output-root D:\staging\olympus-candidate
+```
+
+Use an isolated, project-controlled staging directory that is not loaded by
+OpenCode. The option rejects overlapping roots and known symlink, reparse-point,
+and hardlink redirects, but path inspection cannot prove the directory is
+inactive or prevent concurrent replacement; keep it operator-owned. `check`
+remains read-only, and candidate files are not activated or installed.
+`--output-root` applies only to `render` and `check`, not to `kael`.
+
 ## Generated outputs
 
 | Adapter | Managed/generated outputs |

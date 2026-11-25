@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import stat
 import sys
 import tomllib
 from pathlib import Path
@@ -360,13 +362,103 @@ def rendered_kael(root: Path, max_children: int) -> str:
     return outputs[root / ".opencode" / "agents" / "kael.md"]
 
 
-def run(root: Path, action: str, selected: str) -> int:
-    output = outputs_for(root, selected)
-    capabilities = checked_sources(root)[2]
-    output[root / "docs" / "HARNESS-CAPABILITIES.md"] = capability_doc(capabilities)
+def _absolute_path(path: Path) -> Path:
+    return Path(os.path.abspath(path))
+
+
+def _is_within(path: Path, boundary: Path) -> bool:
+    path_text = os.path.normcase(os.path.abspath(path))
+    boundary_text = os.path.normcase(os.path.abspath(boundary))
+    try:
+        return os.path.commonpath((boundary_text, path_text)) == boundary_text
+    except ValueError:
+        return False
+
+
+def _paths_overlap(left: Path, right: Path) -> bool:
+    return _is_within(left, right) or _is_within(right, left)
+
+
+def _validate_output_path(path: Path, *, directory: bool, boundary: Path | None = None) -> None:
+    path = _absolute_path(path)
+    if boundary is not None and not _is_within(path, boundary):
+        raise RenderError(f"candidate output escapes --output-root: {path}")
+
+    components = [Path(path.anchor)]
+    current = components[0]
+    for part in path.parts[1:]:
+        current /= part
+        components.append(current)
+
+    for index, component in enumerate(components):
+        try:
+            metadata = component.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            raise RenderError(f"cannot inspect candidate output path {component}: {error}") from error
+
+        reparse_point = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+        if stat.S_ISLNK(metadata.st_mode) or getattr(metadata, "st_file_attributes", 0) & reparse_point:
+            raise RenderError(f"refusing candidate output through symlink or reparse point: {component}")
+
+        is_final = index == len(components) - 1
+        if not is_final or directory:
+            if not stat.S_ISDIR(metadata.st_mode):
+                raise RenderError(f"candidate output parent is not a directory: {component}")
+        elif not stat.S_ISREG(metadata.st_mode):
+            raise RenderError(f"candidate output is not a regular file: {component}")
+        elif metadata.st_nlink > 1:
+            raise RenderError(f"refusing hardlinked candidate output: {component}")
+
+
+def _candidate_output_paths(
+    source_root: Path, destination_root: Path, resolved_destination: Path, output: dict[Path, str]
+) -> dict[Path, str]:
+    candidate: dict[Path, str] = {}
+    for source_path, content in output.items():
+        try:
+            relative = source_path.relative_to(source_root)
+        except ValueError as error:
+            raise RenderError(f"managed output is outside source root: {source_path}") from error
+        if relative.is_absolute() or ".." in relative.parts:
+            raise RenderError(f"invalid managed output path: {source_path}")
+        path = destination_root / relative
+        _validate_output_path(path, directory=False, boundary=destination_root)
+        try:
+            resolved_path = path.resolve()
+        except OSError as error:
+            raise RenderError(f"cannot resolve candidate output path {path}: {error}") from error
+        if not _is_within(resolved_path, resolved_destination):
+            raise RenderError(f"candidate output escapes --output-root: {path}")
+        candidate[path] = content
+    return candidate
+
+
+def run(root: Path, action: str, selected: str, output_root: Path | None = None) -> int:
+    if output_root is None:
+        source_root = root
+        destination_root = root
+    else:
+        source_root = root.resolve()
+        destination_root = _absolute_path(output_root)
+        _validate_output_path(destination_root, directory=True)
+        try:
+            resolved_destination = destination_root.resolve()
+        except OSError as error:
+            raise RenderError(f"cannot resolve --output-root {destination_root}: {error}") from error
+        if _paths_overlap(source_root, resolved_destination):
+            raise RenderError("--output-root must not overlap the source root")
+
+    output = outputs_for(source_root, selected)
+    capabilities = checked_sources(source_root)[2]
+    output[source_root / "docs" / "HARNESS-CAPABILITIES.md"] = capability_doc(capabilities)
+    if output_root is not None:
+        output = _candidate_output_paths(source_root, destination_root, resolved_destination, output)
+
     changes = []
-    for path in sorted(output, key=lambda item: item.relative_to(root).as_posix().casefold()):
-        rel = path.relative_to(root).as_posix()
+    for path in sorted(output, key=lambda item: item.relative_to(destination_root).as_posix().casefold()):
+        rel = path.relative_to(destination_root).as_posix()
         expected = output[path]
         exists = path.is_file()
         actual = read_text(path) if exists else None
@@ -396,18 +488,22 @@ def main(argv: list[str] | None = None) -> int:
                         help="render managed output, check drift, or print a cap-specific Kael prompt")
     parser.add_argument("--harness", choices=("opencode",), default="opencode")
     parser.add_argument("--root", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--output-root", type=Path,
+                        help="use an isolated candidate destination for render/check")
     parser.add_argument("--max-children", type=int, choices=range(1, 9), help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     root = (args.root or Path(__file__).resolve().parents[1]).resolve()
     try:
         if args.action == "kael":
+            if args.output_root is not None:
+                parser.error("--output-root is only supported with render/check")
             if args.max_children is None:
                 parser.error("kael requires --max-children")
             if hasattr(sys.stdout, "reconfigure"):
                 sys.stdout.reconfigure(encoding="utf-8", newline="")
             sys.stdout.write(rendered_kael(root, args.max_children))
             return 0
-        return run(root, args.action, args.harness)
+        return run(root, args.action, args.harness, args.output_root)
     except RenderError as error:
         print(f"HARNESS_RENDER: ERROR: {error}", file=sys.stderr)
         return 2

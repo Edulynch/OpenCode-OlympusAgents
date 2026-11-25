@@ -340,7 +340,13 @@ class LinuxGlobalCli(unittest.TestCase):
         package_file.write_bytes(b"damaged package resource\n")
         package_file.chmod(0o444)
         missing_package_file = package / "olympus/doctor.py"
-        missing_package_file.unlink()
+        package_file_parent = missing_package_file.parent
+        package_file_parent_mode = stat.S_IMODE(package_file_parent.stat().st_mode)
+        try:
+            package_file_parent.chmod(package_file_parent_mode | stat.S_IWUSR)
+            missing_package_file.unlink()
+        finally:
+            package_file_parent.chmod(package_file_parent_mode)
 
         global_file = self.global_root / "agents/kael.md"
         global_file.write_bytes(b"damaged global resource\n")

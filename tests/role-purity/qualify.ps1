@@ -38,7 +38,7 @@ function Route($loop, [string]$key, [string]$role, [string]$path = 'src/probe.py
     if (-not $loop.Gate) { return 'NO_THALES' }
     if ($loop.Round -eq 'PENDING_OR_INDETERMINATE' -or $loop.Round -eq 'COMPLETION_UNCONFIRMED') { return 'PENDING' }
     if ($key -cin $loop.Seen -and -not $material) { return 'NO_PROGRESS' }
-    if ($loop.Round -ne 'REQUESTED' -or $role -notin @('veyra','orin','nox','vera') -or
+    if ($loop.Round -ne 'REQUESTED' -or $role -notin @('veyra','nox','vera') -or
         $path -cnotin $loop.AuthorizedPaths -or -not $bounded -or -not $relevant -or
         -not $loop.Dependencies -or -not $loop.PlaneAllowed -or $implementation) { return 'BLOCKED' }
     $loop.Seen += $key; $loop.Worker="worker-$($loop.WorkerCount + 1)"; $loop.WorkerParent='kael-root'
@@ -67,7 +67,7 @@ function Complete($loop) {
 try {
     $k=Text '.opencode/agents/kael.md'; $s=Text '.opencode/agents/thales.md'
     $v=Text '.opencode/agents/vera.md'; $d=Text 'docs/DEVELOPMENT.md'
-    $workers=@(@('veyra','orin','kovan','nox','vera') | ForEach-Object { Text ".opencode/agents/$_.md" })
+    $workers=@(@('veyra','kovan','nox','vera') | ForEach-Object { Text ".opencode/agents/$_.md" })
     Check RP1_ROLE_PURITY ($k -match 'DO YOUR ROLE' -and $s -match 'DO YOUR ROLE' -and $k -match 'do not silently do Veyra.s discovery')
     Check RP2_KAEL_TOPOLOGY ($k -match 'Kael launches the worker as its \*\*direct child\*\*' -and $d -match 'KAEL_MEDIATED')
     Check RP3_THALES_REQUEST ($s -match 'STATUS: EVIDENCE_REQUEST' -and $s -match 'EXPECTED_DISCRIMINATION' -and $k -match 'validate TARGET_ROLE')
@@ -86,7 +86,7 @@ try {
     Check RP16_MODEL_MAPPING ($k -match 'model: "openai/gpt-6.2-sol#high"' -and $s -match 'model: openai/gpt-6.2-sol#xhigh' -and
         @($workers | Where-Object { $_ -notmatch 'model: "openai/gpt-6-luna#max"' }).Count -eq 0)
     Check RP17_CONCURRENCY_UNCHANGED ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and
-        $k -match 'Four is a ceiling, never a target' -and $k -match 'NORMAL is cost/context-aware: adapt from zero to four children')
+        $k -match 'never a target' -and $k -match 'NORMAL is cost/context-aware: adapt from zero to four children')
     $allAgents = @($k,$s) + $workers
     Check RP18_NO_LUNA_FAST (($allAgents -join "`n") -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
     Check 'THALES_READ_ONLY' ((Denied $s 'shell') -and (Denied $s 'edit') -and (Denied $s 'subagent'))
@@ -106,7 +106,7 @@ try {
     Check RP13_NO_FALSE_FAILURE_EVIDENCE ($k -match 'missing parent\s+tool output is not FAILED evidence' -and $k -match 'Never re-consult Thales using\s+fabricated failure')
     Check RP14_NO_INDETERMINATE_RETRY ($k -match 'permission to\s+launch a replacement' -and $k -match 'No second worker is launched')
     Check RP17_THIRD_AUTO_DENIED ($k -match 'No third automatic consultation' -and
-        $k -match 'explicit user authorization' -and $k -match '`/power`, `/olympus\.ultra`, complexity')
+        $k -match 'explicit user authorization' -and $k -match '`/olympus\.ultra`, complexity')
     Check RP18_COMPLETION_OWNERSHIP ($k -match 'reasoner final result consumed' -and $k -match 'zero unresolved required work')
     Check RP19_MODEL_MAPPING ($k -match 'model: "openai/gpt-6.2-sol#high"' -and $s -match 'model: openai/gpt-6.2-sol#xhigh' -and @($workers | Where-Object { $_ -notmatch 'model: "openai/gpt-6-luna#max"' }).Count -eq 0)
     Check RP20_CONCURRENCY ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and
@@ -133,6 +133,7 @@ try {
     $out=New-Loop; $null=Consult $out 'thales-original' 'EVIDENCE_REQUEST'
     Check 'CASE_D_OUT_OF_SCOPE' ((Route $out 'outside' 'veyra' '../external') -eq 'BLOCKED' -and
         (Route $out 'implement' 'kovan') -eq 'BLOCKED' -and
+        (Route $out 'architecture' 'atlas') -eq 'BLOCKED' -and
         (Route $out 'fix' 'veyra' 'src/probe.py' $true $false $true $true) -eq 'BLOCKED' -and
         $out.WorkerCount -eq 0 -and $out.Round -eq 'REQUESTED')
     # A second focused request is possible on call 2. A final Thales answer

@@ -21,7 +21,7 @@ class Parser(argparse.ArgumentParser):
         raise CLIError(f"{message}. See olympus --help.", 2)
 
 
-_ROLE_NAMES = ("kael", "veyra", "orin", "atlas", "kovan", "argus", "nox", "vera",
+_ROLE_NAMES = ("kael", "veyra", "atlas", "kovan", "nox", "vera",
                "talos", "thales", "helios")
 
 
@@ -106,7 +106,7 @@ def parser() -> Parser:
     _set_help(models, models.description, "olympus models list --json")
     model_commands = models.add_subparsers(dest="action", required=True, parser_class=Parser)
     listing = model_commands.add_parser(
-        "list", help="list all eleven OpenCode role assignments", allow_abbrev=False,
+        "list", help="list all nine OpenCode role assignments", allow_abbrev=False,
         description="Read the canonical OpenCode role assignments without writing files.",
     )
     listing.add_argument("--json", action="store_true")

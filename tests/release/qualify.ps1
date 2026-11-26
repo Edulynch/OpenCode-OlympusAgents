@@ -208,8 +208,10 @@ function New-SourceArchive(
         foreach ($relative in @(
             'olympus/harnesses/opencode/commands/olympus.ultra.md',
             'olympus/harnesses/opencode/commands/olympus.performance.md',
+            'olympus/harnesses/opencode/commands/olympus.performance-ultra.md',
             '.opencode/commands/olympus.ultra.md',
-            '.opencode/commands/olympus.performance.md'
+            '.opencode/commands/olympus.performance.md',
+            '.opencode/commands/olympus.performance-ultra.md'
         )) {
             if ((Test-Path -LiteralPath (Join-Path $sourceRoot $relative) -PathType Leaf) -and $relative -notin $files) {
                 $files += $relative
@@ -471,15 +473,16 @@ try {
         $paths = @('opencode.jsonc', '.opencode/orchestrator-install.json',
             '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx',
             '.opencode/scripts/worktree-setup.ps1')
-        $paths += @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios' | ForEach-Object { ".opencode/agents/$_.md" })
+        $currentRoles = @('kael','veyra','kovan','nox','vera','thales','atlas','talos','helios')
+        $paths += @($currentRoles | ForEach-Object { ".opencode/agents/$_.md" })
         Check 'R2_CANDIDATE_ROSTER_FILES' (@($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path $target $_) -PathType Leaf) }).Count -eq 0 -and
             -not (Test-Path -LiteralPath (Join-Path $target '.opencode/agents/aegis.md')) -and
             -not (Test-Path -LiteralPath (Join-Path $target '.opencode/commands/maintain.md')))
         $manifestPath = Join-Path $target '.opencode/orchestrator-install.json'
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
         Check 'R2_CANDIDATE_MANIFEST_VERSION_AND_OWNERSHIP' ($manifest.schema_version -eq 1 -and
-            $manifest.installed_version -eq $script:CandidateVersion -and $manifest.managed_files.Count -eq 15 -and
-            @($manifest.managed_files | Where-Object path -match 'aegis|commands/maintain|agents/maintenance').Count -eq 0)
+            $manifest.installed_version -eq $script:CandidateVersion -and $manifest.managed_files.Count -eq 13 -and
+            @($manifest.managed_files | Where-Object path -match '^\.opencode/(commands/|agents/(?:orin|argus|aegis|maintenance)\.md$)').Count -eq 0)
 
         $betaVerify = Verify $target $candidateArchive $script:CandidateVersion
         Check 'R24_CANDIDATE_INSTALL_VERIFY_PASS' ($betaVerify.Code -eq 0 -and $betaVerify.Text -match "(?m)^OLYMPUS_VERIFY: $($script:CandidateRegex) PASS\s*$")
@@ -487,13 +490,14 @@ try {
         Push-Location $target
         try {
             $agents = (& opencode debug agents 2>&1 | Out-String) | ConvertFrom-Json -Depth 100
-            Check 'R3_EFFECTIVE_AGENTS' ($LASTEXITCODE -eq 0 -and @($agents | Where-Object { $_.id -in @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios') }).Count -eq 11 -and @($agents | Where-Object { $_.id -in @('maintenance','sorin','aegis') }).Count -eq 0)
+            Check 'R3_EFFECTIVE_AGENTS' ($LASTEXITCODE -eq 0 -and @($agents | Where-Object id -in $currentRoles).Count -eq 9 -and
+                @($agents | Where-Object id -in @('maintenance','sorin','aegis','orin','argus')).Count -eq 0)
             $plugins = (& opencode plugin list 2>&1 | Out-String)
             Check 'R9_HUD_DISCOVERY' ($LASTEXITCODE -eq 0 -and $plugins -match 'olympus-activity')
         } finally { Pop-Location }
         $expected = @{
-            kael=@('gpt-6.2-sol','high','primary'); thales=@('gpt-6.2-sol','xhigh','subagent'); atlas=@('gpt-6.2-sol','high','subagent'); argus=@('gpt-6.2-sol','high','subagent'); talos=@('gpt-6.2-sol','high','subagent'); helios=@('gpt-6.2-sol','high','subagent')
-            veyra=@('gpt-6-luna','max','subagent'); orin=@('gpt-6-luna','max','subagent'); kovan=@('gpt-6-luna','max','subagent')
+            kael=@('gpt-6.2-sol','high','primary'); thales=@('gpt-6.2-sol','xhigh','subagent'); atlas=@('gpt-6.2-sol','high','primary'); talos=@('gpt-6.2-sol','high','subagent'); helios=@('gpt-6.2-sol','high','subagent')
+            veyra=@('gpt-6-luna','max','subagent'); kovan=@('gpt-6-luna','max','subagent')
             nox=@('gpt-6-luna','max','subagent'); vera=@('gpt-6-luna','max','subagent')
         }
         foreach ($id in $expected.Keys) {
@@ -517,9 +521,12 @@ try {
     $n = @($agents | Where-Object id -eq nox)[0]
     $kael = @($agents | Where-Object id -eq kael)[0]
     $kaelChildren = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object resource)
-    $expectedChildren = @('veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios')
+    $expectedChildren = @('veyra','kovan','nox','vera','thales','talos','helios')
     Check 'R4_KAEL_CAN_ROUTE_NORMAL_SPECIALISTS' ($kaelChildren.Count -eq $expectedChildren.Count -and
         @($expectedChildren | Where-Object { $_ -notin $kaelChildren }).Count -eq 0)
+    $atlas = @($agents | Where-Object id -eq atlas)[0]
+    $atlasChildren = @($atlas.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object resource | Sort-Object)
+    Check 'R4_ATLAS_CAN_ROUTE_ONLY_ANALYSIS' (($atlasChildren -join ',') -ceq 'helios,talos,thales,veyra')
     function Perm($a, [string]$action, [string]$effect) {
         @($a.permissions | Where-Object { $_.action -eq $action -and $_.resource -eq '*' -and $_.effect -eq $effect }).Count -gt 0
     }
@@ -528,7 +535,7 @@ try {
     Check 'R11_NAMESPACED_PARALLEL_POLICY' ($kaelText -match 'MAX_ACTIVE_CHILDREN = 4' -and
         $kaelText -match 'minimum useful parallelism' -and
         $kaelText -match '/olympus\.ultra <prompt>' -and $kaelText -match '/olympus\.performance <prompt>' -and
-        $kaelText -match 'native parallel tool-call batch' -and
+        $kaelText -match '/olympus\.performance-ultra <prompt>' -and $kaelText -match 'there is no one-batch or wave' -and
         $kaelText -notmatch 'FAST is an explicit user-selected|fast-mode|long-mode|surgical-mode')
 
     # Prerelease identifiers are accepted end-to-end for current source archives.
@@ -821,7 +828,7 @@ try {
     $worktreeSetupHashMatches = ($worktreeSetupPresent -and $worktreeSetupEntry.Count -eq 1 -and
         $null -ne $worktreeHashProperty -and
         $worktreeHashProperty.Value -eq (Get-FileHash -LiteralPath $worktreeSetupPath -Algorithm SHA256).Hash.ToLowerInvariant())
-    $worktreeSetupPass = ($worktreeSetupPresent -and $currentManagedFiles.Count -eq 15 -and
+    $worktreeSetupPass = ($worktreeSetupPresent -and $currentManagedFiles.Count -eq 13 -and
         $worktreeSetupEntry.Count -eq 1 -and $worktreeSetupHashMatches)
     Check 'R2_CURRENT_WORKTREE_SETUP_INSTALLED_AND_OWNED' $worktreeSetupPass `
         ("installed_version=$($currentManifest.installed_version); helper_present=$worktreeSetupPresent; managed_count=$($currentManagedFiles.Count); helper_entries=$($worktreeSetupEntry.Count); hash_matches=$worktreeSetupHashMatches")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import stat
 import sys
@@ -115,6 +116,50 @@ class CandidateRendererTests(unittest.TestCase):
                 self.assert_source_outputs_absent()
                 self.assertEqual(before, self.snapshot(self.sandbox))
 
+    def test_prunes_only_stale_generated_headers_in_managed_namespaces(self):
+        destination = str(self.destination)
+        code, _, stderr = self.invoke("render", "--output-root", destination)
+        self.assertEqual(0, code, stderr)
+        marker = renderer.GENERATED
+        stale = {
+            ".opencode/agents/retired.md": (
+                f"---\n# {marker} Canonical Olympus role: olympus/roles/retired.md (Retired).\n---\n"
+            ),
+            ".opencode/commands/olympus.retired.md": f"---\ndescription: Retired\n---\n<!-- {marker} -->\n",
+            ".opencode/plugins/olympus-activity/retired.ts": f"// {marker}\n",
+            ".opencode/scripts/retired.ps1": f"# {marker}\n",
+        }
+        preserved = {
+            ".opencode/agents/custom.md": f"---\ndescription: Custom\n---\nNotes mention {marker}\n",
+            ".opencode/commands/olympus.custom.md": f"---\ndescription: Custom\n---\n<!-- {marker} (example) -->\n",
+            ".opencode/agents/nested/retired.md": stale[".opencode/agents/retired.md"],
+            ".opencode/plugins/custom/retired.ts": stale[".opencode/plugins/olympus-activity/retired.ts"],
+            "scripts/retired.ps1": stale[".opencode/scripts/retired.ps1"],
+        }
+        for relative, content in (stale | preserved).items():
+            target = self.destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+
+        before = self.snapshot(self.destination)
+        code, stdout, stderr = self.invoke("check", "--output-root", destination)
+        self.assertEqual(1, code, stderr)
+        self.assertEqual(set(stale), set(re.findall(r"^DRIFT obsolete: (.+)$", stdout, re.M)))
+        self.assertEqual(before, self.snapshot(self.destination))
+        code, stdout, stderr = self.invoke("render", "--output-root", destination)
+        self.assertEqual(0, code, stderr)
+        self.assertIn(f"pruned {len(stale)} obsolete output(s)", stdout)
+        after = self.snapshot(self.destination)
+        self.assertFalse(set(stale) & after.keys())
+        self.assertEqual({path: before[path] for path in preserved}, {path: after[path] for path in preserved})
+        code, stdout, stderr = self.invoke("render", "--output-root", destination)
+        self.assertEqual(0, code, stderr)
+        self.assertIn("wrote 0 changed output(s)", stdout)
+        self.assertIn("pruned 0 obsolete output(s)", stdout)
+        self.assertEqual(after, self.snapshot(self.destination))
+        self.assertEqual(0, self.invoke("check", "--output-root", destination)[0])
+        self.assert_source_outputs_absent()
+
     def test_symlinked_output_parent_is_rejected_before_writing(self):
         self.destination.mkdir()
         redirected = self.sandbox / "redirected"
@@ -132,6 +177,23 @@ class CandidateRendererTests(unittest.TestCase):
         self.assertEqual(before_redirect, self.snapshot(redirected))
         self.assertEqual([link], list(self.destination.iterdir()))
         self.assert_source_outputs_absent()
+
+    def test_pruning_does_not_follow_or_remove_unexpected_file_symlink(self):
+        sentinel = self.sandbox / "linked-sentinel.md"
+        sentinel.write_text(f"---\n# {renderer.GENERATED}\n---\n", encoding="utf-8")
+        target = self.destination / ".opencode/agents/custom-link.md"
+        target.parent.mkdir(parents=True)
+        try:
+            target.symlink_to(sentinel)
+        except (NotImplementedError, OSError) as error:
+            self.skipTest(f"file symlink creation unavailable: {error}")
+        before = sentinel.read_bytes()
+        for action in ("render", "check"):
+            code, stdout, stderr = self.invoke(action, "--output-root", str(self.destination))
+            self.assertEqual(0, code, stderr)
+            self.assertNotIn("custom-link", stdout)
+            self.assertTrue(target.is_symlink())
+            self.assertEqual(before, sentinel.read_bytes())
 
     def test_hardlinked_output_is_rejected_before_render_or_check(self):
         target = self.destination / ".opencode" / "agents" / "kael.md"

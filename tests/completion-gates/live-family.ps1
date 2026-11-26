@@ -247,7 +247,7 @@ if ($InspectSession) {
             Start-Sleep -Seconds $PollSeconds
         } while ($true)
         $sorin = @($terminal.GetEnumerator() | Where-Object { (Optional $_.Value.Info 'agent') -eq 'sorin' })
-        $workers = @($terminal.GetEnumerator() | Where-Object { (Optional $_.Value.Info 'agent') -in @('veyra','orin','nox','vera','kovan') })
+        $workers = @($terminal.GetEnumerator() | Where-Object { (Optional $_.Value.Info 'agent') -in @('veyra','nox','vera','kovan') })
         $lastRoot = if ($responses.Count) { TextOf $responses[-1] } else { '' }
         $ok = $complete -and $all.Count -eq $terminal.Count -and $lastRoot
         if ($InspectCase -eq 'A') {

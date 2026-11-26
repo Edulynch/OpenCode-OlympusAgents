@@ -276,12 +276,21 @@ class SliceA(unittest.TestCase):
     def downgrade_global_install_to_v010(self, manifest_path):
         root = manifest_path.parent.parent
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        legacy_commands = {"commands/olympus.ultra.md", "commands/olympus.performance.md"}
+        commands_added_since_v010 = {
+            "commands/olympus.ultra.md", "commands/olympus.performance.md",
+            "commands/olympus.performance-ultra.md",
+        }
         manifest["managed_files"] = [
-            item for item in manifest["managed_files"] if item["path"] not in legacy_commands
+            item for item in manifest["managed_files"] if item["path"] not in commands_added_since_v010
         ]
-        for relative in legacy_commands:
+        for relative in commands_added_since_v010:
             (root / relative).unlink()
+        # The older inventory still owned two roles that are no longer shipped.
+        for role in ("orin", "argus"):
+            relative = f"agents/{role}.md"
+            payload = f"Historical {role} fixture, not a current agent.\n".encode("utf-8")
+            (root / relative).write_bytes(payload)
+            manifest["managed_files"].append({"path": relative, "sha256": hashlib.sha256(payload).hexdigest()})
         manifest["installed_version"] = "v0.10.0"
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
         return manifest
@@ -2397,10 +2406,10 @@ test ! -e "{sentinel}"
         self.assertEqual("unverified", item["integrity"])
         self.assertEqual("synthetic-commit", item["installed_from_commit"])
         self.assertEqual(str(manifest.parent.parent), item["root"])
-        self.assertEqual(16, item["managed_files"])
+        self.assertEqual(15, item["managed_files"])
         self.assertEqual("not_performed", response["data"]["runtime_discovery"])
 
-    def test_slice_c7_v010_global_status_reports_legacy_but_doctor_and_apply_require_upgrade(self):
+    def test_slice_c7_v010_global_status_doctor_and_apply_refuse_historical_inventory(self):
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         for owned_guard, expected_count in ((True, 14), (False, 13)):
             with self.subTest(owned_guard=owned_guard):
@@ -2413,26 +2422,21 @@ test ! -e "{sentinel}"
                 self.assertEqual(expected_count, len(manifest["managed_files"]))
                 before = self.snapshot()
 
-                status = self.json_query("status", "--scope", "global", "--harness", "opencode")
-                self.assertEqual("ok", status["result"])
-                item = status["data"]["harnesses"]["opencode"]
-                self.assertEqual("v0.10.0", item["installed_version"])
-                self.assertEqual(expected_count, item["managed_files"])
-                self.assertEqual("unverified", item["integrity"])
-
                 for arguments in (
+                    ("status", "--scope", "global", "--harness", "opencode"),
                     ("doctor", "--scope", "global", "--harness", "opencode"),
                     ("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run"),
                 ):
                     with self.subTest(operation=arguments[0]):
                         response = self.json_query(*arguments, code=3)
                         self.assertEqual("blocked", response["result"])
-                        self.assertEqual("global_upgrade_required", response["issues"][0]["code"])
+                        self.assertEqual("unsupported_global_version", response["issues"][0]["code"])
+                        self.assertIn("v0.10.0", response["issues"][0]["message"])
                         if arguments[0] == "config":
                             self.assertEqual([], response["data"]["changes"])
                 self.assertEqual(before, self.snapshot(), "Legacy status, doctor, and apply must not write.")
 
-    def test_slice_c7_global_current_15_resource_user_config_is_preserved(self):
+    def test_slice_c7_global_current_user_config_is_preserved(self):
         manifest_path = self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         manifest_path = self.make_global_user_config_install()
@@ -2440,11 +2444,11 @@ test ! -e "{sentinel}"
         preview = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
         self.assertEqual("no_changes", preview["result"])
         self.assertEqual([], preview["data"]["changes"])
-        self.assertEqual(15, preview["data"]["harnesses"]["opencode"]["managed_files"])
+        self.assertEqual(14, preview["data"]["harnesses"]["opencode"]["managed_files"])
         self.assertEqual(user_config, (root / "opencode.json").read_bytes())
         self.assertTrue(manifest_path.is_file())
 
-    def test_slice_c7_global_15_resource_inventory_without_receipted_config_is_refused(self):
+    def test_slice_c7_global_inventory_without_receipted_config_is_refused(self):
         manifests = self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
@@ -2459,7 +2463,7 @@ test ! -e "{sentinel}"
         self.assertEqual(before, self.snapshot())
         self.assertFalse((root / "opencode.jsonc").exists())
 
-    def test_slice_c7_global_current_15_resource_unsafe_user_config_blocks_preview(self):
+    def test_slice_c7_global_current_unsafe_user_config_blocks_preview(self):
         self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         self.make_global_user_config_install()
@@ -2475,7 +2479,7 @@ test ! -e "{sentinel}"
         again = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
         self.assertEqual("global_external_guard_unsafe", again["issues"][0]["code"])
 
-    def test_slice_c7_global_current_15_resource_ambiguous_wildcards_do_not_bypass_ask(self):
+    def test_slice_c7_global_current_ambiguous_wildcards_do_not_bypass_ask(self):
         # V2 treats '**', '?*', '*/**', and '?:/**' as broad matches on paths.
         # A later ALLOW must not be certified as an ASK/DENY fallback.
         self.create_global_managed_install()
@@ -2533,7 +2537,7 @@ test ! -e "{sentinel}"
         self.assertEqual("safe_user_config", response["data"]["harnesses"]["opencode"]["external_guard"])
         self.assertEqual(safe_text, user_config.read_text(encoding="utf-8"))
 
-    def test_slice_c7_global_current_15_resource_safe_jsonc_is_preserved(self):
+    def test_slice_c7_global_current_safe_jsonc_is_preserved(self):
         # Comments, URLs in strings, and trailing commas are supported by V2.
         manifests = self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
@@ -2780,7 +2784,7 @@ test ! -e "{sentinel}"
         self.assertEqual(expected, (root / "agents/veyra.md").read_bytes())
         self.assertEqual(user_config, (root / "opencode.json").read_bytes())
         manifest = json.loads((root / "olympus/orchestrator-install.json").read_text(encoding="utf-8"))
-        self.assertEqual(15, len(manifest["managed_files"]))
+        self.assertEqual(14, len(manifest["managed_files"]))
         self.assertNotIn("opencode.json", {item["path"] for item in manifest["managed_files"]})
 
     def test_slice_c8_global_apply_blocks_a_pending_journal_before_lock_or_writes(self):
@@ -3579,7 +3583,7 @@ class SliceBModelEdit(unittest.TestCase):
             self.source, "sol", "openai/sol-next"
         )
         self.assertEqual(before, self.snapshot(), "Preview must be completely in memory")
-        self.assertEqual(["argus", "atlas", "helios", "kael", "talos", "thales"],
+        self.assertEqual(["atlas", "helios", "kael", "talos", "thales"],
                          candidate.preview["data"]["affected_roles"])
         self.assertEqual("openai/gpt-6.2-sol", candidate.preview["data"]["roles"][0]
                          ["models"]["opencode"]["old"])

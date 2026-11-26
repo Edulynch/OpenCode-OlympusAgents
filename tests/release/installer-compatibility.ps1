@@ -101,13 +101,11 @@ try {
     $results = @()
     $expectedOpenCodeAssets = @(
         'opencode.jsonc',
-        '.opencode/agents/argus.md',
         '.opencode/agents/atlas.md',
         '.opencode/agents/helios.md',
         '.opencode/agents/kael.md',
         '.opencode/agents/kovan.md',
         '.opencode/agents/nox.md',
-        '.opencode/agents/orin.md',
         '.opencode/agents/talos.md',
         '.opencode/agents/thales.md',
         '.opencode/agents/vera.md',
@@ -130,11 +128,12 @@ try {
     $renderOutput = (& $python -B $renderer render --harness opencode --root $source --output-root $packageRoot 2>&1 | Out-String)
     $renderExitCode = $LASTEXITCODE
     Check 'STAGED_PACKAGE_RENDER' ($renderExitCode -eq 0 -and
-        $renderOutput -match 'HARNESS_RENDER: PASS \(opencode; wrote 18 changed output\(s\), 0 unchanged\)')
+        $renderOutput -match 'HARNESS_RENDER: PASS \(opencode; wrote 17 changed output\(s\), 0 unchanged; pruned 0 obsolete output\(s\)\)')
 
     $expectedPackageGenerated = @($expectedOpenCodeAssets + @(
         '.opencode/commands/olympus.ultra.md',
         '.opencode/commands/olympus.performance.md',
+        '.opencode/commands/olympus.performance-ultra.md',
         'docs/HARNESS-CAPABILITIES.md'
     )) | Sort-Object
     $sourceGeneratedSnapshot = Get-SelectedFileSnapshot $source $expectedPackageGenerated
@@ -159,8 +158,8 @@ try {
     $packageInventory = @(Get-PackageInventory $packageRoot)
     $packagePaths = @($packageInventory | ForEach-Object Path)
     $packageEvidence = @($packageInventory | ForEach-Object { "$($_.Path) SHA256=$($_.Sha256)" }) -join "`n"
-    Check 'STAGED_PACKAGE_INVENTORY' ($expectedPackageGenerated.Count -eq 18 -and
-        $expectedPackagePaths.Count -eq 21 -and $packageInventory.Count -eq 21 -and
+    Check 'STAGED_PACKAGE_INVENTORY' ($expectedPackageGenerated.Count -eq 17 -and
+        $expectedPackagePaths.Count -eq 20 -and $packageInventory.Count -eq 20 -and
         [string]::Join("`n", [string[]]$packagePaths) -ceq
             [string]::Join("`n", [string[]]$expectedPackagePaths) -and
         @($packageInventory | Where-Object { $_.Sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0)
@@ -176,7 +175,7 @@ try {
     $checkedInventory = @(Get-PackageInventory $packageRoot)
     $checkedEvidence = @($checkedInventory | ForEach-Object { "$($_.Path) SHA256=$($_.Sha256)" }) -join "`n"
     Check 'STAGED_PACKAGE_RENDER_CHECK' ($checkExitCode -eq 0 -and
-        $checkOutput -match 'HARNESS_RENDER_CHECK: PASS \(opencode; 18 managed output\(s\); read-only\)' -and
+        $checkOutput -match 'HARNESS_RENDER_CHECK: PASS \(opencode; 17 managed output\(s\); read-only\)' -and
         $checkedEvidence -ceq $packageEvidence)
 
     $packageHashByPath = @{}
@@ -204,7 +203,7 @@ try {
         @($packageManifest.installed_harnesses).Count -eq 1 -and $packageManifest.installed_harnesses[0] -ceq 'opencode' -and
         $packageManifest.installed_version -ceq $script:CandidateVersion -and
         $packageManifest.installed_from_commit -ceq 'unknown' -and
-        $packageManifest.managed_files.Count -eq 15 -and
+        $packageManifest.managed_files.Count -eq 13 -and
         @($packageManifest.managed_files | Where-Object { [string]$_.sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0 -and
         [string]::Join("`n", [string[]]$packageManagedPaths) -ceq [string]::Join("`n", [string[]]$expectedOpenCodeAssets))
     $installedPackageHashesMatch = @(
@@ -221,12 +220,12 @@ try {
                 ([string]$manifestEntries[0].sha256).ToLowerInvariant() -ceq $installedHash
         }
     )
-    Check 'STAGED_PACKAGE_INSTALLED_HASHES' ($installedPackageHashesMatch.Count -eq 15 -and
+    Check 'STAGED_PACKAGE_INSTALLED_HASHES' ($installedPackageHashesMatch.Count -eq 13 -and
         @($installedPackageHashesMatch | Where-Object { -not $_ }).Count -eq 0)
     $consumedPackageInventory = @(Get-PackageInventory $packageRoot)
     $consumedPackageEvidence = @($consumedPackageInventory | ForEach-Object { "$($_.Path) SHA256=$($_.Sha256)" }) -join "`n"
     Check 'STAGED_PACKAGE_CONSUMPTION_READ_ONLY' ($consumedPackageEvidence -ceq $packageEvidence)
-    Write-Output 'STAGED_PACKAGE_CASE: PASS (18 generated + 3 support files; isolated mocked bootstrap; package unchanged)'
+    Write-Output 'STAGED_PACKAGE_CASE: PASS (17 generated + 3 support files; isolated mocked bootstrap; package unchanged)'
 
     $archiveContainer = Join-Path $run 'offline-archive-source'
     $archiveRoot = Join-Path $archiveContainer ('OpenCode-OlympusAgents-' + $script:CandidateVersion)
@@ -254,7 +253,7 @@ try {
         --output-root $expectedArchiveStage 2>&1 | Out-String)
     $expectedArchiveRenderCode = $LASTEXITCODE
     Check 'ARCHIVE_CANARY_EXPECTED_RENDER' ($expectedArchiveRenderCode -eq 0 -and
-        $expectedArchiveRender -match 'HARNESS_RENDER: PASS \(opencode; wrote 18 changed output\(s\), 0 unchanged\)')
+        $expectedArchiveRender -match 'HARNESS_RENDER: PASS \(opencode; wrote 17 changed output\(s\), 0 unchanged; pruned 0 obsolete output\(s\)\)')
     $expectedArchiveKovan = Join-Path $expectedArchiveStage '.opencode/agents/kovan.md'
     $expectedArchiveKovanBytes = [IO.File]::ReadAllBytes($expectedArchiveKovan)
     $expectedArchiveKovanHash = (Get-FileHash -LiteralPath $expectedArchiveKovan -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -316,7 +315,7 @@ try {
         $cliKovanPath = Join-Path $archiveCliRoot ('versions/' + $script:CandidateVersion + '/.opencode/agents/kovan.md')
         $cliManifestPath = Join-Path $archiveCliRoot ('versions/' + $script:CandidateVersion + '/olympus-cli-manifest.json')
         Check ($hostEntry.Id + '_ARCHIVE_INSTALL_RENDERED_CANARY') ($archiveInstallCode -eq 0 -and
-            $archiveInstall -match 'OLYMPUS_SOURCE_RENDER: PASS \(18 generated files; isolated stage checked read-only before install\)' -and
+            $archiveInstall -match 'OLYMPUS_SOURCE_RENDER: PASS \(17 generated files; isolated stage checked read-only before install\)' -and
             (Test-Path -LiteralPath $globalManifestPath -PathType Leaf) -and
             (Test-Path -LiteralPath $cliManifestPath -PathType Leaf))
         $globalManifest = Get-Content -LiteralPath $globalManifestPath -Raw | ConvertFrom-Json

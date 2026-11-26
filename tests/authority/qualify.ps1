@@ -1718,17 +1718,50 @@ try {
     Check 'AUTH10B_EXPLICIT_PROHIBITION_OVERRIDES_NATIVE_ASK' ((Native-Decision $nativeRules 'edit' $pluginResource $true) -eq 'DENY' -and
         -not (Write-Decision 'DENY' 'APPROVE_ONCE') -and $kael -match '(?s)Explicit user prohibitions.*?override every other outcome')
 
-    $workerPaths = @($expectedOlympusAgentIds | Where-Object { $_ -ne 'kael' } |
-        ForEach-Object { '.opencode/agents/' + $_ + '.md' })
-    $workerTexts = @($workerPaths | ForEach-Object { Text $_ })
-    $directAskBlocked = @($workerPaths | Where-Object { $file = Text $_; $file -notmatch '(?s)action: question\s+resource: "?\*"?\s+effect: deny' }).Count -eq 0 -and
-        @($workerTexts | Where-Object { $_ -notmatch 'Never ask the user' }).Count -eq 0
+    $specialists = @('veyra','kovan','nox','vera','helios','talos','thales')
+    $atlas = Text '.opencode/agents/atlas.md'
+    $workerTexts = @($specialists | ForEach-Object { Text ".opencode/agents/$_.md" })
+    $directAskBlocked = @($workerTexts | Where-Object {
+        (Native-Decision (Read-NativeRules $_ $config.permissions) 'question' '*') -ne 'DENY' -or
+        $_ -notmatch 'Never ask the user'
+    }).Count -eq 0
     Check 'AUTH10_CHILD_DIRECT_QUESTION_DENIED' $directAskBlocked
 
-    $childSelfRoutes = @($workerPaths | Where-Object { $file = Text $_; $file -notmatch '(?s)action: subagent\s+resource: "?\*"?\s+effect: deny' }).Count
+    $agentsToProbe = @($expectedOlympusAgentIds) + @($retiredOlympusAgentIds) + @('build','general','other-writer')
+    $childSelfRoutes = @(foreach ($worker in $workerTexts) {
+        $rules = Read-NativeRules $worker $config.permissions
+        if ($worker -notmatch '(?m)^mode: subagent\r?$' -or
+            @(Get-ExactRuleIndices $rules 'subagent' '*' 'deny').Count -eq 0) { 'missing child deny' }
+        foreach ($id in $agentsToProbe) {
+            if ((Native-Decision $rules 'subagent' $id) -ne 'DENY') { $id }
+        }
+    }).Count
     Check 'AUTH11_CHILD_SELF_ESCALATION_DENIED' ($childSelfRoutes -eq 0 -and
         @($workerTexts | Where-Object { $_ -notmatch 'never (?:ask the user, grant|grant)\s+or infer your own authority' }).Count -eq 0 -and
         $kael -match 'Kael''s seven child IDs are veyra, kovan, nox, vera, helios, talos, and thales\. Atlas is a separate primary, not a Kael child')
+
+    foreach ($primary in @(
+        @{ Id='KAEL'; Text=$kael; Children=$specialists },
+        @{ Id='ATLAS'; Text=$atlas; Children=@('veyra','helios','talos','thales') }
+    )) {
+        $rules = Read-NativeRules $primary.Text $config.permissions
+        $ownRoutes = @(Read-NativeRules $primary.Text @() | Where-Object { Matches-Glob $_.action 'subagent' })
+        $names = @($ownRoutes | Where-Object effect -eq 'allow' | ForEach-Object resource)
+        $decisions = @(foreach ($id in $agentsToProbe) {
+            $expected = if ($id -cin $primary.Children) { 'ALLOW' } else { 'DENY' }
+            if ((Native-Decision $rules 'subagent' $id) -cne $expected) { $id }
+        })
+        Check ("AUTH11_{0}_EXACT_PRIMARY_ROUTES" -f $primary.Id) (
+            $primary.Text -match '(?m)^mode: primary\r?$' -and
+            $ownRoutes.Count -eq (1 + $primary.Children.Count) -and
+            $ownRoutes[0].resource -ceq '*' -and $ownRoutes[0].effect -ceq 'deny' -and
+            $names.Count -eq $primary.Children.Count -and
+            @(Compare-Object $primary.Children $names -CaseSensitive).Count -eq 0 -and
+            $decisions.Count -eq 0)
+    }
+    Check 'AUTH11_RETIRED_ROLES_ABSENT' (@($retiredOlympusAgentIds | Where-Object {
+        Test-Path -LiteralPath (Join-Path $root ".opencode/agents/$_.md")
+    }).Count -eq 0)
 
     $needs = @(
         [pscustomobject]@{ root=$rootPath; operation='WRITE_SCOPE'; scope='src/one/**' },
@@ -1909,7 +1942,8 @@ try {
         $integrationRouteSource -match 'AUTHORITY_INTEGRATION_CONTEXT: PASS' -and
         $integrationRouteSource -notmatch 'AUTHORITY_PLUGIN_ACTIVATION|Start-Sleep|while\s*\(' -and
         $normalizedQualificationDocs -match 'a 200 may arrive before plugin activation completes.*?not a readiness signal.*?bounded internal wait.*?no polling loop or arbitrary sleep' -and
-        $normalizedQualificationDocs -match '`AUTH14_OPENCODE_EFFECTIVE_RULES PASS`.*?all 9 Olympus IDs exactly once.*?effective DENY for all 54 checks.*?did not establish plugin activation/readiness'
+        # Keep the historical runtime receipt tied to the roster it actually exercised.
+        $normalizedQualificationDocs -match '`AUTH14_OPENCODE_EFFECTIVE_RULES PASS`.*?all 11 Olympus IDs exactly once.*?effective DENY for all 66 checks.*?did not establish plugin activation/readiness'
     )
     $badPermissionProbe = Inspect-EffectiveRules 0 '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"deny"}]}]'
     Check 'AUTH14_SINGLE_KOVAN_RULE_MISMATCH_FAILS' (-not $badPermissionProbe.passed -and

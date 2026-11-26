@@ -933,12 +933,13 @@ subprocess.run = _run
         -not (Test-Path -LiteralPath (Join-Path $packagedSource 'CODEX.md'))
     )
     $packagedCommandDirectory = Join-Path $packagedSource '.opencode/commands'
-    $packagedCommands = if (Test-Path -LiteralPath $packagedCommandDirectory -PathType Container) {
+    $packagedCommands = @(if (Test-Path -LiteralPath $packagedCommandDirectory -PathType Container) {
         @(Get-ChildItem -LiteralPath $packagedCommandDirectory -File | ForEach-Object { $_.Name })
-    } else { @() }
-    $packagedCommandNames = ($packagedCommands | Sort-Object) -join '|'
+    })
+    $expectedCommands = @('olympus.performance-ultra.md','olympus.performance.md','olympus.ultra.md')
     Assert 'PACKAGED_ONLY_REQUIRED_GLOBAL_COMMANDS' (
-        $packagedCommandNames -ceq 'olympus.performance.md|olympus.ultra.md'
+        $packagedCommands.Count -eq $expectedCommands.Count -and
+        @(Compare-Object $expectedCommands $packagedCommands -CaseSensitive).Count -eq 0
     )
     $persistedPath = [IO.File]::ReadAllText($pathStore)
     Assert 'PATH_STORE_ISOLATED' ($persistedPath -ceq [IO.Path]::GetFullPath($bin))

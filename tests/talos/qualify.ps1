@@ -3,7 +3,7 @@ param([ValidateSet('Both','Offline','Runtime')][string]$QualificationSlice = 'Bo
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$run = Join-Path (Join-Path $env:LOCALAPPDATA 'Temp/opencode') ('talos-qualification-' + [guid]::NewGuid().ToString('N'))
+$run = Join-Path (Join-Path ([IO.Path]::GetTempPath()) 'opencode') ('talos-qualification-' + [guid]::NewGuid().ToString('N'))
 $script:CollectOfflineContracts = $QualificationSlice -eq 'Offline'
 $script:OfflineContractFailures = [Collections.Generic.List[string]]::new()
 function Check([string]$id, [bool]$ok) {
@@ -59,7 +59,7 @@ function Simulate([string]$case, [string]$worker = 'TERMINAL') {
     }
     [pscustomobject]@{ Status=$status; Sessions=[int]$eligible; Consultations=$calls; WorkerParent=if ($eligible) { 'kael' } else { '' }; SessionID=if ($eligible) { 'talos-1' } else { '' }; AuditExpanded=$false; Replacement=$false }
 }
-$expected = @{ kael='gpt-6.2-sol#high'; atlas='gpt-6.2-sol#high'; argus='gpt-6.2-sol#high'; talos='gpt-6.2-sol#high'; helios='gpt-6.2-sol#high'; thales='gpt-6.2-sol#xhigh'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
+$expected = @{ kael='gpt-6.2-sol#high'; atlas='gpt-6.2-sol#high'; talos='gpt-6.2-sol#high'; helios='gpt-6.2-sol#high'; thales='gpt-6.2-sol#xhigh'; veyra='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
     if ($QualificationSlice -ne 'Runtime') {
@@ -72,7 +72,8 @@ try {
         $b.Contains('$OpenCodeGenerated = Get-GeneratedHarnessOutputs ''opencode''') -and
         $b.Contains('$OpenCodeManaged = @($OpenCodeGenerated.Keys | Sort-Object)'))
     Check TA2 ($t -match 'model: openai/gpt-6.2-sol#high')
-    Check TA3 ($k -match '(?s)action: subagent\s+resource: talos\s+effect: allow' -and $k -match 'argus, talos, and helios are valid child role IDs')
+    Check TA3 ($k -match '(?s)action: subagent\s+resource: talos\s+effect: allow' -and
+        $k -match 'Kael''s seven child IDs are veyra, kovan, nox, vera, helios, talos, and thales')
     foreach ($pair in @(@('TA4','shell'),@('TA5','edit'),@('TA6','subagent'))) { Check $pair[0] ($t -match ('(?s)action: ' + $pair[1] + '\s+resource: "\*"\s+effect: deny')) }
     Check TA7 (@('read','glob','grep','list','lsp' | Where-Object { $t -notmatch ('(?s)action: ' + $_ + '\s+resource: "\*"\s+effect: deny') }).Count -eq 0)
     Check TA8 ($k -match '## Security Routing Gate' -and $k -match 'TRUST_BOUNDARY_UNCLEAR' -and $k -match 'EXPLOITABILITY_UNCLEAR' -and $k -match 'FIX_BOUNDARY_AMBIGUOUS' -and $t -match 'strongly evidenced material security/trust/authorization boundary defect' -and $t -match 'no additional unanswered security-specific question')
@@ -85,14 +86,16 @@ try {
     Check CASE_OPERATIONAL_SECURITY_TOOL_FAILURE_NOT_AUTOMATIC (@($routingSources | Where-Object { $_ -notmatch '(?s)Trivy/Semgrep execution\s+failure.*(NOT TALOS BY DEFAULT|does NOT activate|does not activate)' }).Count -eq 0)
     Check CASE_NON_SECURITY_FUNCTIONAL_BUG_TALOS_ZERO (@($routingSources | Where-Object { $_ -notmatch '(?s)(deterministic non-security (functional )?(defect|bug)|non-security functional defects?).*TALOS COUNT = 0' }).Count -eq 0)
     Check CASE_UNCONFIRMED_AFFECTED_VERSION_NOT_AUTOMATIC (@($routingSources | Where-Object { $_ -notmatch '(?s)(unconfirmed affected-version/vulnerability relevance|unconfirmed affected-version/vulnerability).*?(insufficient|does NOT activate|does not activate)' }).Count -eq 0)
-    Check TA9 ($k -match 'FUNCTIONAL BEHAVIOR DEFECT' -and $t -match 'TALOS COUNT = 0')
+    Check TA9 ($k -match 'A deterministic non-security functional defect has TALOS COUNT = 0' -and $t -match 'TALOS COUNT = 0')
     Check TA10 ($k -match 'NOT TALOS BY DEFAULT' -and $t -match 'OPERATIONAL_ISSUE')
     Check TA11 ($k -match 'GAP / FEATURE without violated contract' -and $t -match 'GAP / FEATURE not promised')
     Check TA12 ($k -match 'OPTIMIZATION, not Talos' -and $t -match 'OPTIMIZATION of correct behavior')
-    Check TA13 ($k -match 'Argus diagnoses FUNCTIONAL BEHAVIOR DEFECT; Talos diagnoses SECURITY BOUNDARY DEFECT' -and $t -match 'Kael chooses the dominant classification')
+    Check TA13 ($k -match 'Atlas handles bounded non-security functional-defect hypotheses; Talos handles security-boundary defects' -and $t -match 'Kael chooses the dominant classification')
     Check TA14 ($k -match 'Vera independently reviews' -and $t -match 'never replaces Vera')
     Check TA15 ($k -match 'existing Diagnostic Gate after Talos' -and $t -match 'Talos never invokes Thales|Talos does not invoke Thales')
-    Check TA16 ($k -match 'Atlas orders a multi-step fix' -and $t -match 'Kovan implements')
+    Check TA16 ($k -match 'Atlas provides the bounded non-security analysis and planning described above; Kovan implements' -and
+        $t -match 'Atlas owns bounded execution planning; Kovan implements' -and
+        $t -match 'any needed runtime/test evidence goes in a handoff to Kael, not an Atlas\s+delegation to Nox')
     Check TA17 ($k -match 'Veyra owns repository/policy/configuration evidence; Nox owns runtime/test evidence' -and $t -match 'Veyra owns repository/policy/configuration evidence')
     Check TA18 (@('STATUS: SECURITY_DIAGNOSIS','CLASSIFICATION: SECURITY_BUG','SECURITY_BOUNDARY:','OBSERVED:','EXPECTED:','CAUSE:','EVIDENCE:','ATTACK_PREREQUISITES:','IMPACT:','FIX_DIRECTION:','VALIDATION:','CONFIDENCE:','STOP_CONDITIONS:' | Where-Object { -not $t.Contains($_) }).Count -eq 0)
     Check TA19 (@('STATUS: EVIDENCE_REQUEST','TARGET_ROLE: veyra | nox','QUESTION:','SCOPE:','WHY_NEEDED:','EXPECTED_DISCRIMINATION:' | Where-Object { -not $t.Contains($_) }).Count -eq 0)
@@ -107,7 +110,7 @@ try {
     Check TA28 ($k -match 'MISSING OUTPUT != WORKER FAILURE' -and $k -match 'never blind retry, replace worker' -and $t -match 'COMPLETION_UNCONFIRMED')
     Check TA31 ($k -match 'SECURITY_DIAGNOSIS complete is diagnosis only' -and $t -match 'Kael alone routes normal workers')
     Check TA32 (@($expected.Keys | Where-Object { ([IO.File]::ReadAllText((Join-Path $source ".opencode/agents/$_.md"))) -notmatch ('(?m)^model: "?openai/' + [regex]::Escape($expected[$_]) + '"?\r?$') }).Count -eq 0)
-    Check TA33 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'Four is a ceiling, never a target')
+    Check TA33 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'never a target')
     Check TA34 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and
         $b.Contains("'.opencode/agents/sorin.md'") -and
         $b.Contains('foreach ($retiredPath in $RetiredOpenCodeResources)') -and

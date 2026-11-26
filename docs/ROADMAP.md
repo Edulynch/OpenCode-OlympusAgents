@@ -73,34 +73,32 @@ pilot was started here.
 - **Role purity.** Orchestrators/reasoners own decisions and questions: reason, compare evidence, decide, request focused follow-up, re-consult specialists, synthesize. They do not implement, fix, run tests, or take over another specialist's domain merely to avoid a handoff.
 - **Iterative evidence.** Delegation is not one-shot. Re-consult the same specialist for new evidence, clarification, conflict resolution, hypothesis testing, narrower investigation, or validation of a newly discovered fact; prefer focused follow-up to restarting discovery from zero.
 - **Orchestrator ownership.** Kael alone routes normal workers. Specialized reasoners own domain questions, hypotheses, and decisions; they request evidence through Kael and do not execute discovery, fixes or tests themselves.
-- **Acyclic orchestration.** All workers/reasoners are direct children of Kael; no worker or reasoner spawns another agent. The same reasoner session can be re-consulted after Kael collects new evidence; no reasoner-to-Kael child call or reasoner nesting.
+- **Acyclic orchestration.** Specialists are direct children of the current primary: Kael routes execution; Atlas delegates read-only evidence or reasoning to Veyra, Helios, Talos, or Thales. No specialist spawns another agent. A primary may re-consult the original reasoner after collecting new evidence within its own authority.
 - **Completion ownership.** An orchestrator that launches child/descendant work owns it until required descendants are terminal, collected, and validated. A progress response or parent/root idle state is not family completion; the root entrypoint retains final user-facing completion authority.
 - **No-progress rule.** Another diagnostic round needs materially new evidence, a discriminating experiment, a new viable hypothesis, or meaningful scope narrowing. Repeating reasoning over unchanged evidence is not progress.
 - **Containment before heroics.** For third-party, build, deployment, tooling, or test-infrastructure failures, prefer a safe local unblock when appropriate over automatically changing upstream source or spending disproportionate time proving root cause.
 
 ## Target conceptual roster
 
-The table captures shipped roles and current in-validation identities. Model entries describe the corresponding target/current candidate configuration, not an authorization to change other roles. Future role or command changes still require separate validation.
+The table describes the current nine-role candidate. Orin and Argus are retired; the phase history below records earlier releases, not current dispatch rules. Native behavior of the new topology requires separate qualification.
 
 | Agent | Target model | Responsibility | Status |
 |---|---|---|---|
-| `kael` — Kael — The Master | GPT-6.1 Sol High | Master orchestration | SHIPPED; evolving |
+| `kael` — Kael — The Master | GPT-6.2 Sol High | Execution orchestration and acceptance | Primary |
 | `veyra` — Veyra — The Explorer | GPT-6 Luna Max | Research/discovery | SHIPPED; evolving |
-| `orin` — Orin — The Architect | GPT-6 Luna Max | Architecture/boundaries | SHIPPED; evolving |
-| `atlas` — Atlas — The Planner | GPT-6.1 Sol High | Execution planning | SHIPPED; optional, Planning Gate only |
+| `atlas` — Atlas — The Planner | GPT-6.2 Sol High | Read-only architecture, functional analysis, and planning handoff | Primary |
 | `kovan` — Kovan — The Coder | GPT-6 Luna Max | Implementation | SHIPPED; evolving |
-| `argus` — Argus — The Bug Hunter | GPT-6.1 Sol High | Functional defect reasoning | SHIPPED; optional, Functional Bug Routing Gate only |
 | `nox` — Nox — The Tester | GPT-6 Luna Max | Testing/runtime evidence | SHIPPED; evolving |
 | `vera` — Vera — The Judge | GPT-6 Luna Max | Independent review | SHIPPED; evolving |
-| `talos` — Talos — The Sentinel | GPT-6.1 Sol High | Security defect and trust-boundary reasoning | SHIPPED; required for established/strongly evidenced material security/trust/authorization boundary defects under diagnosis/classification; no extra unanswered question required |
-| `thales` — Thales — The Sage | GPT-6.1 Sol XHigh | High-uncertainty diagnostic escalation | SHIPPED: native evolution of Sorin; live routing qualified |
-| `helios` — Helios — The Optimizer | GPT-6.1 Sol High | Explicit-only optimization feasibility and evidence-bounded proposal | SHIPPED; user-executed live qualification passed |
+| `talos` — Talos — The Sentinel | GPT-6.2 Sol High | Security defect and trust-boundary reasoning | Required for established or strongly evidenced material security-boundary defects under diagnosis |
+| `thales` — Thales — The Sage | GPT-6.2 Sol XHigh | High-uncertainty diagnostic escalation | Exceptional |
+| `helios` — Helios — The Optimizer | GPT-6.2 Sol High | Explicit-only optimization feasibility and evidence-bounded proposal | Specialist |
 
-## Defect routing and diagnostic budget — Phase 6 shipped
+## Defect routing and diagnostic budget
 
-- **FUNCTIONAL_BUG → optional Argus** only if cause/fix direction is not obvious; deterministic trivial bugs bypass him. **SECURITY_BUG → Talos required** when diagnosing/classifying an established or strongly evidenced material security/trust/authorization boundary defect; no additional unanswered security-specific question is required. A generic security mention or suspicion without evidence does not automatically route Talos. Phase 7 qualification passed; its earlier activation criterion was superseded by Phase 11. **OPERATIONAL_ISSUE** (build/deploy/tooling/test infrastructure) → low-cost unblock/containment by default. A **GAP / FEATURE / OPTIMIZATION** is not a bug.
+- **FUNCTIONAL_BUG:** use supplied Atlas analysis when cause or fix direction is materially uncertain; Kael does not delegate to Atlas. A deterministic defect takes the smallest normal implementation and validation path. **SECURITY_BUG → Talos required** when diagnosing or classifying an established or strongly evidenced material security/trust/authorization boundary defect; no additional unanswered security-specific question is required. A generic security mention or suspicion without evidence does not automatically route Talos. **OPERATIONAL_ISSUE** (build/deploy/tooling/test infrastructure) → low-cost unblock/containment by default. A **GAP / FEATURE / OPTIMIZATION** is not a bug.
 - Thales is **not** a bug category: escalate to this specialist when ordinary diagnosis reaches high uncertainty or stops making useful progress.
-- Argus normally uses up to two consultations, with a third only after a second materially discriminating evidence round; a fourth automatic call is denied. Kael alone considers Thales under the independent Diagnostic Gate if diagnosis stays unresolved. Stop on no progress.
+- Use Thales only under the current primary's exceptional diagnostic gate, never as automatic follow-up. Stop on no progress.
 - Third-party resolution ladder: correct usage/configuration → available fixed version → upgrade/downgrade/pin → adapter/wrapper → fallback/feature flag → local reversible workaround → patch/vendor/fork **only with explicit approval**. Give workarounds a removal condition when practical.
 
 ## Helios — SHIPPED, explicit-only

@@ -616,7 +616,7 @@ function Invoke-Control([pscustomobject]$Context, [string[]]$ExpectedAgentIds) {
         (Test-Path -LiteralPath (Join-Path $expectedConfigRoot 'agents/kael.md') -PathType Leaf) -and
         (Test-Path -LiteralPath (Join-Path $expectedConfigRoot 'olympus/orchestrator-install.json') -PathType Leaf)) $control.installer_output
     $installedAgentIds = @(Get-ChildItem -LiteralPath (Join-Path $expectedConfigRoot 'agents') -Filter '*.md' -File | ForEach-Object { $_.BaseName } | Sort-Object -Unique)
-    Check "GLOBAL_RUNTIME_$($Name)_ALL_GENERATED_AGENTS_INSTALLED" ($installedAgentIds.Count -eq 11 -and
+    Check "GLOBAL_RUNTIME_$($Name)_ALL_GENERATED_AGENTS_INSTALLED" ($installedAgentIds.Count -eq 9 -and
         @($ExpectedAgentIds | Where-Object { $_ -notin $installedAgentIds }).Count -eq 0)
     Check "GLOBAL_RUNTIME_$($Name)_NO_RETIRED_MAINTENANCE_RESOURCES" (
         -not (Test-Path -LiteralPath (Join-Path $expectedConfigRoot 'agents/aegis.md')) -and
@@ -953,8 +953,8 @@ try {
     $expectedAgentIds = @(Get-ChildItem -LiteralPath (Join-Path $source '.opencode/agents') -Filter '*.md' -File |
         Sort-Object Name | ForEach-Object { $_.BaseName })
     $script:evidence.expected_agent_ids = $expectedAgentIds
-    Check 'GLOBAL_RUNTIME_EXPECTED_GENERATED_ROSTER' ($expectedAgentIds.Count -eq 11 -and
-        @(@('kael','veyra','kovan','nox','vera','orin','thales','atlas','argus','talos','helios') | Where-Object { $_ -notin $expectedAgentIds }).Count -eq 0)
+    Check 'GLOBAL_RUNTIME_EXPECTED_GENERATED_ROSTER' ($expectedAgentIds.Count -eq 9 -and
+        @(@('kael','veyra','kovan','nox','vera','thales','atlas','talos','helios') | Where-Object { $_ -notin $expectedAgentIds }).Count -eq 0)
 
     $controlARoot = Join-Path $run 'control-A'
     [IO.Directory]::CreateDirectory($controlARoot) | Out-Null

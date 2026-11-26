@@ -57,8 +57,9 @@ try {
     $performance = Text '.opencode/commands/olympus.performance.md'
     Check 'QB_COMMANDS_PRESERVE_QUESTION_AND_APPROVAL_GATES' (
         $ultra -match 'question' -and $ultra -match 'Do not.*bypass.*gates' -and
-        $performance -match 'human approval before implementation' -and
-        $performance -match 'does not select `/olympus\.ultra`'
+        $performance -match 'obtains approval for any concrete unsettled direction before implementation' -and
+        $performance -match 'does not select `/olympus\.ultra`' -and
+        (Text '.opencode/commands/olympus.performance-ultra.md') -match 'stop for approval of a concrete unsettled direction'
     )
     Check 'QB_STATIC_POLICY' ($kael -match 'Do not present a human QUESTION while any child launched for this task is\s+RUNNING' -and
         $kael -match 'First reconcile the existing family and consume each available' -and

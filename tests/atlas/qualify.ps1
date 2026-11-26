@@ -3,7 +3,7 @@ param([ValidateSet('Both','Offline','Runtime')][string]$QualificationSlice = 'Bo
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$run = Join-Path (Join-Path $env:LOCALAPPDATA 'Temp/opencode') ('atlas-qualification-' + [guid]::NewGuid().ToString('N'))
+$run = Join-Path (Join-Path ([IO.Path]::GetTempPath()) 'opencode') ('atlas-qualification-' + [guid]::NewGuid().ToString('N'))
 $script:CollectOfflineContracts = $QualificationSlice -eq 'Offline'
 $script:OfflineContractFailures = [Collections.Generic.List[string]]::new()
 function Check([string]$id, [bool]$ok) {
@@ -116,7 +116,10 @@ try {
         $k -match 'Stop when supplied evidence is\s+sufficient to act or conclude')
     Check AT20 ($k -match 'reconciles its\s+original result' -and
         $k -match 'COMPLETION_UNCONFIRMED' -and
-        $k -match 'replacement children')
+        $k -match 'replacement children' -and
+        $a -match 'Reconcile and consume every required direct child.s terminal result exactly\s+once before returning a ready plan' -and
+        $a -match 'yield\s+for the native notification; do not poll' -and
+        $a -match 'COMPLETION_UNCONFIRMED.*?instead of declaring a ready plan')
     Check AT23 ($routing -match 'Kael owns all user decisions' -and
         $k -match 'Atlas is a separate read-only primary' -and
         $a -match 'or claim completion' -and $a -match 'PLAN_READY')

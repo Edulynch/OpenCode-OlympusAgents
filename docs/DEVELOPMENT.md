@@ -192,7 +192,7 @@ That returns Git to an inherited global/system path if one exists, or its defaul
 
 ## Architecture
 
-Olympus Core defines canonical role responsibilities, model intent, routing, authority, result lifecycle, and contextual maintenance semantics; see the [contextual maintenance policy](../olympus/policies/maintenance-context.md). OpenCode is the only currently supported runtime and the target for new capabilities. Kael is the single conceptual ROOT ORCHESTRATOR, represented as OpenCode's primary agent. The eleven canonical Core roles and their responsibilities remain intact; maintenance uses Kael's normal workflow, selected from the identified target repository and task intent.
+Olympus Core defines canonical role responsibilities, model intent, routing, authority, result lifecycle, and contextual maintenance semantics; see the [contextual maintenance policy](../olympus/policies/maintenance-context.md). OpenCode is the only currently supported runtime and the target for new capabilities. The nine Core roles include two OpenCode primaries: Kael is the sole execution orchestrator; Atlas plans and analyzes without writing. Maintenance uses Kael's normal workflow, selected from the identified target repository and task intent.
 
 ### Current support and adapter contract
 
@@ -320,8 +320,10 @@ verification stages (not wall-clock time):
 routing, dependencies, session families, reconciliation, retry decisions and final
 synthesis; it evaluates supplied evidence and does not perform repository exploration,
 technical research, implementation, or technical validation. Veyra supplies
-discovery; Orin architecture; Kovan implementation; Nox runtime/test evidence;
-Vera independent review. Atlas optionally plans execution order for already-scoped, already-architected changes without discovering, editing or validating; Thales reasons over actual
+discovery; Kovan implementation; Nox runtime/test evidence; Vera independent
+review. Atlas, as a separate primary, can collect bounded read-only evidence,
+analyze architecture and plan a handoff without implementing or running tests.
+Thales reasons over actual
 evidence under the existing Diagnostic Gate; straightforward bugs do not trigger
 Thales. Reasoners identify hypotheses and discriminating evidence, not execute
 specialist work or self-review in place of Vera.
@@ -487,7 +489,7 @@ FULL are not included. Direct qualifier defaults remain unchanged.
 **FULL** runs FAST exactly once, then the offline global OpenCode API-query
 contract, the Windows global-installer fixture, the release qualifier with
 `-MockOpenCode`, installer compatibility, and dirty-worktree checks, followed by the Offline
-slices of Authority, Activity HUD, Argus, Atlas, Helios, Talos, Thales, Phase 4C,
+slices of Authority, Activity HUD, roster retirement, Atlas, Helios, Talos, Thales, Phase 4C,
 and Autonomy. Those nine slices execute their existing
 local installation, history, upgrade, drift, conflict, and synthetic checks;
 Activity also runs its local Node presentation tests. For bootstrap-driven
@@ -520,7 +522,7 @@ cases if you change a selector or the test names it matches.
 
 **RUNTIME** does not include FULL or FAST. It runs external-work ownership
 disposable process cases and the
-existing effective-agent/plugin boundaries for Authority, Activity HUD, Argus,
+existing effective-agent/plugin boundaries for Authority, Activity HUD,
 Atlas, Helios, Talos, Thales, Phase 4C, and Autonomy. Phase 4C's runtime
 selector includes P4C-2/11/12/14 and the contextual-maintenance roster check.
 Managed-file drift and fail-closed refusal/preservation checks for unsupported

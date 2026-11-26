@@ -36,12 +36,13 @@ python tests/harness-core/qualify.py
 ```
 
 `render` is deterministic and idempotent. `check` is read-only: it compares
-the current generated inventory, reports missing or changed outputs, creates
-no temporary repository files, and exits nonzero on a mismatch. Neither
-command reports or removes retired outputs outside that inventory. Before
-removing an old file by hand, verify that Olympus generated it. Generated
-files contain a parser-safe marker; **edit Core/adapter source, not generated
-outputs**.
+the current generated inventory and reports missing, changed, or obsolete
+outputs without writing. `render` prunes obsolete regular files only in the
+managed agent, command, Activity plugin, and worktree-script namespaces, only
+when their generated header contains the exact renderer marker. Custom files,
+links, and files outside those namespaces are not pruned. Run this workflow on
+source candidates, never on an installed profile. **Edit Core/adapter source,
+not generated outputs**.
 
 For detached candidate generation, `--output-root` relocates every managed
 output while `--root` (or the script checkout by default) remains the source:
@@ -56,7 +57,7 @@ OpenCode. The option rejects overlapping roots and known symlink, reparse-point,
 and hardlink redirects, but path inspection cannot prove the directory is
 inactive or prevent concurrent replacement; keep it operator-owned. `check`
 remains read-only, and candidate files are not activated or installed.
-`--output-root` applies only to `render` and `check`, not to `kael`.
+`--output-root` applies only to `render` and `check`, not to `kael` or `primaries`.
 
 ## Generated outputs
 
@@ -191,7 +192,7 @@ and later project-local config/`.opencode` sources taking precedence.
 The current generated capability contract applies only to OpenCode.
 V2.0.26 qualification established agent registration and configuration-level
 Kael selection on that dated v0.4.6 installation, **not** a model-backed
-conversation, universal V2 compatibility, or behavior of the current 11-role
+conversation, universal V2 compatibility, or behavior of the current nine-role
 candidate. The current installer selects global Kael through the reversible
 receipt described above; existing sessions and project preferences are not
 replaced. No interactive keybind or live permission-UI behavior is inferred
@@ -276,7 +277,7 @@ shell probe, or fresh global-scope evidence.
 ## OpenCode 2.4.0 role tool boundaries
 
 The canonical role metadata denies `automation_*` and `browser`, each on
-resource `*`, for Kael, Kovan, Nox, Orin, Vera, and Veyra. Argus, Atlas, Helios,
+resource `*`, for Kael, Atlas, Kovan, Nox, Vera, and Veyra. Helios,
 Talos, and Thales already deny every action on every resource in their role
 metadata; they need no duplicate tool-specific rules. OpenCode V2.4.0 maps a
 namespace/tool pair to its effective `namespace_tool` permission ID, so
@@ -289,7 +290,7 @@ These are Olympus role-level native denials only. They do not disable a user's
 manual `/automation` command, block browser use by other agents, or edit root,
 user, or profile permissions. The Authority source/matcher checks evaluate
 both routes with last-matching-rule semantics; the isolated runtime check
-requires each of the 11 expected Olympus IDs exactly once, permits additional
+requires each of the nine expected Olympus IDs exactly once, permits additional
 OpenCode built-ins, and reports each protected action's effective decision.
 Static source checks and isolated fixtures are not evidence of the native
 permission UI, human approval/rejection, or an arbitrary user's effective
@@ -358,8 +359,8 @@ followed by
 `python -B scripts/render_harnesses.py check --harness opencode` reporting
 `HARNESS_RENDER_CHECK: PASS (opencode; 18 managed output(s); read-only)`. This
 supplied transcript, not an independent rerun or a separately supplied exit
-code, supersedes the earlier stale-output note as current renderer evidence.
-This documentation task did not render or edit generated outputs.
+code, supersedes the earlier stale-output note for that historical candidate
+only. It does not qualify the current nine-role renderer inventory.
 
 **USER_REPORTED — separate manual TUI trace; exact runtime version not
 supplied.** A screenshot showed the Activity HUD `1 active` with `Nox — The

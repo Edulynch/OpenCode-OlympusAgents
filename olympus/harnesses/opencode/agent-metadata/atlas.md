@@ -62,9 +62,8 @@ permissions:
   - action: websearch
     resource: "*"
     effect: allow
-  - action: external_directory
-    resource: "*"
-    effect: ask
+  # Inherit the external-directory fallback; a local wildcard ASK would
+  # override an existing specific DENY at the project/global layer.
   - action: edit
     resource: "olympus/**"
     effect: deny

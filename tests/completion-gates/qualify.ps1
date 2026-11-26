@@ -45,13 +45,15 @@ try {
     $docs = Text 'docs/DEVELOPMENT.md'
     $ultra = Text '.opencode/commands/olympus.ultra.md'
     $performance = Text '.opencode/commands/olympus.performance.md'
+    $performanceUltra = Text '.opencode/commands/olympus.performance-ultra.md'
     Check 'KAEL_JOIN' ($kael -match 'enumerate the required direct child' -and $kael -match 'consume each result' -and
         $kael -match 'Never declare final completion while a required direct child is non-terminal' -and
         $kael -match 'IN PROGRESS / waiting')
     Check 'TASK_COMMANDS_KEEP_COMPLETION_GATES' (
         $ultra -match 'completion gates' -and $ultra -match 'reconciliation' -and
         $performance -match 'completion gate' -and
-        $performance -match 'correctness validation'
+        $performance -match 'correctness validation' -and
+        $performanceUltra -match 'correctness validation' -and $performanceUltra -match 'completion'
     )
     Check 'API_SEMANTICS' ($docs -match 'MESSAGE_COMPLETE, ROOT_IDLE and FAMILY_COMPLETE' -and
         $docs -match 'No native family-wide wait|no documented family-wide wait' -and $docs -match 'session/active' -and
@@ -70,8 +72,9 @@ try {
         $maintenancePolicy -match 'manifest-owned files' -and
         $kael -match '## Identify the target repository' -and
         $kael -match '## Preserve the external-project boundary' -and
-        $kael -match 'independent project-identity evidence identifies OlympusAgents' -and
-        $kael -match 'stop before dependent work' -and
+        $kael -match 'independent project identity, exact\s+target ownership' -and
+        $kael -match 'stop (?:before )?dependent work' -and
+        $kael -match 'source candidates, not an installed Olympus runtime' -and
         $kael -match 'manifest-owned files')
     $good = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='succeeded'; validated=$true}
     $bad = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='failed'; validated=$false}
@@ -96,31 +99,28 @@ try {
     $gate = [regex]::Match($kael, '(?ms)^## Completion gate\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
     $core = Text 'olympus/policies/routing.md'
     $kaelSource = Text 'olympus/harnesses/opencode/agent-prompts/kael.md'
+    $completionSource = [regex]::Match($kaelSource, '(?ms)^## Completion gate\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
+    $normalRule = 'NORMAL CHANGE: one scoped Kovan writer and the smallest sufficient focused validation. Kovan may run focused checks while implementing. Use Nox only when distinct test, runtime, or measurement evidence is needed. Use Vera only when independent review is justified by risk, contract, a gate, or an explicit request. Kael evaluates the supplied evidence for acceptance and reconciles all required evidence. Do not repeat a still-applicable check solely because the phase or agent changed;'
     Check 'TFR_NORMAL_GATE_CONDITIONAL' (
-        $gate -match 'NORMAL CHANGE: one scoped implementer' -and
-        $gate -match 'uses Nox only when' -and $gate -match 'uses Vera only when' -and
+        ($gate -replace '\s+', ' ').Contains($normalRule) -and
         $gate -match 'fast-path exclusion alone does\s+not require a separate tester or reviewer' -and
-        $gate -notmatch 'NORMAL CHANGE:\s*implementer,\s*tester,\s*reviewer' -and
-        $core -match 'Assign Nox only for distinct needed test/runtime validation' -and
-        $kaelSource -match 'uses Nox only when')
+        $core -match 'A normal change has one scoped Kovan writer\. Kovan may run authorized focused checks while implementing' -and
+        $core -match 'Assign Nox only when distinct test, runtime, or measurement evidence is needed' -and
+        $core -match 'Assign Vera only when independent review of the supplied final candidate is justified by risk, contract, a gate, or an explicit request' -and
+        $core -match 'Exclusion from the trivial fast path alone does not require a tester or reviewer' -and
+        $core -match 'Kael evaluates the supplied evidence for acceptance; reuse still-applicable checks across phases or agents')
     Check 'TFR_MANDATORY_GATES_PRESERVED' (
-        $gate -match 'CRITICAL CHANGE: researcher, architect, implementer, tester/reviewer' -and
+        $gate -match 'CRITICAL CHANGE: preserve risk-driven mandatory discovery, analysis,\s+implementation, test, and review stages' -and
         $gate -match 'mandatory project, CI,\s+runtime, migration, release, or critical-change gates remain required' -and
         $gate -match 'explicit user-requested independent review' -and
         $gate -match 'REQUIRED VALIDATION PASSED' -and
         $gate -match 'NO UNRESOLVED BLOCKING OR MATERIAL REVIEW FINDINGS')
     Check 'TFR_OPENCODE_NORMAL_GATE_PARITY' (
-        $gate -match 'NORMAL CHANGE: one scoped implementer and the smallest sufficient focused\s+validation' -and
-        $gate -match 'uses Nox only when distinct\s+test/runtime evidence is needed' -and
-        $gate -match 'uses Vera only when independent review\s+is justified or explicitly required' -and
-        $gate -match 'fast-path exclusion alone does\s+not require a separate tester or reviewer' -and
-        $gate -match 'explicit user-requested independent review and mandatory project, CI,\s+runtime, migration, release, or critical-change gates remain required' -and
-        $gate -match 'Master Orchestrator reconciles all\s+required evidence' -and
+        ($gate -replace '\r\n', "`n") -ceq ($completionSource -replace '\r\n', "`n") -and
         $gate -match 'Completion is DONE only when all required conditions hold')
     Check 'PROGRESS_NOT_FINAL' ($kael -match 'Progress\s+messages must explicitly say IN PROGRESS / waiting' -and
         $kael -match 'Never declare final completion while a required direct child is non-terminal')
     $nativeSessions = [regex]::Match($kaelSource, '(?ms)^## Native child sessions\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
-    $completionSource = [regex]::Match($kaelSource, '(?ms)^## Completion gate\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
     foreach ($prompt in @($kaelSource, $kael)) {
         Check 'NATIVE_PARENT_YIELD' (
             $prompt -match 'keep the logical task pending, not the\s+model turn active' -and
@@ -174,7 +174,7 @@ try {
     $agents = Get-ChildItem (Join-Path $root '.opencode/agents') -Filter '*.md'
     $allAgentText = ($agents | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
     Check 'NO_LUNA_FAST' ($allAgentText -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
-    $workersMatch = @(@('veyra','orin','kovan','nox','vera') | ForEach-Object { (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max' }) -notcontains $false
+    $workersMatch = @(@('veyra','kovan','nox','vera') | ForEach-Object { (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max' }) -notcontains $false
     Check 'MODELS' ($kael -match 'model: "?openai/gpt-6.2-sol#high' -and
         (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.2-sol#xhigh' -and
         $workersMatch)

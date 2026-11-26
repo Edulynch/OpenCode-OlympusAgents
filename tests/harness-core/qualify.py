@@ -347,7 +347,7 @@ def main() -> int:
         ),
     )
     check("OPENCODE_KAEL_DERIVES_CONTEXTUAL_MAINTENANCE_POLICY", maintenance_policy in kael_prompt and
-          "Kael is the only root orchestrator" in kael_prompt and "project-identity evidence" in kael_prompt and
+          "Kael is the only root orchestrator" in kael_prompt and "independent project identity" in kael_prompt and
           "do not silently broaden" in kael_prompt.lower())
 
     for role, intent in models["roles"].items():
@@ -366,8 +366,8 @@ def main() -> int:
     check("MAX_CHILDREN_CANONICAL_FOUR", orchestration["max_children"] == 4)
     routing = (ROOT / "olympus/policies/routing.md").read_text(encoding="utf-8")
     check("TRIVIAL_FAST_PATH_CANONICAL", "A direct answer from existing context uses zero tools and zero children" in routing and
-          "Every source change, including a trivial deterministic edit, goes to one scoped Kovan writer" in routing and
-          "Kael does not explore repositories, conduct technical research, implement, or execute technical validation" in routing and
+          "Every product-source change goes to one scoped Kovan writer" in routing and
+          "Kael does not read/search repositories, research, run shell/Git/tests, implement, or mutate files" in routing and
           "Kael may directly implement" not in routing)
     check("PENDING_WORK_ROUTING_CANONICAL", "dispatch only work already necessary to the objective, ready, and independent" in routing and
           "Do not start opportunistic research, verification, or unrelated work" in routing and
@@ -523,7 +523,7 @@ def main() -> int:
           len(matrix_rows) == len(EXPECTED_CAPABILITIES) + 2
           and all(len(line.strip().strip("|").split("|")) == 2 for line in matrix_rows)
           and "HARNESSES.md#capability-evidence" in rendered_capability_doc)
-    managed = set(outputs)
+    managed = set(outputs) | {ROOT / "docs/HARNESS-CAPABILITIES.md"}
     before = snapshot_outputs(managed)
     print(f"ROOT_MANAGED_OUTPUT_COUNT {len(managed)}")
     report_output_snapshot("ROOT_MANAGED_OUTPUT_BEFORE", before)
@@ -550,9 +550,9 @@ def main() -> int:
     check("CHECK_MODE_READ_ONLY", opencode_check.returncode == 0 and
           "read-only" in opencode_check.stdout and before == after)
 
-    temp_base = Path.home() / "AppData" / "Local" / "Temp" / "opencode"
-    if not temp_base.is_dir():
-        temp_base = Path(tempfile.gettempdir())
+    temp_base = Path(tempfile.gettempdir())
+    if (temp_base / "opencode").is_dir():
+        temp_base /= "opencode"
     with tempfile.TemporaryDirectory(prefix="olympus-harness-qual-", dir=temp_base) as temporary:
         fixture = Path(temporary)
         shutil.copytree(ROOT / "olympus", fixture / "olympus")
@@ -639,17 +639,6 @@ def main() -> int:
               "DRIFT missing: .opencode/scripts/worktree-setup.ps1" in missing_check.stdout)
         check("MISSING_GENERATED_OUTPUT_RESTORED",
               run_renderer("render", "opencode", fixture).returncode == 0)
-
-        retired_agent = fixture / ".opencode" / "agents" / "aegis.md"
-        retired_command = fixture / ".opencode" / "commands" / "maintain.md"
-        retired_agent.write_text(f"<!-- {GENERATED_MARKER} -->\n", encoding="utf-8")
-        retired_command.parent.mkdir(parents=True, exist_ok=True)
-        retired_command.write_text(f"<!-- {GENERATED_MARKER} -->\n", encoding="utf-8")
-        retired_snapshot = snapshot_outputs((retired_agent, retired_command))
-        retired_check = run_renderer("check", "opencode", fixture)
-        retired_render = run_renderer("render", "opencode", fixture)
-        check("RETIRED_OUTPUTS_NOT_AUTOMATICALLY_REMOVED", retired_check.returncode == 0 and
-              retired_render.returncode == 0 and snapshot_outputs((retired_agent, retired_command)) == retired_snapshot)
 
     print("OLYMPUS_HARNESS_CORE_QUALIFICATION: PASS")
     return 0

@@ -126,7 +126,7 @@ try {
     $agentText = ($agents | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
     Check 'MODELS_AND_NO_LUNA_FAST' ($kael -match 'model: "openai/gpt-6.2-sol#high"' -and
         (Text '.opencode/agents/thales.md') -match 'model: openai/gpt-6.2-sol#xhigh' -and
-        @(@('veyra','orin','kovan','nox','vera') | ForEach-Object {
+        @(@('veyra','kovan','nox','vera') | ForEach-Object {
             (Text ".opencode/agents/$_.md") -match 'model: "?openai/gpt-6-luna#max'
         }) -notcontains $false -and $agentText -notmatch 'gpt-6-luna#fast|luna.fast|luna-fast')
     Check 'CONFIGURED_CEILING_AND_ADAPTIVE_DEFAULT' ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and

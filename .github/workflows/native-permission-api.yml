@@ -23,6 +23,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check source candidate before native qualification
+        shell: pwsh
+        run: |
+          python -B scripts/render_harnesses.py check --harness opencode
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Install current stable OpenCode V2
         shell: pwsh
         run: |
@@ -44,6 +50,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Confirm checkout unchanged
+        if: ${{ always() }}
         shell: pwsh
         run: |
           $changes = @(git status --porcelain --untracked-files=all)

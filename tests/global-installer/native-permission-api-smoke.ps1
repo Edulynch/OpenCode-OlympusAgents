@@ -27,7 +27,8 @@ $base = ''
 $completed = $false
 foreach ($name in $envNames) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 
-function Fail([string]$Reason) { throw "OA121_NATIVE_PERMISSION_API_BLOCKED: $Reason" }
+function Fail([string]$Reason) { throw "OA121_NATIVE_PERMISSION_API_FAIL: $Reason" }
+function Block-NativeIsolation([string]$Reason) { throw "BLOCKED_NATIVE_AUTH_ISOLATION: $Reason" }
 
 function JsonContent($Value) {
     $json = $Value | ConvertTo-Json -Depth 15 -Compress
@@ -195,16 +196,20 @@ try {
     }
 
     # Never install into a real home directory if this OpenCode build ignores
-    # XDG_CONFIG_HOME. Verify the exact native path before touching a target.
+    # XDG variables. Require exact config and auth-bearing data roots before
+    # installing or launching the isolated server.
     $debugPaths = @(opencode debug paths)
-    if ($LASTEXITCODE -ne 0) { Fail 'Cannot inspect native global configuration path.' }
-    $nativeRoots = @($debugPaths | ForEach-Object {
-        $match = [regex]::Match([string]$_, '^\s*config\s{2,}(?<path>.+?)\s*$')
-        if ($match.Success) { $match.Groups['path'].Value.Trim() }
-    } | Where-Object { $_ })
-    if ($nativeRoots.Count -ne 1 -or
-        -not [IO.Path]::GetFullPath($nativeRoots[0]).Equals([IO.Path]::GetFullPath($configRoot), [StringComparison]::OrdinalIgnoreCase)) {
-        Fail 'Native default global config path is not the isolated XDG root; refusing installation.'
+    if ($LASTEXITCODE -ne 0) { Block-NativeIsolation 'Cannot prove native config and data isolation.' }
+    $expectedRoots = @{ config=$configRoot; data=(Join-Path $env:XDG_DATA_HOME 'opencode') }
+    foreach ($key in $expectedRoots.Keys) {
+        $nativeRoots = @($debugPaths | ForEach-Object {
+            $match = [regex]::Match([string]$_, ('^\s*' + $key + '\s{2,}(?<path>.+?)\s*$'))
+            if ($match.Success) { $match.Groups['path'].Value.Trim() }
+        })
+        if ($nativeRoots.Count -ne 1 -or -not [IO.Path]::IsPathFullyQualified($nativeRoots[0]) -or
+            -not [IO.Path]::GetFullPath($nativeRoots[0]).Equals([IO.Path]::GetFullPath($expectedRoots[$key]), [StringComparison]::OrdinalIgnoreCase)) {
+            Block-NativeIsolation "Native $key path is not the isolated XDG root; refusing installation and server launch."
+        }
     }
     Write-Output 'NATIVE_GLOBAL_XDG_ROOT: ISOLATED'
 
@@ -218,7 +223,7 @@ try {
     Remove-Item Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue
     if ($LASTEXITCODE -ne 0) { Fail "Isolated global installation failed: $installText" }
     $manifest = Get-Content -LiteralPath (Join-Path $configRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
-    if (@($manifest.managed_files).Count -ne 16) { Fail 'Global-only manifest does not own 16 expected resources.' }
+    if (@($manifest.managed_files).Count -ne 15) { Fail 'Global-only manifest does not own 15 expected resources.' }
 
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
     try {

@@ -34,6 +34,13 @@ ceiling may be 1–8. This is local guidance, not native enforcement or a quota
 shared with another root. Use adaptive concurrency only for ready, independent
 evidence/reasoning work. Reuse applicable evidence and avoid duplicates.
 
+Reconcile and consume every required direct child's terminal result exactly
+once before returning a ready plan. If independent work is exhausted, yield
+for the native notification; do not poll or treat a progress report, parent
+idle, or missing output as completion or retry authorization. Retain the
+original assignment. If its status cannot be established, report `BLOCKED`
+with `COMPLETION_UNCONFIRMED` instead of declaring a ready plan.
+
 ## Analysis and planning
 
 Answer only what the supplied objective requires. Atlas owns bounded architecture

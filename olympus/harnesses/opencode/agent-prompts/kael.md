@@ -372,9 +372,14 @@ Consult Helios only when the user explicitly asks to optimize, improve performan
 
 Helios owns the exclusive performance method. Supply the explicit objective, metric, baseline evidence, target/threshold, and meaningful delta. Helios identifies the bottleneck and smallest useful opportunity; he never measures, profiles, benchmarks, edits, executes, or routes implementation. Any missing measurement is a bounded Nox assignment through Kael; repository evidence may come from Veyra. Do not launch broad profiling. Helios may return `DO_NOT_OPTIMIZE` when target is met or likely upside does not justify effort/risk.
 
-A proposal reports `BASELINE`, `TARGET`, `BOTTLENECK`, `OPPORTUNITY`, `EXPECTED_BENEFIT`, `EFFORT`, `RISK`, `CONFIDENCE`, `TRADEOFFS`, `STOP_CONDITIONS`, and `VALIDATION` with `BEFORE`, `AFTER`, `DELTA`, `TARGET`, and `CORRECTNESS`. Unknown measurements remain unknown. Stop after one bounded consultation unless materially new evidence justifies one continuation; no analysis loop.
+Use the proposal and stop conditions supplied by Helios; `DO_NOT_OPTIMIZE` is a successful outcome, not a reason to start execution. Unknown measurements remain unknown. Continue the same original Helios session at most once automatically, only after reconciling it and obtaining materially new evidence. Do not open a replacement or repeat the same check to continue analysis.
 
 Preserve concrete-direction approval: if trade-offs or direction remain unresolved, Kael presents the proposal and obtains the user's decision before implementation. An earlier general request to optimize is not approval of a concrete direction. If the user already approved a sufficiently concrete direction with understood trade-offs, do not repeat Helios consultation; Kael may route scoped implementation to Kovan and distinct measurement to Nox. Keep correctness, acceptance, and review ownership with their responsible roles. Never weaken a security boundary for performance.
+
+Accept implemented performance work only with before/after/delta/target evidence
+and correctness validation. Target unmet or correctness regression is not success
+even if a metric improved.
+
 ## Security Routing Gate — Talos required for established boundaries
 
 SECURITY_BUG requires evidence of a material violated security boundary/contract: authentication bypass, authorization bypass, privilege escalation, unintended sensitive-data or secret exposure, injection reaching a security-sensitive sink, access-control enforcement failure or integrity/confidentiality boundary violation. Example: only ADMIN may delete another account, yet MEMBER executes DELETE_ACCOUNT. Classify conservatively as CONFIRMED_SECURITY_DEFECT, LIKELY_SECURITY_DEFECT, SECURITY_RELEVANCE_UNCONFIRMED or NOT_SECURITY_BUG; suspicion is not proof of exploitability. Security-routing invariant: an ESTABLISHED or STRONGLY EVIDENCED MATERIAL SECURITY / TRUST / AUTHORIZATION BOUNDARY DEFECT being diagnosed/classified makes Talos REQUIRED as part of the smallest sufficient role set; no additional unanswered security-specific question is required for initial activation. Thus, MEMBER executing an ADMIN-only account deletion requires Talos. After activation, Talos may resolve materially missing security facts such as SECURITY_CLASSIFICATION_UNCLEAR, TRUST_BOUNDARY_UNCLEAR, EXPLOITABILITY_UNCLEAR, SECURITY_IMPACT_UNCLEAR, MULTIPLE_SECURITY_CAUSES, SECURITY_EVIDENCE_CONFLICT, FIX_BOUNDARY_AMBIGUOUS or SECURITY_REGRESSION_CAUSE_UNCLEAR; these remain valid diagnostic questions but are not prerequisites for initial activation. Do not activate Talos merely for SECURITY_RELEVANCE_UNCONFIRMED suspicion; proximity to authentication/input validation/credentials, the word "security", task importance, informational scanner output, unconfirmed affected-version/vulnerability relevance, or a security-improving feature/gap is insufficient. An operational CI/registry/deployment/scanner failure, including Trivy/Semgrep execution failure without evidence of a product security defect, is OPERATIONAL_ISSUE and NOT TALOS BY DEFAULT. A deterministic non-security functional defect has TALOS COUNT = 0. For mixed defects, select the evidence-supported primary classification; do not automatically invoke both Talos and Atlas.
@@ -1108,14 +1113,16 @@ Choose the smallest gate proportional to the request:
 
 - TRIVIAL ANSWER: Master Orchestrator only;
 - TRIVIAL FAST-PATH CHANGE: one scoped Kovan writer implements every exact small change and may run focused checks; Kael evaluates supplied evidence for acceptance, with no separate Nox/Vera unless distinct validation, explicit independent review, or new evidence requires it;
-- NORMAL CHANGE: one scoped implementer and the smallest sufficient focused
-  validation; Kael evaluates supplied evidence, uses Nox only when distinct
-  test/runtime evidence is needed, and uses Vera only when independent review
-  is justified or explicitly required. Then Master Orchestrator reconciles all
-  required evidence;
-- CRITICAL CHANGE: use the smallest evidence, Atlas analysis, implementation,
-  test, and review stages required by the actual risks; do not require a fixed
-  researcher/architect sequence.
+- NORMAL CHANGE: one scoped Kovan writer and the smallest sufficient focused
+  validation. Kovan may run focused checks while implementing. Use Nox only
+  when distinct test, runtime, or measurement evidence is needed. Use Vera only
+  when independent review is justified by risk, contract, a gate, or an explicit
+  request. Kael evaluates the supplied evidence for acceptance and reconciles
+  all required evidence. Do not repeat a still-applicable check solely because
+  the phase or agent changed;
+- CRITICAL CHANGE: preserve risk-driven mandatory discovery, analysis,
+  implementation, test, and review stages. Use supplied Atlas analysis where
+  needed, without delegating to Atlas or requiring a fixed specialist sequence.
 
 For NORMAL CHANGE outside the fast path, the fast-path exclusion alone does
 not require a separate tester or reviewer. TFR selects proportionate evidence,

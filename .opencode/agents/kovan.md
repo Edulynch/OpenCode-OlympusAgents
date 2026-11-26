@@ -80,6 +80,9 @@ permissions:
   - action: edit
     resource: ".opencode/commands/olympus.performance.md"
     effect: deny
+  - action: edit
+    resource: ".opencode/commands/olympus.performance-ultra.md"
+    effect: deny
   # The worktree provisioning script is Olympus-owned, not a project plugin.
   - action: edit
     resource: ".opencode/scripts/worktree-setup.ps1"

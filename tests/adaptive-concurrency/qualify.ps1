@@ -70,7 +70,11 @@ try {
     Check AC9 ($kael -match '## Diagnostic Gate' -and $kael -match 'default limit is one Thales consultation' -and
         $kael -match 'materially new evidence' -and
         $ultra -match 'follow the current primary.s canonical role, authority, ownership, validation, result, and completion rules')
-    Check AC10 ($hud -match 'active\(\)\.slice\(0, 4\)' -and $hud -match 'context\.data\.session\.status' -and $activity -match 'current\.parentID != null' -and $activity -match 'status\(session\.id\) === "running"' -and $hud -notmatch 'setInterval|setTimeout|spawn|schedule')
+    Check AC10 ($activity -match 'active:\s*activeRows\.length' -and
+        $activity -match 'visibleRows:\s*activeRows\.slice\(0, 4\)' -and
+        $hud -match '\{activity\(\)\.active\} active · showing \{activity\(\)\.visibleRows\.length\}' -and
+        $hud -match 'context\.data\.session\.status' -and $activity -match 'current\.parentID != null' -and
+        $activity -match 'status\(session\.id\) === "running"' -and $hud -notmatch 'setInterval|setTimeout|spawn|schedule')
     $commandDocs = [regex]::Match($readme, '(?ms)^<a id="task-parallelism"></a>\s+^## [^\r\n]+\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value
     Check 'DOC' ($commandDocs -match '(?s)/olympus\.ultra <prompt>.*?prompt-level ceiling.*?/olympus\.performance <prompt>.*?/olympus\.performance-ultra <prompt>' -and
         $readme -match 'There are no bare aliases' -and

@@ -14,7 +14,7 @@ The public entrypoints are executable code. They select an immutable stable rele
 
 ## Requirements and platform limits
 
-- **Windows:** PowerShell 7 (`pwsh`) on `PATH`. Windows PowerShell 5.1 alone is insufficient. The previously published `v0.11.1` release is Windows-only.
+- **Windows:** PowerShell 7 (`pwsh`) on `PATH`. Windows PowerShell 5.1 alone is insufficient. Tag-archive operations other than uninstall—including install/update, `-DryRun`, and `-VerifyOnly`—also require Python 3.11+ on `PATH` to render and check generated OpenCode resources before target changes; trusted `-SourceRoot` checkout mode is not rendered. The previously published `v0.11.1` release is Windows-only.
 - **Linux:** POSIX `sh` and `curl` for the one-line command. The candidate's lifecycle and runtime discovery were validated on Ubuntu 24.04 in WSL 2 with OpenCode V2.3.2. This does not qualify native Linux.
 - **macOS:** no CI coverage and not qualified.
 - **All supported installs:** OpenCode V2 and Python 3.11+. Runtime discovery on every OpenCode version is not implied.

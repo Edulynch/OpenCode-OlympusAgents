@@ -24,6 +24,26 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ReleaseVersion = 'v0.12.10' # Must equal this installer's default and the release target tag.
 $owned = $null
+$ArchiveGeneratedPaths = @(
+    'opencode.jsonc',
+    '.opencode/agents/argus.md',
+    '.opencode/agents/atlas.md',
+    '.opencode/agents/helios.md',
+    '.opencode/agents/kael.md',
+    '.opencode/agents/kovan.md',
+    '.opencode/agents/nox.md',
+    '.opencode/agents/orin.md',
+    '.opencode/agents/talos.md',
+    '.opencode/agents/thales.md',
+    '.opencode/agents/vera.md',
+    '.opencode/agents/veyra.md',
+    '.opencode/plugins/olympus-activity/activity.ts',
+    '.opencode/plugins/olympus-activity/tui.tsx',
+    '.opencode/scripts/worktree-setup.ps1',
+    '.opencode/commands/olympus.ultra.md',
+    '.opencode/commands/olympus.performance.md',
+    'docs/HARNESS-CAPABILITIES.md'
+)
 
 function Get-DeclaredReleaseVersion([string]$Source) {
     $scriptPath = Join-Path $Source 'install.ps1'
@@ -75,6 +95,208 @@ function Assert-ArchiveTag([string]$RootName, [string]$RequestedVersion) {
     if (@($acceptedRoots | Where-Object { $_ -ceq $RootName }).Count -ne 1) {
         throw "SOURCE_VERSION_MISMATCH: Archive root '$RootName' does not identify requested tag '$RequestedVersion'."
     }
+}
+
+function Get-InstallItemOrNull([string]$Path) {
+    try { return Get-Item -LiteralPath $Path -Force -ErrorAction Stop }
+    catch {
+        if ($_.Exception -is [Management.Automation.ItemNotFoundException] -and
+            $_.FullyQualifiedErrorId -like 'PathNotFound,*') { return $null }
+        throw "SOURCE_PATH_INSPECTION_FAILED: Cannot inspect '$Path': $($_.Exception.Message)"
+    }
+}
+
+function Assert-ContainedInstallPath([string]$Boundary, [string]$Root, [string]$Relative, [string]$Kind) {
+    if ($Kind -notin @('File','Directory')) { throw 'SOURCE_RENDER_PATH_UNSAFE: Invalid path kind.' }
+    $boundaryFull = [IO.Path]::GetFullPath($Boundary)
+    $rootFull = [IO.Path]::GetFullPath($Root)
+    $boundaryPrefix = $boundaryFull.TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
+    if ((-not [string]::Equals($rootFull, $boundaryFull, [StringComparison]::OrdinalIgnoreCase) -and
+            -not $rootFull.StartsWith($boundaryPrefix, [StringComparison]::OrdinalIgnoreCase)) -or
+        ($Relative -and ([IO.Path]::IsPathRooted($Relative) -or
+            $Relative -match '(^|[\\/])\.\.?([\\/]|$)'))) {
+        throw 'SOURCE_RENDER_PATH_UNSAFE: Render path is outside its owned directory.'
+    }
+    $relativePath = if ($Relative) { $Relative -replace '/', [IO.Path]::DirectorySeparatorChar } else { '' }
+    $targetPath = if ($relativePath) { Join-Path $rootFull $relativePath } else { $rootFull }
+    $full = [IO.Path]::GetFullPath($targetPath)
+    if (-not $full.StartsWith($boundaryPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'SOURCE_RENDER_PATH_UNSAFE: Render path escapes its owned directory.'
+    }
+    foreach ($directory in @($boundaryFull, $rootFull)) {
+        $item = Get-InstallItemOrNull $directory
+        if ($null -eq $item -or -not $item.PSIsContainer -or
+            ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "SOURCE_RENDER_PATH_UNSAFE: Render directory is missing, not a directory, or a reparse point: $directory"
+        }
+    }
+    $volume = [IO.Path]::GetPathRoot($full)
+    $parts = @($full.Substring($volume.Length) -split '[\\/]' | Where-Object { $_ })
+    $cursor = $volume
+    for ($index = 0; $index -lt $parts.Count; $index++) {
+        $cursor = Join-Path $cursor $parts[$index]
+        $item = Get-InstallItemOrNull $cursor
+        if ($null -eq $item) { continue }
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw "SOURCE_RENDER_PATH_UNSAFE: Render path traverses a reparse point: $cursor"
+        }
+        $isLeaf = $index -eq ($parts.Count - 1)
+        if ((-not $isLeaf -or $Kind -eq 'Directory') -and -not $item.PSIsContainer) {
+            throw "SOURCE_RENDER_PATH_UNSAFE: Render path has a non-directory component: $cursor"
+        }
+        if ($isLeaf -and $Kind -eq 'File' -and $item.PSIsContainer) {
+            throw "SOURCE_RENDER_PATH_UNSAFE: Render output is a directory: $cursor"
+        }
+    }
+    return $full
+}
+
+function Get-ArchiveRenderInventory([string]$Boundary, [string]$Root) {
+    [void](Assert-ContainedInstallPath $Boundary $Root '' 'Directory')
+    $prefix = [IO.Path]::GetFullPath($Root).TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
+    $files = @{}
+    $directories = [System.Collections.Generic.List[string]]::new()
+    foreach ($item in @(Get-ChildItem -LiteralPath $Root -Force -Recurse -ErrorAction Stop)) {
+        $relative = $item.FullName.Substring($prefix.Length).Replace('\','/')
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw "SOURCE_RENDER_STAGE_INVALID: Stage contains a reparse point: $relative"
+        }
+        if ($item.PSIsContainer) {
+            [void](Assert-ContainedInstallPath $Boundary $Root $relative 'Directory')
+            $directories.Add($relative)
+        } else {
+            $path = Assert-ContainedInstallPath $Boundary $Root $relative 'File'
+            $files[$relative] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+    }
+    return [pscustomobject]@{ Files=$files; Directories=@($directories.ToArray()) }
+}
+
+function Get-ArchiveGeneratedDirectories {
+    $directories = @{}
+    foreach ($relative in $ArchiveGeneratedPaths) {
+        $parent = Split-Path -Parent ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+        while ($parent) {
+            $directories[$parent.Replace('\','/')] = $true
+            $parent = Split-Path -Parent $parent
+        }
+    }
+    return @($directories.Keys | Sort-Object)
+}
+
+function Resolve-Python311 {
+    foreach ($name in @('python3.11','python3','python.exe','python')) {
+        $command = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($null -eq $command) { continue }
+        try {
+            & $command.Source -B -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>$null
+            if ($LASTEXITCODE -eq 0) { return $command.Source }
+        } catch {}
+    }
+    throw 'PYTHON_UNAVAILABLE: Python 3.11+ is required to render tag-archive installs; no environment or package installation was attempted.'
+}
+
+function Invoke-ArchiveRender([string]$Source, [string]$OwnedRoot) {
+    $python = Resolve-Python311
+    $renderer = Assert-ContainedInstallPath $OwnedRoot $Source 'scripts/render_harnesses.py' 'File'
+    if (-not (Test-Path -LiteralPath $renderer -PathType Leaf)) {
+        throw 'SOURCE_INVALID: Release archive is missing scripts/render_harnesses.py.'
+    }
+    $stage = Join-Path $OwnedRoot 'render-stage'
+    [void](Assert-ContainedInstallPath $OwnedRoot $OwnedRoot 'render-stage' 'Directory')
+    [IO.Directory]::CreateDirectory($stage) | Out-Null
+    [void](Assert-ContainedInstallPath $OwnedRoot $OwnedRoot 'render-stage' 'Directory')
+    $renderOutput = (& $python -B $renderer render --harness opencode --root $Source --output-root $stage 2>&1 | Out-String)
+    $renderCode = $LASTEXITCODE
+    if ($renderCode -ne 0) {
+        throw "SOURCE_RENDERER_FAILED: Rendering archive sources exited $renderCode. $($renderOutput.Trim())"
+    }
+
+    $rendered = Get-ArchiveRenderInventory $OwnedRoot $stage
+    $expectedPaths = @($ArchiveGeneratedPaths | Sort-Object)
+    $actualPaths = @($rendered.Files.Keys | Sort-Object)
+    $expectedDirectories = @(Get-ArchiveGeneratedDirectories)
+    $actualDirectories = @($rendered.Directories | Sort-Object)
+    if ($actualPaths.Count -ne 18 -or
+        [string]::Join("`n", [string[]]$actualPaths) -cne [string]::Join("`n", [string[]]$expectedPaths) -or
+        [string]::Join("`n", [string[]]$actualDirectories) -cne
+            [string]::Join("`n", [string[]]$expectedDirectories)) {
+        throw "SOURCE_RENDER_STAGE_INVALID: Renderer stage inventory does not match the 18 expected generated files. $($renderOutput.Trim())"
+    }
+
+    $checkOutput = (& $python -B $renderer check --harness opencode --root $Source --output-root $stage 2>&1 | Out-String)
+    $checkCode = $LASTEXITCODE
+    $checked = Get-ArchiveRenderInventory $OwnedRoot $stage
+    $checkedPaths = @($checked.Files.Keys | Sort-Object)
+    $stageUnchanged = [string]::Join("`n", [string[]]$checkedPaths) -ceq
+        [string]::Join("`n", [string[]]$expectedPaths)
+    foreach ($relative in $expectedPaths) {
+        if (-not $checked.Files.ContainsKey($relative) -or
+            $checked.Files[$relative] -cne $rendered.Files[$relative]) { $stageUnchanged = $false }
+    }
+    if ($checkCode -ne 0 -or
+        $checkOutput -notmatch 'HARNESS_RENDER_CHECK: PASS \(opencode; 18 managed output\(s\); read-only\)' -or
+        -not $stageUnchanged -or
+        [string]::Join("`n", [string[]]@($checked.Directories | Sort-Object)) -cne
+            [string]::Join("`n", [string[]]$expectedDirectories)) {
+        throw "SOURCE_RENDERER_CHECK_FAILED: Rendered archive stage failed its read-only inventory check. $($checkOutput.Trim())"
+    }
+
+    foreach ($relative in $expectedPaths) {
+        $stageFile = Assert-ContainedInstallPath $OwnedRoot $stage $relative 'File'
+        $destination = Assert-ContainedInstallPath $OwnedRoot $Source $relative 'File'
+        $parentRelative = Split-Path -Parent ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+        if ($parentRelative) {
+            $parent = Assert-ContainedInstallPath $OwnedRoot $Source $parentRelative 'Directory'
+            [IO.Directory]::CreateDirectory($parent) | Out-Null
+            [void](Assert-ContainedInstallPath $OwnedRoot $Source $parentRelative 'Directory')
+        }
+        $destination = Assert-ContainedInstallPath $OwnedRoot $Source $relative 'File'
+        $temporaryName = '.olympus-render-' + [guid]::NewGuid().ToString('N') + '.tmp'
+        $temporaryRelative = if ($parentRelative) { Join-Path $parentRelative $temporaryName } else { $temporaryName }
+        $temporary = Assert-ContainedInstallPath $OwnedRoot $Source $temporaryRelative 'File'
+        $backup = $null
+        try {
+            [IO.File]::Copy($stageFile, $temporary)
+            if ((Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash.ToLowerInvariant() -cne
+                $rendered.Files[$relative]) {
+                throw "SOURCE_RENDER_COPY_FAILED: Staged bytes changed while copying '$relative'."
+            }
+            $existing = Get-InstallItemOrNull $destination
+            if ($null -ne $existing) {
+                [void](Assert-ContainedInstallPath $OwnedRoot $Source $relative 'File')
+                $backupName = '.olympus-render-' + [guid]::NewGuid().ToString('N') + '.bak'
+                $backupRelative = if ($parentRelative) { Join-Path $parentRelative $backupName } else { $backupName }
+                $backup = Assert-ContainedInstallPath $OwnedRoot $Source $backupRelative 'File'
+                if ($null -ne (Get-InstallItemOrNull $backup)) {
+                    throw "SOURCE_RENDER_COPY_FAILED: Temporary backup path already exists for '$relative'."
+                }
+                [IO.File]::Replace($temporary, $destination, $backup)
+                [IO.File]::Delete($backup)
+            } else {
+                [IO.File]::Move($temporary, $destination)
+            }
+            if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant() -cne
+                $rendered.Files[$relative]) {
+                throw "SOURCE_RENDER_COPY_FAILED: Destination bytes do not match the verified render for '$relative'."
+            }
+        } finally {
+            $temporaryItem = Get-InstallItemOrNull $temporary
+            if ($null -ne $temporaryItem) {
+                [void](Assert-ContainedInstallPath $OwnedRoot $Source $temporaryRelative 'File')
+                [IO.File]::Delete($temporary)
+            }
+            if ($backup) {
+                $backupItem = Get-InstallItemOrNull $backup
+                if ($null -ne $backupItem) {
+                    [void](Assert-ContainedInstallPath $OwnedRoot $Source $backupRelative 'File')
+                    [IO.File]::Delete($backup)
+                }
+            }
+        }
+    }
+    Write-Output 'OLYMPUS_SOURCE_RENDER: PASS (18 generated files; isolated stage checked read-only before install)'
 }
 
 try {
@@ -141,6 +363,9 @@ try {
     if ($Uninstall -and $DryRun) { throw 'UNINSTALL_MODE_INVALID: -Uninstall and -DryRun cannot be combined.' }
     $globalScript = Join-Path $source 'scripts/global-install.ps1'
     if (-not (Test-Path -LiteralPath $globalScript -PathType Leaf)) { throw 'SOURCE_INVALID: Global installer is missing.' }
+    if ($origin -in @('LOCAL_ARCHIVE','REMOTE_ARCHIVE') -and -not $Uninstall) {
+        Invoke-ArchiveRender -Source $source -OwnedRoot $owned
+    }
     $globalArgs = @('-NoProfile', '-File', $globalScript, '-Harness', 'opencode', '-SourceVersion', $resolvedVersion)
     if ($VerifyOnly) { $globalArgs += '-VerifyOnly' }
     if ($DryRun) { $globalArgs += '-DryRun' }

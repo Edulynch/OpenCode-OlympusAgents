@@ -375,10 +375,16 @@ exit 23
     Assert 'FORCE_REPAIRS_GLOBAL_VERSION_MARKER' (
         $forcedGlobalManifest.installed_version -ceq $env:OLYMPUS_SMOKE_RELEASE_VERSION
     ) ([string]$forcedGlobalManifest.installed_version)
+    $fixtureGlobalAgent = Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT '.opencode/agents/kael.md'
+    $fixtureAgentHash = (Get-FileHash -LiteralPath $fixtureGlobalAgent -Algorithm SHA256).Hash
+    $expectedAgentHash = (Get-FileHash -LiteralPath $env:OLYMPUS_SMOKE_EXPECTED_GLOBAL_AGENT -Algorithm SHA256).Hash
+    $installedAgentHash = (Get-FileHash -LiteralPath $globalAgent -Algorithm SHA256).Hash
+    $forceRepairAgentEvidence = "replica_sha256=$fixtureAgentHash; renderer_sha256=$expectedAgentHash; installed_sha256=$installedAgentHash"
     Assert 'FORCE_REPAIRS_CHANGED_GLOBAL_AGENT' (
-        [IO.File]::ReadAllText($globalAgent) -ceq
-            [IO.File]::ReadAllText((Join-Path $env:OLYMPUS_SMOKE_SOURCE_ROOT '.opencode/agents/kael.md'))
-    )
+        [Convert]::ToBase64String([IO.File]::ReadAllBytes($globalAgent)) -ceq
+            [Convert]::ToBase64String([IO.File]::ReadAllBytes($env:OLYMPUS_SMOKE_EXPECTED_GLOBAL_AGENT))
+    ) $forceRepairAgentEvidence
+    Write-Output "FORCE_REPAIR_GLOBAL_AGENT_COMPARE: $forceRepairAgentEvidence"
     Assert 'FORCE_RESTORES_MISSING_GLOBAL_AGENT' (
         [IO.File]::ReadAllText($missingGlobalAgent) -ceq $expectedGlobalNox
     )
@@ -702,7 +708,7 @@ $environmentNames = @(
     'OLYMPUS_SMOKE_METADATA_FAIL', 'OLYMPUS_SMOKE_SOURCE_VERSION',
     'OLYMPUS_UPDATE_COMPACT', 'OLYMPUS_CLI_UPDATE_COMPACT',
     'OLYMPUS_SMOKE_SCRIPT', 'OLYMPUS_SMOKE_HOOK_DIR', 'OLYMPUS_SMOKE_OTHER_DIR', 'OLYMPUS_SMOKE_LAUNCHER_PATH',
-    'OLYMPUS_SMOKE_LAUNCHER',
+    'OLYMPUS_SMOKE_EXPECTED_GLOBAL_AGENT', 'OLYMPUS_SMOKE_LAUNCHER',
     'OLYMPUS_SMOKE_OPENCODE_CONFIG', 'OLYMPUS_SMOKE_GLOBAL_MARKER', 'OLYMPUS_SMOKE_BIN_MARKER',
     'OLYMPUS_SMOKE_VERSION_MARKER', 'OLYMPUS_SMOKE_GLOBAL_MANIFEST', 'OLYMPUS_SMOKE_USER_CONFIG',
     'OLYMPUS_CLI_ROOT', 'OLYMPUS_CLI_PATH_STORE', 'XDG_CONFIG_HOME'
@@ -817,6 +823,17 @@ if ($env:OLYMPUS_SMOKE_INSTALL_ROOT -and $env:OLYMPUS_SMOKE_PATH_STORE) {
     $fixtureInstaller = $fixtureInstaller.Replace($cliAnchor, $cliIsolation + $cliAnchor)
     [IO.File]::WriteAllText($fixtureInstallerPath, $fixtureInstaller, $Utf8NoBom)
 
+    $expectedRenderRoot = Join-Path $run 'force-repair-expected-render'
+    $expectedGlobalAgent = Join-Path $expectedRenderRoot '.opencode/agents/kael.md'
+    $renderer = Join-Path $releaseSource 'scripts/render_harnesses.py'
+    $renderOutput = (& $python -B $renderer render --harness opencode --root $releaseSource `
+        --output-root $expectedRenderRoot 2>&1 | Out-String)
+    $renderExitCode = $LASTEXITCODE
+    Assert 'FORCE_REPAIR_EXPECTATION_RENDERED' (
+        $renderExitCode -eq 0 -and $renderOutput -match 'HARNESS_RENDER: PASS \(opencode;' -and
+        (Test-Path -LiteralPath $expectedGlobalAgent -PathType Leaf)
+    ) $renderOutput
+
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [IO.Compression.ZipFile]::CreateFromDirectory(
         $releaseSource, $releaseArchive, [IO.Compression.CompressionLevel]::Optimal, $true
@@ -875,6 +892,7 @@ subprocess.run = _run
     $env:OLYMPUS_SMOKE_RELEASE_INSTALLER = $fixtureInstallerPath
     $env:OLYMPUS_SMOKE_RELEASE_ARCHIVE = $releaseArchive
     $env:OLYMPUS_SMOKE_SOURCE_ROOT = $releaseSource
+    $env:OLYMPUS_SMOKE_EXPECTED_GLOBAL_AGENT = $expectedGlobalAgent
     $env:OLYMPUS_SMOKE_METADATA_FIXTURE = $metadataFixture
     $env:OLYMPUS_SMOKE_REQUEST_LOG = $requestLog
     $env:OLYMPUS_SMOKE_METADATA_URI = $apiUri
@@ -969,7 +987,7 @@ subprocess.run = _run
             'OLYMPUS_SMOKE_REQUEST_LOG', 'OLYMPUS_SMOKE_METADATA_URI', 'OLYMPUS_SMOKE_RAW_BASE',
             'OLYMPUS_SMOKE_ARCHIVE_URI', 'OLYMPUS_SMOKE_PWSH', 'OLYMPUS_SMOKE_METADATA_FAIL',
             'OLYMPUS_SMOKE_SOURCE_VERSION',
-            'OLYMPUS_SMOKE_SCRIPT', 'OLYMPUS_SMOKE_HOOK_DIR',
+            'OLYMPUS_SMOKE_SCRIPT', 'OLYMPUS_SMOKE_HOOK_DIR', 'OLYMPUS_SMOKE_EXPECTED_GLOBAL_AGENT',
             'OLYMPUS_SMOKE_OTHER_DIR', 'OLYMPUS_SMOKE_LAUNCHER_PATH', 'OLYMPUS_SMOKE_LAUNCHER', 'OLYMPUS_SMOKE_OPENCODE_CONFIG',
             'OLYMPUS_SMOKE_GLOBAL_MARKER', 'OLYMPUS_SMOKE_BIN_MARKER', 'OLYMPUS_SMOKE_VERSION_MARKER',
             'OLYMPUS_SMOKE_GLOBAL_MANIFEST', 'OLYMPUS_SMOKE_USER_CONFIG')) {

@@ -7,8 +7,8 @@ Maintainer-facing, directional, evidence-driven and subject to validation. This 
 - **OpenCode — the only currently supported Olympus runtime.** Prioritize it for every new feature, agent, command, architectural improvement, and runtime capability.
 - Do not add Codex support, compatibility fallbacks, or parity gates. Historical Codex components, evaluations, and release claims remain dated evidence only; they do not define current support or compatibility.
 - Preserve OpenCode capability limits and evidence dates. Do not generalize a scoped runtime result to untested versions or platforms.
-- The eleven canonical Olympus Core roles and their responsibilities remain intact. Runtime support status does not remove or reassign a role.
-- OpenCode exposes exactly two global task commands: `/olympus.ultra <prompt>` for maximum useful safe concurrency within the configured ceiling, and `/olympus.performance <prompt>` for the existing explicit-only optimization gate. There are no bare aliases; empty-argument usage is a prompt-level guard, not deterministic native enforcement.
+- The current candidate has nine Core roles: Kael and Atlas as separate primaries and seven specialists.
+- OpenCode exposes three global task commands: `/olympus.ultra`, `/olympus.performance`, and `/olympus.performance-ultra`. They respect the selected Kael or Atlas primary. There are no bare aliases; empty-argument usage is a prompt-level guard, not deterministic native enforcement.
 
 ## Current foundation — SHIPPED
 
@@ -108,17 +108,19 @@ Explicit user optimization intent may engage Helios; a performance fact alone ne
 ## Command UX — namespaced OpenCode commands
 
 The earlier Phase 10 decision dropped unnamespaced `/power`, `/plan`,
-`/performance`, and `/fast` shortcuts. Current OpenCode provides exactly
-`/olympus.ultra <prompt>` and `/olympus.performance <prompt>` as global native
-commands. Ultra maximizes useful, safe concurrency only up to the configured
-ceiling; Performance enters the existing Helios gate and still stops for
-approval before implementation. Neither changes ownership or completion gates,
-and neither has a bare alias. Empty-argument usage is guarded in the prompt
+`/performance`, and `/fast` shortcuts. The three global native commands are
+`/olympus.ultra <prompt>`, `/olympus.performance <prompt>`, and
+`/olympus.performance-ultra <prompt>`. Ultra minimizes time to acceptance,
+not child count; Performance uses the Helios gate and preserves approval of
+the concrete direction before implementation. Performance-Ultra applies both.
+Kael may execute authorized work; Atlas stops at analysis and a scoped handoff.
+The commands preserve ownership and completion gates and have no bare aliases.
+Empty-argument usage is guarded in the prompt
 because native command metadata has no required-arguments field. `/goal` remains
 opt-in and user-selected where the native surface provides it; Kael does not
 trigger it invisibly or assume it delegates.
 
-- `/power` and `/plan` — **DROP as Olympus commands**. Natural-language requests use the normal routing and Atlas gate; the runtime's built-in `/plan` is not an Olympus role invocation.
+- `/power` and `/plan` — **DROP as Olympus commands**. Select Atlas for read-only planning; the runtime's built-in `/plan` is not an Olympus role invocation.
 - Bare `/performance` and `/fast` — **DROP**. Use the explicit namespaced commands above; FAST remains only a maintainer qualification profile, and the trivial fast path remains a policy optimization for routing.
 
 ## Phase order
@@ -135,7 +137,7 @@ trigger it invisibly or assume it delegates.
 | 7 — Talos The Sentinel | **SHIPPED** | Bounded security defect and trust-boundary diagnosis; static/synthetic, installer, regression and user-executed live qualification passed. |
 | 8 — Helios The Optimizer | **SHIPPED** | Explicit-only feasibility/proposal, mandatory user approval, before/after validation; user-executed live cases A and B passed. |
 | 9 — Contextual maintenance (Issue #28) | **IN VALIDATION** | One Kael handles OlympusAgents and external-project work using the normal specialists and gates; former separate maintenance role/command are removed. Historical Codex capability labels are not current support claims. |
-| 10 — Command UX | **SUPERSEDED** | Earlier bare shortcuts remain dropped; the current exact namespaced commands are `/olympus.ultra` and `/olympus.performance`, with no aliases. |
+| 10 — Command UX | **SUPERSEDED** | Earlier bare shortcuts remain dropped. The current three namespaced commands are listed above. |
 | 11 — Integrated Routing Qualification | **SHIPPED** | [Closure evidence](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/8534e94337797f0c734d5abcf91b10a13b013c62/tests/phase11-integrated-routing/baseline.md): qualification is complete with no pending native cases. Case I remains guided PARTIAL; Argus/Thales same-session follow-up runtime coverage was NOT_EXERCISED. These are non-blocking limits, not evidence that every runtime path was exercised. |
 | 12 — Cross-harness evaluation | **CLOSED — HISTORICAL** | [Results](https://github.com/Edulynch/OpenCode-OlympusAgents/blob/5e9bec1a5eb51d9bfcac93931f0d165a48b4a53c/docs/history/PHASE12-CROSS-HARNESS-RESULTS.md): 3 matched pairs / 6 verified executions at that time; PASS for tested invariants only. This does not establish current Codex support, total parity, superiority, or a harness/model winner. |
 

@@ -335,6 +335,7 @@ class SliceA(unittest.TestCase):
 
         collect_help_paths(cli_parser())
         self.assertEqual(48, len(paths))
+        self.assertFalse(any(path[0] in {"orin", "argus"} for path in paths))
         self.assertEqual(36, sum(
             not any(len(other) > len(path) and other[:len(path)] == path for other in paths)
             for path in paths
@@ -981,7 +982,6 @@ test ! -e "{sentinel}"
         self.assertTrue(command_paths.isdisjoint(
             {item["path"] for item in manifest["managed_files"]}
         ))
-        self.assertFalse(any(path[0] in {"orin", "argus"} for path in paths))
         preview = self.json_query(*self.config_apply_arguments())
         self.assertEqual("ok", preview["result"])
         self.assertEqual([], preview["data"]["changes"])
@@ -1028,6 +1028,10 @@ test ! -e "{sentinel}"
         self.assertTrue(manifest_path.is_file())
 
     def test_slice_c7_project_recovery_rejects_v010_manifest_receipt_without_writes(self):
+        # Recovery gets the canonical trusted source from CLI preflight. Mirror
+        # that boundary when calling internals directly (Windows TEMP may use
+        # an 8.3 alias that is not a valid lexical containment base).
+        trusted_source = self.source.resolve(strict=True)
         manifest_path = self.create_managed_install(version="v0.10.0")
         legacy_raw = manifest_path.read_bytes()
         current_data = json.loads(legacy_raw)
@@ -1053,7 +1057,7 @@ test ! -e "{sentinel}"
                     config_apply_transaction.TransactionError, "Legacy project manifest receipt",
                 ):
                     config_apply_transaction._manifest_maps(
-                        self.target, record, file_map, {}, self.source, self.renderer,
+                        self.target, record, file_map, {}, trusted_source, self.renderer,
                     )
                 self.assertEqual(before, self.snapshot())
 
@@ -1063,7 +1067,7 @@ test ! -e "{sentinel}"
             config_apply_transaction.TransactionError, "Legacy project manifest receipt",
         ):
             config_apply_transaction._settings_manifest_data(
-                self.target, self.source,
+                self.target, trusted_source,
                 {"scope": "project", "manifest_path": record_path},
                 legacy_raw, legacy_raw,
             )

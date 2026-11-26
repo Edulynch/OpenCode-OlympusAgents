@@ -156,7 +156,7 @@ historical facts do not describe current public routes.
 OpenCode V2.0.26 global discovery was observed on isolated Windows with the
 v0.4.6 installer: 15 resources, read-only `VerifyOnly`, loader active, 12/12
 then-current agents plus two controls, and configuration-level Kael selection.
-The current 11-role candidate was not included; no model-backed conversation
+The current nine-role candidate was not included; no model-backed conversation
 or universal runtime compatibility is implied.
 
 **Permission precedence limit:** V2 resolves the **last matching rule**, not

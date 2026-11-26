@@ -227,8 +227,8 @@ def main() -> int:
         capabilities = tomllib.load(stream)
     maintenance_policy = (ROOT / "olympus" / "policies" / "maintenance-context.md").read_text(encoding="utf-8").strip()
     canonical_roles = {path.stem for path in (ROOT / "olympus" / "roles").glob("*.md")}
-    check("CANONICAL_11_UNIQUE_ROLE_FILES", len(canonical_roles) == 11 and canonical_roles == set(models["roles"]))
-    check("CANONICAL_11_UNIQUE_DISPLAY_IDENTITIES", set(identities) == canonical_roles and len(set(identities.values())) == 11 and
+    check("CANONICAL_9_UNIQUE_ROLE_FILES", len(canonical_roles) == 9 and canonical_roles == set(models["roles"]))
+    check("CANONICAL_9_UNIQUE_DISPLAY_IDENTITIES", set(identities) == canonical_roles and len(set(identities.values())) == 9 and
         all(display.split(" — ", 1)[0].casefold() == role for role, display in identities.items()))
     check("ONE_ROOT_ORCHESTRATOR", "ROOT ORCHESTRATOR" in (ROOT / "olympus/roles/kael.md").read_text(encoding="utf-8"))
 
@@ -271,7 +271,7 @@ def main() -> int:
     check(
         "INSTALLER_HAS_NO_HARDCODED_ROLE_MODEL_MAP",
         re.search(
-            r'(?m)^\s*"(?:kael|thales|atlas|argus|talos|helios|veyra|orin|kovan|nox|vera)"=@\(',
+            r'(?m)^\s*"(?:kael|thales|atlas|talos|helios|veyra|kovan|nox|vera)"=@\(',
             bootstrap_text,
         ) is None,
     )
@@ -299,29 +299,35 @@ def main() -> int:
         path.stem: path.read_text(encoding="utf-8")
         for path in (ROOT / "olympus/harnesses/opencode/commands").glob("*.md")
     }
-    expected_commands = {"olympus.ultra", "olympus.performance"}
+    expected_commands = {"olympus.ultra", "olympus.performance", "olympus.performance-ultra"}
     check("EXACT_NAMESPACED_COMMAND_SOURCE_SET", set(command_sources) == expected_commands)
     for name, command in command_sources.items():
         metadata = yaml_frontmatter(command)
-        rendered_path = ROOT / ".opencode" / "commands" / f"{name}.md"
-        rendered = rendered_path.read_text(encoding="utf-8") if rendered_path.is_file() else ""
         check(f"COMMAND_{name.upper().replace('.', '_')}_NATIVE_SHAPE",
-              metadata is not None and "agent: kael" in metadata[0].splitlines()
-              and "subagent: false" in metadata[0].splitlines()
-              and not any(line.startswith(("model:", "template:")) for line in metadata[0].splitlines())
+              metadata is not None and "subagent: false" in metadata[0].splitlines()
+              and not any(line.startswith(("agent:", "model:", "template:")) for line in metadata[0].splitlines())
               and "$ARGUMENTS" in command and "empty or contains only whitespace" in command
-              and "Do not call tools or launch agents." in command and "!`" not in command
-              and rendered_path.is_file()
-              and GENERATED_MARKER in rendered)
+              and "Do not call tools or launch agents." in command
+              and "Before using tools, check the already-known current primary." in command
+              and "!`" not in command)
     check("ULTRA_COMMAND_PRESERVES_CEILING_AND_GATES",
-          "MAX_ACTIVE_CHILDREN" in command_sources.get("olympus.ultra", "")
-          and "Do not add filler" in command_sources.get("olympus.ultra", "")
-          and "completion gates" in command_sources.get("olympus.ultra", ""))
+          all(term in command_sources.get("olympus.ultra", "") for term in (
+              "ULTRA_CEILING", "READY_WORKSTREAMS", "TARGET_ACTIVE", "CURRENT_ACTIVE",
+              "UNDERFILL_REASON", "Do not wait for a whole wave, require a single batch",
+              "Same-role sessions are permitted only for genuinely independent work",
+          )))
     check("PERFORMANCE_COMMAND_RETAINS_APPROVAL_AND_MEASUREMENT",
-          "explicit optimization request" in command_sources.get("olympus.performance", "")
-          and "human approval before implementation" in command_sources.get("olympus.performance", "")
+          "explicit optimization intent" in command_sources.get("olympus.performance", "")
+          and "obtains approval for any concrete unsettled direction before implementation" in command_sources.get("olympus.performance", "")
           and "before/after/delta/target measurements" in command_sources.get("olympus.performance", "")
           and "does not select `/olympus.ultra`" in command_sources.get("olympus.performance", ""))
+    check("PERFORMANCE_ULTRA_COMBINES_BOTH_MODES_AND_GATES",
+          all(term in command_sources.get("olympus.performance-ultra", "") for term in (
+              "DOMAIN_MODE: PERFORMANCE", "EXECUTION_MODE: ULTRA",
+              "stop for approval of a concrete unsettled direction",
+              "before/after/delta/target measurements plus correctness validation",
+              "Use native child sessions only where allowed for the current primary",
+          )))
     check("NO_RETIRED_AEGIS_OR_MAINTAIN_OUTPUT", "aegis" not in opencode_files and
           not (ROOT / ".opencode/commands/maintain.md").exists())
     generated_agent_frontmatter = {
@@ -353,9 +359,9 @@ def main() -> int:
     kael_intent = models["roles"]["kael"]
     check("MODEL_FAMILIES_OPENCODE_ONLY", all(set(family) == {"opencode"} for family in models["families"].values()))
     check("SOL_OPENCODE_MODEL", models["families"]["sol"]["opencode"] == "openai/gpt-6.2-sol")
-    check("LUNA_REMAINS_LUNA", models["families"]["luna"]["opencode"].endswith("gpt-6-luna") and all(models["roles"][r]["family"] == "luna" for r in ("veyra", "orin", "kovan", "nox", "vera")))
+    check("LUNA_REMAINS_LUNA", models["families"]["luna"]["opencode"].endswith("gpt-6-luna") and all(models["roles"][r]["family"] == "luna" for r in ("veyra", "kovan", "nox", "vera")))
     check("NO_STALE_GPT_6_SOL_OUTPUT", all("gpt-6-sol" not in path.read_text(encoding="utf-8") for path in [*opencode_files.values(), ROOT / "opencode.jsonc"]))
-    check("EFFORTS_CANONICAL", models["roles"]["thales"]["effort"] == "xhigh" and models["roles"]["kovan"]["effort"] == "max" and all(models["roles"][r]["effort"] == "high" for r in ("kael", "atlas", "argus", "talos", "helios")))
+    check("EFFORTS_CANONICAL", models["roles"]["thales"]["effort"] == "xhigh" and models["roles"]["kovan"]["effort"] == "max" and all(models["roles"][r]["effort"] == "high" for r in ("kael", "atlas", "talos", "helios")))
 
     check("MAX_CHILDREN_CANONICAL_FOUR", orchestration["max_children"] == 4)
     routing = (ROOT / "olympus/policies/routing.md").read_text(encoding="utf-8")

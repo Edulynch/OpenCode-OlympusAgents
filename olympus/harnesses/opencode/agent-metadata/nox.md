@@ -1,5 +1,5 @@
 ---
-description: Source-read-only trusted-project validation specialist with practical shell.
+description: Trusted-project validation and measurement specialist; test-only writes require exact task scope.
 mode: subagent
 model: "{{opencode_model}}#{{effort}}"
 permissions:
@@ -57,4 +57,9 @@ permissions:
   - action: edit
     resource: "scripts/render_harnesses.py"
     effect: deny
+  # Role prompts require an exact task TEST_WRITE_SCOPE; this native allow is
+  # only the maximum test-source boundary, not task ownership or a source sandbox.
+  - action: edit
+    resource: "tests/**"
+    effect: allow
 ---

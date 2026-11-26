@@ -69,14 +69,16 @@ _STATIC_INPUTS = (
     "olympus/harnesses/opencode/global-permissions.jsonc",
     "olympus/harnesses/opencode/commands/olympus.ultra.md",
     "olympus/harnesses/opencode/commands/olympus.performance.md",
+    "olympus/harnesses/opencode/commands/olympus.performance-ultra.md",
     "scripts/render_harnesses.py",
     "scripts/olympus_cli.py",
     "scripts/olympus",
     "scripts/launch-latest.py",
     "install.ps1",
 )
-_ROLE_NAMES = ("argus", "atlas", "helios", "kael", "kovan", "nox", "orin",
-               "talos", "thales", "vera", "veyra")
+_ROLE_NAMES = (
+    "kael", "atlas", "veyra", "kovan", "nox", "vera", "helios", "talos", "thales",
+)
 _ROLE_INPUTS = tuple(f"olympus/roles/{role}.md" for role in _ROLE_NAMES)
 _AGENT_METADATA_INPUTS = tuple(
     f"olympus/harnesses/opencode/agent-metadata/{role}.md" for role in _ROLE_NAMES
@@ -98,6 +100,7 @@ _OUTPUT_FIXED = (
     ".opencode/scripts/worktree-setup.ps1",
     ".opencode/commands/olympus.ultra.md",
     ".opencode/commands/olympus.performance.md",
+    ".opencode/commands/olympus.performance-ultra.md",
 )
 
 
@@ -301,7 +304,7 @@ def _generated_paths(source: Path, renderer, roles: set[str]) -> dict[str, str]:
         if relative in actual or not isinstance(content, str):
             raise GlobalCliError(f"Renderer produced a duplicate or non-text output: {relative}")
         actual[relative] = content
-    if set(actual) != expected or len(actual) != 17:
+    if set(actual) != expected or len(actual) != len(expected):
         raise GlobalCliError("Renderer output inventory differs from the bounded Linux CLI package layout.")
     return actual
 
@@ -773,6 +776,7 @@ def _validate_package(package_root: Path, *, version: str | None = None,
         raw_receipt, receipt_meta, version=version, commit=commit,
         receipt_sha256=receipt_sha256,
     )
+    _require_current_package_inventory(actual_version, recorded)
 
     files, directories = _scan_package_tree(package_root)
     expected_files = set(recorded) | {_RECEIPT}
@@ -822,6 +826,15 @@ def _known_package_paths() -> set[str]:
     )
 
 
+def _require_current_package_inventory(version: str, recorded: dict[str, str]) -> None:
+    if set(recorded) != _known_package_paths():
+        raise GlobalCliError(
+            f"CLI package receipt for {version} uses an obsolete Olympus inventory and cannot "
+            f"be adopted or force-repaired. Uninstall it with the Linux release that created it "
+            f"({version}), then install the current release."
+        )
+
+
 def _validate_force_package(package_root: Path, *, version: str | None = None,
                             commit: str | None = None,
                             receipt_sha256: str | None = None) -> InstalledIdentity:
@@ -836,8 +849,7 @@ def _validate_force_package(package_root: Path, *, version: str | None = None,
         raw_receipt, receipt_meta, version=version, commit=commit,
         receipt_sha256=receipt_sha256,
     )
-    if set(recorded) != _known_package_paths():
-        raise GlobalCliError("CLI package receipt differs from the bounded Olympus package inventory.")
+    _require_current_package_inventory(actual_version, recorded)
     files, directories = _scan_package_tree(package_root)
     expected_files = set(recorded) | {_RECEIPT}
     expected_directories = {""}

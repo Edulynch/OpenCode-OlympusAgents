@@ -4,7 +4,7 @@
 
 Quick guides: [English](../README.md) · [Español](../README.ES.md).
 
-The [Fast Install](../README.md#fast-install) is per-user, global, and OpenCode-only. It has no project/harness selectors or menus, and the current directory never selects the installation target. It installs the `olympus` CLI and exactly `/olympus.ultra` and `/olympus.performance` as global OpenCode commands; bare aliases are not provided.
+The [Fast Install](../README.md#fast-install) is per-user, global, and OpenCode-only. It has no project/harness selectors or menus, and the current directory never selects the installation target. It installs the `olympus` CLI and exactly `/olympus.ultra`, `/olympus.performance`, and `/olympus.performance-ultra` as global OpenCode commands; bare aliases are not provided.
 
 Choose the latest release below or [install a specific version](#install-a-specific-version). Do not execute installers from a mutable `master` URL.
 
@@ -96,33 +96,51 @@ The receipt states `pending_set`, `committed`, and `pending_uninstall` are recon
 
 Current project manifests use `schema_version=1`, explicit `scope=project`,
 `installed_harnesses=["opencode"]`, nonempty `installed_version` and
-`installed_from_commit`, and the current 15-path managed inventory with hashes.
+`installed_from_commit`, and the current 13-path managed inventory with hashes.
 Global manifests use `schema_version=1`, `scope=global`, exactly OpenCode,
 `installed_version=local` or a release tag, a nonempty `installed_from_commit`,
 and a valid `default_agent_receipt`. When the existing global config is
-user-owned, 15 base resources are managed and the config remains unowned; if
-Olympus creates the config, 16 resources are managed. Both are valid current
-formats. The two namespaced command files are global-only and are not added to
-project manifests or project config apply.
+user-owned, 14 base resources (nine agents, three commands, and two Activity
+files) are managed and the config remains unowned; if
+Olympus creates the config, 15 resources are managed. Both are valid current
+formats. All three namespaced command files are global-only and are not added
+to project manifests or project config apply.
 
-The installer recognizes only the exact, hash-verified v0.10.0 global 13/14-path
-inventories for safe upgrade or uninstall. `VerifyOnly`, global doctor, and
-global config apply report that an update is required; they do not create the
-missing commands or change the target. New command destinations that already
-exist without current manifest ownership are collisions, even when their bytes
-match Olympus output; the installer will not adopt or overwrite them.
+Older role/command inventories, unsupported legacy manifests, and receipt-less
+global manifests are rejected rather than migrated or adopted. `--force` does
+not bypass those checks. `olympus doctor` is read-only: use it to inspect the
+reported state, not to migrate or repair it. For an unsupported older
+installation, use the Olympus version that created it to uninstall, then
+install the current version; never manually delete files or receipts. For a
+global installation, rerun the current public entrypoint from [Fast Install](../README.md#fast-install)
+after the old version's uninstall completes. For an older project-managed
+configuration, follow that creator version's project uninstall procedure, then
+use only the current supported project-configuration flow. If the creator
+version or its supported uninstall route cannot be established, stop and seek
+maintainer guidance rather than forcing or deleting resources.
 
-### Update from v0.10.0
+New command destinations that already exist without current manifest ownership
+are collisions, even when their bytes match Olympus output; the installer will
+not adopt or overwrite them.
 
-```powershell
-olympus update
-olympus version
-olympus doctor --scope global
-```
+### Safe transition from an unsupported installation
+
+1. Run the read-only diagnostic for the exact target: `olympus doctor --scope
+   global`, or `olympus doctor --scope project --target
+   <absolute-worktree-root>`. Doctor reports state; it does not migrate files.
+2. Identify the Olympus version that created the installation and use that
+   version's supported uninstall procedure. Do not use the current `--force`
+   option to cross an unsupported manifest or receipt.
+3. After the old installation is removed through its matching procedure, install
+   the current release using the supported global entrypoint above. For project
+   configuration, use the current supported project workflow; `config apply`
+   does not install, adopt, or migrate an absent/legacy manifest.
+4. Verify with `olympus version` and the appropriate read-only `olympus doctor`
+   command. Do not manually delete managed files, manifests, or receipts.
 
 The updater preserves your explicit model and effort overrides and global
 concurrency preference. Use the updater, not `config apply`, to install the
-two new commands. Verify them in a new OpenCode session.
+three global commands. Verify them in a new OpenCode session.
 
 Overrides use `schema_version=1` with an `overrides` map; a missing file means
 empty, and precedence is project override, global override, then Core defaults.
@@ -216,8 +234,8 @@ below do not inherit that rule.
 | `olympus update` (`upgrade`) | Fixed global OpenCode; CWD does not select a project | Installs a newer immutable stable release. When both installed versions match the latest, it reports that Olympus is up to date without downloading the release archive or running the installer. `--force` (Windows/Linux only) requests a full reinstall of manifest-proven managed files; drift replacement is limited to those paths. No backup, unknown-file cleanup, adoption, or downgrade. There is no preview mode. |
 | `olympus install` | Fixed global OpenCode; no scope/harness/target/version selectors | `--dry-run` previews. Otherwise the installer executes; `--execute` makes that intent explicit. `--json` captures native output. |
 | `olympus uninstall` | Fixed global OpenCode | `--dry-run` previews; otherwise removes unchanged manifest-owned resources, reverses the still-owned default field, and removes the active CLI. PATH entry cleanup applies only to Windows. |
-| `olympus <role> set-model <id>` / `set-effort <value>` | `<role>`: `kael`, `veyra`, `orin`, `atlas`, `kovan`, `argus`, `nox`, `vera`, `talos`, `thales`, or `helios`; auto-detects or accepts scope/target | Writes the user override immediately and updates a managed installed OpenCode agent when applicable. Global setters require a safely resolved root and honor the shared lock and pending-recovery controls above. This is not a canonical source edit and has no dry-run flag. |
-| `olympus config set-max-parallel N` | Global user configuration; `N` is an integer from 1 to 8 | Updates Kael's prompt-level direct-child ceiling and the managed global Kael prompt when installed. Default is 4. It does not control the native scheduler, combine separate root sessions into one quota, cancel active children, or update existing project installations implicitly. |
+| `olympus <role> set-model <id>` / `set-effort <value>` | Current role IDs: `kael`, `atlas`, `veyra`, `kovan`, `nox`, `vera`, `helios`, `talos`, and `thales`; auto-detects or accepts scope/target | Writes the user override immediately and updates a managed installed OpenCode agent when applicable. Global setters require a safely resolved root and honor the shared lock and pending-recovery controls above. This is not a canonical source edit and has no dry-run flag. |
+| `olympus config set-max-parallel N` | Global user configuration; `N` is an integer from 1 to 8 | Updates the shared prompt-level ceiling for Kael and Atlas and their managed global prompts when installed. Default is 4. It does not control the native scheduler, combine separate root sessions into one quota, cancel active children, or update existing project installations implicitly. |
 | `olympus models list`, `olympus agents list` | Canonical source for models; agents list uses auto-detection or explicit scope/target | Read-only lists. `models list` is offline; `agents list` shows effective values and their sources. |
 | `olympus models set-family <family> --opencode <id>` / `olympus agents set-model <role> [--family <family>] [--effort <value>]` (at least one option required) | Canonical checkout selected by `--source`, or this CLI's bundled source | Edits canonical model intent. `--dry-run` previews; omitting it executes the source edit. JSON output for these edits requires `--dry-run`. |
 | `olympus config list` / `olympus config check` | List uses auto-detection or explicit scope/target; check reads the selected source and OpenCode harness | Both are read-only. List shows effective values, precedence, and paths; check compares renderer output without writing. |
@@ -227,7 +245,7 @@ below do not inherit that rule.
 | `olympus doctor` | Auto-detects or accepts explicit scope/target; project scope requires `--target`; `--harness opencode` is the supported harness | Read-only configuration and managed-installation diagnostics. It does not apply repairs or check provider access. |
 | `olympus completion powershell` / `olympus completion bash` | Current shell only: PowerShell 7 on Windows or Bash on Linux | Prints optional native registration code. Load it explicitly in the current shell; completion uses local CLI commands/options/choices only and does not inspect files, providers, networks, or configuration. No profile is edited. |
 
-For a project copy, first preview `olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --dry-run`, then execute only when the proposed change is intended. Project `config list` labels the concurrency ceiling as `GLOBAL`; changing the global preference does not retroactively rewrite existing project agents or sessions.
+For a project copy, first preview `olympus config apply --scope project --target <absolute-worktree-root> --harness opencode --dry-run`, then execute only when the proposed change is intended. Project `config list` labels the concurrency ceiling as `GLOBAL`. Project apply uses the shared global prompt-ceiling preference when rendering Kael and Atlas; changing that preference alone does not rewrite existing project agents or sessions, so explicitly apply the intended project update. Project apply excludes the three global-only command files and does not duplicate them.
 
 To enable completion only in the current shell:
 

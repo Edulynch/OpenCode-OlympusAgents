@@ -3,10 +3,13 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$kael = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/kael.md'))
-$kovan = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/kovan.md'))
-$nox = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/nox.md'))
+$kael = [IO.File]::ReadAllText((Join-Path $root 'olympus/harnesses/opencode/agent-prompts/kael.md'))
+$kovan = [IO.File]::ReadAllText((Join-Path $root 'olympus/harnesses/opencode/agent-prompts/kovan.md'))
+$nox = [IO.File]::ReadAllText((Join-Path $root 'olympus/harnesses/opencode/agent-prompts/nox.md'))
 $maintenance = [IO.File]::ReadAllText((Join-Path $root 'olympus/policies/maintenance-context.md'))
+$routing = [IO.File]::ReadAllText((Join-Path $root 'olympus/policies/routing.md'))
+$orchestration = [IO.File]::ReadAllText((Join-Path $root 'olympus/policies/orchestration.toml'))
+$models = [IO.File]::ReadAllText((Join-Path $root 'olympus/core/models.toml'))
 $fixture = Join-Path $PSScriptRoot 'fixtures'
 
 function Check([string]$Id, [bool]$Condition) {
@@ -33,7 +36,7 @@ try {
     $preflight = Section $kael 'Capability Preflight — before research'
     $authority = Section $kael 'Task-scoped Authority Grants and native permission outcomes'
     $kaelMetadata = Frontmatter ([IO.File]::ReadAllText((Join-Path $root 'olympus/harnesses/opencode/agent-metadata/kael.md')))
-    $noxMetadata = Frontmatter $nox
+    $noxMetadata = Frontmatter ([IO.File]::ReadAllText((Join-Path $root 'olympus/harnesses/opencode/agent-metadata/nox.md')))
     $discovery = Section $kael 'Task-scoped, progressive discovery'
     $mission = Section $kael 'Mission and routing'
     $repositoryPreflight = Subsection $kael 'OpenCode repository preflight'
@@ -41,41 +44,39 @@ try {
     Check ORDER ($mission.IndexOf('Capability Preflight') -ge 0 -and
         $mission.IndexOf('Capability Preflight') -lt $mission.IndexOf('choose DIRECT') -and
         $kael.IndexOf('## Capability Preflight') -lt $kael.IndexOf('Use the delegation gate'))
-    Check PREFLIGHT ($preflight -match 'actual outcome' -and $preflight -match 'required capabilities' -and
-        $preflight -match 'target-repository\s+identity' -and $preflight -match 'role permissions' -and
-        $preflight -match 'is any additional evidence\s+needed' -and
-        $preflight -match 'inspect the project\s+beyond minimal identity/ownership preflight' -and
-        $preflight -match 'not a research phase')
-    Check KNOWN_READONLY_PREFLIGHT_REUSE ($repositoryPreflight -match 'For read-only work on a known path when Olympus\s+identity does not affect feasibility or authorization' -and
-        $repositoryPreflight -match 'reuse the trusted root\s+and location; do not reread all Core markers merely to label the checkout' -and
-        $repositoryPreflight -match 'If a\s+root probe is genuinely needed, run `git rev-parse --show-toplevel` alone' -and
-        $maintenance -match 'For read-only work on a known path in the active trusted checkout' -and
-        $maintenance -match 'Do not reread every Core marker solely to label that checkout')
-    Check IDENTITY_OWNERSHIP_PREFLIGHT_RETAINED ($repositoryPreflight -match 'read all three Core markers, independent project identity' -and
-        $repositoryPreflight -match 'positive ownership evidence for the exact target' -and
-        $repositoryPreflight -match 'install-manifest/installer ownership evidence' -and
-        $maintenance -match 'all three canonical Olympus Core files' -and
-        $maintenance -match 'independent project-identity evidence identifies OlympusAgents' -and
+    Check PREFLIGHT ($preflight -match 'actual outcome and required\s+capabilities' -and
+        $preflight -match 'target identity' -and $preflight -match 'role permissions' -and
+        $preflight -match 'If a root,\s+identity, ownership, or manifest fact is missing, route the smallest necessary' -and
+        $preflight -match 'Kael does\s+not inspect the repository or run tools to decide feasibility')
+    Check KAEL_PREFLIGHT_HAS_NO_DIRECT_REPOSITORY_TOOLS ($repositoryPreflight -match 'Kael never runs `git rev-parse`, shell, or repository read/search tools' -and
+        $repositoryPreflight -match 'Reuse an\s+explicit root and identity only from native session context' -and
+        $repositoryPreflight -match 'an\s+Atlas\s+handoff, or Veyra''s bounded evidence' -and
+        $repositoryPreflight -notmatch 'run `git rev-parse --show-toplevel` alone' -and
+        $maintenance -match 'Kael never probes the root or reads repository files')
+    Check IDENTITY_OWNERSHIP_PREFLIGHT_RETAINED ($repositoryPreflight -match 'canonical root, independent project identity, exact\s+target ownership' -and
+        $repositoryPreflight -match 'exact\s+target ownership' -and
+        $repositoryPreflight -match 'applicable installer/manifest checks' -and
+        $maintenance -match 'all three canonical Core markers' -and
+        $maintenance -match 'independent project identity' -and
         $maintenance -match 'positive ownership evidence for the exact target' -and
         $maintenance -match 'applicable installer/manifest and protected-path checks' -and
-        $authority -match 'check `.opencode/orchestrator-install.json` plus\s+Olympus installer ownership declarations')
+        $authority -match 'plus\s+applicable `.opencode/orchestrator-install.json`' -and
+        $authority -match 'Olympus installer ownership\s+evidence when present')
     Check CAPABILITY_ROUTE_ORDER ($preflight -match 'INTENT → TARGET_REPOSITORY → REQUIRED_CAPABILITY → ROLE →\s+EFFECTIVE_AUTHORITY → NATIVE_ROUTE → ROUTE/BLOCK' -and
-        $preflight -match 'scope against that role''s effective native permission, user constraints,\s+ownership, and policy boundaries' -and
-        $preflight -match 'Kael never directly implements or executes\s+technical validation, regardless of effective permission' -and
+        $preflight -match 'scope against effective native permission, user constraints,\s+ownership, and policy boundaries' -and
+        $preflight -match 'Kael never reads/searches repositories, runs\s+shell/Git/tests, implements, or executes technical validation' -and
         $preflight -match 'selected specialist can be invoked under the effective `subagent` permission')
-    Check SPECIALIST_ROUTE ($preflight -match 'read-only `git status --short` to\s+Nox as one bounded child assignment' -and
-        $preflight -match '`SCOPE: read-only git status --short`\s+and `REPOSITORY_ROOT: <the identified trusted repository root>`' -and
-        $preflight -match 'Reconcile and consume that original child''s terminal result' -and
-        $preflight -match 'including\s+its directly observed command outcome' -and
-        $preflight -match 'an absent\s+or unresolved result does not authorize a retry' -and
-        $preflight -match 'scoped tests to Nox and\s+implementation or explicitly authorized Git mutations to Kovan' -and
-        $preflight -match 'known exact\s+small edit always uses one scoped Kovan writer' -and
-        $preflight -match 'Kovan may run focused\s+implementation checks, while Nox is reserved for distinct needed test/runtime\s+evidence' -and
+    Check SPECIALIST_ROUTE ($preflight -match 'Route bounded\s+reproduction, tests, runtime validation, and measurement to Nox' -and
+        $preflight -match 'implementation or explicitly authorized Git mutations to Kovan' -and
+        $preflight -match 'Every product-source edit\s+uses one scoped Kovan writer' -and
+        $preflight -match 'Nox may perform only read-only Git\s+integrity checks' -and
+        $routing -match 'Kovan may run focused checks while implementing' -and
         $preflight -match 'Check whether native delegation is actually available to this session' -and
         $preflight -match 'allowlist or role definition alone does not prove' -and
         $preflight -match 'exact scope, and\s+child-result reconciliation lifecycle')
-    Check WRITER_BOUNDARY ($kael -match 'A known exact\s+small edit always uses one scoped Kovan writer' -and
-        $kael -match 'Only DISJOINT file scopes and non-conflicting repository/ref Git scopes may run\s+concurrently')
+    Check WRITER_BOUNDARY ($kael -match 'Every known exact small source edit uses\s+\*\*one Kovan writer\*\*' -and
+        $kael -match 'one mutative writer per worktree' -and
+        $kael -match 'Parallel writers require\s+isolated worktrees plus non-conflicting refs and shared resources')
     Check DELEGATION_BLOCKERS ($preflight -match 'BLOCKED_DELEGATION_UNAVAILABLE' -and
         $preflight -match 'Do not claim an\s+attempt that did not happen' -and
         $preflight -match 'A user prohibition or effective native DENY means\s+do not invoke' -and
@@ -96,9 +97,9 @@ try {
         $authority -match 'do not send a duplicate Kael\s+QUESTION' -and
         $authority -match 'rejection/cancellation stops it with no retry or\s+bypass' -and
         $authority -match 'If denied, keep work stopped')
-    Check NO_DELEGATION ($preflight -match 'Do not invoke Veyra to decide\s+whether Olympus has permission' -and
-        $preflight -match 'Orin to decide the plane' -and
-        $preflight -match 'inspect the project\s+beyond minimal identity/ownership preflight to confirm an already-known boundary')
+    Check NO_DELEGATION ($preflight -match 'If a root,\s+identity, ownership, or manifest fact is missing, route the smallest necessary\s+read-only evidence task to Atlas or Veyra' -and
+        $preflight -notmatch 'Orin to decide the plane' -and
+        $preflight -match 'Trivial requests still use the direct-answer path with zero children')
     Check NORMAL_GIT_ROUTING ($preflight -match 'Ordinary Git work in a trusted project belongs to Kael''s normal workflow' -and
         $preflight -match 'Kovan is the normal-plane Git writer' -and
         $preflight -match 'Nox may perform only read-only Git\s+integrity checks' -and
@@ -110,33 +111,37 @@ try {
         $preflight -match 'explain the blocker before optional research')
     Check BOUNDARY ($maintenance -match 'Kael is the only root orchestrator' -and
         $maintenance -match 'There is no separate maintenance role, command' -and
-        $maintenance -match 'canonical Olympus Core files' -and
+        $maintenance -match 'all three canonical Core markers' -and
         $maintenance -match 'olympus/core/models\.toml' -and
         $maintenance -match 'olympus/core/identities\.toml' -and
         $maintenance -match 'olympus/policies/routing\.md' -and
-        $maintenance -match 'independent project-identity evidence identifies OlympusAgents' -and
-        $maintenance -match 'A directory name, a request mentioning Olympus, or an isolated matching file is not sufficient' -and
-        $maintenance -match 'If identity, ownership, or target is unclear or conflicting, stop before dependent work' -and
+        $maintenance -match 'independent project identity' -and
+        $maintenance -match 'A directory name, a request mentioning Olympus, or an isolated matching file is insufficient' -and
+        $maintenance -match 'If identity, ownership, or target is unclear or conflicting, stop dependent work' -and
         $maintenance -match 'For a different user project, work only on that project' -and
         $maintenance -match 'Do not reach into a separate OlympusAgents checkout' -and
-        $maintenance -match 'manifest-owned files' -and
-        $kael -notmatch '(?i)Aegis|/maintain')
+        $maintenance -match 'manifest-owned files')
     Check KAEL_NATIVE_PERMISSION ($kaelMetadata -notmatch '(?m)^  - action: external_directory\b' -and
         $kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
-        $kaelMetadata -match '(?m)^  - action: shell\r?\n    resource: "git rev-parse --show-toplevel"\r?\n    effect: allow(?:\r?\n|$)' -and
-        $kaelMetadata -notmatch '(?ms)^  - action: shell\r?\n    resource: "(?:git status \*|git branch --show-current|git diff --check|git diff --stat)"\r?\n    effect: allow$' -and
+        $kaelMetadata -notmatch '(?ms)^  - action: shell\r?\n    resource: [^\r\n]+\r?\n    effect: allow$' -and
+        $kaelMetadata -match '(?m)^  - action: read\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
+        $kaelMetadata -match '(?m)^  - action: glob\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
+        $kaelMetadata -match '(?m)^  - action: grep\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
+        $kaelMetadata -match '(?m)^  - action: list\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
+        $kaelMetadata -match '(?m)^  - action: lsp\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
         $kaelMetadata -match '(?m)^  - action: edit\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
         $kaelMetadata -match '(?m)^  - action: serena_\*\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
         $kaelMetadata -notmatch '(?ms)^  - action: serena_[^\r\n]*\r?\n    resource: [^\r\n]+\r?\n    effect: allow$' -and
         $kaelMetadata -match '(?m)^  - action: subagent\r?\n    resource: "\*"\r?\n    effect: deny(?:\r?\n|$)' -and
         $kaelMetadata -match '(?m)^  - action: subagent\r?\n    resource: nox\r?\n    effect: allow(?:\r?\n|$)')
-    $expectedKaelChildren = @('veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios')
+    $expectedKaelChildren = @('veyra','kovan','nox','vera','talos','helios','thales')
     $actualKaelChildren = @([regex]::Matches($kaelMetadata, '(?m)^  - action: subagent\r?\n    resource: ([^\r\n]+)\r?\n    effect: allow\r?$') |
         ForEach-Object { $_.Groups[1].Value.Trim('"') })
     Check KAEL_SPECIALIST_ALLOWLIST_UNCHANGED (($actualKaelChildren -join ',') -ceq ($expectedKaelChildren -join ',') -and
-        $kael -match '(?m)^mode: primary\r?$' -and $kael -match 'model: "openai/gpt-6\.2-sol#high"')
+        $kaelMetadata -match '(?m)^mode: primary\r?$' -and
+        $kaelMetadata -match 'model: "\{\{opencode_model\}\}#\{\{effort\}\}"')
     Check NOX_NATIVE_SHELL ($noxMetadata -match '(?m)^  - action: shell\r?\n    resource: "\*"\r?\n    effect: allow(?:\r?\n|$)' -and
-        $nox -match 'Source-read-only trusted-project validation specialist with practical shell')
+        $nox -match 'normally source-read-\s*only' -and $nox -match 'execute validation relevant to the task contract')
 
     # Controlled small fixture: localized cart target, related test, unrelated auth module.
     Check FIXTURE ((Test-Path (Join-Path $fixture 'src/cart.ts')) -and
@@ -160,14 +165,14 @@ try {
     Check BROAD_ALLOWED ($discovery -match 'Refactor authentication across\s+all services' -and
         $discovery -match 'audit these 40 independent\s+modules' -and $discovery -match 'repository-wide analysis')
     # Admitted Olympus Git work uses administrative rather than source-first policy.
-    Check CONTEXTUAL_MAINTENANCE ($maintenance -match 'For read-only work on a known path in the active trusted checkout' -and
-        $maintenance -match 'canonical Olympus Core files' -and
-        $maintenance -match 'project-identity evidence' -and
+    Check CONTEXTUAL_MAINTENANCE ($maintenance -match 'Kael is the only root orchestrator' -and
+        $maintenance -match 'Kael never probes the root or reads repository files' -and
+        $maintenance -match 'all three canonical Core markers' -and
         $maintenance -match 'positive ownership evidence for the exact target' -and
         $maintenance -match 'A native `/goal` surface remains opt-in')
-    Check INVARIANTS ($kael -match 'MAX_ACTIVE_CHILDREN = 4' -and
-        $kael -match 'model: "openai/gpt-6.2-sol#high"' -and
-        $kael -notmatch 'Luna Fast|project-context\.json')
+    Check INVARIANTS ($orchestration -match '(?m)^max_children = 4$' -and
+        $kael.Contains('MAX_ACTIVE_CHILDREN = {{max_children}}') -and
+        $models -match '(?ms)^\[roles\.kael\]\s+family = "sol"\s+effort = "high"')
     Write-Output 'PREFLIGHT / SCOPED DISCOVERY QUALIFICATION: PASS (static policy contracts + fixture only; no live delegation or native permission behavior executed)'
     exit 0
 } catch {

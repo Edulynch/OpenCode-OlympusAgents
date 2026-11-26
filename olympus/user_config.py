@@ -337,35 +337,47 @@ def _prepare_installed_update(source: Path, role: str, model: str, effort: str,
     except (ValueError, UnicodeError) as error:
         raise UserConfigError("The installed OpenCode ownership manifest is invalid; no files were changed.") from error
 
-    relative = f"agents/{role}.md"
-    owned_relative = f".opencode/{relative}" if scope == "project" else relative
-    entries = [entry for entry in manifest["managed_files"]
-               if isinstance(entry, dict) and entry.get("path") == owned_relative]
-    if len(entries) != 1 or not isinstance(entries[0].get("sha256"), str) or not _HASH.fullmatch(entries[0]["sha256"]):
-        raise UserConfigError(f"The installed Olympus manifest does not manage {role}; no configuration was changed.")
-    if scope == "project":
-        from . import config_apply
-
-        current, issue = config_apply._read_target_file(root, f".opencode/{relative}")
-        if issue:
-            raise UserConfigError(f"The project-managed {role} agent is unsafe; no configuration was changed.")
-    else:
-        current = global_readonly._read(root, relative)
-    if current is None or hashlib.sha256(current).hexdigest() != entries[0]["sha256"].lower():
-        raise UserConfigError(f"Managed OpenCode agent {role} was changed outside Olympus; preserve it and run olympus doctor.")
-    if max_children is None:
-        updated = _replace_agent_model(current, model, effort, role)
-    else:
-        generated = expected.get(relative)
-        if generated is None:
-            raise UserConfigError(f"The OpenCode renderer does not manage expected agent {role}.")
+    agent_updates = []
+    agent_roles = ("kael", "atlas") if max_children is not None else (role,)
+    if max_children is not None:
         _apply_config_to_expected(source, expected, read_config(source, scope, target))
-        updated = expected[relative]
-    entries[0]["sha256"] = hashlib.sha256(updated).hexdigest()
+    for agent_role in agent_roles:
+        relative = f"agents/{agent_role}.md"
+        owned_relative = f".opencode/{relative}" if scope == "project" else relative
+        entries = [entry for entry in manifest["managed_files"]
+                   if isinstance(entry, dict) and entry.get("path") == owned_relative]
+        if (len(entries) != 1 or not isinstance(entries[0].get("sha256"), str)
+                or not _HASH.fullmatch(entries[0]["sha256"])):
+            raise UserConfigError(
+                f"The installed Olympus manifest does not manage {agent_role}; no configuration was changed."
+            )
+        if scope == "project":
+            from . import config_apply
+
+            current, issue = config_apply._read_target_file(root, f".opencode/{relative}")
+            if issue:
+                raise UserConfigError(
+                    f"The project-managed {agent_role} agent is unsafe; no configuration was changed."
+                )
+        else:
+            current = global_readonly._read(root, relative)
+        if current is None or hashlib.sha256(current).hexdigest() != entries[0]["sha256"].lower():
+            raise UserConfigError(
+                f"Managed OpenCode agent {agent_role} was changed outside Olympus; "
+                "preserve it and run olympus doctor."
+            )
+        if max_children is None:
+            updated = _replace_agent_model(current, model, effort, agent_role)
+        else:
+            updated = expected.get(relative)
+            if updated is None:
+                raise UserConfigError(f"The OpenCode renderer does not manage expected agent {agent_role}.")
+        entries[0]["sha256"] = hashlib.sha256(updated).hexdigest()
+        agent_path = root / (f".opencode/{relative}" if scope == "project" else relative)
+        agent_updates.append((agent_path, current, updated))
     manifest_bytes = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-    agent_path = root / (f".opencode/{relative}" if scope == "project" else relative)
     manifest_path = root / manifest_relative
-    return agent_path, current, updated, manifest_path, raw_manifest, manifest_bytes
+    return tuple(agent_updates), manifest_path, raw_manifest, manifest_bytes
 
 
 def _check_global_recovery(root: Path) -> None:
@@ -385,6 +397,17 @@ def _check_global_recovery(root: Path) -> None:
         raise UserConfigError(
             "An OpenCode guard transaction is pending; preserve it for explicit recovery; no files were changed."
         )
+
+
+def _preflight_global_manifest(root: Path) -> None:
+    from . import global_readonly
+
+    try:
+        raw = global_readonly._read(root, _MANIFEST)
+        if raw is not None:
+            global_readonly._parse_manifest_bytes(raw, "opencode", None)
+    except global_readonly.GlobalFault as error:
+        raise UserConfigError(str(error)) from error
 
 
 def _config_bytes(path: Path, scope: str, target: Path | None) -> bytes | None:
@@ -408,9 +431,14 @@ def _commit_override(path: Path, encoded: bytes, scope: str, target: Path | None
     config_before = _config_bytes(path, scope, target)
     destinations = []
     if installed is not None:
-        agent_path, current, updated, manifest_path, manifest_before, manifest_after = installed
-        if updated != current:
-            destinations.extend(((agent_path, current, updated), (manifest_path, manifest_before, manifest_after)))
+        agent_updates, manifest_path, manifest_before, manifest_after = installed
+        changed_agents = [(agent_path, current, updated) for agent_path, current, updated in agent_updates
+                          if updated != current]
+        if changed_agents:
+            if manifest_after == manifest_before:
+                raise UserConfigError("Managed agent receipts did not change with their content; no files were changed.")
+            destinations.extend(changed_agents)
+            destinations.append((manifest_path, manifest_before, manifest_after))
     if config_before != encoded:
         destinations.append((path, config_before, encoded))
     if not destinations:
@@ -443,7 +471,7 @@ def _commit_override(path: Path, encoded: bytes, scope: str, target: Path | None
 
     try:
         config_apply_transaction.commit_user_config(
-            target if scope == "project" else installed[0].parents[1],
+            target if scope == "project" else installed[0][0][0].parents[1],
             source, lock, scope, path, config_before, encoded, installed, change,
             root_check=root_check, project_fallback=project_fallback,
         )
@@ -561,6 +589,7 @@ def set_max_children(source: Path, value: int) -> tuple[Path, bool]:
         raise UserConfigError(
             f"Cannot safely resolve the global OpenCode root; no configuration was changed: {error}"
         ) from error
+    _preflight_global_manifest(global_root)
     try:
         global_root, global_root_identity = _ensure_global_root(global_root)
         _verify_global_root(global_readonly, global_root, global_root_identity)

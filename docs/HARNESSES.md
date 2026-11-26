@@ -9,10 +9,10 @@ weaken or redefine Core policy.
 
 | Source | Owns |
 |---|---|
-| `olympus/roles/<role>.md` | One conceptual definition and responsibility boundary for each of the 11 canonical roles. Kael is the ROOT ORCHESTRATOR independently of runtime. |
+| `olympus/roles/<role>.md` | One conceptual definition and responsibility boundary for each of the nine canonical roles. Kael is the root orchestrator; Atlas is a separate read-only primary. |
 | `olympus/core/identities.toml` | The single canonical full display identity for each technical role ID; the renderer derives OpenCode descriptions and HUD labels from it. |
 | `olympus/core/models.toml` | The only role → model family / reasoning effort map and OpenCode identifiers. A family upgrade is one edit followed by rendering and qualification. |
-| `olympus/policies/routing.md` and `orchestration.toml` | Specialist suppression, trivial fast path, direct-root ownership, bounded parallelism, and the canonical maximum of four children. |
+| `olympus/policies/routing.md` and `orchestration.toml` | Specialist suppression, trivial fast path, direct-root ownership, bounded parallelism, a default ceiling of four children, and a user-selected prompt ceiling of 1–8 per primary session. |
 | `olympus/policies/result-lifecycle.md` | Question barrier, completion barrier, original-result reconciliation, and no-blind-retry semantics. |
 | `olympus/policies/authority.md` | Canonical ALLOW / ASK / DENY meaning. |
 | `olympus/policies/maintenance-context.md` | Repository identity, contextual maintenance routing, goal-first execution, and the external-project ownership boundary. |
@@ -62,14 +62,17 @@ remains read-only, and candidate files are not activated or installed.
 
 | Adapter | Managed/generated outputs |
 |---|---|
-| OpenCode | `.opencode/agents/**`, `.opencode/commands/olympus.ultra.md`, `.opencode/commands/olympus.performance.md`, `.opencode/plugins/olympus-activity/**`, `.opencode/scripts/worktree-setup.ps1`, `opencode.jsonc` |
+| OpenCode | `.opencode/agents/**`, `.opencode/commands/olympus.ultra.md`, `.opencode/commands/olympus.performance.md`, `.opencode/commands/olympus.performance-ultra.md`, `.opencode/plugins/olympus-activity/**`, `.opencode/scripts/worktree-setup.ps1`, `opencode.jsonc` |
 | Shared contract presentation | `docs/HARNESS-CAPABILITIES.md` |
 
-The renderer manages 17 OpenCode runtime outputs: eleven role agents, two
-commands, two Activity plugin files, the worktree setup script, and
-`opencode.jsonc`. It also renders the capability matrix separately. Renderer
-output membership is not by itself an installer ownership declaration; the
-installed manifest and installer define managed resources.
+The renderer currently emits 16 OpenCode runtime outputs: nine role agents,
+three commands, two Activity plugin files, the worktree setup script, and
+`opencode.jsonc`. It renders the capability matrix separately. Verify the
+current generated inventory with the read-only
+`python -B scripts/render_harnesses.py check --harness opencode`; renderer
+output membership is not itself an installer ownership declaration. Staged
+renderer outputs and manifest-owned installation resources are distinct
+inventories.
 
 ### Core-to-prompt synchronization
 
@@ -102,19 +105,27 @@ are separate CLI operations; they do not install a project. Current manifests
 use `schema_version=1`, explicit scope, and hash-own only declared resources.
 An existing current-format project manifest requires `scope=project`,
 `installed_harnesses=["opencode"]`, nonempty `installed_version` and
-`installed_from_commit`, and the current 15-path managed inventory. A current
+`installed_from_commit`, and the current 13-path managed inventory. A current
 global manifest requires `scope=global`, exactly OpenCode,
 `installed_version=local` or a release tag, nonempty `installed_from_commit`,
 and a valid `default_agent_receipt`.
 
-When an existing user-owned global config passes the permission guard, the 15
-base resources are managed and the config itself remains unowned; its
+When an existing user-owned global config passes the permission guard, the 14
+base resources (nine agents, three commands, and two Activity files) are
+managed and the config itself remains unowned; its
 `default_agent` field is reconciled using the receipt while preserving other
 bytes. If neither config file exists, Olympus creates a managed config and
-manages 16 resources. Both counts are current formats. The two command files are
-global-only; project inventories remain at 15 paths. Only the exact, hash-verified
-v0.10.0 global 13/14-path inventories are recognized for installer upgrade or
-uninstall; they require an update before current verification or config apply.
+manages 15 resources. The global manifest excludes the generated worktree
+setup script. Both counts are current formats. All three command files
+are global-only and excluded from the 13-path project inventory; project
+`config apply` does not create duplicate command files. Old role/command
+inventories, unsupported legacy manifests, and receipt-less global manifests
+are rejected rather than migrated or adopted. `--force` does not bypass those
+checks. Read-only `olympus doctor` explains the reported state; it does not
+migrate or repair it. For an unsupported older installation, uninstall with the
+Olympus version that created it, then install the current version. Do not
+manually delete files or receipts.
+
 An existing `opencode.json` or `opencode.jsonc` must have a valid ordered V2
 `permissions` array with an effective `external_directory * ASK` or `DENY`
 fallback. Unsafe, malformed, or ambiguous config blocks before writes; Olympus
@@ -217,8 +228,8 @@ supported-state evidence.
 The OpenCode adapter represents Kael, normal specialists, native ASK,
 hard DENY, Activity HUD, models, permissions, and installer-managed resources
 through the mechanisms and evidence limits in the [capability table](#capability-evidence).
-Contextual Olympus maintenance uses the same Kael workflow; the current 11-role
-candidate requires its own runtime evidence. The OpenCode adapter does not
+Contextual Olympus maintenance uses the same Kael workflow; the current
+nine-role roster requires its own runtime evidence. The OpenCode adapter does not
 register any MCP server. MCP is optional user/host configuration: Olympus does
 not require an MCP CLI on `PATH`, install Serena, or manage the user's MCP
 settings. If a user or host separately makes Serena tools available, the
@@ -229,23 +240,22 @@ are not a Serena prerequisite or a guarantee against host-level MCP failures.
 Global discovery is separately qualified above for isolated Windows V2.0.26;
 no model-backed prompt is implied.
 
-### Kael's native permission boundary
+### Kael and Atlas native permission boundaries
 
-Kael's metadata denies wildcard `shell` and `edit`; its only shell exception is
-the literal `git rev-parse --show-toplevel` needed when a repository-root probe
-is genuinely required. The previous status, branch, and diff shell exceptions
-are absent. Kael's existing ten-agent subagent allowlist remains unchanged.
-OpenCode applies agent permission rules after shared configuration and uses the
-last matching rule, so this exact shell exception follows Kael's wildcard
-DENY. Prompt-level minimal reads, user questions, scoped delegation, and native
-child-result handling remain; they do not grant shell commands or edits.
+Kael's metadata denies direct repository reads/searches, shell/Git, tests,
+research, and edits; Kael owns decisions, routing, reconciliation, and
+completion, not direct technical execution. Its seven child roles are Veyra,
+Kovan, Nox, Vera, Helios, Talos, and Thales. Atlas is a separate read-only
+primary: its metadata permits scoped repository reads and declares shell and
+execute as native ASK. Atlas's prompt limits shell to bounded inspection and
+diagnostics; it never authorizes mutation, Git writes, tests, or external
+actions. Atlas may delegate only to Veyra, Helios, Talos, and Thales.
 
-No agent-level `external_directory` rule is added. The shared ASK fallback and
-any later applicable user, project, or host/system restrictions still govern
-external paths; these source declarations do not establish effective runtime
-configuration or grant external access. Static source/render checks establish
-configured rules only—not tool execution, native permission UI or decisions,
-or user/account state. Shell retains host authority and is not an OS sandbox.
+Native ASK is the consent point, not prior approval or a sandbox. Shell retains
+host authority and is not an OS sandbox. Effective access still depends on
+shared, project, user, and host/system permission rules. Static source and
+renderer checks describe configured rules only; they do not establish tool
+execution, permission UI or decisions, or user/account state.
 
 **Historical Issue #177 qualification (OpenCode V2.3.2; 2026-11-22).** Nox's
 independent isolated run of `pwsh -NoProfile -File ./tests/authority/qualify.ps1 -QualificationSlice Runtime` reported `AUTH14_OPENCODE_EFFECTIVE_RULES PASS` and

@@ -582,8 +582,8 @@ def load_renderer(source: Path):
 def model_assignments(renderer, source: Path) -> dict:
     # checked_sources uses tomllib and validates the single canonical registry.
     models, _, _, identities, roles = renderer.checked_sources(source)
-    if len(roles) != 11:
-        raise CLIError(f"Expected eleven canonical roles, found {len(roles)}")
+    if len(roles) != 9:
+        raise CLIError(f"Expected nine canonical roles, found {len(roles)}")
     rows = []
     for role in sorted(roles):
         resolved = {}

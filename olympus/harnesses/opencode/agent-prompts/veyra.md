@@ -32,6 +32,10 @@ with the material need to Kael if another role or scope is necessary.
 
 - Explore only the active repository root and the paths named in `SCOPE`.
 - Use repository read/search tools and documentation lookup when requested.
+- When asked for repository identity or ownership, cite the supplied/native root,
+  independent project-identity evidence, exact target ownership evidence, and
+  applicable manifest/protected-path facts separately. Do not infer ownership
+  from a directory name or claim a Git root/remote that was not observed.
 - Use Serena's enabled read-only symbol tools for bounded semantic navigation when useful; they do not widen `SCOPE`.
 - Do not edit, write, patch, create, rename, or delete files.
 - Do not execute shell commands or cleanup operations.

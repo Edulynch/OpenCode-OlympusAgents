@@ -58,10 +58,13 @@ try {
         $docs -match 'CLI `opencode run` exit or a root assistant response is not a session-family completion signal')
     Check 'CONTEXTUAL_MAINTENANCE' ($maintenancePolicy -match 'Kael is the only root orchestrator' -and
         $maintenancePolicy -match 'There is no separate maintenance role, command' -and
-        $maintenancePolicy -match 'canonical Olympus Core files' -and
-        $maintenancePolicy -match 'independent project-identity evidence identifies OlympusAgents' -and
-        $maintenancePolicy -match 'A directory name, a request mentioning Olympus, or an isolated matching file is not sufficient' -and
-        $maintenancePolicy -match 'If identity, ownership, or target is unclear or conflicting, stop before dependent work' -and
+        $maintenancePolicy -match 'all three canonical Core markers' -and
+        $maintenancePolicy -match 'olympus/core/models\.toml' -and
+        $maintenancePolicy -match 'olympus/core/identities\.toml' -and
+        $maintenancePolicy -match 'olympus/policies/routing\.md' -and
+        $maintenancePolicy -match 'plus independent project identity, such as root README/metadata or Git remote' -and
+        $maintenancePolicy -match 'A directory name, a request mentioning Olympus, or an isolated matching file is insufficient' -and
+        $maintenancePolicy -match 'If identity, ownership, or target is unclear or conflicting, stop dependent work and ask only for missing task detail' -and
         $maintenancePolicy -match 'different user project' -and
         $maintenancePolicy -match 'do not reach into a separate OlympusAgents checkout' -and
         $maintenancePolicy -match 'manifest-owned files' -and

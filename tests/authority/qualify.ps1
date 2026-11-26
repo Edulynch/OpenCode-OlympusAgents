@@ -5,12 +5,14 @@ $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $exactManagedCommandPaths = @(
     '.opencode/commands/olympus.ultra.md',
-    '.opencode/commands/olympus.performance.md'
+    '.opencode/commands/olympus.performance.md',
+    '.opencode/commands/olympus.performance-ultra.md'
 )
-$expectedOlympusAgentIds = @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios')
+$expectedOlympusAgentIds = @('kael','veyra','atlas','kovan','nox','vera','talos','thales','helios')
+$retiredOlympusAgentIds = @('orin','argus')
 $automationActionsV240 = @('automation_create','automation_list','automation_pause','automation_resume','automation_delete')
 $protectedToolActionsV240 = @($automationActionsV240) + @('browser')
-$newToolDenyAgentIds = @('kael','kovan','nox','orin','vera','veyra')
+$newToolDenyAgentIds = @('kael','atlas','kovan','nox','vera','veyra')
 function Text([string]$path) { [IO.File]::ReadAllText((Join-Path $root $path)) }
 function Check([string]$id, [bool]$ok) {
     if (-not $ok) { throw "$id FAIL" }
@@ -254,6 +256,11 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
             $failures.Add("roster_${agentId}=duplicated (matches=$count)")
         }
     }
+    foreach ($agentId in $retiredOlympusAgentIds) {
+        if ($additionalAgentIds -contains $agentId) {
+            $failures.Add("retired_agent_${agentId}=present")
+        }
+    }
     $kaelCount = $kaelMatches.Count
     $kovanCount = $kovanMatches.Count
     if ($kaelCount -eq 0) {
@@ -366,18 +373,14 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                 $shellWildcardDeny = @($permissions | Where-Object {
                     $_.action -eq 'shell' -and $_.resource -eq '*' -and $_.effect -eq 'deny'
                 }).Count
-                $rootProbeAllow = @($permissions | Where-Object {
-                    $_.action -eq 'shell' -and $_.resource -eq 'git rev-parse --show-toplevel' -and $_.effect -eq 'allow'
+                $shellAllowRules = @($permissions | Where-Object {
+                    $_.action -eq 'shell' -and $_.effect -eq 'allow'
                 }).Count
-                $otherShellAllows = @($permissions | Where-Object {
-                    $_.action -eq 'shell' -and $_.effect -eq 'allow' -and $_.resource -ne 'git rev-parse --show-toplevel'
-                }).Count
-                $commandDecisionEvidence.Add("kael:edit_*_deny=$editWildcardDeny;shell_*_deny=$shellWildcardDeny;root_probe_allow=$rootProbeAllow;other_shell_allows=$otherShellAllows")
-                if ($editWildcardDeny -lt 1 -or $shellWildcardDeny -lt 1 -or $rootProbeAllow -lt 1 -or
-                    $otherShellAllows -ne 0) {
+                $commandDecisionEvidence.Add("kael:edit_*_deny=$editWildcardDeny;shell_*_deny=$shellWildcardDeny;shell_allow_rules=$shellAllowRules/0")
+                if ($editWildcardDeny -lt 1 -or $shellWildcardDeny -lt 1 -or $shellAllowRules -ne 0) {
                     $failures.Add('kael_least_privilege_metadata_mismatch')
                 }
-                foreach ($command in @('git status --short','git branch --show-current','git diff --check','python scripts/check_docs.py')) {
+                foreach ($command in @('git rev-parse --show-toplevel','git status --short','git branch --show-current','git diff --check','python scripts/check_docs.py')) {
                     $decision = Native-Decision $permissions 'shell' $command
                     $commandDecisionEvidence.Add("kael:shell:$command=$decision")
                     if ($decision -ne 'DENY') {
@@ -430,7 +433,7 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                     $failures.Add("kael_serena_effective_decision_mismatch=denied:$serenaDeniedCount/$($serenaNavigationActions.Count);source_deny:$($sourceSerenaDenyRules.Count);loaded_direct_deny:$($serenaDenyIndices.Count);base_allow_before_deny:$([int]$serenaBaselineBeforeDeny);deny_rules:$($serenaDenyRules.Count);allow_ask_rules:$($serenaOverrideRules.Count);non_deny:$($serenaDecisionFailures -join ',')")
                 }
 
-                $expectedSpecialists = @('veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios')
+                $expectedSpecialists = @('veyra','kovan','nox','vera','talos','helios','thales')
                 $subagentDenyIndices = @(Get-ExactRuleIndices $permissions 'subagent' '*' 'deny')
                 $subagentBaselineBeforeDeny = $baselineAllowIndex -ge 0 -and
                     $subagentDenyIndices.Count -gt 0 -and $baselineAllowIndex -lt $subagentDenyIndices[-1]
@@ -452,12 +455,19 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                     $decision = Native-Decision $permissions 'subagent' $specialist
                     if ($decision -ne 'ALLOW') { $specialistDecisionFailures.Add("${specialist}=$decision") }
                 }
+                $nonChildRoleIds = @('atlas') + $retiredOlympusAgentIds
+                $nonChildRoleDecisions = @($nonChildRoleIds | ForEach-Object {
+                    [pscustomobject]@{ id=$_; decision=(Native-Decision $permissions 'subagent' $_) }
+                })
+                $nonChildRoleFailures = @($nonChildRoleDecisions | Where-Object { $_.decision -ne 'DENY' })
+                $nonChildRoleEvidence = ($nonChildRoleDecisions | ForEach-Object { "$($_.id):$($_.decision)" }) -join ','
                 $unlistedSpecialistDecision = Native-Decision $permissions 'subagent' '__authority_unlisted_specialist__'
-                $commandDecisionEvidence.Add("kael:subagent_allow_rules=$($specialistAllowRules.Count)/$($expectedSpecialists.Count);named_allow=$($expectedSpecialists.Count - $specialistDecisionFailures.Count)/$($expectedSpecialists.Count);expanded=$($expandedSpecialistRules.Count);duplicates=$duplicateSpecialists;base_allow_before_deny=$([int]$subagentBaselineBeforeDeny);unlisted=$unlistedSpecialistDecision")
+                $commandDecisionEvidence.Add("kael:subagent_allow_rules=$($specialistAllowRules.Count)/$($expectedSpecialists.Count);named_allow=$($expectedSpecialists.Count - $specialistDecisionFailures.Count)/$($expectedSpecialists.Count);expanded=$($expandedSpecialistRules.Count);duplicates=$duplicateSpecialists;base_allow_before_deny=$([int]$subagentBaselineBeforeDeny);unlisted=$unlistedSpecialistDecision;atlas_and_retired=$nonChildRoleEvidence")
                 if ($specialistAllowRules.Count -ne $expectedSpecialists.Count -or
                     $expandedSpecialistRules.Count -ne 0 -or $duplicateSpecialists -ne 0 -or
-                    $specialistDecisionFailures.Count -ne 0 -or $unlistedSpecialistDecision -ne 'DENY') {
-                    $failures.Add("kael_subagent_allowlist_mismatch=rules:$($specialistAllowRules.Count)/$($expectedSpecialists.Count);expanded:$($expandedSpecialistRules.Count);duplicates:$duplicateSpecialists;base_allow_before_deny:$([int]$subagentBaselineBeforeDeny);unlisted:$unlistedSpecialistDecision;non_allow:$($specialistDecisionFailures -join ',')")
+                    $specialistDecisionFailures.Count -ne 0 -or $unlistedSpecialistDecision -ne 'DENY' -or
+                    $nonChildRoleFailures.Count -ne 0) {
+                    $failures.Add("kael_subagent_allowlist_mismatch=rules:$($specialistAllowRules.Count)/$($expectedSpecialists.Count);expanded:$($expandedSpecialistRules.Count);duplicates:$duplicateSpecialists;base_allow_before_deny:$([int]$subagentBaselineBeforeDeny);unlisted:$unlistedSpecialistDecision;non_child:$($nonChildRoleFailures.id -join ',');non_allow:$($specialistDecisionFailures -join ',')")
                 }
 
                 $sourceExternalRules = @($kaelSourceRules | Where-Object {
@@ -1363,18 +1373,23 @@ try {
         $normalizedAlternatePolicy -match 'correctly assigns the exact operation.*?actual pending native ASK event.*?not `NEED_AUTHORITY`' -and
         $normalizedAlternatePolicy -match 'does not widen, renew, or transfer a task scope or grant')
 
-    $authorityWorkers = @('veyra','orin','nox','vera','atlas','argus','helios','talos','thales')
+    $authorityWorkers = @('veyra','nox','vera','kovan','helios','talos','thales')
+    $authorityHandoffWorkers = @('veyra','nox','vera','helios','talos','thales')
     $workerPromptSources = @{}
     foreach ($roleName in $authorityWorkers) {
         $workerPromptSources[$roleName] = Text ('olympus/harnesses/opencode/agent-prompts/' + $roleName + '.md')
     }
+    $atlasPromptSource = Text 'olympus/harnesses/opencode/agent-prompts/atlas.md'
+    $atlasRoleSource = Text 'olympus/roles/atlas.md'
+    $atlasMetadataSource = Text 'olympus/harnesses/opencode/agent-metadata/atlas.md'
+    $atlasNativeRules = Read-NativeRules $atlasMetadataSource @()
     $alternateResultClause = 'For an otherwise role-eligible operation/path outside this task''s exact assigned scope, use the distinct `STATUS: NEED_AUTHORITY` alternate result defined by the `Scope and Authority handoff` section only while the operation remains unattempted; it takes precedence over this normal/specialized result contract for this case only and is not a normal completion/failure status. It grants no authority or retry, does not replace native ASK/DENY/rejection, erase already-applied authorized effects, or apply to role, ownership, or user-prohibition blockers.'
-    $workerClauseFailures = @($authorityWorkers | Where-Object {
+    $workerClauseFailures = @($authorityHandoffWorkers | Where-Object {
         ($workerPromptSources[$_] -replace '\s+', ' ') -notmatch [regex]::Escape($alternateResultClause)
     })
     $handoffFields = @('STATUS: NEED_AUTHORITY','OPERATION','MINIMUM_SCOPE','REPOSITORY_ROOT','REASON','TASK_BLOCKED')
     $workerHandoffsValid = $true
-    foreach ($roleName in $authorityWorkers) {
+    foreach ($roleName in $authorityHandoffWorkers) {
         $handoffSplit = $workerPromptSources[$roleName] -split '## Scope and Authority handoff',2
         $handoffBody = if ($handoffSplit.Count -gt 1) { ($handoffSplit[1] -split '\r?\n## ',2)[0] } else { '' }
         foreach ($field in $handoffFields) {
@@ -1387,11 +1402,8 @@ try {
         Where-Object { $kovanPromptSource -notmatch [regex]::Escape($_) } | Measure-Object | Select-Object -ExpandProperty Count
     $specializedStatusContracts = @(
         @('veyra','STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED'),
-        @('orin','STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED'),
         @('nox','STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED'),
         @('vera','STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED'),
-        @('atlas','STATUS: PLAN','STATUS: EVIDENCE_REQUEST'),
-        @('argus','STATUS: BUG_DIAGNOSIS','STATUS: EVIDENCE_REQUEST','STATUS: NOT_FUNCTIONAL_BUG'),
         @('helios','STATUS: OPTIMIZATION_PROPOSAL','STATUS: DO_NOT_OPTIMIZE','STATUS: EVIDENCE_REQUEST'),
         @('talos','STATUS: SECURITY_DIAGNOSIS','STATUS: EVIDENCE_REQUEST','STATUS: NOT_SECURITY_BUG'),
         @('thales','STATUS: EVIDENCE_REQUEST','STATUS: ADVICE | INCONCLUSIVE | BLOCKED')
@@ -1405,7 +1417,21 @@ try {
             }
         }
     }
+    $normalizedAtlasPromptSource = $atlasPromptSource -replace '\s+', ' '
+    $normalizedAtlasRoleSource = $atlasRoleSource -replace '\s+', ' '
+    $atlasPrimaryContractValid = $atlasMetadataSource -match '(?m)^mode:\s*primary\s*$' -and
+        (Native-Decision $atlasNativeRules 'edit' 'olympus/primary-write-probe') -eq 'DENY' -and
+        (Native-Decision $atlasNativeRules 'write' 'olympus/primary-write-probe') -eq 'DENY' -and
+        $normalizedAtlasPromptSource -match 'primary read-only technical analyst and planner, separate from Kael.*?Never ask the user, grant or infer authority, implement, mutate Git, execute tests, review a final candidate, or claim completion' -and
+        $normalizedAtlasPromptSource -match 'Every proposed execution handoff to Kael states exact candidate paths/effects.*?proposed scopes for Kovan/Nox/Vera as applicable.*?Proposed scopes are not grants or approval' -and
+        $normalizedAtlasPromptSource -match 'Never invoke Kael, Atlas, Kovan, Nox, Vera, or any other agent; do not ask a child to write, test, measure, review, or perform another role.s work' -and
+        $normalizedAtlasPromptSource -match 'STATUS: PLAN_READY \| NEEDS_DECISION \| NEEDS_EVIDENCE \| BLOCKED' -and
+        $normalizedAtlasPromptSource -match 'SCOPED_HANDOFF_TO_KAEL: exact candidate paths/effects, proposed role/scope, acceptance, validation, dependencies, and stop conditions' -and
+        $normalizedAtlasRoleSource -match 'PRIMARY TECHNICAL ANALYST AND PLANNER.*?bounded read-only.*?May delegate only read-only evidence or reasoning to Veyra, Helios, Talos, and Thales.*?Never implements, mutates Git, runs tests, reviews a final candidate' -and
+        ($kaelPromptSource -replace '\s+', ' ') -match 'Atlas is a separate read-only primary, not a Kael child or execution authority.*?it cannot route Kovan, Nox, Vera, or other writers.*?Kael never invokes Atlas as a child, gives Atlas permission to execute, or treats an Atlas plan as approval'
     Check 'AUTH2B_WORKER_RESULT_PRECEDENCE_AND_EXISTING_FORMATS' (
+        $authorityWorkers.Count -eq 7 -and
+        $authorityWorkers -notcontains 'atlas' -and
         $workerClauseFailures.Count -eq 0 -and
         $workerHandoffsValid -and
         $kovanAlternateFieldsValid -eq 0 -and
@@ -1413,7 +1439,8 @@ try {
         $kovanPromptSource -match 'STATUS: NEED_AUTHORITY\s+OPERATION: exact capability and effect required' -and
         $kovanPromptSource -match 'STATUS: SUCCESS \| PARTIAL \| BLOCKED \| FAILED' -and
         $kovanPromptSource -notmatch '(?m)^STATUS: SUCCESS \| PARTIAL \| BLOCKED \| FAILED \| NEED_AUTHORITY\r?$' -and
-        $specializedStatusContractsValid
+        $specializedStatusContractsValid -and
+        $atlasPrimaryContractValid
     )
 
     $normalizedKaelPromptSource = $kaelPromptSource -replace '\s+', ' '
@@ -1505,8 +1532,8 @@ try {
         (Native-Decision $kaelNativeRules 'edit' $canonicalPath) -eq 'DENY' -and
         $kael -match 'Canonical Olympus source is writable only when target repository'
     )
-    $kaelRootProbe = Native-Decision $kaelNativeRules 'shell' 'git rev-parse --show-toplevel'
     $blockedKaelShell = @(
+        'git rev-parse --show-toplevel',
         'git status --short','git branch --show-current','git diff --check',
         'git diff --stat','python scripts/check_docs.py'
     ) | Where-Object {
@@ -1518,8 +1545,8 @@ try {
     $kaelSerenaWildcardDeny = @($kaelSourceRules | Where-Object {
         $_.action -ceq 'serena_*' -and $_.resource -ceq '*' -and $_.effect -eq 'deny'
     }).Count
-    Check 'AUTH9E_KAEL_NATIVE_ROOT_PROBE_ONLY' (
-        $kaelRootProbe -eq 'ALLOW' -and @($blockedKaelShell).Count -eq 0
+    Check 'AUTH9E_KAEL_NATIVE_SHELL_DENIED' (
+        @($blockedKaelShell).Count -eq 0
     )
     Check 'AUTH9F_KAEL_NATIVE_EDIT_DENIED' (
         $kaelEditWildcardDeny -eq 1 -and
@@ -1633,7 +1660,7 @@ try {
     }
     $globalWithDeny = @($config.permissions) + @($explicitExternalDeny)
     $rolesThatOverrideDeny = [Collections.Generic.List[string]]::new()
-    foreach ($role in @('kael', 'kovan', 'nox', 'orin', 'vera', 'veyra', 'thales')) {
+    foreach ($role in $expectedOlympusAgentIds) {
         $roleRules = Read-NativeRules (Text ('.opencode/agents/' + $role + '.md')) $globalWithDeny
         if ((Native-Decision $roleRules 'external_directory' $prohibitedPath) -ne 'DENY') {
             $rolesThatOverrideDeny.Add($role)
@@ -1691,9 +1718,8 @@ try {
     Check 'AUTH10B_EXPLICIT_PROHIBITION_OVERRIDES_NATIVE_ASK' ((Native-Decision $nativeRules 'edit' $pluginResource $true) -eq 'DENY' -and
         -not (Write-Decision 'DENY' 'APPROVE_ONCE') -and $kael -match '(?s)Explicit user prohibitions.*?override every other outcome')
 
-    $workerPaths = @('.opencode/agents/argus.md','.opencode/agents/atlas.md','.opencode/agents/helios.md',
-        '.opencode/agents/kovan.md','.opencode/agents/nox.md','.opencode/agents/orin.md',
-        '.opencode/agents/talos.md','.opencode/agents/thales.md','.opencode/agents/vera.md','.opencode/agents/veyra.md')
+    $workerPaths = @($expectedOlympusAgentIds | Where-Object { $_ -ne 'kael' } |
+        ForEach-Object { '.opencode/agents/' + $_ + '.md' })
     $workerTexts = @($workerPaths | ForEach-Object { Text $_ })
     $directAskBlocked = @($workerPaths | Where-Object { $file = Text $_; $file -notmatch '(?s)action: question\s+resource: "?\*"?\s+effect: deny' }).Count -eq 0 -and
         @($workerTexts | Where-Object { $_ -notmatch 'Never ask the user' }).Count -eq 0
@@ -1702,7 +1728,7 @@ try {
     $childSelfRoutes = @($workerPaths | Where-Object { $file = Text $_; $file -notmatch '(?s)action: subagent\s+resource: "?\*"?\s+effect: deny' }).Count
     Check 'AUTH11_CHILD_SELF_ESCALATION_DENIED' ($childSelfRoutes -eq 0 -and
         @($workerTexts | Where-Object { $_ -notmatch 'never (?:ask the user, grant|grant)\s+or infer your own authority' }).Count -eq 0 -and
-        $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
+        $kael -match 'Kael''s seven child IDs are veyra, kovan, nox, vera, helios, talos, and thales\. Atlas is a separate primary, not a Kael child')
 
     $needs = @(
         [pscustomobject]@{ root=$rootPath; operation='WRITE_SCOPE'; scope='src/one/**' },
@@ -1781,27 +1807,23 @@ try {
         [pscustomobject]@{ action='edit'; resource=$_; effect='deny' }
     })
     $runtimeAgentFixture = @(
-        [pscustomobject]@{
-            id='kael'
-            permissions=@(
-                [pscustomobject]@{ action='*'; resource='*'; effect='allow' }
-                [pscustomobject]@{ action='automation_*'; resource='*'; effect='deny' }
-                [pscustomobject]@{ action='browser'; resource='*'; effect='deny' }
-                [pscustomobject]@{ action='shell'; resource='*'; effect='deny' }
-                [pscustomobject]@{ action='shell'; resource='git rev-parse --show-toplevel'; effect='allow' }
-                [pscustomobject]@{ action='serena_*'; resource='*'; effect='deny' }
+                [pscustomobject]@{
+                    id='kael'
+                    permissions=@(
+                        [pscustomobject]@{ action='*'; resource='*'; effect='allow' }
+                        [pscustomobject]@{ action='automation_*'; resource='*'; effect='deny' }
+                        [pscustomobject]@{ action='browser'; resource='*'; effect='deny' }
+                        [pscustomobject]@{ action='shell'; resource='*'; effect='deny' }
+                        [pscustomobject]@{ action='serena_*'; resource='*'; effect='deny' }
                 [pscustomobject]@{ action='edit'; resource='*'; effect='deny' }
                 [pscustomobject]@{ action='subagent'; resource='*'; effect='deny' }
                 [pscustomobject]@{ action='subagent'; resource='veyra'; effect='allow' }
-                [pscustomobject]@{ action='subagent'; resource='orin'; effect='allow' }
                 [pscustomobject]@{ action='subagent'; resource='kovan'; effect='allow' }
                 [pscustomobject]@{ action='subagent'; resource='nox'; effect='allow' }
                 [pscustomobject]@{ action='subagent'; resource='vera'; effect='allow' }
-                [pscustomobject]@{ action='subagent'; resource='thales'; effect='allow' }
-                [pscustomobject]@{ action='subagent'; resource='atlas'; effect='allow' }
-                [pscustomobject]@{ action='subagent'; resource='argus'; effect='allow' }
                 [pscustomobject]@{ action='subagent'; resource='talos'; effect='allow' }
                 [pscustomobject]@{ action='subagent'; resource='helios'; effect='allow' }
+                [pscustomobject]@{ action='subagent'; resource='thales'; effect='allow' }
                 [pscustomobject]@{ action='external_directory'; resource='*'; effect='ask' }
             ) + $runtimeCommandDenies
         }
@@ -1844,15 +1866,23 @@ try {
     $duplicateNoxProbe = Inspect-EffectiveRules 0 (ConvertTo-Json -InputObject $duplicateNoxFixture -Compress -Depth 10)
     Check 'AUTH14_DUPLICATE_EXPECTED_OLYMPUS_ID_REJECTED' (-not $duplicateNoxProbe.passed -and
         $duplicateNoxProbe.evidence -match 'roster_nox=duplicated \(matches=2\)')
+    $retiredRuntimeFixture = @($runtimeAgentFixture) + @(
+        [pscustomobject]@{ id='argus'; permissions=@() }
+        [pscustomobject]@{ id='orin'; permissions=@() }
+    )
+    $retiredRuntimeProbe = Inspect-EffectiveRules 0 (ConvertTo-Json -InputObject $retiredRuntimeFixture -Compress -Depth 10)
+    Check 'AUTH14_RETIRED_OLYMPUS_IDS_REJECTED' (-not $retiredRuntimeProbe.passed -and
+        $retiredRuntimeProbe.evidence -match 'retired_agent_argus=present' -and
+        $retiredRuntimeProbe.evidence -match 'retired_agent_orin=present')
     $singleKovanProbe = Inspect-EffectiveRules 0 $validRuntimeFixture
     Check 'AUTH14_SINGLE_KOVAN_EVALUATES_EFFECTIVE_RULES' ($singleKovanProbe.passed -and
-        $singleKovanProbe.evidence -match 'olympus_roster=kael=1,veyra=1,orin=1,kovan=1,nox=1,vera=1,thales=1,atlas=1,argus=1,talos=1,helios=1' -and
-        $singleKovanProbe.evidence -match 'tool_denies=66/66;tool_checks=66;additional_agent_ids=1' -and
+        $singleKovanProbe.evidence -match 'olympus_roster=kael=1,veyra=1,atlas=1,kovan=1,nox=1,vera=1,talos=1,thales=1,helios=1' -and
+        $singleKovanProbe.evidence -match 'tool_denies=54/54;tool_checks=54;additional_agent_ids=1' -and
         $singleKovanProbe.evidence -match 'kael_matches=1' -and $singleKovanProbe.evidence -match 'kovan_matches=1' -and
         $singleKovanProbe.evidence -match 'task_edit=ALLOW/2 rules, project_plugin_edit=ASK, activity_edit=DENY' -and
         $singleKovanProbe.evidence -match 'edit_plugins_ask=1/1' -and
         $singleKovanProbe.evidence -match 'serena_nav_denied=6/6;source_deny=1;loaded_direct_deny=1;base_allow_before_deny=1;deny_rules=1;allow_ask_rules=0' -and
-        $singleKovanProbe.evidence -match 'subagent_allow_rules=10/10;named_allow=10/10;expanded=0;duplicates=0;base_allow_before_deny=1;unlisted=DENY' -and
+        $singleKovanProbe.evidence -match 'subagent_allow_rules=7/7;named_allow=7/7;expanded=0;duplicates=0;base_allow_before_deny=1;unlisted=DENY;atlas_and_retired=atlas:DENY,orin:DENY,argus:DENY' -and
         $singleKovanProbe.evidence -match 'external_directory=ASK;source_agent_rules=0;inherited_rules=1;loaded_category_rules=1;missing=0;unexpected=0;category_allow=0;base_allow_before_ask=1;read_question=NOT_ASSESSED' -and
         $singleKovanProbe.evidence -match 'kael:\.opencode/commands/olympus\.ultra\.md=DENY' -and
         $singleKovanProbe.evidence -match 'kovan:\.opencode/commands/project-owned\.md=ASK')
@@ -1866,8 +1896,9 @@ try {
     $lateOverrideProbe = Inspect-EffectiveRules 0 (ConvertTo-Json -InputObject $lateOverrideRuntimeFixture -Compress -Depth 10)
     Check 'AUTH14_LATE_BASE_ALLOW_OVERRIDE_REJECTED' (-not $lateOverrideProbe.passed -and
         $lateOverrideProbe.evidence -match 'serena_nav_denied=0/6' -and
-        $lateOverrideProbe.evidence -match 'subagent_allow_rules=11/10' -and
+        $lateOverrideProbe.evidence -match 'subagent_allow_rules=8/7' -and
         $lateOverrideProbe.evidence -match 'unlisted=ALLOW' -and
+        $lateOverrideProbe.evidence -match 'kael:shell:git rev-parse --show-toplevel=ALLOW' -and
         $lateOverrideProbe.evidence -match 'kael/automation_create=ALLOW' -and
         $lateOverrideProbe.evidence -match 'kael/browser=ALLOW' -and
         $lateOverrideProbe.evidence -match 'external_directory=ALLOW')
@@ -1878,7 +1909,7 @@ try {
         $integrationRouteSource -match 'AUTHORITY_INTEGRATION_CONTEXT: PASS' -and
         $integrationRouteSource -notmatch 'AUTHORITY_PLUGIN_ACTIVATION|Start-Sleep|while\s*\(' -and
         $normalizedQualificationDocs -match 'a 200 may arrive before plugin activation completes.*?not a readiness signal.*?bounded internal wait.*?no polling loop or arbitrary sleep' -and
-        $normalizedQualificationDocs -match '`AUTH14_OPENCODE_EFFECTIVE_RULES PASS`.*?all 11 Olympus IDs exactly once.*?effective DENY for all 66 checks.*?did not establish plugin activation/readiness'
+        $normalizedQualificationDocs -match '`AUTH14_OPENCODE_EFFECTIVE_RULES PASS`.*?all 9 Olympus IDs exactly once.*?effective DENY for all 54 checks.*?did not establish plugin activation/readiness'
     )
     $badPermissionProbe = Inspect-EffectiveRules 0 '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"deny"}]}]'
     Check 'AUTH14_SINGLE_KOVAN_RULE_MISMATCH_FAILS' (-not $badPermissionProbe.passed -and

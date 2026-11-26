@@ -1,13 +1,13 @@
 # Documentation index
 
-Start with the quick guide in [English](../README.md) or [Español](../README.ES.md) for examples, installation, and the eleven-agent team. Then open the guide for the subject you need.
+Start with the quick guide in [English](../README.md) or [Español](../README.ES.md) for examples, installation, and the current nine-role team: Kael and Atlas as separate primaries, plus Kael's seven specialists. Orin and Argus are retired. Then open the guide for the subject you need.
 
 ## Sources of truth
 
 | Subject | Canonical source | Use |
 | --- | --- | --- |
 | First install and removal | [README](../README.md) and [installation guide](INSTALLATION.md) | The README has the two first-run commands; the guide explains supported platforms, parameters, safeguards, and troubleshooting. |
-| Team, commands, and prompt examples | [README](../README.md#the-team) and [workflow guide](WORKFLOWS.md) | The README introduces the team; the workflow guide explains `/olympus.ultra` and `/olympus.performance`. Canonical behavior stays in Core. |
+| Team, commands, and prompt examples | [README](../README.md#the-team) and [workflow guide](WORKFLOWS.md) | The README introduces both primaries and Kael's seven specialists; the workflow guide explains `/olympus.ultra`, `/olympus.performance`, and `/olympus.performance-ultra`. Canonical behavior stays in Core. |
 | Olympus roles, routing, authority, and policies | [Olympus Core](../olympus/README.md) | Edit the canonical Core or adapter source when behavior changes. Generated harness files are outputs. |
 | Harness capabilities and support status | [Capability source](../olympus/harnesses/capabilities.toml) and [OpenCode capability contract](HARNESS-CAPABILITIES.md) | OpenCode is the only currently supported Olympus runtime. |
 | Feature requirements and evidence | [`specs/`](../specs/README.md) | Keep implemented and retrospective contracts there. `specs/future/` is a proposal register, not implementation authority. |

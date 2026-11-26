@@ -14,10 +14,6 @@ effort = "high"
 family = "luna"
 effort = "max"
 
-[roles.orin]
-family = "luna"
-effort = "max"
-
 [roles.atlas]
 family = "sol"
 effort = "high"
@@ -25,10 +21,6 @@ effort = "high"
 [roles.kovan]
 family = "luna"
 effort = "max"
-
-[roles.argus]
-family = "sol"
-effort = "high"
 
 [roles.nox]
 family = "luna"

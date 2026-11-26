@@ -1,2 +1,3 @@
 # Shared orchestration invariants consumed by both harness adapters.
+# Default per-root prompt ceiling; user preference may set an effective ceiling from 1 to 8.
 max_children = 4

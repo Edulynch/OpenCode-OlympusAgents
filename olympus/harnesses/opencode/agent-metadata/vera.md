@@ -1,5 +1,5 @@
 ---
-description: Strict read-only reviewer worker for correctness, scope, security, and regressions.
+description: Strict read-only reviewer of a supplied final candidate for correctness, scope, security, and regressions.
 mode: subagent
 model: "{{opencode_model}}#{{effort}}"
 permissions:

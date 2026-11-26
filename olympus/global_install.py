@@ -1630,7 +1630,11 @@ def _commit(root: Path, root_identity: tuple[int, int], candidate: _Candidate, o
 def _operate(source: Path, version: str, commit: str, operation: str, *,
              force: bool = False) -> LifecycleOutcome:
     candidate = _candidate(source, version, commit)
-    root, root_identity = _resolve_root(create=operation in ("install", "update"))
+    if version == "v0.10.0":
+        raise GlobalInstallError(
+            f"Staged global source version '{version}' is historically unsupported; use the current source.",
+        )
+    root, root_identity = _resolve_root(create=operation == "install")
     _check_roots(candidate.source, root)
     lock = _existing_lock(root, root_identity)
     try:
@@ -1769,8 +1773,6 @@ def verify(source: Path, *, version: str = "local", commit: str = "unknown") -> 
             raise GlobalInstallError(
                 f"Installed global version is {manifest['installed_version']}; requested {version}.", 3,
             )
-        if global_readonly._is_legacy_inventory(manifest, entries):
-            raise GlobalInstallError("The installed global inventory requires an explicit update.", 3)
         current = _validate_owned_files(root, entries)
         if any(raw != candidate.expected.get(path) for path, (raw, _) in current.items()):
             raise GlobalInstallError("Installed managed resources differ from this staged source.", 1)

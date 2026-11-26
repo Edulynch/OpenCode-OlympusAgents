@@ -344,22 +344,26 @@ try {
         @($denyManifest.installed_harnesses).Count -eq 1 -and $denyManifest.installed_harnesses[0] -ceq 'opencode' -and
         -not [string]::IsNullOrWhiteSpace([string]$denyManifest.installed_version) -and
         -not [string]::IsNullOrWhiteSpace([string]$denyManifest.installed_from_commit) -and
-        $denyManifest.managed_files.Count -eq 15 -and
+        $denyManifest.managed_files.Count -eq 14 -and
         @($denyManifest.managed_files | Where-Object { [string]$_.sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0 -and
         $denyManifest.default_agent_receipt.state -ceq 'committed' -and
         @($denyManifest.managed_files | Where-Object { $_.path -eq 'opencode.jsonc' }).Count -eq 0 -and
         [IO.File]::ReadAllText($userDenyPath) -ceq $userDenyText.Insert($userDenyText.IndexOf('"permissions"'), '"default_agent":"kael",')
     ) ("exit=$($denyInstall.Code)`n$($denyInstall.Text)")
-    # A 15-resource current install is valid only with its user-config receipt.
+    # A 14-resource current install is valid only with its user-config receipt.
     $userDenyManifestPath = Join-Path $userDenyRoot 'olympus/orchestrator-install.json'
     $userDenyManifestBytes = [IO.File]::ReadAllBytes($userDenyManifestPath)
     [void]$denyManifest.PSObject.Properties.Remove('default_agent_receipt')
     [IO.File]::WriteAllText($userDenyManifestPath, ($denyManifest | ConvertTo-Json -Depth 20), $utf8)
     $missingReceiptBefore = Snapshot $userDenyRoot
     $missingReceiptInstall = Global-Install $project 'opencode'
-    Check 'GLOBAL_15_RESOURCE_MANIFEST_REQUIRES_RECEIPT_READONLY' (
+    $missingReceiptVerify = Global-Verify $project 'opencode'
+    Check 'GLOBAL_14_RESOURCE_MANIFEST_REQUIRES_RECEIPT_READONLY' (
         $missingReceiptInstall.Code -ne 0 -and
         $missingReceiptInstall.Text -match 'GLOBAL_DEFAULT_AGENT_RECEIPT_MISSING' -and
+        $missingReceiptVerify.Code -ne 0 -and
+        $missingReceiptVerify.Text -match 'GLOBAL_DEFAULT_AGENT_RECEIPT_MISSING' -and
+        $missingReceiptVerify.Text -match 'Uninstall it with the Olympus version that created this installation, then install the current version' -and
         (Snapshot $userDenyRoot) -ceq $missingReceiptBefore
     ) ("exit=$($missingReceiptInstall.Code)`n$($missingReceiptInstall.Text)")
     [IO.File]::WriteAllBytes($userDenyManifestPath, $userDenyManifestBytes)
@@ -379,19 +383,30 @@ try {
     $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeOnlyRoot
     $openCodeOnly = Run-Installer $project @('-Scope','global','-Harness','opencode')
     $openCodeOnlyManifest = Get-Content (Join-Path $openCodeOnlyRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
+    $requiredGlobalCommands = @(
+        'commands/olympus.ultra.md',
+        'commands/olympus.performance.md',
+        'commands/olympus.performance-ultra.md'
+    )
+    $expectedGlobalPaths = @(
+        'agents/kael.md', 'agents/atlas.md', 'agents/veyra.md', 'agents/kovan.md',
+        'agents/nox.md', 'agents/vera.md', 'agents/helios.md', 'agents/talos.md', 'agents/thales.md',
+        'plugins/olympus-activity/activity.ts', 'plugins/olympus-activity/tui.tsx'
+    ) + $requiredGlobalCommands
     Check 'GLOBAL_OPENCODE_ONLY_SELECTOR' ($openCodeOnly.Code -eq 0 -and $openCodeOnlyManifest.schema_version -eq 1 -and
         $openCodeOnlyManifest.scope -ceq 'global' -and $openCodeOnlyManifest.installed_harnesses.Count -eq 1 -and
         $openCodeOnlyManifest.installed_harnesses[0] -ceq 'opencode' -and
         -not [string]::IsNullOrWhiteSpace([string]$openCodeOnlyManifest.installed_version) -and
         -not [string]::IsNullOrWhiteSpace([string]$openCodeOnlyManifest.installed_from_commit) -and
-        $openCodeOnlyManifest.managed_files.Count -eq 16 -and
+        $openCodeOnlyManifest.managed_files.Count -eq 15 -and
         @($openCodeOnlyManifest.managed_files | Where-Object { [string]$_.sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0 -and
-        $openCodeOnlyManifest.default_agent_receipt.state -ceq 'committed')
-    $requiredGlobalCommands = @('commands/olympus.ultra.md','commands/olympus.performance.md')
+        $openCodeOnlyManifest.default_agent_receipt.state -ceq 'committed' -and
+        [string]::Join("`n", @($openCodeOnlyManifest.managed_files | ForEach-Object { $_.path } | Sort-Object)) -ceq
+            [string]::Join("`n", @($expectedGlobalPaths + 'opencode.jsonc' | Sort-Object)))
     $managedGlobalCommands = @($openCodeOnlyManifest.managed_files |
         Where-Object { $_.path -in $requiredGlobalCommands })
     Check 'GLOBAL_NAMESPACED_COMMANDS_ARE_MANAGED' (
-        $managedGlobalCommands.Count -eq 2 -and
+        $managedGlobalCommands.Count -eq 3 -and
         @($requiredGlobalCommands | Where-Object {
             -not (Test-Path -LiteralPath (Join-Path $openCodeOnlyRoot $_) -PathType Leaf)
         }).Count -eq 0 -and (Global-Verify $project 'opencode').Code -eq 0
@@ -402,39 +417,33 @@ try {
         @($openCodeOnlyManifest.managed_files | Where-Object { $_.path -eq 'opencode.jsonc' }).Count -eq 1 -and
         (Global-Verify $project 'opencode').Code -eq 0
     )
+    $legacyRoot = Join-Path $run 'OpenCode v0.10.0 Inventory Refused'
+    [IO.Directory]::CreateDirectory($legacyRoot) | Out-Null
+    Copy-Item -Path (Join-Path $openCodeOnlyRoot '*') -Destination $legacyRoot -Recurse
+    $legacyManifestPath = Join-Path $legacyRoot 'olympus/orchestrator-install.json'
+    $legacyManifest = Get-Content -LiteralPath $legacyManifestPath -Raw | ConvertFrom-Json
+    $legacyManifest.installed_version = 'v0.10.0'
+    $legacyManifest.managed_files = @($legacyManifest.managed_files | Where-Object {
+        $_.path -notin $requiredGlobalCommands
+    })
     foreach ($commandPath in $requiredGlobalCommands) {
-        $malformedRoot = Join-Path $run ('malformed-legacy-' + [IO.Path]::GetFileNameWithoutExtension($commandPath))
-        [IO.Directory]::CreateDirectory($malformedRoot) | Out-Null
-        Copy-Item -Path (Join-Path $openCodeOnlyRoot '*') -Destination $malformedRoot -Recurse
-        $malformedManifestPath = Join-Path $malformedRoot 'olympus/orchestrator-install.json'
-        $malformedManifest = Get-Content -LiteralPath $malformedManifestPath -Raw | ConvertFrom-Json
-        $malformedManifest.installed_version = 'v0.10.0'
-        # Fourteen entries must mean legacy base + guard, never base + a user command.
-        $malformedManifest.managed_files = @($malformedManifest.managed_files | Where-Object {
-            $_.path -ne 'opencode.jsonc' -and
-            ($_.path -notin $requiredGlobalCommands -or $_.path -eq $commandPath)
-        })
-        foreach ($otherCommand in @($requiredGlobalCommands | Where-Object { $_ -ne $commandPath })) {
-            [IO.File]::Delete((Join-Path $malformedRoot $otherCommand))
-        }
-        $userCommandPath = Join-Path $malformedRoot $commandPath
-        [IO.File]::WriteAllText($userCommandPath, "User command must survive: $commandPath`n", $utf8)
-        ($malformedManifest.managed_files | Where-Object path -eq $commandPath).sha256 =
-            (Get-FileHash -LiteralPath $userCommandPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        Check 'GLOBAL_MALFORMED_LEGACY_FIXTURE_SHAPE' (
-            $malformedManifest.managed_files.Count -eq 14 -and
-            @($malformedManifest.managed_files | Where-Object path -eq 'opencode.jsonc').Count -eq 0 -and
-            $malformedManifest.default_agent_receipt.config_path -eq 'opencode.jsonc')
-        [IO.File]::WriteAllText($malformedManifestPath, ($malformedManifest | ConvertTo-Json -Depth 30), $utf8)
-        $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $malformedRoot
-        $beforeMalformed = Snapshot $malformedRoot
-        foreach ($operation in @('Update','Force','Uninstall','VerifyOnly')) {
-            $rejected = Run-Installer $project @('-Scope','global','-Harness','opencode',('-' + $operation))
-            Check ('GLOBAL_MALFORMED_LEGACY_' + $operation.ToUpperInvariant() + '_PRESERVES_USER_COMMAND') (
-                $rejected.Code -ne 0 -and $rejected.Text -match 'GLOBAL_MANIFEST_INVALID' -and
-                (Snapshot $malformedRoot) -ceq $beforeMalformed
-            ) ("command=$commandPath; exit=$($rejected.Code)`n$($rejected.Text)")
-        }
+        [IO.File]::Delete((Join-Path $legacyRoot $commandPath))
+    }
+    [IO.File]::WriteAllText($legacyManifestPath, ($legacyManifest | ConvertTo-Json -Depth 30), $utf8)
+    $legacyLockPath = Join-Path $legacyRoot '.olympus-cli-edit.lock'
+    if (Test-Path -LiteralPath $legacyLockPath) { [IO.File]::Delete($legacyLockPath) }
+    $beforeLegacy = Snapshot $legacyRoot
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $legacyRoot
+    foreach ($operation in @('Install','Update','Force','Uninstall','VerifyOnly')) {
+        $arguments = @('-Scope','global','-Harness','opencode')
+        if ($operation -ne 'Install') { $arguments += ('-' + $operation) }
+        $rejected = Run-Installer $project $arguments
+        Check ('GLOBAL_V010_' + $operation.ToUpperInvariant() + '_REFUSED_BEFORE_LOCK') (
+            $rejected.Code -ne 0 -and $rejected.Text -match 'GLOBAL_MANIFEST_INVALID' -and
+            $rejected.Text -match 'Uninstall it with the Olympus version that created this installation, then install the current version' -and
+            (Snapshot $legacyRoot) -ceq $beforeLegacy -and
+            -not (Test-Path -LiteralPath $legacyLockPath)
+        ) ("operation=$operation; exit=$($rejected.Code)`n$($rejected.Text)")
     }
     $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeOnlyRoot
     # ASK requires approval (a rejected approval blocks the read). A following
@@ -476,7 +485,7 @@ try {
     Check 'GLOBAL_INTERRUPTED_GUARD_RECOVERED_AND_OWNED' (
         $recoverVerifyBefore.Code -ne 0 -and
         $recoverInstall.Code -eq 0 -and $null -ne $recoverManifest -and
-        $recoverManifest.managed_files.Count -eq 16 -and
+        $recoverManifest.managed_files.Count -eq 15 -and
         @($recoverManifest.managed_files | Where-Object { $_.path -eq 'opencode.jsonc' }).Count -eq 1 -and
         [IO.File]::ReadAllText($recoverGuardPath) -ceq $defaultGuardText -and
         -not (Test-Path -LiteralPath $recoverIntentPath) -and
@@ -682,12 +691,12 @@ try {
     $openManifestPath = Join-Path $openCodeRoot 'olympus/orchestrator-install.json'
     $openManifestText = [IO.File]::ReadAllText($openManifestPath)
     $openManifest = $openManifestText | ConvertFrom-Json
-    Check 'GLOBAL_USER_CONFIG_MANIFEST_CURRENT_15_RESOURCE_FORM' (
+    Check 'GLOBAL_USER_CONFIG_MANIFEST_CURRENT_14_RESOURCE_FORM' (
         $openManifest.schema_version -eq 1 -and $openManifest.scope -ceq 'global' -and
         @($openManifest.installed_harnesses).Count -eq 1 -and $openManifest.installed_harnesses[0] -ceq 'opencode' -and
         -not [string]::IsNullOrWhiteSpace([string]$openManifest.installed_version) -and
         -not [string]::IsNullOrWhiteSpace([string]$openManifest.installed_from_commit) -and
-        $openManifest.managed_files.Count -eq 15 -and
+        $openManifest.managed_files.Count -eq 14 -and
         @($openManifest.managed_files | Where-Object { [string]$_.sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0 -and
         $openManifest.default_agent_receipt.state -ceq 'committed' -and
         (Test-Path -LiteralPath $openUserConfig) -and

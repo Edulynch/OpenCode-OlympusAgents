@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import shutil
 import stat
@@ -68,10 +69,11 @@ class CandidateRendererTests(unittest.TestCase):
         self.assertTrue(all(not path.exists() for path in self.expected))
 
     def test_detached_render_check_drift_and_idempotence(self):
+        managed_count = len(self.expected)
         self.assert_source_outputs_absent()
         code, stdout, stderr = self.invoke("render", "--output-root", str(self.destination))
         self.assertEqual(0, code, stderr)
-        self.assertIn("wrote 18 changed output(s), 0 unchanged", stdout)
+        self.assertIn(f"wrote {managed_count} changed output(s), 0 unchanged", stdout)
         expected_paths = {path.relative_to(self.source).as_posix() for path in self.expected}
         actual_paths = {
             path.relative_to(self.destination).as_posix()
@@ -84,7 +86,7 @@ class CandidateRendererTests(unittest.TestCase):
         before_check = self.snapshot(self.destination)
         code, stdout, stderr = self.invoke("check", "--output-root", str(self.destination))
         self.assertEqual(0, code, stderr)
-        self.assertIn("18 managed output(s); read-only", stdout)
+        self.assertIn(f"{managed_count} managed output(s); read-only", stdout)
         self.assertEqual(before_check, self.snapshot(self.destination))
 
         drifted = self.destination / ".opencode" / "agents" / "kael.md"
@@ -97,10 +99,10 @@ class CandidateRendererTests(unittest.TestCase):
 
         code, stdout, stderr = self.invoke("render", "--output-root", str(self.destination))
         self.assertEqual(0, code, stderr)
-        self.assertIn("wrote 1 changed output(s), 17 unchanged", stdout)
+        self.assertIn(f"wrote 1 changed output(s), {managed_count - 1} unchanged", stdout)
         code, stdout, stderr = self.invoke("render", "--output-root", str(self.destination))
         self.assertEqual(0, code, stderr)
-        self.assertIn("wrote 0 changed output(s), 18 unchanged", stdout)
+        self.assertIn(f"wrote 0 changed output(s), {managed_count} unchanged", stdout)
         self.assert_source_outputs_absent()
 
     def test_overlapping_roots_are_rejected_before_writing(self):
@@ -152,11 +154,12 @@ class CandidateRendererTests(unittest.TestCase):
                 self.assert_source_outputs_absent()
 
     def test_legacy_source_output_and_kael_behavior_without_output_root(self):
+        managed_count = len(self.expected)
         stdout = StringIO()
         with redirect_stdout(stdout):
             code = renderer.run(self.source, "render", "opencode")
         self.assertEqual(0, code)
-        self.assertIn("wrote 18 changed output(s), 0 unchanged", stdout.getvalue())
+        self.assertIn(f"wrote {managed_count} changed output(s), 0 unchanged", stdout.getvalue())
         for path, content in self.expected.items():
             self.assertEqual(content, path.read_text(encoding="utf-8"))
 
@@ -171,6 +174,47 @@ class CandidateRendererTests(unittest.TestCase):
                 ])
         self.assertEqual(2, raised.exception.code)
         self.assertIn("--output-root is only supported with render/check", error.getvalue())
+
+    def test_shared_primary_ceiling_and_three_current_primary_commands(self):
+        outputs = renderer.outputs_for(self.source, "opencode", 7)
+        for role in ("kael", "atlas"):
+            prompt = outputs[self.source / ".opencode" / "agents" / f"{role}.md"]
+            self.assertIn("MAX_ACTIVE_CHILDREN = 7", prompt)
+            if role == "kael":
+                self.assertIn("adapt from zero to seven children", prompt)
+
+        command_paths = {
+            path.name: content
+            for path, content in outputs.items()
+            if path.parent == self.source / ".opencode" / "commands"
+        }
+        self.assertEqual(
+            set(command_paths),
+            {"olympus.ultra.md", "olympus.performance.md", "olympus.performance-ultra.md"},
+        )
+        for name, content in command_paths.items():
+            frontmatter = content.split("\n---\n", 1)[0]
+            self.assertRegex(frontmatter, r"(?m)^subagent: false$")
+            self.assertNotRegex(frontmatter, r"(?m)^agent:")
+            self.assertIn(f"Usage: /{name.removesuffix('.md')} <prompt>", content)
+            self.assertIn("Do not call tools or launch agents.", content)
+            self.assertIn("Kael or Atlas primary session", content)
+        self.assertIn("ULTRA_CEILING", command_paths["olympus.ultra.md"])
+        self.assertIn("READY_WORKSTREAMS", command_paths["olympus.ultra.md"])
+        self.assertIn("TARGET_ACTIVE", command_paths["olympus.ultra.md"])
+        self.assertIn("CURRENT_ACTIVE", command_paths["olympus.ultra.md"])
+        self.assertIn("DOMAIN_MODE: PERFORMANCE", command_paths["olympus.performance-ultra.md"])
+        self.assertIn("EXECUTION_MODE: ULTRA", command_paths["olympus.performance-ultra.md"])
+
+        rendered_primaries = renderer.rendered_primaries(self.source, 7)
+        self.assertEqual(set(rendered_primaries), {"kael", "atlas"})
+        self.assertTrue(all("MAX_ACTIVE_CHILDREN = 7" in prompt for prompt in rendered_primaries.values()))
+
+        code, stdout, stderr = self.invoke("primaries", "--max-children", "6")
+        self.assertEqual(0, code, stderr)
+        primaries = json.loads(stdout)
+        self.assertEqual(set(primaries), {"kael", "atlas"})
+        self.assertTrue(all("MAX_ACTIVE_CHILDREN = 6" in prompt for prompt in primaries.values()))
 
 
 if __name__ == "__main__":

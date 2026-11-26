@@ -105,7 +105,7 @@ class LinuxReleaseLauncher(unittest.TestCase):
     def _archive(self, *, extra=None, changes=None):
         root_name = f"{LAUNCHER._OWNER}-{LAUNCHER._REPOSITORY}-{self.commit[:7]}"
         stream = io.BytesIO()
-        with tarfile.open(fileobj=stream, mode="w:gz") as archive:
+        with tarfile.open(fileobj=stream, mode="w:gz", format=tarfile.USTAR_FORMAT) as archive:
             root = tarfile.TarInfo(root_name + "/")
             root.type = tarfile.DIRTYPE
             root.mode = 0o755
@@ -130,6 +130,22 @@ class LinuxReleaseLauncher(unittest.TestCase):
             if extra is not None:
                 archive.addfile(extra)
         return stream.getvalue()
+
+    def _source_release_files(self):
+        from olympus import global_cli
+        from olympus.cli import load_renderer
+
+        # Render generated release members in memory; checked-in .opencode outputs may lag.
+        generated = global_cli._generated_paths(
+            ROOT, load_renderer(ROOT), set(global_cli._ROLE_NAMES),
+        )
+        return {
+            path: (
+                generated[path].encode("utf-8")
+                if path in generated else (ROOT / Path(path)).read_bytes()
+            )
+            for path in LAUNCHER._RELEASE_FILES
+        }
 
     def _bootstrap_transport(self, *, include_tree=False, archive=False, tag=None):
         self.files["scripts/launch-latest.py"] = (
@@ -643,11 +659,64 @@ class LinuxReleaseLauncher(unittest.TestCase):
         from olympus import global_cli
         from olympus.cli import load_renderer
 
+        expected_roles = {
+            "kael", "atlas", "veyra", "kovan", "nox", "vera", "helios", "talos", "thales",
+        }
+        expected_commands = {"olympus.ultra", "olympus.performance", "olympus.performance-ultra"}
+        command_source_prefix = "olympus/harnesses/opencode/commands/"
+        command_output_prefix = ".opencode/commands/"
+        self.assertEqual(expected_roles, set(global_cli._ROLE_NAMES))
+        self.assertEqual(expected_roles, set(LAUNCHER._ROLE_NAMES))
+        self.assertEqual(
+            {f"{command_source_prefix}{name}.md" for name in expected_commands},
+            {path for path in global_cli._STATIC_INPUTS if path.startswith(command_source_prefix)},
+        )
+        self.assertEqual(
+            {f"{command_output_prefix}{name}.md" for name in expected_commands},
+            {path for path in global_cli._OUTPUT_FIXED if path.startswith(command_output_prefix)},
+        )
         generated = global_cli._generated_paths(
             ROOT, load_renderer(ROOT), {Path(item).stem for item in global_cli._ROLE_INPUTS},
         )
         expected = set(global_cli._PACKAGE_INPUTS) | set(generated)
         self.assertEqual(expected, LAUNCHER._RELEASE_FILES)
+
+    def test_old_package_receipts_are_rejected_before_tree_validation_or_repair(self):
+        from olympus import global_cli
+
+        receipt = global_cli._canonical({
+            "schema_version": 1,
+            "kind": global_cli._PACKAGE_KIND,
+            "version": "v0.10.0",
+            "commit": "a" * 40,
+            "files": [{
+                "path": "olympus/roles/argus.md",
+                "sha256": "b" * 64,
+            }],
+        })
+        receipt_metadata = SimpleNamespace(st_mode=0o100444)
+        with tempfile.TemporaryDirectory() as temporary:
+            package_root = Path(temporary) / "package"
+            for validator in (global_cli._validate_package, global_cli._validate_force_package):
+                with self.subTest(validator=validator.__name__):
+                    with (
+                        mock.patch.object(
+                            global_cli, "_ensure_directory",
+                            return_value=(package_root, (1, 2)),
+                        ),
+                        mock.patch.object(global_cli, "_verify_directory"),
+                        mock.patch.object(
+                            global_cli, "_safe_read",
+                            return_value=(receipt, receipt_metadata),
+                        ),
+                        mock.patch.object(global_cli, "_scan_package_tree") as scan_tree,
+                    ):
+                        with self.assertRaisesRegex(
+                            global_cli.GlobalCliError,
+                            r"v0\.10\.0.*cannot be adopted or force-repaired.*Uninstall.*\(v0\.10\.0\)",
+                        ):
+                            validator(package_root)
+                        scan_tree.assert_not_called()
 
     def test_update_current_identity_does_not_fetch_archive_or_tree(self):
         from olympus import global_cli
@@ -1139,10 +1208,7 @@ class LinuxReleaseLauncher(unittest.TestCase):
 
         self.version = cli.release_version(ROOT)
         self.commit = "d" * 40
-        self.files = {
-            path: (ROOT / Path(path)).read_bytes()
-            for path in LAUNCHER._RELEASE_FILES
-        }
+        self.files = self._source_release_files()
         self.hashes = {
             path: LAUNCHER._git_blob_sha(raw) for path, raw in self.files.items()
         }
@@ -1195,10 +1261,7 @@ class LinuxReleaseLauncher(unittest.TestCase):
 
         self.version = cli.release_version(ROOT)
         self.commit = "d" * 40
-        self.files = {
-            path: (ROOT / Path(path)).read_bytes()
-            for path in LAUNCHER._RELEASE_FILES
-        }
+        self.files = self._source_release_files()
         self.hashes = {
             path: LAUNCHER._git_blob_sha(raw) for path, raw in self.files.items()
         }

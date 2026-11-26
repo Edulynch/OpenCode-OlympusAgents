@@ -46,8 +46,7 @@ _MAX_ARCHIVE_BYTES = 256 * 1024 * 1024
 _MAX_FILE_BYTES = 16 * 1024 * 1024
 _OFFICIAL_HOSTS = frozenset(("api.github.com", "codeload.github.com", "github.com"))
 _ROLE_NAMES = (
-    "argus", "atlas", "helios", "kael", "kovan", "nox", "orin", "talos",
-    "thales", "vera", "veyra",
+    "kael", "atlas", "veyra", "kovan", "nox", "vera", "helios", "talos", "thales",
 )
 _PYTHON_FILES = (
     "olympus/__init__.py",
@@ -83,6 +82,7 @@ _STATIC_FILES = (
     "olympus/harnesses/opencode/global-permissions.jsonc",
     "olympus/harnesses/opencode/commands/olympus.ultra.md",
     "olympus/harnesses/opencode/commands/olympus.performance.md",
+    "olympus/harnesses/opencode/commands/olympus.performance-ultra.md",
     "scripts/render_harnesses.py",
     "scripts/olympus_cli.py",
     "scripts/olympus",
@@ -106,6 +106,7 @@ _GENERATED_FILES = frozenset(
         ".opencode/scripts/worktree-setup.ps1",
         ".opencode/commands/olympus.ultra.md",
         ".opencode/commands/olympus.performance.md",
+        ".opencode/commands/olympus.performance-ultra.md",
         *(f".opencode/agents/{role}.md" for role in _ROLE_NAMES),
     }
 )

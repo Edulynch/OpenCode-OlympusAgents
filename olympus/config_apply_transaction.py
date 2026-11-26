@@ -269,12 +269,19 @@ def _record_context(target: Path, lock, *, settings_source: Path | None = None
 def _manifest_maps(target: Path, record: dict, file_map: dict[str, dict], states: dict[str, str], source: Path,
                    renderer) -> tuple[Any, Any, dict[str, str], dict[str, str]]:
     old_raw, new_raw = _manifest_bytes(target, record, file_map, states, state=record["state"])
+    from .config_apply import _LEGACY_PROJECT_MANIFEST_VERSIONS, _render_managed_outputs
+
     old_manifest = _parse_manifest(target, record["manifest_path"], old_raw)
+    if old_manifest.installed_version in _LEGACY_PROJECT_MANIFEST_VERSIONS:
+        raise TransactionError(
+            f"Legacy project manifest receipt {old_manifest.installed_version} cannot be recovered; "
+            "uninstall with its source version, then install the current release.",
+            4,
+        )
     if old_manifest.relative_path != record["manifest_path"]:
         raise TransactionError("Old manifest location contradicts the project-apply record", 4)
     old_harnesses = old_manifest.installed_harnesses
     try:
-        from .config_apply import _render_managed_outputs
         by_harness = _render_managed_outputs(source, renderer, old_harnesses)
     except TransactionError:
         raise
@@ -298,6 +305,12 @@ def _manifest_maps(target: Path, record: dict, file_map: dict[str, dict], states
 
     old_entries = manifest_entries(old_manifest, "Old")
     new_manifest = _parse_manifest(target, record["manifest_path"], new_raw)
+    if new_manifest.installed_version in _LEGACY_PROJECT_MANIFEST_VERSIONS:
+        raise TransactionError(
+            f"Legacy project manifest receipt {new_manifest.installed_version} cannot be recovered; "
+            "uninstall with its source version, then install the current release.",
+            4,
+        )
     if new_manifest.relative_path != record["manifest_path"] or new_manifest.installed_harnesses != old_harnesses:
         raise TransactionError("New manifest changes project ownership or harness inventory", 4)
     new_entries = manifest_entries(new_manifest, "New")
@@ -1311,6 +1324,12 @@ def _settings_preference_descriptor(scope: str, target: Path, path: Path, *, cre
     }
 
 
+def _settings_agent_paths(record: dict) -> tuple[str, ...]:
+    if record["change"].get("kind") == "max_children":
+        return ("agents/kael.md", "agents/atlas.md")
+    return (record["agent_path"],)
+
+
 def _settings_validate_record(target: Path, source: Path, lock, record: Any, scope: str) -> dict[str, dict]:
     expected_fields = {
         "schema_version", "kind", "scope", "operation_id", "target_root", "scratch_identity",
@@ -1375,6 +1394,7 @@ def _settings_validate_record(target: Path, source: Path, lock, record: Any, sco
     manifest_path = ".opencode/orchestrator-install.json" if scope == "project" else _GLOBAL_MANIFEST
     if record["agent_path"] != agent_path or record["manifest_path"] != manifest_path:
         raise TransactionError("User-settings record names an unsupported role or manifest path", 4)
+    agent_paths = _settings_agent_paths(record)
     if scope == "project":
         if record["preference_target"] != {"relative": ".opencode/olympus-config.json"}:
             raise TransactionError("Project preference record names an unsupported path", 4)
@@ -1400,9 +1420,19 @@ def _settings_validate_record(target: Path, source: Path, lock, record: Any, sco
         preference_path = _SETTINGS_PREFERENCES
 
     files = record["files"]
-    if not isinstance(files, list) or len(files) != 3:
-        raise TransactionError("User-settings record must contain exactly three destinations", 4)
-    expected_paths = [agent_path, manifest_path, preference_path]
+    expected_paths = [*agent_paths, manifest_path, preference_path]
+    legacy_paths = [agent_path, manifest_path, preference_path]
+    if (change["kind"] == "max_children" and isinstance(files, list) and len(files) == 3
+            and [item.get("path") if isinstance(item, dict) else None for item in files] == legacy_paths):
+        raise TransactionError(
+            "Legacy max-children user-settings journal contains only Kael; preserve its evidence and "
+            "recover it with the Olympus source version that created it.",
+            4,
+        )
+    if not isinstance(files, list) or len(files) != len(expected_paths):
+        raise TransactionError(
+            f"User-settings record must contain exactly {len(expected_paths)} destinations", 4,
+        )
     file_map: dict[str, dict] = {}
     for index, entry in enumerate(files):
         if not isinstance(entry, dict) or set(entry) != {
@@ -1413,8 +1443,11 @@ def _settings_validate_record(target: Path, source: Path, lock, record: Any, sco
         if (entry["path"] != expected_paths[index] or entry["path"] in file_map
                 or (old_hash is not None and (not isinstance(old_hash, str) or _HASH.fullmatch(old_hash) is None))
                 or not isinstance(new_hash, str) or _HASH.fullmatch(new_hash) is None
-                or (index < 2 and (old_hash is None or old_hash == new_hash))
-                or (index == 2 and old_hash == new_hash and old_hash is None)
+                or (index < len(expected_paths) - 1 and old_hash is None)
+                or (index < len(agent_paths)
+                    and old_hash == new_hash and change["kind"] != "max_children")
+                or (index == len(expected_paths) - 2 and old_hash == new_hash)
+                or (index == len(expected_paths) - 1 and old_hash == new_hash and old_hash is None)
                 or type(entry["mode"]) is not int or not 0 <= entry["mode"] <= 0o7777
                 or entry["backup"] != f"backups/file-{index:04d}.old"
                 or entry["staged"] != f"staged/file-{index:04d}.new"):
@@ -1555,31 +1588,33 @@ def _settings_initial_temp(target: Path, source: Path, lock, scope: str):
 
     old_manifest = base64.b64decode(record["manifest_old_b64"], validate=True)
     new_manifest = base64.b64decode(record["manifest_new_b64"], validate=True)
+    agent_paths = _settings_agent_paths(record)
     _, old_entries, new_entries = _settings_manifest_data(
         target, source, record, old_manifest, new_manifest,
     )
     for relative, digest in old_entries.items():
         value, _ = _global_target(target, relative)
         if (value is None or _hash(value) != digest
-                or relative != record["agent_path"] and new_entries.get(relative) != digest):
+                or relative not in agent_paths and new_entries.get(relative) != digest):
             raise TransactionError(f"Unpublished user-settings receipt drifted: {relative}", 4)
-    agent_entry = file_map[record["agent_path"]]
-    if (old_entries.get(record["agent_path"]) != agent_entry["old_sha256"]
-            or new_entries.get(record["agent_path"]) != agent_entry["new_sha256"]):
-        raise TransactionError("Unpublished user-settings agent receipt contradicts its record", 4)
+    for relative in agent_paths:
+        agent_entry = file_map[relative]
+        if (old_entries.get(relative) != agent_entry["old_sha256"]
+                or new_entries.get(relative) != agent_entry["new_sha256"]):
+            raise TransactionError("Unpublished user-settings agent receipt contradicts its record", 4)
     preference_path = ".opencode/olympus-config.json" if scope == "project" else _SETTINGS_PREFERENCES
     old_config, new_config, new_preference = _settings_changed_config(
         source, record, current[preference_path], None,
     )
     if _hash(new_preference) != file_map[preference_path]["new_sha256"]:
         raise TransactionError("Unpublished user-settings preference receipt is inconsistent", 4)
-    old_agent = current[record["agent_path"]]
-    if old_agent is None:
+    old_agents = {relative: current[relative] for relative in agent_paths}
+    if any(agent is None for agent in old_agents.values()):
         raise TransactionError("Unpublished user-settings agent is missing", 4)
-    new_agent = _settings_derive_new_agent(source, record, old_config, new_config, old_agent)
-    if _hash(new_agent) != file_map[record["agent_path"]]["new_sha256"]:
+    new_agents = _settings_derive_new_agents(source, record, old_config, new_config, old_agents)
+    if any(_hash(new_agents[relative]) != file_map[relative]["new_sha256"] for relative in agent_paths):
         raise TransactionError("Unpublished user-settings agent receipt is inconsistent", 4)
-    _settings_agent_binding(source, record, old_config, new_config, old_agent, new_agent)
+    _settings_agent_binding(source, record, old_config, new_config, old_agents, new_agents)
 
     for relative, entry in file_map.items():
         value, target_metadata = _settings_read_target(target, record, relative)
@@ -1652,6 +1687,13 @@ def _settings_manifest_data(target: Path, source: Path, record: dict, old_raw: b
             new_manifest = install_manifest.parse_project_manifest(
                 target, target / record["manifest_path"], new_raw,
             )
+            if (old_manifest.installed_version in config_apply._LEGACY_PROJECT_MANIFEST_VERSIONS
+                    or new_manifest.installed_version in config_apply._LEGACY_PROJECT_MANIFEST_VERSIONS):
+                raise TransactionError(
+                    "Legacy project manifest receipt cannot be recovered; "
+                    "uninstall with its source version, then install the current release.",
+                    4,
+                )
             old_data, new_data = old_manifest.data, new_manifest.data
             old_entries = {item["path"]: item["sha256"].lower() for item in old_data["managed_files"]}
             new_entries = {item["path"]: item["sha256"].lower() for item in new_data["managed_files"]}
@@ -1662,46 +1704,57 @@ def _settings_manifest_data(target: Path, source: Path, record: dict, old_raw: b
     except Exception as error:
         raise TransactionError(f"Cannot validate user-settings manifest receipts: {error}", 4) from error
 
-    agent_path = record["agent_path"]
+    agent_paths = _settings_agent_paths(record)
     if (set(old_entries) != set(new_entries)
             or {key: value for key, value in old_data.items() if key != "managed_files"}
             != {key: value for key, value in new_data.items() if key != "managed_files"}):
         raise TransactionError("User-settings manifest changed ownership or non-hash metadata", 4)
     for relative in old_entries:
-        if relative != agent_path and old_entries[relative] != new_entries[relative]:
+        if relative not in agent_paths and old_entries[relative] != new_entries[relative]:
             raise TransactionError(f"User-settings manifest changed an unrelated receipt: {relative}", 4)
     return expected, old_entries, new_entries
 
 
-def _settings_agent_binding(source: Path, record: dict, old_config: dict, new_config: dict,
-                            old_agent: bytes | None, new_agent: bytes | None) -> None:
+def _settings_expected_max_children_agents(source: Path, config: dict, value: int) -> dict[str, bytes]:
     from . import global_readonly, user_config
     from .cli import load_renderer
+
+    expected = global_readonly._expected(
+        source, load_renderer(source), ("opencode",), max_children=value,
+    )["opencode"]
+    user_config._apply_config_to_expected(source, expected, config)
+    return {relative: expected[relative] for relative in ("agents/kael.md", "agents/atlas.md")}
+
+
+def _settings_agent_binding(source: Path, record: dict, old_config: dict, new_config: dict,
+                            old_agents: dict[str, bytes | None],
+                            new_agents: dict[str, bytes | None]) -> None:
+    from . import user_config
 
     role = record["role"]
     change = record["change"]
     scope = record["scope"]
+    agent_paths = _settings_agent_paths(record)
+    entries = {entry["path"]: entry for entry in record["files"]}
     if change["kind"] == "max_children":
         children_old = old_config.get("orchestration", {}).get("max_children", 4)
         children_new = new_config["orchestration"]["max_children"]
-        renderer = load_renderer(source)
-        expected_old = global_readonly._expected(
-            source, renderer, ("opencode",), max_children=children_old,
-        )["opencode"]
-        expected_new = global_readonly._expected(
-            source, renderer, ("opencode",), max_children=children_new,
-        )["opencode"]
-        user_config._apply_config_to_expected(source, expected_old, old_config)
-        user_config._apply_config_to_expected(source, expected_new, new_config)
-        if _hash(expected_new[f"agents/{role}.md"]) != record["files"][0]["new_sha256"]:
-            raise TransactionError("Recorded new Kael agent differs from the validated preference output", 4)
-        if ((old_config != new_config and old_agent is not None
-             and (old_agent != expected_old[f"agents/{role}.md"]
-                  or _hash(expected_old[f"agents/{role}.md"]) != record["files"][0]["old_sha256"]))
-                or (new_agent is not None and new_agent != expected_new[f"agents/{role}.md"])):
-            raise TransactionError("User-settings Kael agent does not match its recorded old/new preferences", 4)
+        expected_old = _settings_expected_max_children_agents(source, old_config, children_old)
+        expected_new = _settings_expected_max_children_agents(source, new_config, children_new)
+        for relative in agent_paths:
+            old_agent, new_agent = old_agents.get(relative), new_agents.get(relative)
+            entry = entries[relative]
+            if (_hash(expected_new[relative]) != entry["new_sha256"]
+                    or new_agent is not None and new_agent != expected_new[relative]
+                    or old_config != new_config and old_agent is not None
+                    and (old_agent != expected_old[relative]
+                         or _hash(expected_old[relative]) != entry["old_sha256"])):
+                raise TransactionError(
+                    "User-settings primary agents do not match the recorded old/new preferences", 4,
+                )
         return
 
+    old_agent, new_agent = old_agents.get(record["agent_path"]), new_agents.get(record["agent_path"])
     fallback = record["project_fallback"]
     old_model, old_effort = _settings_effective(source, scope, role, old_config, fallback)
     new_model, new_effort = _settings_effective(source, scope, role, new_config, fallback)
@@ -1727,7 +1780,7 @@ def _settings_agent_binding(source: Path, record: dict, old_config: dict, new_co
         else:
             old_preferences_match = old_assignment == f"{old_model}#{old_effort}"
         if ((not unchanged_preferences and not old_preferences_match)
-                or _hash(derived_new) != record["files"][0]["new_sha256"]
+                or _hash(derived_new) != entries[record["agent_path"]]["new_sha256"]
                 or new_agent is not None and derived_new != new_agent):
             raise TransactionError("User-settings old agent is not bound to the exact old/new preferences", 4)
     if new_agent is not None:
@@ -1743,20 +1796,19 @@ def _settings_agent_binding(source: Path, record: dict, old_config: dict, new_co
             raise TransactionError("User-settings new agent is not bound to the exact old/new preferences", 4)
 
 
-def _settings_new_agent_binding(source: Path, record: dict, new_config: dict, new_agent: bytes) -> None:
-    from . import global_readonly, user_config
-    from .cli import load_renderer
+def _settings_new_agent_binding(source: Path, record: dict, new_config: dict,
+                                new_agents: dict[str, bytes]) -> None:
+    from . import user_config
 
     role = record["role"]
     if record["change"]["kind"] == "max_children":
-        expected = global_readonly._expected(
-            source, load_renderer(source), ("opencode",),
-            max_children=new_config.get("orchestration", {}).get("max_children", 4),
-        )["opencode"]
-        user_config._apply_config_to_expected(source, expected, new_config)
-        if new_agent != expected[f"agents/{role}.md"]:
-            raise TransactionError("Committed Kael agent does not match the recorded preferences", 4)
+        expected = _settings_expected_max_children_agents(
+            source, new_config, new_config.get("orchestration", {}).get("max_children", 4),
+        )
+        if any(new_agents.get(relative) != expected[relative] for relative in _settings_agent_paths(record)):
+            raise TransactionError("Committed primary agents do not match the recorded preferences", 4)
         return
+    new_agent = new_agents[record["agent_path"]]
     model, effort = _settings_effective(
         source, record["scope"], role, new_config, record["project_fallback"],
     )
@@ -1764,23 +1816,22 @@ def _settings_new_agent_binding(source: Path, record: dict, new_config: dict, ne
         raise TransactionError("Committed role agent does not match the recorded preferences", 4)
 
 
-def _settings_derive_new_agent(source: Path, record: dict, old_config: dict, new_config: dict,
-                               old_agent: bytes) -> bytes:
-    from . import global_readonly, user_config
-    from .cli import load_renderer
+def _settings_derive_new_agents(source: Path, record: dict, old_config: dict, new_config: dict,
+                               old_agents: dict[str, bytes | None]) -> dict[str, bytes]:
+    from . import user_config
 
     role = record["role"]
     if record["change"]["kind"] == "max_children":
-        expected = global_readonly._expected(
-            source, load_renderer(source), ("opencode",),
-            max_children=new_config.get("orchestration", {}).get("max_children", 4),
-        )["opencode"]
-        user_config._apply_config_to_expected(source, expected, new_config)
-        return expected[f"agents/{role}.md"]
+        return _settings_expected_max_children_agents(
+            source, new_config, new_config.get("orchestration", {}).get("max_children", 4),
+        )
+    old_agent = old_agents[record["agent_path"]]
+    if old_agent is None:
+        raise TransactionError("Unpublished user-settings agent is missing", 4)
     model, effort = _settings_effective(
         source, record["scope"], role, new_config, record["project_fallback"],
     )
-    return user_config._replace_agent_model(old_agent, model, effort, role)
+    return {record["agent_path"]: user_config._replace_agent_model(old_agent, model, effort, role)}
 
 
 def _settings_validate_new_preference(record: dict, config: dict) -> None:
@@ -1835,29 +1886,33 @@ def _settings_inspect(target: Path, source: Path, lock, record: dict, record_raw
     expected, old_entries, new_entries = _settings_manifest_data(
         target, source, record, old_manifest, new_manifest,
     )
-    agent_entry = file_map[record["agent_path"]]
-    if (old_entries.get(record["agent_path"]) != agent_entry["old_sha256"]
-            or new_entries.get(record["agent_path"]) != agent_entry["new_sha256"]):
-        raise TransactionError("User-settings manifest receipt contradicts the recorded role agent", 4)
+    agent_paths = _settings_agent_paths(record)
+    for relative in agent_paths:
+        agent_entry = file_map[relative]
+        if (old_entries.get(relative) != agent_entry["old_sha256"]
+                or new_entries.get(relative) != agent_entry["new_sha256"]):
+            raise TransactionError("User-settings manifest receipt contradicts a recorded role agent", 4)
     for relative, digest in old_entries.items():
-        if relative == record["agent_path"]:
+        if relative in agent_paths:
             continue
         current, _ = _global_target(target, relative)
         if current is None or _hash(current) != digest or new_entries.get(relative) != digest:
             raise TransactionError(f"Unchanged manifest-owned resource drifted: {relative}", 4)
     artifacts = _settings_artifacts(target, record, file_map, required_backups=require_backups,
                                     required_staged=require_staged)
-    old_agent_entry = file_map[record["agent_path"]]
-    old_agent_backup = artifacts.get(f"{_SCRATCH}/{old_agent_entry['backup']}")
-    old_agent = old_agent_backup[0] if old_agent_backup is not None else (
-        _settings_read_target(target, record, record["agent_path"])[0]
-        if states[record["agent_path"]] in ("old", "same") else None
-    )
-    staged_agent = artifacts.get(f"{_SCRATCH}/{old_agent_entry['staged']}")
-    new_agent = staged_agent[0] if staged_agent is not None else (
-        _settings_read_target(target, record, record["agent_path"])[0]
-        if states[record["agent_path"]] in ("new", "same") else None
-    )
+    old_agents, new_agents = {}, {}
+    for relative in agent_paths:
+        entry = file_map[relative]
+        old_backup = artifacts.get(f"{_SCRATCH}/{entry['backup']}")
+        old_agents[relative] = old_backup[0] if old_backup is not None else (
+            _settings_read_target(target, record, relative)[0]
+            if states[relative] in ("old", "same") else None
+        )
+        staged_agent = artifacts.get(f"{_SCRATCH}/{entry['staged']}")
+        new_agents[relative] = staged_agent[0] if staged_agent is not None else (
+            _settings_read_target(target, record, relative)[0]
+            if states[relative] in ("new", "same") else None
+        )
     preference_entry = file_map[
         ".opencode/olympus-config.json" if record["scope"] == "project" else _SETTINGS_PREFERENCES
     ]
@@ -1893,13 +1948,14 @@ def _settings_inspect(target: Path, source: Path, lock, record: dict, record_raw
         _settings_validate_new_preference(record, new_config)
         old_config = None
     if old_config is None:
-        if states[record["agent_path"]] not in ("new", "same"):
-            raise TransactionError("Preferences are committed but the managed agent is not at its new state", 4)
-        if new_agent is None:
-            new_agent = _settings_read_target(target, record, record["agent_path"])[0]
-        _settings_new_agent_binding(source, record, new_config, new_agent)
+        if any(states[relative] not in ("new", "same") for relative in agent_paths):
+            raise TransactionError("Preferences are committed but a managed agent is not at its new state", 4)
+        for relative in agent_paths:
+            if new_agents[relative] is None:
+                new_agents[relative] = _settings_read_target(target, record, relative)[0]
+        _settings_new_agent_binding(source, record, new_config, new_agents)
     else:
-        _settings_agent_binding(source, record, old_config, new_config, old_agent, new_agent)
+        _settings_agent_binding(source, record, old_config, new_config, old_agents, new_agents)
     return {"identity": identity, "file_map": file_map, "states": states, "artifacts": artifacts,
             "old_entries": old_entries, "new_entries": new_entries,
             "preference_state": preference_state, "old_config": old_config, "new_config": new_config}
@@ -1984,8 +2040,8 @@ def _settings_publish(target: Path, source: Path, lock, record: dict, relative: 
     identity = source_edit._lock_identity(lock)
     if root_check is not None:
         root_check()
-    if relative not in (record["agent_path"], record["manifest_path"]):
-        raise TransactionError("User-settings recovery may publish only its managed agent and manifest", 4)
+    if relative not in (*_settings_agent_paths(record), record["manifest_path"]):
+        raise TransactionError("User-settings recovery may publish only its managed agents and manifest", 4)
     current, metadata = _global_target(target, relative)
     if current != expected_old or (
             current is not None and (metadata is None or stat.S_IMODE(metadata.st_mode) != mode)):
@@ -2034,7 +2090,8 @@ def _recover_settings_cycle(target: Path, source: Path, lock, record: dict, reco
     live = _settings_inspect(target, source, lock, record, record_raw, record_metadata)
     preference_path = ".opencode/olympus-config.json" if scope == "project" else _SETTINGS_PREFERENCES
     preference = file_map[preference_path]
-    managed_paths = (record["agent_path"], record["manifest_path"])
+    agent_paths = _settings_agent_paths(record)
+    managed_paths = (*agent_paths, record["manifest_path"])
     preference_committed = (
         preference["old_sha256"] != preference["new_sha256"]
         and live["preference_state"] == "new"
@@ -2042,7 +2099,7 @@ def _recover_settings_cycle(target: Path, source: Path, lock, record: dict, reco
     if preference_committed:
         if any(live["states"][relative] not in ("new", "same") for relative in managed_paths):
             raise TransactionError(
-                "Preferences reached their commit point before both managed resources reached the new state", 4,
+                "Preferences reached their commit point before all managed resources reached the new state", 4,
             )
         expected = _settings_expected_state(file_map, new=True)
         _settings_cleanup(target, source, lock, record, record_raw, record_metadata, file_map, expected)
@@ -2061,7 +2118,7 @@ def _recover_settings_cycle(target: Path, source: Path, lock, record: dict, reco
         _settings_cleanup(target, source, lock, record, record_raw, record_metadata, file_map, expected)
         return "discarded_uncommitted"
 
-    for relative in (record["manifest_path"], record["agent_path"]):
+    for relative in (record["manifest_path"], *agent_paths):
         if live["states"][relative] in ("old", "same"):
             continue
         entry = file_map[relative]
@@ -2129,15 +2186,28 @@ def _settings_commit_preferences(target: Path, source: Path, lock, record: dict,
 def commit_user_config(target: Path, source: Path, lock, scope: str, preference_path: Path,
                        preference_old: bytes | None, preference_new: bytes, installed,
                        change: dict, *, root_check=None, project_fallback: dict | None = None) -> str:
-    """Journal only setter updates that coordinate a role agent, receipt, and preferences."""
+    """Journal setter updates that coordinate managed agents, receipts, and preferences."""
     target = Path(target).resolve(strict=True)
     identity = source_edit._lock_identity(lock)
     if pending(target):
         raise TransactionError("A pending Olympus transaction blocks user-settings changes", 3)
     from . import user_config
 
-    agent_path, agent_old, agent_new, manifest_path, manifest_old, manifest_new = installed
-    agent_relative = Path(agent_path).relative_to(target).as_posix()
+    agent_updates, manifest_path, manifest_old, manifest_new = installed
+    agent_changes = []
+    for agent_path, agent_old, agent_new in agent_updates:
+        agent_relative = Path(agent_path).relative_to(target).as_posix()
+        agent_current, agent_metadata = _global_target(target, agent_relative)
+        if (agent_current != agent_old or agent_metadata is None
+                or not isinstance(agent_new, bytes)):
+            raise TransactionError(
+                f"Managed agent changed before user-settings journal preparation: {agent_relative}", 3,
+            )
+        agent_changes.append((
+            agent_relative, agent_old, agent_new, stat.S_IMODE(agent_metadata.st_mode),
+        ))
+    if not agent_changes or len({item[0] for item in agent_changes}) != len(agent_changes):
+        raise TransactionError("User-settings journal requires distinct managed agent destinations", 3)
     manifest_relative = Path(manifest_path).relative_to(target).as_posix()
     if scope == "project":
         preference_target = {"relative": ".opencode/olympus-config.json"}
@@ -2160,13 +2230,10 @@ def commit_user_config(target: Path, source: Path, lock, scope: str, preference_
     else:
         raise TransactionError(f"Unsupported user-settings scope: {scope}", 3)
 
-    agent_current, agent_metadata = _global_target(target, agent_relative)
     manifest_current, manifest_metadata = _global_target(target, manifest_relative)
-    if (agent_current != agent_old or manifest_current != manifest_old
-            or agent_metadata is None or manifest_metadata is None):
+    if (manifest_current != manifest_old or manifest_metadata is None):
         raise TransactionError("Managed agent or manifest changed before user-settings journal preparation", 3)
     role = change.get("role", "kael")
-    mode = stat.S_IMODE(agent_metadata.st_mode)
     if len(preference_new) > _SETTINGS_LIMIT:
         raise TransactionError("User-settings preference exceeds the safety limit", 3)
     preference_mode = (
@@ -2174,7 +2241,7 @@ def commit_user_config(target: Path, source: Path, lock, scope: str, preference_
         else 0o666 if os.name == "nt" else 0o600
     )
     changes = [
-        (agent_relative, agent_old, agent_new, mode),
+        *agent_changes,
         (manifest_relative, manifest_old, manifest_new, stat.S_IMODE(manifest_metadata.st_mode)),
         (preference_relative, preference_old, preference_new, preference_mode),
     ]
@@ -2190,7 +2257,7 @@ def commit_user_config(target: Path, source: Path, lock, scope: str, preference_
         "target_root": str(target), "scratch_identity": {"st_dev": 0, "st_ino": 0},
         "lock_identity": {"path": source_edit._LOCK_NAME, "st_dev": identity[0], "st_ino": identity[1]},
         "state": "PREPARING", "role": role, "change": change,
-        "agent_path": agent_relative, "manifest_path": manifest_relative,
+        "agent_path": agent_changes[0][0], "manifest_path": manifest_relative,
         "preference_target": preference_target, "project_fallback": project_fallback,
         "manifest_old_b64": base64.b64encode(manifest_old).decode("ascii"),
         "manifest_new_b64": base64.b64encode(manifest_new).decode("ascii"), "files": files,
@@ -2229,7 +2296,7 @@ def commit_user_config(target: Path, source: Path, lock, scope: str, preference_
             previous=(record, record_raw, record_metadata),
         )
         file_map = _settings_validate_record(target, source, lock, record, scope)
-        managed = (agent_relative, manifest_relative)
+        managed = (*(item[0] for item in agent_changes), manifest_relative)
         required = {relative for relative in managed if file_map[relative]["old_sha256"] is not None}
         _settings_inspect(
             target, source, lock, record, record_raw, record_metadata,

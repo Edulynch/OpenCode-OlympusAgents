@@ -319,7 +319,7 @@ def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[
     setup_source = adapter / "worktree-setup.ps1"
     output[root / ".opencode" / "scripts" / "worktree-setup.ps1"] = f"# {GENERATED}\n" + read_text(setup_source)
     commands_dir = adapter / "commands"
-    for command in ("olympus.ultra", "olympus.performance"):
+    for command in ("olympus.ultra", "olympus.performance", "olympus.performance-ultra"):
         source_path = commands_dir / f"{command}.md"
         command_text = read_text(source_path)
         if not command_text.startswith("---\n"):
@@ -360,6 +360,14 @@ def outputs_for(root: Path, selected: str, max_children: int | None = None) -> d
 def rendered_kael(root: Path, max_children: int) -> str:
     outputs = outputs_for(root, "opencode", max_children)
     return outputs[root / ".opencode" / "agents" / "kael.md"]
+
+
+def rendered_primaries(root: Path, max_children: int) -> dict[str, str]:
+    outputs = outputs_for(root, "opencode", max_children)
+    return {
+        role: outputs[root / ".opencode" / "agents" / f"{role}.md"]
+        for role in ("kael", "atlas")
+    }
 
 
 def _absolute_path(path: Path) -> Path:
@@ -484,8 +492,8 @@ def run(root: Path, action: str, selected: str, output_root: Path | None = None)
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("render", "check", "kael"),
-                        help="render managed output, check drift, or print a cap-specific Kael prompt")
+    parser.add_argument("action", choices=("render", "check", "kael", "primaries"),
+                        help="render managed output, check drift, or print cap-specific primary prompt(s)")
     parser.add_argument("--harness", choices=("opencode",), default="opencode")
     parser.add_argument("--root", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--output-root", type=Path,
@@ -494,14 +502,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     root = (args.root or Path(__file__).resolve().parents[1]).resolve()
     try:
-        if args.action == "kael":
+        if args.action in {"kael", "primaries"}:
             if args.output_root is not None:
                 parser.error("--output-root is only supported with render/check")
             if args.max_children is None:
-                parser.error("kael requires --max-children")
+                parser.error(f"{args.action} requires --max-children")
             if hasattr(sys.stdout, "reconfigure"):
                 sys.stdout.reconfigure(encoding="utf-8", newline="")
-            sys.stdout.write(rendered_kael(root, args.max_children))
+            if args.action == "kael":
+                sys.stdout.write(rendered_kael(root, args.max_children))
+            else:
+                sys.stdout.write(json.dumps(rendered_primaries(root, args.max_children), ensure_ascii=False))
             return 0
         return run(root, args.action, args.harness, args.output_root)
     except RenderError as error:

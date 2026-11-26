@@ -12,13 +12,11 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $OpenCodeManifestRel = '.opencode/orchestrator-install.json'
 $CurrentProjectInventory = @(
-    '.opencode/agents/argus.md',
     '.opencode/agents/atlas.md',
     '.opencode/agents/helios.md',
     '.opencode/agents/kael.md',
     '.opencode/agents/kovan.md',
     '.opencode/agents/nox.md',
-    '.opencode/agents/orin.md',
     '.opencode/agents/talos.md',
     '.opencode/agents/thales.md',
     '.opencode/agents/vera.md',
@@ -182,6 +180,9 @@ function Read-ProjectManifest([string]$Repo) {
         $manifest.installed_from_commit -isnot [string] -or [string]::IsNullOrWhiteSpace($manifest.installed_from_commit) -or
         $null -eq $manifest.managed_files) {
         Fail 'PROJECT_MANIFEST_INVALID' 'Current schema v1 project metadata is incomplete or unsupported.'
+    }
+    if ([string]$manifest.installed_version -ceq 'v0.10.0') {
+        Fail 'PROJECT_MANIFEST_LEGACY' "Project manifest v0.10.0 is unsupported; uninstall with its source version, then install the current release."
     }
     [void](Get-HarnessProvenance $manifest)
 

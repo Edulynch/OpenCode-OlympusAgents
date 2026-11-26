@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { test } from "node:test"
-import { activeChildren } from "../../.opencode/plugins/olympus-activity/activity.ts"
+import { activitySnapshot, activeChildren } from "../../olympus/harnesses/opencode/activity.ts"
 
 const root = { id: "root", agent: "kael" }
 const child = (id, agent, title = "Inspect repository", parentID = "root") =>
@@ -17,8 +17,8 @@ test("H4 root-only and direct children only", () => {
 
 test("H5 running direct children appear and disappear on native status transitions", () => {
   const sessions = [root, child("a", "orin"), child("b", "kovan")]
-  assert.deepEqual(activeChildren("root", sessions, status(["a"])).map((row) => row.agent), ["Orin — The Architect"])
-  assert.deepEqual(activeChildren("root", sessions, status(["b"])).map((row) => row.agent), ["Kovan — The Coder"])
+  assert.deepEqual(activeChildren("root", sessions, status(["a"])).map((row) => row.agent), ["orin"])
+  assert.deepEqual(activeChildren("root", sessions, status(["b"])).map((row) => row.agent), ["kovan"])
   assert.deepEqual(activeChildren("root", sessions, status([])), [])
 })
 
@@ -72,20 +72,41 @@ test("H6 duplicate sessions remain distinct rows", () => {
   assert.deepEqual(rows.map((row) => row.agent), ["unknown-role", "unknown-role"])
 })
 
-test("H7 fallback, truncation and Olympus display names", () => {
+test("H7 fallback and truncation use source labels before renderer identity injection", () => {
   const rows = activeChildren("root", [root, child("a", "unknown-role", "New session"), child("b", "veyra", "x".repeat(90))], status(["a", "b"]))
   assert.equal(rows[0].title, "Subagent task")
-  assert.equal(rows[1].agent, "Veyra — The Explorer")
+  assert.equal(rows[1].agent, "veyra")
   assert.ok(rows[1].title.length <= 64)
 })
 
 test("H8 slot is passive and only reads native state", () => {
-  const view = readFileSync(new URL("../../.opencode/plugins/olympus-activity/tui.tsx", import.meta.url), "utf8")
+  const view = readFileSync(new URL("../../olympus/harnesses/opencode/tui.tsx", import.meta.url), "utf8")
   assert.match(view, /append: "session\.composer\.top"/)
   assert.match(view, /context\.data\.session\.list\(\)/)
   assert.match(view, /context\.data\.session\.status\(id\)/)
   assert.match(view, /job\?\.list\(sessionID\)/)
   assert.doesNotMatch(view, /job\.(?:sync|invalidate)\(/)
   assert.doesNotMatch(view, /\b(?:onMouse\w*|onKey\w*|keymap|navigate|interrupt|cancel|setInterval|setTimeout|client\.)\b/)
-  assert.match(view, /slice\(0, 4\)/)
+  assert.match(view, /visibleRows/)
+  assert.match(view, /child sessions seen · peak/)
+})
+
+test("H9 observed, active, peak, and visible child counts follow root-local session transitions", () => {
+  const sessions = [root, ...Array.from({ length: 7 }, (_, index) => child(String.fromCharCode(97 + index), "nox"))]
+  const running = (...ids) => {
+    const activeIDs = new Set(ids)
+    return (id) => activeIDs.has(id) ? "running" : "completed"
+  }
+
+  let snapshot = activitySnapshot("root", sessions, running("a", "b", "c", "d", "e", "f", "g"))
+  assert.deepEqual([snapshot.observed, snapshot.active, snapshot.peak, snapshot.visibleRows.length], [7, 7, 7, 4])
+  assert.deepEqual(snapshot.visibleRows.map((row) => row.id), ["a", "b", "c", "d"])
+
+  snapshot = activitySnapshot("root", sessions, running("a", "b"), [], snapshot.state)
+  assert.deepEqual([snapshot.observed, snapshot.active, snapshot.peak, snapshot.visibleRows.length], [7, 2, 7, 2])
+  snapshot = activitySnapshot("root", sessions, running(), [], snapshot.state)
+  assert.deepEqual([snapshot.observed, snapshot.active, snapshot.peak, snapshot.visibleRows.length], [7, 0, 7, 0])
+
+  snapshot = activitySnapshot("root", [...sessions, child("h", "nox")], running("h"), [], snapshot.state)
+  assert.deepEqual([snapshot.observed, snapshot.active, snapshot.peak, snapshot.visibleRows.length], [8, 1, 7, 1])
 })

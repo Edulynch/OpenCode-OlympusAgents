@@ -1,0 +1,17 @@
+---
+description: Evaluate an optimization task with useful bounded parallelism
+subagent: false
+---
+
+User task:
+$ARGUMENTS
+
+If the user task is empty or contains only whitespace, respond only with `Usage: /olympus.performance-ultra <prompt>`. Do not call tools or launch agents.
+
+Before using tools, check the already-known current primary. If it is neither Kael nor Atlas, respond only: `Use /olympus.performance-ultra from a Kael or Atlas primary session.` Do not call tools, switch agents, or delegate to imitate either primary.
+
+Set `DOMAIN_MODE: PERFORMANCE` and `EXECUTION_MODE: ULTRA`. Treat the task as explicit optimization intent and follow the current primary's canonical role, Performance Gate, and Ultra admission rules without duplicating or weakening them. Use the Ultra admission fields and exact `UNDERFILL_REASON` categories in the canonical routing policy; admit only ready, independent performance work that can materially reduce time to the correct terminal result. Do not fan out merely to fill the ceiling or repeat measurements/checks.
+
+For Kael, remain latency-first through accepted execution: involve Helios only when a decision materially benefits, stop for approval of a concrete unsettled direction, and require before/after/delta/target measurements plus correctness validation before acceptance. For Atlas, remain read-only and finish with `PERFORMANCE_PLAN_READY` and a scoped handoff to Kael; preserve unknown measurements and never write, execute, or claim acceptance.
+
+Use native child sessions only where allowed for the current primary, keep filling eligible slots as they become ready, and preserve all ownership, permission, dependency, writer/worktree, shared-resource, reconciliation, validation, and completion gates. Do not poll, add a scheduler/controller, or treat Ultra as authorization to implement or as a global runtime quota. Finish with the canonical compact Ultra receipt and performance result; report unknown evidence honestly.

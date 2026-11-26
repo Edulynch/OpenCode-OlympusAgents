@@ -20,11 +20,11 @@ $OpenCodeConfigRelative = 'opencode.jsonc'
 $DefaultAgentReceiptProperty = 'default_agent_receipt'
 $OpenCodeGuardIntentRelative = 'olympus/opencode-guard-pending.json'
 $GlobalApplyScratch = '.olympus-cli-config-apply'
+$GlobalReinstallGuidance = 'Uninstall it with the Olympus version that created this installation, then install the current version; do not manually delete files or use -Force to adopt it.'
 . (Join-Path $PSScriptRoot 'target-writer-lock.ps1')
 $script:ProjectOverrideDetected = $false
 $script:ModifiedManagedAgents = @()
 $script:ConfirmedModifiedAgentPaths = @()
-$script:LegacyGlobalInventory = $false
 
 function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
 
@@ -168,11 +168,11 @@ function Get-GlobalOutputs([string]$SelectedHarness) {
         $relative = $file.FullName.Substring($pluginRoot.Length + 1).Replace('\','/')
         Add-GeneratedOutput $outputs ('plugins/olympus-activity/' + $relative) $file.FullName
     }
-    foreach ($command in @('olympus.ultra','olympus.performance')) {
+    foreach ($command in @('olympus.ultra','olympus.performance','olympus.performance-ultra')) {
         Add-GeneratedOutput $outputs ('commands/' + $command + '.md') `
             (Join-Path $SourceRoot ('.opencode/commands/' + $command + '.md'))
     }
-    if ($outputs.Count -ne 15) { Fail 'SOURCE_INVALID' "Unexpected OpenCode global resource inventory: $($outputs.Count)." }
+    if ($outputs.Count -ne 14) { Fail 'SOURCE_INVALID' "Unexpected OpenCode global resource inventory: $($outputs.Count)." }
     return ,$outputs
 }
 
@@ -1099,13 +1099,12 @@ function Test-ManagedDefaultConfigChange([string]$Path) {
     return $snapshot.Text -ceq (Get-OpenCodeDefaultGuard)
 }
 
-function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
+function Read-GlobalManifestCore([string]$Root, [string]$Harness, [switch]$Required,
     [System.Collections.IDictionary]$RecoverOutputs = $null, [switch]$AllowModifiedAgents,
     [System.Collections.IDictionary]$ExpectedOutputs = $null, [switch]$ForceManagedDrift) {
     if ($Harness -cne 'opencode') { Fail 'GLOBAL_MANIFEST_INVALID' "Unsupported harness '$Harness'." }
     $script:ModifiedManagedAgents = @()
     $script:DefaultAgentManagedUserChange = $false
-    $script:LegacyGlobalInventory = $false
     $path = Assert-SafeDestination $Root $ManifestRelative
     if (-not (Test-Path -LiteralPath $path)) {
         if ($Required) { Fail 'GLOBAL_MANIFEST_MISSING' "No Olympus global ownership manifest exists for $Harness." }
@@ -1153,20 +1152,18 @@ function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
         $manifest.managed_files -isnot [System.Collections.IList]) {
         Fail 'GLOBAL_MANIFEST_INVALID' 'Current global schema v1 metadata is incomplete or unsupported.'
     }
+    if ([string]$manifest.installed_version -ceq 'v0.10.0') {
+        Fail 'GLOBAL_MANIFEST_INVALID' 'Historical v0.10.0 global installations are no longer supported.'
+    }
     $receipt = Get-DefaultAgentReceipt $manifest
     if ($null -eq $receipt) {
         Fail 'GLOBAL_DEFAULT_AGENT_RECEIPT_MISSING' 'A current OpenCode global manifest must include a valid default_agent receipt.'
     }
     $baseOutputs = if ($null -ne $ExpectedOutputs) { $ExpectedOutputs } else { Get-GlobalOutputs 'opencode' }
     $expectedBasePaths = @($baseOutputs.Keys)
-    $legacyCommandPaths = @('commands/olympus.ultra.md','commands/olympus.performance.md')
-    $expectedLegacyPaths = @($expectedBasePaths | Where-Object { $_ -cnotin $legacyCommandPaths })
     $entries = @($manifest.managed_files)
-    $legacyVersion = [string]$manifest.installed_version -ceq 'v0.10.0'
-    $isCurrentCount = $entries.Count -in @($expectedBasePaths.Count, ($expectedBasePaths.Count + 1))
-    $isLegacyCount = $legacyVersion -and $entries.Count -in @($expectedLegacyPaths.Count, ($expectedLegacyPaths.Count + 1))
-    if (-not $isCurrentCount -and -not $isLegacyCount) {
-        Fail 'GLOBAL_MANIFEST_INVALID' 'Global managed_files is not the exact current 15-resource inventory or the exact v0.10.0 legacy 13-resource inventory, optionally with its owned guard.'
+    if ($entries.Count -notin @($expectedBasePaths.Count, ($expectedBasePaths.Count + 1))) {
+        Fail 'GLOBAL_MANIFEST_INVALID' 'Global managed_files is not the exact current OpenCode inventory, optionally with its owned guard.'
     }
     $ownsGuard = @($entries | Where-Object { [string]$_.path -ceq $OpenCodeConfigRelative }).Count -eq 1
     if ($ownsGuard -and $receipt.config_path -cne $OpenCodeConfigRelative) {
@@ -1215,18 +1212,56 @@ function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
         }
     }
     $currentPaths = @($expectedBasePaths)
-    $legacyPaths = @($expectedLegacyPaths)
     if ($ownsGuard) {
         $currentPaths += $OpenCodeConfigRelative
-        $legacyPaths += $OpenCodeConfigRelative
     }
     $isCurrentInventory = $seen.SetEquals([string[]]$currentPaths)
-    $isLegacyInventory = $legacyVersion -and $seen.SetEquals([string[]]$legacyPaths)
-    if (-not $isCurrentInventory -and -not $isLegacyInventory) {
-        Fail 'GLOBAL_MANIFEST_INVALID' 'Global managed_files does not match an exact supported current or v0.10.0 legacy path set.'
+    if (-not $isCurrentInventory) {
+        Fail 'GLOBAL_MANIFEST_INVALID' 'Global managed_files does not match the exact current OpenCode path set.'
     }
-    $script:LegacyGlobalInventory = $isLegacyInventory
     return $manifest
+}
+
+function Read-GlobalManifest([string]$Root, [string]$Harness, [switch]$Required,
+    [System.Collections.IDictionary]$RecoverOutputs = $null, [switch]$AllowModifiedAgents,
+    [System.Collections.IDictionary]$ExpectedOutputs = $null, [switch]$ForceManagedDrift) {
+    try {
+        return Read-GlobalManifestCore $Root $Harness -Required:$Required `
+            -RecoverOutputs $RecoverOutputs -AllowModifiedAgents:$AllowModifiedAgents `
+            -ExpectedOutputs $ExpectedOutputs -ForceManagedDrift:$ForceManagedDrift
+    } catch {
+        $failure = [regex]::Match($_.Exception.Message,
+            '^(?<code>GLOBAL_MANIFEST_(?:INVALID|CONFLICT)|GLOBAL_DEFAULT_AGENT_RECEIPT_(?:INVALID|MISSING)):\s*(?<detail>.*)$')
+        if ($failure.Success) {
+            throw "$($failure.Groups['code'].Value): $($failure.Groups['detail'].Value) $GlobalReinstallGuidance"
+        }
+        throw
+    }
+}
+
+function Assert-GlobalManifestBeforeLock([string]$Root, [string]$Harness) {
+    $manifestPath = Assert-SafeDestination $Root $ManifestRelative
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+        if ($Uninstall -or $Force) { [void](Read-GlobalManifest $Root $Harness -Required) }
+        return
+    }
+    $allowModifiedAgents = $Update -and $Harness -eq 'opencode'
+    try {
+        # Check ownership and exact inventory before preparing output content.
+        # A pending guard recovery may need outputs to validate a roll-forward.
+        [void](Read-GlobalManifest $Root $Harness -Required:$Uninstall `
+            -AllowModifiedAgents:$allowModifiedAgents -ForceManagedDrift:$Force)
+        return
+    } catch {
+        if ($_.Exception.Message -notmatch '^GLOBAL_MANAGED_FILE_DRIFT:') { throw }
+    }
+    $outputs = Get-GlobalOutputs $Harness
+    if ($Harness -eq 'opencode') { Apply-OpenCodeUserOverrides $outputs }
+    $guardIntent = if ($Harness -eq 'opencode') { Read-OpenCodeGuardIntent $Root } else { $null }
+    $recoverOutputs = if ($null -ne $guardIntent) { $outputs } else { $null }
+    [void](Read-GlobalManifest $Root $Harness -Required:$Uninstall `
+        -RecoverOutputs $recoverOutputs -AllowModifiedAgents:$allowModifiedAgents `
+        -ExpectedOutputs $outputs -ForceManagedDrift:$Force)
 }
 
 function Confirm-ModifiedManagedAgents {
@@ -1336,6 +1371,7 @@ function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]
         if ($Uninstall -and -not (Test-Path -LiteralPath $root -PathType Container)) {
             Fail 'GLOBAL_INSTALL_CONFLICT' 'Cannot uninstall because the resolved global root does not exist.'
         }
+        Assert-GlobalManifestBeforeLock $root $SelectedHarness
         if (-not $Uninstall) { [IO.Directory]::CreateDirectory($root) | Out-Null }
         $root = Assert-SafeGlobalRoot $root
         $targetLock = $null
@@ -1421,7 +1457,8 @@ function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]
 
     foreach ($relative in @($outputs.Keys | Sort-Object)) {
         $full = Assert-SafeDestination $root $relative
-        if ($relative -in @('commands/olympus.ultra.md','commands/olympus.performance.md') -and
+        if ($relative -in @('commands/olympus.ultra.md','commands/olympus.performance.md',
+                'commands/olympus.performance-ultra.md') -and
             -not $oldEntries.ContainsKey($relative) -and (Test-Path -LiteralPath $full)) {
             Fail 'GLOBAL_INSTALL_CONFLICT' "User-owned global command destination already exists: $relative"
         }
@@ -1465,9 +1502,6 @@ function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]
         }
         if ($SelectedHarness -eq 'opencode') {
             Assert-OpenCodeDefaultAgentCommitted $root $manifest._validated_default_agent_receipt
-        }
-        if ($script:LegacyGlobalInventory) {
-            Fail 'GLOBAL_UPGRADE_REQUIRED' 'The verified v0.10.0 global inventory predates the namespaced commands; run olympus update to upgrade it.'
         }
         if ($null -ne $manifest -and [string]$manifest.installed_version -cne $SourceVersion) {
             Fail 'GLOBAL_VERSION_DRIFT' "Global manifest records '$($manifest.installed_version)'; requested '$SourceVersion'."

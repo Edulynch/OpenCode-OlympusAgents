@@ -5,17 +5,11 @@ display = "Kael — The Master"
 [roles.veyra]
 display = "Veyra — The Explorer"
 
-[roles.orin]
-display = "Orin — The Architect"
-
 [roles.atlas]
 display = "Atlas — The Planner"
 
 [roles.kovan]
 display = "Kovan — The Coder"
-
-[roles.argus]
-display = "Argus — The Bug Hunter"
 
 [roles.nox]
 display = "Nox — The Tester"

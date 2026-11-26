@@ -675,9 +675,10 @@ jobs:
             printf '%s\n' "$test_output"
             exit "$status"
           fi
-          grep -Eq '^Ran 14 tests in ' <<<"$test_output"
+          grep -Eq '^Ran 15 tests in ' <<<"$test_output"
+          grep -q 'test_slice_c5_windows_bootstrap_rejects_v010_before_lock_without_writes.*skipped' <<<"$test_output"
           grep -q 'test_slice_c5_windows_project_uninstall_preserves_unmanaged_and_blocks_drift.*skipped' <<<"$test_output"
-          grep -qx 'OK (skipped=1)' <<<"$test_output"
+          grep -qx 'OK (skipped=2)' <<<"$test_output"
 
       - name: Linux global CLI package lifecycle (Python fixtures)
         if: runner.os == 'Linux'
@@ -721,7 +722,7 @@ jobs:
           $testOutput | Out-Host
           if ($testExitCode -ne 0) { exit $testExitCode }
           $transcript = $testOutput -join "`n"
-          if ($transcript -notmatch '(?m)^Ran 14 tests in ' -or
+          if ($transcript -notmatch '(?m)^Ran 15 tests in ' -or
               $transcript -notmatch '(?m)^OK$') {
             throw 'Windows install, update, and uninstall routing tests did not all pass without skips.'
           }
@@ -737,7 +738,7 @@ jobs:
           $testOutput | Out-Host
           if ($testExitCode -ne 0) { exit $testExitCode }
           $transcript = $testOutput -join "`n"
-          if ($transcript -notmatch '(?m)^Ran 18 tests in ' -or
+          if ($transcript -notmatch '(?m)^Ran 21 tests in ' -or
               $transcript -notmatch '(?m)^OK$' -or $transcript -match 'skipped') {
             throw 'Windows global diagnostics and project inventory tests must all pass without skips.'
           }

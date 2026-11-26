@@ -1525,8 +1525,12 @@ function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]
         return
     }
 
-    $commit = (& git -C $SourceRoot rev-parse HEAD 2>$null | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $commit) { $commit = 'unknown' }
+    $commit = 'unknown'
+    # Do not attribute a Git-free archive/package to its containing checkout.
+    if (Test-Path -LiteralPath (Join-Path $SourceRoot '.git')) {
+        $head = (& git -C $SourceRoot rev-parse HEAD 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0 -and $head -match '^(?:[0-9a-f]{40}|[0-9a-f]{64})$') { $commit = $head }
+    }
     $receiptToCommit = Set-DefaultAgentReceiptState $script:DefaultAgentReceipt 'committed'
     $writeRecord = Get-ManifestForWrite $manifest $newEntries $receiptToCommit $SourceVersion $commit
     $manifestText = ($writeRecord | ConvertTo-Json -Depth 30) + "`n"

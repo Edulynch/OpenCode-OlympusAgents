@@ -18,7 +18,7 @@ function Check([string]$Id, [bool]$Ok) {
     Write-Output "$Id PASS"
 }
 try {
-    Check AC1 ($orchestration -match '(?m)^max_children = 4$' -and
+    Check AC1 ($orchestration -match '(?m)^max_children = 4\r?$' -and
         $kael.Contains('MAX_ACTIVE_CHILDREN = {{max_children}}'))
     Check AC2 ($kael -match 'never a target' -and $kael -match 'effective ceiling may be 1–8 per root')
     Check AC3 ($routing -match 'TARGET_ACTIVE = min\(ULTRA_CEILING, READY_WORKSTREAMS\)' -and
@@ -28,7 +28,7 @@ try {
         $kael -match '(?s)only the namespaced `/olympus\.ultra <prompt>`.*?/olympus\.performance-ultra <prompt>`' -and
         $kael -notmatch 'FAST is an explicit user-selected|fast-mode|long-mode|surgical-mode|FAST:')
     $ultraMetadata = [regex]::Match($ultra, '\A---\r?\n(?<metadata>.*?)\r?\n---[ \t]*(?:\r?\n|\z)', [Text.RegularExpressions.RegexOptions]::Singleline).Groups['metadata'].Value
-    Check AC5 ($ultraMetadata -match '(?m)^subagent: false$' -and
+    Check AC5 ($ultraMetadata -match '(?m)^subagent: false\r?$' -and
         $ultraMetadata -notmatch '(?m)^(agent|model|template):' -and
         $ultra -match '\$ARGUMENTS' -and $ultra -match 'empty or contains only whitespace' -and
         $ultra -match 'Do not call tools or launch agents' -and

@@ -408,7 +408,7 @@ try {
             @($manifest.installed_harnesses).Count -eq 1 -and $manifest.installed_harnesses[0] -ceq 'opencode' -and
             $manifest.installed_version -ceq $script:CandidateVersion -and
             -not [string]::IsNullOrWhiteSpace([string]$manifest.installed_from_commit) -and
-            $manifest.managed_files.Count -eq 15 -and
+            $manifest.managed_files.Count -eq 13 -and
             @($manifest.managed_files | Where-Object { [string]$_.sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0 -and
             [string]::Join("`n", $installedAssets) -ceq [string]::Join("`n", $expectedOpenCodeAssets) -and
             (Test-Path -LiteralPath (Join-Path $target '.opencode/plugins/olympus-activity/activity.ts') -PathType Leaf))

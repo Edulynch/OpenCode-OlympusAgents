@@ -726,8 +726,13 @@ function Detect-Project([string]$Repo) {
 
 function Manifest-Text($Detection, $Content, [string]$Version, $ExistingManifest) {
     $files = foreach ($p in @($Content.Keys | Sort-Object)) { [ordered]@{ path=$p; sha256=Sha-Text ([string]$Content[$p]) } }
-    $commit = (& git -C $SourceRoot rev-parse HEAD 2>$null | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $commit) { $commit = "unknown" }
+    $commit = 'unknown'
+    # A rendered package may live inside an unrelated checkout. Its ancestor's
+    # HEAD is not provenance for a source root with no Git metadata of its own.
+    if (Test-Path -LiteralPath (Join-Path $SourceRoot '.git')) {
+        $head = (& git -C $SourceRoot rev-parse HEAD 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0 -and $head -match '^(?:[0-9a-f]{40}|[0-9a-f]{64})$') { $commit = $head }
+    }
     $record = [ordered]@{
         schema_version = 1
         scope = 'project'

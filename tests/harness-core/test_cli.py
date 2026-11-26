@@ -334,8 +334,8 @@ class SliceA(unittest.TestCase):
                         collect_help_paths(child, route)
 
         collect_help_paths(cli_parser())
-        self.assertEqual(54, len(paths))
-        self.assertEqual(40, sum(
+        self.assertEqual(48, len(paths))
+        self.assertEqual(36, sum(
             not any(len(other) > len(path) and other[:len(path)] == path for other in paths)
             for path in paths
         ))
@@ -981,6 +981,7 @@ test ! -e "{sentinel}"
         self.assertTrue(command_paths.isdisjoint(
             {item["path"] for item in manifest["managed_files"]}
         ))
+        self.assertFalse(any(path[0] in {"orin", "argus"} for path in paths))
         preview = self.json_query(*self.config_apply_arguments())
         self.assertEqual("ok", preview["result"])
         self.assertEqual([], preview["data"]["changes"])
@@ -4559,7 +4560,7 @@ source_edit._recover_batch(Path(sys.argv[1]))
 
         self._t017_seed_sentinels()
         candidate = self._family_candidate()
-        self.assertEqual(8, len(candidate.files), "T017 must use the current OpenCode write-set")
+        self.assertEqual(7, len(candidate.files), "T017 must use the current OpenCode write-set")
         before_targets = {
             item.relative_path: (item.old_bytes, item.mode, item.path.stat().st_mtime_ns)
             for item in candidate.files
@@ -4595,7 +4596,7 @@ source_edit._recover_batch(Path(sys.argv[1]))
         self.assertEqual(before_external, self._t017_external_snapshot())
 
     def test_slice_b_t017_crash_at_all_current_write_set_boundaries_recovers_old(self):
-        expected_targets = 8
+        expected_targets = 7
         for boundary in range(expected_targets + 1):
             with self.subTest(replacement_boundary=boundary):
                 if boundary:
@@ -4603,7 +4604,7 @@ source_edit._recover_batch(Path(sys.argv[1]))
                 else:
                     self._t017_seed_sentinels()
                 candidate, prepared = self._prepared_family()
-                self.assertEqual(expected_targets, len(candidate.files), "current family edit must have 8 targets")
+                self.assertEqual(expected_targets, len(candidate.files), "current family edit must have seven targets")
                 self.assertEqual(expected_targets, len(prepared.write_set))
                 before_outside = self._snapshot_outside_targets(candidate)
                 before_external = self._t017_external_snapshot()
@@ -5101,7 +5102,7 @@ raise SystemExit(main(sys.argv[1:]))
         self.assertEqual(1, preview["schema_version"])
         self.assertEqual("models set-family", preview["operation"])
         self.assertEqual("ok", preview["result"])
-        self.assertEqual(8, len(preview["data"]["write_set"]))
+        self.assertEqual(7, len(preview["data"]["write_set"]))
         self.assertEqual("openai/t018-sol", preview["data"]["request"]["models"]["opencode"])
 
         human = self._run("agents", "set-model", "veyra", "--effort", "high", "--dry-run")
@@ -5177,7 +5178,7 @@ raise SystemExit(main(sys.argv[1:]))
         self.assertEqual(0, applied.returncode, (applied.stdout, applied.stderr))
         self.assertIn("Execution preview (not yet applied):", applied.stdout)
         self.assertIn("execution: committed", applied.stdout)
-        self.assertEqual(8, len(changed))
+        self.assertEqual(7, len(changed))
         self._assert_renderer_coherent()
         self.assertTrue((self.source / ".olympus-cli-edit.lock").is_file())
         self.assertEqual(0, (self.source / ".olympus-cli-edit.lock").stat().st_size)
@@ -5435,8 +5436,8 @@ raise SystemExit(main(sys.argv[1:]))
 
     def test_slice_b_t019_public_preview_write_sets_match_fixture_mutations(self):
         cases = (
-            ("sol", ("models", "set-family", "sol", "--opencode", "openai/t019-sol"), 8),
-            ("luna", ("models", "set-family", "luna", "--opencode", "openai/t019-luna"), 6),
+            ("sol", ("models", "set-family", "sol", "--opencode", "openai/t019-sol"), 7),
+            ("luna", ("models", "set-family", "luna", "--opencode", "openai/t019-luna"), 5),
             ("specialist", ("agents", "set-model", "veyra", "--family", "sol", "--effort", "high"), 2),
             ("kael", ("agents", "set-model", "kael", "--family", "luna", "--effort", "max"), 3),
             ("no-op", ("models", "set-family", "sol", "--opencode", "openai/gpt-6.2-sol"), 0),

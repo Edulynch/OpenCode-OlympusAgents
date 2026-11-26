@@ -170,7 +170,7 @@ try {
         $maintenance -match 'all three canonical Core markers' -and
         $maintenance -match 'positive ownership evidence for the exact target' -and
         $maintenance -match 'A native `/goal` surface remains opt-in')
-    Check INVARIANTS ($orchestration -match '(?m)^max_children = 4$' -and
+    Check INVARIANTS ($orchestration -match '(?m)^max_children = 4\r?$' -and
         $kael.Contains('MAX_ACTIVE_CHILDREN = {{max_children}}') -and
         $models -match '(?ms)^\[roles\.kael\]\s+family = "sol"\s+effort = "high"')
     Write-Output 'PREFLIGHT / SCOPED DISCOVERY QUALIFICATION: PASS (static policy contracts + fixture only; no live delegation or native permission behavior executed)'

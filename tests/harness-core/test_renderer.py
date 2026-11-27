@@ -249,6 +249,9 @@ class CandidateRendererTests(unittest.TestCase):
             target = package / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
+        # Match the real loader's canonical source root, including when the
+        # Windows runner supplies TEMP through an 8.3 alias.
+        package = package.resolve(strict=True)
         from_package = load_renderer(package).outputs_for(package, "opencode")
         self.assertEqual(
             {path.relative_to(ROOT): text for path, text in renderer.outputs_for(ROOT, "opencode").items()},

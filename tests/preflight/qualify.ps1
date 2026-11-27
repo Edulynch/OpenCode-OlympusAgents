@@ -97,7 +97,8 @@ try {
         $authority -match 'do not send a duplicate Kael\s+QUESTION' -and
         $authority -match 'rejection/cancellation stops it with no retry or\s+bypass' -and
         $authority -match 'If denied, keep work stopped')
-    Check NO_DELEGATION ($preflight -match 'If a root,\s+identity, ownership, or manifest fact is missing, route the smallest necessary\s+read-only evidence task to Atlas or Veyra' -and
+    Check NO_DELEGATION ($preflight -match 'If a root,\s+identity, ownership, or manifest fact is missing, route the smallest necessary\s+read-only evidence task to Veyra; reuse a supplied Atlas handoff' -and
+        $preflight -notmatch 'evidence task to Atlas' -and
         $preflight -notmatch 'Orin to decide the plane' -and
         $preflight -match 'Trivial requests still use the direct-answer path with zero children')
     Check NORMAL_GIT_ROUTING ($preflight -match 'Ordinary Git work in a trusted project belongs to Kael''s normal workflow' -and
@@ -170,6 +171,23 @@ try {
         $maintenance -match 'all three canonical Core markers' -and
         $maintenance -match 'positive ownership evidence for the exact target' -and
         $maintenance -match 'A native `/goal` surface remains opt-in')
+    $readiness = Section $routing 'Mission Readiness'
+    $generated = [IO.File]::ReadAllText((Join-Path $root '.opencode/agents/kael.md'))
+    Check READINESS_BEFORE_EXPENSIVE_WORK (
+        $preflight.Contains('{{mission_readiness_policy}}') -and
+        $generated.IndexOf('### Mission Readiness') -gt $generated.IndexOf('## Capability Preflight') -and
+        $generated.IndexOf('### Mission Readiness') -lt $generated.IndexOf('## Task-scoped, progressive discovery') -and
+        $readiness -match 'before the first expensive operation or writer launch' -and
+        $readiness -match 'target and ownership, acceptance path and required checks, required roles and read/write/shell capabilities, Git effects and external actions' -and
+        $readiness -match 'known native ASK/DENY, independent useful work, safe defaults and stop conditions' -and
+        $readiness -match 'Do not print a readiness block for routine work')
+    Check READINESS_READY_AND_UPFRONT_DECISION (
+        $readiness -match '`READY`:[^\r\n]+Proceed without artificial questions' -and
+        $readiness -match '`NEEDS_UPFRONT_DECISION`:[^\r\n]+one initial request before expensive work; say what each answer unlocks' -and
+        $readiness -match 'A host-native ASK is still a separate consent event')
+    Check READINESS_IMPOSSIBLE_NO_WRITER_OR_FALLBACK (
+        $readiness -match '`IMPOSSIBLE`:[^\r\n]+effective DENY[^\r\n]+do not launch doomed dependent or writer work, attempt DENY, or switch to `build`' -and
+        $readiness -match 'Preserve any independently deliverable, useful authorized result')
     Check INVARIANTS ($orchestration -match '(?m)^max_children = 4\r?$' -and
         $kael.Contains('MAX_ACTIVE_CHILDREN = {{max_children}}') -and
         $models -match '(?ms)^\[roles\.kael\]\s+family = "sol"\s+effort = "high"')

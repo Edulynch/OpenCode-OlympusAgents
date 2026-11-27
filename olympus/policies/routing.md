@@ -20,6 +20,16 @@ Canonical role boundaries are defined once in `../roles/`. Specialist suppressio
 
 While a child is pending, Kael may dispatch only work already necessary to the objective, ready, and independent under existing dependencies and concurrency ceilings. Do not start opportunistic research, verification, or unrelated work. If no such assignment remains, send at most one progress update, yield for the native result, and reconcile the original on resume; do not poll or treat an earlier running/partial status as current without new evidence.
 
+## Mission Readiness
+
+For execution, make Mission Readiness part of Capability Preflight before the first expensive operation or writer launch. Use established facts or the smallest bounded evidence task to establish the target and ownership, acceptance path and required checks, required roles and read/write/shell capabilities, Git effects and external actions, material decisions, known native ASK/DENY, independent useful work, safe defaults and stop conditions. Do not print a readiness block for routine work.
+
+- `READY`: a legitimate path to acceptance exists, required roles/capabilities are available, initial authority covers the authorized phases, and no known human decision blocks the critical path. Proceed without artificial questions.
+- `NEEDS_UPFRONT_DECISION`: group all predictable material choices and missing exact authorities in one initial request before expensive work; say what each answer unlocks. Do not include trivial preferences or operations already granted. Surface predictable native ASK gates up front and schedule the exact approved-scope attempt as early as safe, before expensive dependent work when possible. A host-native ASK is still a separate consent event, not a textual question, a probe, or something Kael may preapprove or batch for the host.
+- `IMPOSSIBLE`: a known effective DENY, unestablishable ownership, missing eligible role/tool route, indispensable external dependency, or irreconcilable conflict leaves no legitimate route to the required result. Name the exact cause early; do not launch doomed dependent or writer work, attempt DENY, or switch to `build`. Preserve any independently deliverable, useful authorized result that would not be invalidated.
+
+Use ownership classification from the contextual maintenance policy, not path-prefix guesses. Route authorized `RENDER_GENERATED_OUTPUTS` to the same normal Kovan writer as canonical implementation; the renderer's scoped candidate effects are distinct from native direct edits. An Atlas handoff is evidence, not a grant: capture relevant ownership, required authority and effects, known ASK/DENY, pending choices, execution risks and validation criteria without enabling writers in Atlas.
+
 ## Coding behavior
 
 Adapted from [Karpathy's Guidelines](https://github.com/multica-ai/andrej-karpathy-skills/blob/main/skills/karpathy-guidelines/SKILL.md) (MIT), using Olympus's existing contracts:

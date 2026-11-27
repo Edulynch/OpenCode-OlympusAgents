@@ -71,10 +71,10 @@ try {
         $maintenancePolicy -match 'do not reach into a separate OlympusAgents checkout' -and
         $maintenancePolicy -match 'manifest-owned files' -and
         $kael -match '## Identify the target repository' -and
-        $kael -match '## Preserve the external-project boundary' -and
+        $kael -match '## Classify ownership by effect' -and
         $kael -match 'independent project identity, exact\s+target ownership' -and
         $kael -match 'stop (?:before )?dependent work' -and
-        $kael -match 'source candidates, not an installed Olympus runtime' -and
+        $kael -match 'Versioned derived outputs.+are candidates, not installations' -and
         $kael -match 'manifest-owned files')
     $good = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='succeeded'; validated=$true}
     $bad = [pscustomobject]@{known=$true; terminal=$true; collected=$true; familyKnown=$true; inboxEmpty=$true; parentConsumed=$true; outcome='failed'; validated=$false}
@@ -94,6 +94,11 @@ try {
         (Gate @($good,$uncollected)).state -eq 'PARTIAL' -and (Gate @($good,$notConsumed)).state -eq 'PARTIAL')
     Check 'NESTED_FAMILY_AND_INBOX' ((Gate @($good,$nestedUnconfirmed)).state -eq 'PARTIAL' -and
         (Gate @($good,$queued)).state -eq 'PARTIAL')
+    Check 'BLOCKED_RESERVED_FOR_REQUIRED_ACCEPTANCE' (
+        $kael -match 'Reserve root `BLOCKED` for a genuine acceptance blocker' -and
+        $kael -match 'optional checks, release-only gates and secondary gaps are `NOT_RUN`, `RELEASE_ONLY`, `INDEPENDENT_GAP` or `NOT_APPLICABLE`' -and
+        $kael -match 'Never downgrade a required acceptance gate' -and
+        $kael -match 'terminal attempt failed acceptance and no proportionate viable correction remains')
     # The gate owns completion obligations; TFR must not turn normal changes into
     # unconditional Nox/Vera fan-out. Keep critical and mandatory gates intact.
     $gate = [regex]::Match($kael, '(?ms)^## Completion gate\r?\n(?<body>.*?)(?=^## |\z)').Groups['body'].Value

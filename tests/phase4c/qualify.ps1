@@ -513,12 +513,17 @@ try {
         Assert-Condition (Has-Rule $kovan 'shell' '*' 'allow') 'Kovan shell ALLOW missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $kovan 'subagent' '*' 'deny') 'Kovan subagent DENY missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (@($kovan.permissions | Where-Object { $_.action -eq 'external_directory' }).Count -eq 0) 'Kovan must inherit project external-directory rules without overriding a specific DENY.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $kovan 'edit' '.opencode/**' 'ask' -and Has-Rule $kovan 'edit' '.opencode/plugins/**' 'ask') 'Project-owned protected-adjacent edit ASK missing.' 'BOOTSTRAP_BUG'
-        foreach ($resource in @('.git', '.git/*', '.opencode', '.opencode/agents/**',
+        foreach ($namespace in @('skills','plugins','agents','commands')) {
+            Assert-Condition (Has-Rule $kovan 'edit' ".opencode/$namespace/**" 'allow') "Missing project source allow: $namespace" 'BOOTSTRAP_BUG'
+        }
+        foreach ($resource in @('.git', '.git/*', '.opencode', '.opencode/agents/kovan.md',
             '.opencode/plugins/olympus-activity/**',
-            '.opencode/orchestrator-install.json', '.opencode/opencode.json', '.opencode/opencode.jsonc',
-            'opencode.json', 'opencode.jsonc', '*.env', '*.env.*')) {
+            '.opencode/orchestrator-install.json', '.opencode/olympus-config.json',
+            '*.env', '*.env.*')) {
             Assert-Condition (Has-Rule $kovan 'edit' $resource 'deny') ('Kovan protected edit path missing: ' + $resource) 'BOOTSTRAP_BUG'
+        }
+        foreach ($resource in @('opencode.json', 'opencode.jsonc', '.opencode/opencode.json', '.opencode/opencode.jsonc')) {
+            Assert-Condition (Has-Rule $kovan 'edit' $resource 'ask') "Missing project configuration ASK: $resource" 'BOOTSTRAP_BUG'
         }
         Assert-Condition (Has-Rule $kovan 'edit' '*.env.example' 'allow') 'Documented env-example exception missing.' 'BOOTSTRAP_BUG'
         }

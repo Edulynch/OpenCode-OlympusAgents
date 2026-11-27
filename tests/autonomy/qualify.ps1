@@ -56,7 +56,8 @@ try {
     Check AU2 ((Has $k edit allow) -and
         @($k.permissions | Where-Object { $_.action -eq 'edit' -and $_.resource -eq '*' -and $_.effect -eq 'deny' }).Count -eq 0 -and
         @($k.permissions | Where-Object { $_.action -eq 'edit' -and $_.resource -eq '.opencode/**' -and $_.effect -eq 'ask' }).Count -gt 0 -and
-        @($k.permissions | Where-Object { $_.action -eq 'edit' -and $_.resource -eq '.opencode/agents/**' -and $_.effect -eq 'deny' }).Count -gt 0)
+        @($k.permissions | Where-Object { $_.action -eq 'edit' -and $_.resource -eq '.opencode/agents/**' -and $_.effect -eq 'allow' }).Count -eq 1 -and
+        @($k.permissions | Where-Object { $_.action -eq 'edit' -and $_.resource -eq '.opencode/agents/kovan.md' -and $_.effect -eq 'deny' }).Count -eq 1)
     Check AU3_STATIC ((Has $k shell allow) -and (Has $k edit allow) -and ([IO.File]::ReadAllText((Join-Path $fixture '.opencode/agents/kovan.md')) -match 'Project scripts created as'))
     Check AU4_STATIC ((Has $n shell allow) -and @($n.permissions | Where-Object { $_.action -eq 'shell' -and $_.resource -eq 'pwsh -NoProfile -File ./safe-validation.ps1' -and $_.effect -eq 'allow' }).Count -eq 0)
     Check AU5 (Has $n edit deny)
@@ -71,6 +72,11 @@ try {
         @($k.permissions + $n.permissions | Where-Object { $_.action -eq 'shell' -and $_.effect -eq 'ask' }).Count -eq 0)
     }
     if ($QualificationSlice -ne 'Runtime') {
+        $installedKovan = [IO.File]::ReadAllText((Join-Path $fixture '.opencode/agents/kovan.md'))
+        Check AU_PROJECT_EXTENSION_AND_RENDER_CONTRACT (
+            $installedKovan -match '(?s)\.opencode/agents/\*\*"\s+effect: allow.*?\.opencode/agents/kovan\.md"\s+effect: deny' -and
+            $installedKovan -match 'RENDER_GENERATED_OUTPUTS' -and $installedKovan -match 'target is neither a consumer nor global installation' -and
+            $installedKovan -match 'new session alone is not proof of isolation')
         $again = (& pwsh -NoProfile -File (Join-Path $root 'scripts/bootstrap.ps1') -Target $fixture 2>&1 | Out-String)
         Check AU12_IDEMPOTENT ($LASTEXITCODE -eq 0 -and $again -match '(?m)^NO_CHANGES\s*$')
     }

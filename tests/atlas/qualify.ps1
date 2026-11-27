@@ -100,7 +100,10 @@ try {
         $routing -match 'Nox owns distinct reproduction, tests, runtime validation, and measurement' -and
         $routing -match 'Vera reviews a supplied final candidate')
     Check AT13 ($a -match 'smallest sufficient execution sequence' -and
-        $a -match 'exact candidate paths/effects' -and $a -match 'acceptance criteria')
+        $a -match 'exact candidate paths and required effects' -and $a -match 'acceptance\s+criteria')
+    Check AT_READINESS_HANDOFF ($a -match 'SCOPED_HANDOFF_TO_KAEL: ownership, required authority and effects, predictable\s+ASK/DENY, pending decisions, execution risks' -and
+        $a -match 'acceptance, validation criteria, dependencies, and stop conditions' -and
+        $k -match 'predictable ASK/DENY, pending decisions, execution risks, evidence owners')
     $planFields = @('STATUS: PLAN_READY','NEEDS_DECISION','NEEDS_EVIDENCE','BLOCKED','OBJECTIVE:','EVIDENCE:','ANALYSIS:','TRADEOFFS:','RECOMMENDATION:','SCOPED_HANDOFF_TO_KAEL:')
     Check AT14 (@($planFields | Where-Object { -not $a.Contains($_) }).Count -eq 0)
     Check AT15 ($a -match 'For `NEEDS_EVIDENCE`, state one exact missing fact, bounded scope, why it matters,\s+and expected discrimination' -and
@@ -124,7 +127,7 @@ try {
         $k -match 'Atlas is a separate read-only primary' -and
         $a -match 'or claim completion' -and $a -match 'PLAN_READY')
     Check AT24 ($a -match 'Never ask the user, grant or\s+infer authority' -and
-        $a -match 'Proposed scopes are\s+not grants or approval' -and
+        $a -match 'Proposed scopes are not grants or approval and Atlas does not execute them' -and
         $a -match 'Kael alone')
     Check AT25 ($orchestration -match '(?m)^max_children = 4$' -and
         $a -match 'MAX_ACTIVE_CHILDREN = \{\{max_children\}\}' -and

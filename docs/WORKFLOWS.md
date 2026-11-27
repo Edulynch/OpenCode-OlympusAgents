@@ -219,7 +219,9 @@ and [routing policy](../olympus/policies/routing.md).
 ## Contextual maintenance and ownership
 
 - **Kael orchestrates** work inside OlympusAgents and other projects using the same normal team. There is no active Aegis role or `/maintain` command.
+- **Project-owned OpenCode extensions** (skills, plugins, custom agents and commands) can be implemented by Kovan in the assigned scope. Managed files are protected; project OpenCode config needs explicit scope and the applicable native decision. Candidate rendering in the OlympusAgents source worktree is not installation.
 - **The user owns product decisions.** Kael checks project identity, scope and feasibility before involving specialists; it cannot silently expand authorization.
+- **Readiness comes before expensive work.** Kael groups foreseeable material decisions, reuses authority already granted, and continues useful independent work when a workstream is blocked. Native permission questions remain with the host.
 - **OpenCode owns runtime execution.** Sessions, subprocesses, tools and permissions belong to the host; Olympus coordinates and reconciles results. Do not interpret static tests as live provider/runtime guarantees.
 - **OpenCode is the only currently supported runtime.** Historical Codex behavior is not a support or compatibility promise; see the [capability contract](HARNESS-CAPABILITIES.md).
 - **Optional native `/goal`** is chosen by the user when available; it is not silently invoked or required.

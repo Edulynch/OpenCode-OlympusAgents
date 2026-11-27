@@ -44,10 +44,15 @@ function Launch-Dependent($barrier) {
     if ($barrier.questionPending) { return $false }
     $true
 }
-function Start-With-Known-Prerequisite([bool]$decisionKnownRequired) {
-    $events = [Collections.Generic.List[string]]::new()
-    if ($decisionKnownRequired) { $events.Add('question') } else { $events.Add('fanout') }
-    $events.ToArray()
+function Start-With-Known-Prerequisites([string[]]$missing, [string[]]$authorized,
+                                      [bool]$hardDeny = $false) {
+    # Synthetic task decisions, not observed model behavior or native consent.
+    $pending = @($missing | Where-Object { $_ -notin $authorized })
+    if ($hardDeny) { return [pscustomobject]@{ state='IMPOSSIBLE'; questions=0; writer=$false; items=@() } }
+    if ($pending.Count -gt 0) {
+        return [pscustomobject]@{ state='NEEDS_UPFRONT_DECISION'; questions=1; writer=$false; items=$pending }
+    }
+    [pscustomobject]@{ state='READY'; questions=0; writer=$true; items=@() }
 }
 
 try {
@@ -64,7 +69,7 @@ try {
     Check 'QB_STATIC_POLICY' ($kael -match 'Do not present a human QUESTION while any child launched for this task is\s+RUNNING' -and
         $kael -match 'First reconcile the existing family and consume each available' -and
         $kael -match '(?s)While a\s+human QUESTION is pending.*?do not launch children' -and
-        $kael -match '(?s)ask\s+that bounded question before launching dependent children' -and
+        $kael -match '(?s)group\s+it with the predictable decisions in Capability Preflight before launching\s+dependent children' -and
         $docs -match 'Kael does not ask a human question while any task child is running')
 
     $running = New-Barrier @((New-Child 'RUNNING' $false $false))
@@ -93,9 +98,35 @@ try {
         $empty.events.Count -eq 1 -and $empty.events[0] -eq 'question')
     Check 'QB_PENDING_QUESTION_BLOCKS_DEPENDENTS' (-not (Launch-Dependent $empty))
 
-    $prerequisiteOrder = @(Start-With-Known-Prerequisite $true)
-    Check 'QB_KNOWN_PREREQUISITE_BEFORE_FANOUT' ($prerequisiteOrder.Count -eq 1 -and
-        $prerequisiteOrder[0] -eq 'question')
+    $authorized = @('investigate','edit','test','correct','commit','push','update PR')
+    $ready = Start-With-Known-Prerequisites $authorized $authorized
+    $upfront = Start-With-Known-Prerequisites @('edit project config','choose contract','push','update PR') @('update PR')
+    $denied = Start-With-Known-Prerequisites $authorized $authorized $true
+    Check 'QB_KNOWN_PREREQUISITES_GROUPED_BEFORE_FANOUT' ($upfront.state -eq 'NEEDS_UPFRONT_DECISION' -and
+        $upfront.questions -eq 1 -and -not $upfront.writer -and
+        ($upfront.items -join ',') -eq 'edit project config,choose contract,push')
+    Check 'QB_READY_REUSES_INITIAL_AUTHORITY_WITHOUT_MERGE_OR_RELEASE' ($ready.state -eq 'READY' -and
+        $ready.questions -eq 0 -and $ready.writer -and
+        $kael -match 'do not\s+ask again merely because the phase or worker changed' -and
+        $kael -match 'Merge and release always require separate explicit\s+authority; never infer them from commit, push, or PR authority')
+    Check 'QB_HARD_DENY_BEFORE_WRITER' ($denied.state -eq 'IMPOSSIBLE' -and
+        -not $denied.writer -and $denied.questions -eq 0 -and
+        $kael -match 'do not launch doomed dependent or writer work, attempt DENY, or switch to `build`')
+
+    # One child blocked; the ready independent child finishes before the
+    # grouped question. The dependent child cannot run across the barrier.
+    $partial = New-Barrier @((New-Child 'TERMINAL' $false $true), (New-Child 'RUNNING' $true $false))
+    $partialResult = Advance-Question $partial
+    $partial.children[1].state = 'TERMINAL'
+    $partial.children[1].resultPending = $false
+    $partial.events.Add('independent-completed')
+    $afterIndependent = Advance-Question $partial
+    Check 'QB_PARTIAL_BLOCK_CONTINUES_INDEPENDENT_WORK_AND_RECONCILES' (
+        $partialResult.state -eq 'DEFERRED' -and $afterIndependent.asked -and
+        ($partial.events -join ',') -eq 'independent-completed,reconcile,consume,question' -and
+        -not (Launch-Dependent $partial) -and
+        $kael -match 'A blocked workstream does not block the entire mission while independent, authorized, useful work exists' -and
+        $kael -match 'Do not start work the pending decision would inevitably invalidate')
 
     $unknown = New-Barrier @((New-Child 'UNKNOWN' $false $false))
     $unknownResult = Advance-Question $unknown

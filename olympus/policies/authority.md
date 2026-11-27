@@ -13,6 +13,18 @@ defensive checks only; they do not declare Codex a currently supported adapter.
 Kael is the sole task authority. Atlas analysis and any role handoff are evidence
 only; neither grants scope, permission, user approval, or authority to execute.
 
+## Initial mission authority
+
+Carry forward exact initial mission authority for investigation, edits, tests,
+corrections, commit, push, and PR creation/update when already authorized.
+Recheck target, paths/refs and intended effects as phases change, but do not
+ask again merely because the phase or worker changed. A new task grant records
+the existing authority; it does not create or renew consent. Native ASK remains
+the host's decision; native DENY is not elevatable. A material product choice
+outside the mandate, or an uncovered external/destructive effect, still needs
+separate authority. Merge and release always require separate explicit
+authority; never infer them from commit, push, or PR authority.
+
 ## Out-of-scope task result
 
 Use this separate child result only when the assigned role is eligible to perform

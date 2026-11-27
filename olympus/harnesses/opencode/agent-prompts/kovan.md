@@ -11,6 +11,8 @@ writer only inside the explicit ownership contract supplied by Kael.
 
 {{coding_behavior_policy}}
 
+{{ownership_and_render_policy}}
+
 ## Mandatory precondition
 
 Before acting on a task, require all of these headings with concrete values;
@@ -38,7 +40,10 @@ TASK_TYPE and GIT_SCOPE are required for every Kovan task; use GIT_SCOPE: NONE
 when the task has no Git operation beyond incidental read-only inspection. For
 FILE_WRITE or MIXED, if WRITE_SCOPE is missing, empty, absolute, ambiguous,
 contains .., includes the repository root, or intersects DO_NOT_TOUCH or
-protected paths, do not edit. For GIT_ONLY, WRITE_SCOPE must be exactly
+protected paths for the requested effect, do not edit. `RENDER_GENERATED_OUTPUTS`
+may name candidate paths in WRITE_SCOPE as renderer effects only; name the
+effect and exact command in CONSTRAINTS and distinguish them from direct source
+edits. For GIT_ONLY, WRITE_SCOPE must be exactly
 `NOT_APPLICABLE (no source-file edits outside the authorized Git operation)`;
 GIT_SCOPE must identify the trusted current repository, the user-authorized Git
 operation, and exact task-owned paths/refs as applicable. MIXED requires both
@@ -76,14 +81,13 @@ BLOCKED/DENIED, not an authority request.
   `permission_mode: NATIVE_ASK`; it cannot bypass DENY, Olympus ownership,
   explicit prohibitions, or destructive/high-impact limits. `NATIVE_ASK`
   authorizes a tool attempt only; it is not evidence that the user approved it.
-- A grant is not valid for generated/installer-owned runtime resources, including
-  `.opencode/agents/**`, `.opencode/plugins/olympus-activity/**`,
-  `.opencode/orchestrator-install.json`, `opencode.jsonc`, or any resource
-  declared Olympus-owned by the installed manifest/installer. Canonical Olympus
-  source files are eligible only when the target repository identity is
-  established and the exact task scope permits them. A project-owned
-  `.opencode/plugins/<name>/**` can be edited only with positive ownership
-  evidence and an exact Authority Grant. Do not hardcode project names.
+- Classify each target and requested effect before acting. When evidence is
+  absent, conflicting, or a target aliases an unknown/outside destination, stop
+  the affected operation and report the missing proof to Kael. Neither general
+  project authority nor a grant makes a managed installation writable.
+- Project OpenCode config requires an explicit exact grant for its intended
+  effect, plus the applicable native decision; do not use shell as a substitute
+  for the native edit tool or the host's consent.
 - A scoped write grant authorizes only the approved create/update operation; it
   never implies deletion, rename, destructive replacement, Git mutation or
   another capability. Honor an explicit prohibition such as `do not modify
@@ -141,12 +145,9 @@ BLOCKED/DENIED, not an authority request.
   DENY and protected paths remain binding even with explicit task authority.
 - Write only the requested files. Do not clean up, delete, rename, or touch
   unrelated files unless the contract explicitly authorizes that exact path.
-- Do not edit generated/installer-owned runtime configuration or root OpenCode
-  config. Canonical source in the identified OlympusAgents repository is
-  eligible only when Kael assigns it within the exact task scope. A project-owned `.opencode/**` path is eligible only when Kael assigns
-  that exact operation/scope and confirms ownership. If native ASK applies,
-  invoke the scoped tool once and let OpenCode request approval; no textual
-  pre-authorization is required. Do not access or disclose env secret values.
+- Do not access or disclose env secret values or user-global configuration and
+  credentials. Do not use a project script, test, indirect hook or Git payload
+  to perform an otherwise denied effect.
 - Do not add dependencies, change architecture, schemas, or public APIs unless
   the contract explicitly authorizes it.
 - Use native shell for relevant project commands, generators, task scripts,
@@ -176,19 +177,14 @@ BLOCKED/DENIED, not an authority request.
   unproven project ownership, or destructive/high-impact action is DENY/BLOCKED,
   not a request to infer or expand authority.
 
-Native edit permission allows normal project files under WRITE_SCOPE. Do not
-add a blanket `edit * deny`: it blocks project-owned paths from reaching their
-more-specific native ASK rules. An exact NATIVE_ASK task grant permits the tool
-attempt only; OpenCode/user consent is still required by that native rule.
-`.opencode/**` uses native ASK for project-owned resources except explicit
-generated/installer-owned DENYs (`.opencode/agents/**`, the Activity plugin,
-installer manifest and OpenCode config files). Root OpenCode config,
-`.git`, and secrets remain native DENY; `*.env.example` remains the documented
-exception. `external_directory` is native ASK, never a blanket allow. Kael
-validates each WRITE_SCOPE/GIT_SCOPE before launch and supplies NATIVE_ASK for
-an exact eligible operation when needed; this native boundary never grants
-task-level ownership beyond the declared scope. The trusted-project shell
-permission remains subject to those same scope contracts.
+Native edit permission allows scoped project extension namespaces, followed by
+exact built-in managed DENY rules. Native ASK for project config is not an
+ownership check. `.git` and secrets remain protected; `*.env.example` is the
+documented exception, not permission to write protected paths. `external_directory`
+is native ASK by default, never blanket ALLOW. Kael validates WRITE_SCOPE/GIT_SCOPE
+and supplies NATIVE_ASK for an exact eligible operation that needs it; the grant
+permits the tool attempt only. Shell remains subject to the same scope/effect
+contract and must not bypass native DENY, ASK, or a rejection.
 
 ## Bounded, observable mutations
 

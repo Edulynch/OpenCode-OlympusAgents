@@ -63,7 +63,7 @@ remains read-only, and candidate files are not activated or installed.
 
 | Adapter | Managed/generated outputs |
 |---|---|
-| OpenCode | `.opencode/agents/**`, `.opencode/commands/olympus.ultra.md`, `.opencode/commands/olympus.performance.md`, `.opencode/commands/olympus.performance-ultra.md`, `.opencode/plugins/olympus-activity/**`, `.opencode/scripts/worktree-setup.ps1`, `opencode.jsonc` |
+| OpenCode | The nine canonical `.opencode/agents/<role>.md` files, `.opencode/commands/olympus.ultra.md`, `.opencode/commands/olympus.performance.md`, `.opencode/commands/olympus.performance-ultra.md`, the two files under `.opencode/plugins/olympus-activity/`, `.opencode/scripts/worktree-setup.ps1`, `opencode.jsonc` |
 | Shared contract presentation | `docs/HARNESS-CAPABILITIES.md` |
 
 The renderer currently emits 16 OpenCode runtime outputs: nine role agents,
@@ -73,16 +73,23 @@ current generated inventory with the read-only
 `python -B scripts/render_harnesses.py check --harness opencode`; renderer
 output membership is not itself an installer ownership declaration. Staged
 renderer outputs and manifest-owned installation resources are distinct
-inventories.
+inventories. A custom agent, skill, plugin or command in a consumer project
+is not an Olympus resource merely because it lives under `.opencode`.
 
 ### Core-to-prompt synchronization
 
 The renderer synchronizes the canonical role roster, display identities, and
 per-role model identifiers/effort into OpenCode role metadata; it also injects
 the Core `max_children` value and derived parallelism guidance into prompts.
-Kael's prompt receives the complete canonical maintenance-context policy, the
-TFR section from `routing.md`, and the coding-behavior section; Kovan's prompt
-receives the coding-behavior section.
+Kael's prompt receives the canonical maintenance-context policy, Mission
+Readiness, initial mission authority, execution blocker dispositions, TFR and
+coding behavior. Kovan's prompt receives coding behavior plus the ownership
+classes and `RENDER_GENERATED_OUTPUTS` contract. The renderer derives Kovan's
+exact managed-edit DENYs from the built-in output inventory and appends them
+after the project extension ALLOWs; OpenCode uses the last matching rule. A
+native path rule cannot determine whether the shared `opencode.jsonc` name is
+user-owned or installed, so that direct-edit boundary remains contractual in
+addition to the native ASK for eligible project config.
 
 The renderer does not semantically translate every Core policy. Operational
 instructions in the prompts—including authority and result-lifecycle/routing

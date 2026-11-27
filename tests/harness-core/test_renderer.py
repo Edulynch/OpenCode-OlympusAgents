@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from fnmatch import fnmatchcase
 from io import StringIO
 from pathlib import Path
 
@@ -236,6 +237,72 @@ class CandidateRendererTests(unittest.TestCase):
                 ])
         self.assertEqual(2, raised.exception.code)
         self.assertIn("--output-root is only supported with render/check", error.getvalue())
+
+    def test_project_extensions_and_inventory_denials_follow_last_matching_rule(self):
+        def decision(resource, content):
+            header = content.split("\n---\n", 1)[0]
+            rules = re.findall(r'\n  - action: edit\n    resource: "([^"]+)"\n    effect: (\w+)', header)
+            return [effect for pattern, effect in rules if fnmatchcase(resource, pattern)][-1]
+
+        kovan = self.source / ".opencode/agents/kovan.md"
+        content = self.expected[kovan]
+        project_paths = (
+            ".opencode/skills/example/SKILL.md",
+            ".opencode/plugins/example/index.ts",
+            ".opencode/agents/project-reviewer.md",
+            ".opencode/commands/project-release.md",
+        )
+        for path in project_paths:
+            self.assertEqual("allow", decision(path, content), path)
+            target = self.source / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("project-owned fixture\n", encoding="utf-8")
+        for config in ("opencode.json", "opencode.jsonc", ".opencode/opencode.json", ".opencode/opencode.jsonc"):
+            self.assertEqual("ask", decision(config, content), config)
+        for target in self.expected.keys() - {self.source / "opencode.jsonc"}:
+            relative = target.relative_to(self.source).as_posix()
+            self.assertEqual("deny", decision(relative, content), relative)
+        for path in (
+            ".opencode/orchestrator-install.json",
+            ".opencode/olympus-config.json",
+            ".opencode/plugins/olympus-activity/other.ts",
+            ".opencode/plugins/example/private.env",
+            "/home/fixture/.config/opencode/opencode.jsonc",
+            "/home/fixture/.local/share/opencode/auth.json",
+            "C:/Users/fixture/AppData/Roaming/opencode/opencode.jsonc",
+        ):
+            self.assertEqual("deny", decision(path, content), path)
+
+        # Exercise an actual canonical roster change in an isolated source
+        # fixture. The same inventory must drive both candidates and exact rules.
+        self.assertEqual(0, self.invoke("render")[0])
+        fixture_role = "fixture-specialist"
+        for base in ("olympus/roles", "olympus/harnesses/opencode/agent-metadata",
+                     "olympus/harnesses/opencode/agent-prompts"):
+            shutil.copyfile(self.source / base / "veyra.md", self.source / base / f"{fixture_role}.md")
+        for relative, snippet in (
+            ("olympus/core/models.toml", 'family = "luna"\neffort = "max"'),
+            ("olympus/core/identities.toml", f'display = "{fixture_role} — Fixture"'),
+        ):
+            with (self.source / relative).open("a", encoding="utf-8") as stream:
+                stream.write(f"\n[roles.{fixture_role}]\n{snippet}\n")
+        role_path = f".opencode/agents/{fixture_role}.md"
+        self.assertEqual("allow", decision(role_path, content))
+        self.assertEqual(1, self.invoke("check")[0])
+        code, stdout, stderr = self.invoke("render")
+        self.assertEqual(0, code, stderr)
+        self.assertIn("pruned 0 obsolete output(s)", stdout)
+        self.assertTrue((self.source / role_path).is_file())
+        self.assertEqual("deny", decision(role_path, kovan.read_text(encoding="utf-8")))
+        self.assertEqual(0, self.invoke("check")[0])
+        before = self.snapshot(self.source)
+        code, stdout, stderr = self.invoke("render")
+        self.assertEqual(0, code, stderr)
+        self.assertIn("wrote 0 changed output(s)", stdout)
+        self.assertIn("pruned 0 obsolete output(s)", stdout)
+        self.assertEqual(before, self.snapshot(self.source))
+        for path in project_paths:
+            self.assertEqual("project-owned fixture\n", (self.source / path).read_text(encoding="utf-8"))
 
     def test_shared_primary_ceiling_and_three_current_primary_commands(self):
         outputs = renderer.outputs_for(self.source, "opencode", 7)

@@ -2,7 +2,23 @@
 
 ## Question barrier
 
-Kael centralizes task questions and prerequisites. If a user decision is already known to be required, ask before launching dependent work. After fan-out, do not ask while a child is running, an original result is pending or indeterminate, or a terminal result has not been reconciled, collected, validated, and consumed. Unknown work is not an empty barrier. Harness-native permission approval may be an adapter-specific ASK path; report honestly whether the harness guarantees centralization.
+Kael centralizes task questions and prerequisites. Group predictable material decisions and missing authorities before expensive work. After fan-out, do not ask while a child is running, an original result is pending or indeterminate, or a terminal result has not been reconciled, collected, validated, and consumed. Unknown work is not an empty barrier. Harness-native permission approval is a distinct ASK path; report honestly whether the harness guarantees centralization.
+
+## Execution blockers
+
+Classify the impediment, not the entire mission by default. These are dispositions, not new child result or ledger states:
+
+| Disposition | Meaning and action |
+|---|---|
+| `RECOVERABLE` | A related technical failure has a proportionate correction; reconcile, correct and continue. |
+| `SOFT_BLOCKER` | Evidence or a surface is not required for this milestone; record the limitation and continue. |
+| `WORKSTREAM_BLOCKED` | Only one workstream is stopped; preserve its state and evidence and continue independent work. |
+| `NEEDS_DECISION` | An unresolved choice materially affects result, risk, or scope; group it with other pending decisions. |
+| `NEEDS_AUTHORITY` | A still-unattempted effect needs authority; request minimum scope only if the mission does not already grant it. Not product failure; the worker's separate `NEED_AUTHORITY` handoff is unchanged. |
+| `HARD_BLOCKED` | No legitimate route to acceptance remains; stop with the exact unmet acceptance criterion and cause. |
+| `FAILED` | A terminal attempt failed acceptance and no proportionate viable correction remains; close with evidence, not success. |
+
+A blocked workstream does not block the entire mission while independent, authorized, useful work exists. Do not start work the pending decision would inevitably invalidate. Continue eligible work, preserve blocked state and original outcomes, reconcile children, and use the existing Question Barrier to present one grouped request when independent progress is exhausted. Never blindly retry an indeterminate effect. Reserve root `BLOCKED` for a genuine acceptance blocker; optional checks, release-only gates and secondary gaps are `NOT_RUN`, `RELEASE_ONLY`, `INDEPENDENT_GAP` or `NOT_APPLICABLE` as warranted. Never downgrade a required acceptance gate or present any of these as PASS.
 
 ## Completion barrier
 

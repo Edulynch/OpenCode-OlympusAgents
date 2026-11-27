@@ -435,7 +435,8 @@ def main() -> int:
         "**Blocker** only when one exists", "finish with a useful **Next** action",
         "Exact `EXPECTED_OUTPUT` takes precedence", "ordinary conversation and direct answers stay natural",
         "Required validation pending after implementation is PARTIAL", "required work actively running is IN PROGRESS",
-        "required checks unavailable because of a blocker are BLOCKED", "observed required execution failure is FAILED",
+        "use overall BLOCKED only when a required acceptance gate is blocked and no useful independent authorized work remains",
+        "terminal required execution failure without a proportionate correction is FAILED",
         "optional check is skipped", "report COMPLETE", "Say idle only when you know no work remains active",
         "COMPLETION_UNCONFIRMED", "if either is unknown, say so",
     )))

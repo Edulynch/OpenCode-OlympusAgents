@@ -1296,8 +1296,11 @@ class GlobalCli(unittest.TestCase):
         unchanged_metadata = settings.stat()
         before_agents = {role: self._agent(role).read_bytes() for role in ("kael", "atlas")}
         before_manifest = self.manifest_path.read_bytes()
-        with mock.patch("olympus.config_apply_transaction._settings_cleanup",
-                        side_effect=KeyboardInterrupt("stop before committed cleanup")):
+        # The historical writer lacked this stale-prompt preflight. Bypass only that
+        # creation check while the real writer builds valid journal evidence; recovery stays real.
+        with mock.patch.object(config_apply_transaction, "_settings_preflight_max_children_binding"), \
+                mock.patch("olympus.config_apply_transaction._settings_cleanup",
+                           side_effect=KeyboardInterrupt("stop before committed cleanup")):
             with self.assertRaises(KeyboardInterrupt):
                 user_config.set_max_children(ROOT, 3)
         self.assertTrue((self.root / ".olympus-cli-config-apply/record.json").is_file())
@@ -1328,7 +1331,8 @@ class GlobalCli(unittest.TestCase):
                 raise KeyboardInterrupt("stop before unchanged-preference commit")
             return result
 
-        with mock.patch("olympus.config_apply_transaction._settings_publish", side_effect=stop_after_manifest):
+        with mock.patch.object(config_apply_transaction, "_settings_preflight_max_children_binding"), \
+                mock.patch("olympus.config_apply_transaction._settings_publish", side_effect=stop_after_manifest):
             with self.assertRaises(KeyboardInterrupt):
                 user_config.set_max_children(ROOT, 3)
         output = io.StringIO()

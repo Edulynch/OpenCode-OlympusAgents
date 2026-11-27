@@ -30,6 +30,34 @@ For execution, make Mission Readiness part of Capability Preflight before the fi
 
 Use ownership classification from the contextual maintenance policy, not path-prefix guesses. Route authorized `RENDER_GENERATED_OUTPUTS` to the same normal Kovan writer as canonical implementation; the renderer's scoped candidate effects are distinct from native direct edits. An Atlas handoff is evidence, not a grant: capture relevant ownership, required authority and effects, known ASK/DENY, pending choices, execution risks and validation criteria without enabling writers in Atlas.
 
+## Initial mission authority
+
+Carry forward exact initial mission authority for investigation, edits, tests,
+corrections, commit, push, and PR creation/update when already authorized.
+Recheck target, paths/refs and intended effects as phases change, but do not
+ask again merely because the phase or worker changed. A new task grant records
+the existing authority; it does not create or renew consent. Native ASK remains
+the host's decision; native DENY is not elevatable. A material product choice
+outside the mandate, or an uncovered external/destructive effect, still needs
+separate authority. Merge and release always require separate explicit
+authority; never infer them from commit, push, or PR authority.
+
+## Execution blockers
+
+Classify the impediment, not the entire mission by default. These are dispositions, not new child result or ledger states:
+
+| Disposition | Meaning and action |
+|---|---|
+| `RECOVERABLE` | A related technical failure has a proportionate correction; reconcile, correct and continue. |
+| `SOFT_BLOCKER` | Evidence or a surface is not required for this milestone; record the limitation and continue. |
+| `WORKSTREAM_BLOCKED` | Only one workstream is stopped; preserve its state and evidence and continue independent work. |
+| `NEEDS_DECISION` | An unresolved choice materially affects result, risk, or scope; group it with other pending decisions. |
+| `NEEDS_AUTHORITY` | A still-unattempted effect needs authority; request minimum scope only if the mission does not already grant it. Not product failure; the worker's separate `NEED_AUTHORITY` handoff is unchanged. |
+| `HARD_BLOCKED` | No legitimate route to acceptance remains; stop with the exact unmet acceptance criterion and cause. |
+| `FAILED` | A terminal attempt failed acceptance and no proportionate viable correction remains; close with evidence, not success. |
+
+A blocked workstream does not block the entire mission while independent, authorized, useful work exists. Do not start work the pending decision would inevitably invalidate. Continue eligible work, preserve blocked state and original outcomes, reconcile children, and use the existing Question Barrier to present one grouped request when independent progress is exhausted. Never blindly retry an indeterminate effect. Reserve root `BLOCKED` for a genuine acceptance blocker; optional checks, release-only gates and secondary gaps are `NOT_RUN`, `RELEASE_ONLY`, `INDEPENDENT_GAP` or `NOT_APPLICABLE` as warranted. Never downgrade a required acceptance gate or present any of these as PASS.
+
 ## Coding behavior
 
 Adapted from [Karpathy's Guidelines](https://github.com/multica-ai/andrej-karpathy-skills/blob/main/skills/karpathy-guidelines/SKILL.md) (MIT), using Olympus's existing contracts:

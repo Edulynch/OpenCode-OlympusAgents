@@ -264,14 +264,17 @@ def opencode_outputs(root: Path, models: dict, policies: dict, identities: dict[
     tfr_policy = focused_testing_policy(root)
     coding_policy = coding_behavior_policy(root)
     kael_sections = {"maintenance_context_policy": maintenance_policy}
+    # Linux CLI packages carry a fixed, verified source inventory. Keep these
+    # renderer inputs in the already-packaged canonical routing policy.
+    routing_path = maintenance_policy_path.with_name("routing.md")
+    routing = read_text(routing_path)
     shared_prompt_sections = {
-        "mission_readiness_policy": ("routing.md", "## Mission Readiness"),
-        "initial_mission_authority_policy": ("authority.md", "## Initial mission authority"),
-        "execution_blockers_policy": ("result-lifecycle.md", "## Execution blockers"),
+        "mission_readiness_policy": "## Mission Readiness",
+        "initial_mission_authority_policy": "## Initial mission authority",
+        "execution_blockers_policy": "## Execution blockers",
     }
-    for token, (filename, heading) in shared_prompt_sections.items():
-        source = maintenance_policy_path.parent / filename
-        kael_sections[token] = "#" + markdown_section(read_text(source), heading, source)
+    for token, heading in shared_prompt_sections.items():
+        kael_sections[token] = "#" + markdown_section(routing, heading, routing_path)
     ownership_and_render = "\n\n".join(
         markdown_section(maintenance_policy, heading, maintenance_policy_path)
         for heading in ("## Classify ownership by effect", "## RENDER_GENERATED_OUTPUTS")

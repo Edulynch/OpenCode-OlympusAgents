@@ -238,6 +238,23 @@ class CandidateRendererTests(unittest.TestCase):
         self.assertEqual(2, raised.exception.code)
         self.assertIn("--output-root is only supported with render/check", error.getvalue())
 
+    def test_renderer_works_from_exact_linux_package_inputs(self):
+        from olympus import global_cli
+        from olympus.cli import load_renderer
+
+        package = self.sandbox / "package inputs"
+        # No checkout fallback: the Linux CLI stage carries only this verified
+        # source inventory plus generated outputs, not every Core document.
+        for relative in global_cli._PACKAGE_INPUTS:
+            target = package / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, target)
+        from_package = load_renderer(package).outputs_for(package, "opencode")
+        self.assertEqual(
+            {path.relative_to(ROOT): text for path, text in renderer.outputs_for(ROOT, "opencode").items()},
+            {path.relative_to(package): text for path, text in from_package.items()},
+        )
+
     def test_project_extensions_and_inventory_denials_follow_last_matching_rule(self):
         def decision(resource, content):
             header = content.split("\n---\n", 1)[0]

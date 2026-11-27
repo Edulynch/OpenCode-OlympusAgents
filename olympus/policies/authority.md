@@ -15,15 +15,10 @@ only; neither grants scope, permission, user approval, or authority to execute.
 
 ## Initial mission authority
 
-Carry forward exact initial mission authority for investigation, edits, tests,
-corrections, commit, push, and PR creation/update when already authorized.
-Recheck target, paths/refs and intended effects as phases change, but do not
-ask again merely because the phase or worker changed. A new task grant records
-the existing authority; it does not create or renew consent. Native ASK remains
-the host's decision; native DENY is not elevatable. A material product choice
-outside the mandate, or an uncovered external/destructive effect, still needs
-separate authority. Merge and release always require separate explicit
-authority; never infer them from commit, push, or PR authority.
+Kael carries forward exact authority across phases, not native consent or
+authority for merge and release. Apply the [initial mission authority
+rules](routing.md#initial-mission-authority) within Capability Preflight and
+each later task delegation.
 
 ## Out-of-scope task result
 

@@ -1726,6 +1726,53 @@ def _settings_expected_max_children_agents(source: Path, config: dict, value: in
     return {relative: expected[relative] for relative in ("agents/kael.md", "agents/atlas.md")}
 
 
+def _settings_preflight_max_children_binding(
+        target: Path, source: Path, record: dict, preference_old: bytes | None,
+        preference_new: bytes, agent_changes, manifest_old: bytes, manifest_new: bytes) -> None:
+    """Reject stale primary prompts before a new max-children journal is published."""
+    preference_path = Path(record["preference_target"]["path"])
+    old_config, new_config, _ = _settings_changed_config(
+        source, record, preference_old, preference_new,
+    )
+    old_children = old_config.get("orchestration", {}).get("max_children", 4)
+    new_children = new_config.get("orchestration", {}).get("max_children", 4)
+    try:
+        expected_old = _settings_expected_max_children_agents(source, old_config, old_children)
+        expected_new = (
+            expected_old if old_config == new_config else
+            _settings_expected_max_children_agents(source, new_config, new_children)
+        )
+        _, old_entries, new_entries = _settings_manifest_data(
+            target, source, record, manifest_old, manifest_new,
+        )
+    except TransactionError:
+        raise
+    except Exception as error:
+        raise TransactionError(
+            f"Cannot validate primary agents before creating a user-settings journal: {error}", 4,
+        ) from error
+
+    changes = {relative: (old, new) for relative, old, new, _ in agent_changes}
+    if set(changes) != set(_settings_agent_paths(record)):
+        raise TransactionError("Max-children preflight does not cover both primary agents", 4)
+    for relative in _settings_agent_paths(record):
+        old_agent, new_agent = changes[relative]
+        if (old_agent is None or old_agent != expected_old[relative]
+                or old_entries.get(relative) != _hash(old_agent)):
+            raise TransactionError(
+                "Installed primary agents do not match the current preferences; "
+                "no user-settings journal was created",
+                3,
+            )
+        if (new_agent is None or new_agent != expected_new[relative]
+                or new_entries.get(relative) != _hash(new_agent)):
+            raise TransactionError(
+                "Candidate primary agents do not match the requested preferences; "
+                "no user-settings journal was created",
+                3,
+            )
+
+
 def _settings_agent_binding(source: Path, record: dict, old_config: dict, new_config: dict,
                             old_agents: dict[str, bytes | None],
                             new_agents: dict[str, bytes | None]) -> None:
@@ -2262,6 +2309,11 @@ def commit_user_config(target: Path, source: Path, lock, scope: str, preference_
         "manifest_old_b64": base64.b64encode(manifest_old).decode("ascii"),
         "manifest_new_b64": base64.b64encode(manifest_new).decode("ascii"), "files": files,
     }
+    if change.get("kind") == "max_children":
+        _settings_preflight_max_children_binding(
+            target, source, record, preference_old, preference_new, agent_changes,
+            manifest_old, manifest_new,
+        )
     record, record_raw, record_metadata = _write_record_new(target, record, lock, identity)
     scratch = target / _SCRATCH
     prepared = False

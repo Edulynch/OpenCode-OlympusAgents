@@ -183,7 +183,7 @@ function Get-OlympusUserConfigPath {
     return Join-Path $appData 'Olympus/config.json'
 }
 
-function Get-RenderedKaelPrompt([int]$MaxChildren) {
+function Get-RenderedPrimaries([int]$MaxChildren) {
     $pythonExecutable = $env:OLYMPUS_PYTHON
     if (-not $pythonExecutable) {
         $python = Get-Command python.exe -CommandType Application -ErrorAction SilentlyContinue |
@@ -203,7 +203,7 @@ function Get-RenderedKaelPrompt([int]$MaxChildren) {
     $start.RedirectStandardError = $true
     $start.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
     $start.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
-    foreach ($argument in @('-B', $renderer, 'kael', '--root', $SourceRoot,
+    foreach ($argument in @('-B', $renderer, 'primaries', '--root', $SourceRoot,
             '--max-children', [string]$MaxChildren)) {
         $start.ArgumentList.Add([string]$argument)
     }
@@ -216,12 +216,19 @@ function Get-RenderedKaelPrompt([int]$MaxChildren) {
         $process.WaitForExit()
         $text = $stdout.GetAwaiter().GetResult()
         if ($process.ExitCode -ne 0) {
-            Fail 'SOURCE_RENDERER_FAILED' "The canonical renderer rejected the global Kael ceiling: $($stderr.GetAwaiter().GetResult())"
+            Fail 'SOURCE_RENDERER_FAILED' "The canonical renderer rejected the global primary ceiling: $($stderr.GetAwaiter().GetResult())"
         }
-        return $text
+        try { $primaries = $text | ConvertFrom-Json -AsHashtable -Depth 10 -ErrorAction Stop }
+        catch { Fail 'SOURCE_RENDERER_FAILED' 'The canonical renderer returned invalid primary prompts.' }
+        if ($primaries -isnot [System.Collections.IDictionary] -or $primaries.Count -ne 2 -or
+            @($primaries.Keys | Where-Object { $_ -cnotin @('kael', 'atlas') }).Count -gt 0 -or
+            $primaries['kael'] -isnot [string] -or $primaries['atlas'] -isnot [string]) {
+            Fail 'SOURCE_RENDERER_FAILED' 'The canonical renderer did not return exactly the Kael and Atlas prompts.'
+        }
+        return ,$primaries
     } catch {
         if ($_.Exception.Message -match 'PYTHON_UNAVAILABLE|SOURCE_RENDERER_FAILED') { throw }
-        Fail 'SOURCE_RENDERER_FAILED' 'The canonical renderer could not produce a cap-specific Kael prompt.'
+        Fail 'SOURCE_RENDERER_FAILED' 'The canonical renderer could not produce cap-specific primary prompts.'
     } finally {
         $process.Dispose()
     }
@@ -252,11 +259,15 @@ function Apply-OpenCodeUserOverrides([System.Collections.IDictionary]$Outputs) {
             Fail 'USER_CONFIG_INVALID' 'Global max_children must be an integer from 1 to 8.'
         }
         if ($maxChildren -ne 4) {
-            $kael = Get-RenderedKaelPrompt ([int]$maxChildren)
-            if ([string]$Outputs['agents/kael.md'] -match "`r`n") {
-                $kael = $kael.Replace("`n", "`r`n")
+            $primaries = Get-RenderedPrimaries ([int]$maxChildren)
+            foreach ($role in @('kael', 'atlas')) {
+                $relative = "agents/$role.md"
+                $prompt = [string]$primaries[$role]
+                if ([string]$Outputs[$relative] -match "`r`n") {
+                    $prompt = $prompt.Replace("`r`n", "`n").Replace("`n", "`r`n")
+                }
+                $Outputs[$relative] = $prompt
             }
-            $Outputs['agents/kael.md'] = $kael
         }
     }
     $catalogPath = Join-Path $SourceRoot 'olympus/core/models-dev.json'
@@ -1264,6 +1275,36 @@ function Assert-GlobalManifestBeforeLock([string]$Root, [string]$Harness) {
         -ExpectedOutputs $outputs -ForceManagedDrift:$Force)
 }
 
+function Get-InstalledSharedPrimaryCap([string]$Text, [string]$Role) {
+    $marker = 'MAX_ACTIVE_CHILDREN = '
+    $markerCount = [regex]::Matches($Text, [regex]::Escape($marker)).Count
+    $matches = [regex]::Matches($Text, 'MAX_ACTIVE_CHILDREN = (?<cap>[0-9]+)(?=\x60|\))')
+    if ($markerCount -eq 0 -or $matches.Count -ne $markerCount) {
+        Fail 'GLOBAL_PRIMARY_CAP_INCONSISTENT' "Installed $Role prompt has a malformed shared cap marker."
+    }
+    $caps = @($matches | ForEach-Object { [int]$_.Groups['cap'].Value })
+    if (@($caps | Sort-Object -Unique).Count -ne 1 -or $caps[0] -lt 1 -or $caps[0] -gt 8) {
+        Fail 'GLOBAL_PRIMARY_CAP_INCONSISTENT' "Installed $Role prompt has inconsistent shared cap markers."
+    }
+    return [int]$caps[0]
+}
+
+function Assert-GlobalPrimaryCapCoherent([string]$Root) {
+    $marker = 'MAX_ACTIVE_CHILDREN = '
+    $kaelPath = Assert-SafeDestination $Root 'agents/kael.md'
+    $atlasPath = Assert-SafeDestination $Root 'agents/atlas.md'
+    if (-not (Test-Path -LiteralPath $kaelPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $atlasPath -PathType Leaf)) { return }
+    $kaelText = [IO.File]::ReadAllText($kaelPath)
+    $atlasText = [IO.File]::ReadAllText($atlasPath)
+    if (-not $kaelText.Contains($marker) -or -not $atlasText.Contains($marker)) { return }
+    $kaelCap = Get-InstalledSharedPrimaryCap $kaelText 'Kael'
+    $atlasCap = Get-InstalledSharedPrimaryCap $atlasText 'Atlas'
+    if ($kaelCap -ne $atlasCap) {
+        Fail 'GLOBAL_PRIMARY_CAP_INCONSISTENT' "Installed Kael/Atlas shared caps differ (Kael=$kaelCap, Atlas=$atlasCap); refusing update."
+    }
+}
+
 function Confirm-ModifiedManagedAgents {
     $roles = @($script:ModifiedManagedAgents | Sort-Object -Unique)
     if ($roles.Count -eq 0) { return }
@@ -1441,6 +1482,9 @@ function Invoke-OneHarness([string]$SelectedHarness, [switch]$LockHeld, [string]
     $manifest = Read-GlobalManifest $root $SelectedHarness -Required:($VerifyOnly -or $Force) `
         -RecoverOutputs $recoverOutputs -AllowModifiedAgents:$allowModifiedAgents `
         -ExpectedOutputs $outputs -ForceManagedDrift:$Force
+    if ($LockHeld -and $null -ne $manifest) {
+        Assert-GlobalPrimaryCapCoherent $root
+    }
     if ($Force -and $null -ne $manifest -and
         (Compare-ReleaseTag $SourceVersion ([string]$manifest.installed_version)) -lt 0) {
         Fail 'GLOBAL_NO_DOWNGRADE' "Refusing to select $SourceVersion below the installed global version $($manifest.installed_version)."

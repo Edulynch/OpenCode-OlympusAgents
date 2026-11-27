@@ -33,8 +33,8 @@ RELEASE_VERSION = _default_version.group(1)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from olympus import (config_apply, config_apply_transaction, global_readonly, models_catalog, source_edit,
-                     user_config)
+from olympus import (config_apply, config_apply_transaction, global_install, global_readonly, models_catalog,
+                     source_edit, user_config)
 from olympus.cli import load_renderer, main
 
 
@@ -1685,7 +1685,18 @@ class GlobalCli(unittest.TestCase):
         installed = self._engine(update=False, env=env, source_root=source)
         self.assertEqual(0, installed.returncode, installed.stdout + installed.stderr)
 
-        for value in (1, 8):
+        output = io.StringIO()
+        with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(output):
+            for role in ("kael", "atlas", "nox"):
+                self.assertEqual(
+                    0, main(["--source", str(source), role, "set-model", "openai/gpt-6.1-sol",
+                             "--scope", "global"]), output.getvalue(),
+                )
+                self.assertEqual(
+                    0, main(["--source", str(source), role, "set-effort", "high", "--scope", "global"]),
+                    output.getvalue(),
+                )
+        for value in (6, 8, 4):
             output = io.StringIO()
             with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(output):
                 self.assertEqual(
@@ -1694,17 +1705,24 @@ class GlobalCli(unittest.TestCase):
                 )
             preferences = json.loads(settings.read_text(encoding="utf-8"))
             self.assertEqual({"max_children": value}, preferences["orchestration"])
+            self.assertEqual(
+                {role: {"model": "openai/gpt-6.1-sol", "effort": "high"}
+                 for role in ("kael", "atlas", "nox")},
+                preferences["overrides"],
+            )
             manifest = json.loads((global_root / "olympus/orchestrator-install.json").read_text(encoding="utf-8"))
             entries = {item["path"]: item["sha256"] for item in manifest["managed_files"]}
-            for role in ("kael", "atlas"):
+            for role in ("kael", "atlas", "nox"):
                 agent = (global_root / f"agents/{role}.md").read_bytes()
-                self.assertIn(f"MAX_ACTIVE_CHILDREN = {value}".encode(), agent)
+                if role in ("kael", "atlas"):
+                    self.assertIn(f"MAX_ACTIVE_CHILDREN = {value}".encode(), agent)
+                self.assertIn(b'model: "openai/gpt-6.1-sol#high"', agent)
                 self.assertEqual(hashlib.sha256(agent).hexdigest(), entries[f"agents/{role}.md"])
 
         with mock.patch.dict(os.environ, env, clear=True):
             expected = global_readonly._expected(source, load_renderer(source), ("opencode",))
             user_config.apply_to_expected(source, expected["opencode"])
-            for role in ("kael", "atlas"):
+            for role in ("kael", "atlas", "nox"):
                 self.assertEqual(
                     expected["opencode"][f"agents/{role}.md"],
                     (global_root / f"agents/{role}.md").read_bytes(),
@@ -1733,7 +1751,7 @@ class GlobalCli(unittest.TestCase):
                 with self.assertRaises(KeyboardInterrupt):
                     user_config.set_max_children(source, 3)
         self.assertIn(b"MAX_ACTIVE_CHILDREN = 3", (global_root / "agents/kael.md").read_bytes())
-        self.assertIn(b"MAX_ACTIVE_CHILDREN = 8", (global_root / "agents/atlas.md").read_bytes())
+        self.assertIn(b"MAX_ACTIVE_CHILDREN = 4", (global_root / "agents/atlas.md").read_bytes())
         self.assertEqual(before_settings, settings.read_bytes())
         self.assertTrue((global_root / ".olympus-cli-config-apply/record.json").is_file())
 
@@ -1748,7 +1766,7 @@ class GlobalCli(unittest.TestCase):
         self.assertEqual(before_settings, settings.read_bytes())
         self.assertFalse((global_root / ".olympus-cli-config-apply").exists())
 
-    def test_global_nondefault_cap_preserves_lf_and_crlf_with_python_and_native_verification(self):
+    def test_global_nondefault_cap_preserves_lf_and_crlf_with_python_install_and_verification(self):
         source = self.sandbox / "newline-source"
         self._copy_global_source(source)
         kael_source = source / ".opencode/agents/kael.md"
@@ -1774,13 +1792,11 @@ class GlobalCli(unittest.TestCase):
                     "OLYMPUS_PYTHON": sys.executable,
                 })
 
-                installed = self._engine(update=False, env=env, source_root=source)
-                self.assertEqual(0, installed.returncode, installed.stdout + installed.stderr)
-                verified = self._verify_global(env, source_root=source)
-                self.assertEqual(0, verified.returncode, verified.stdout + verified.stderr)
-
                 with mock.patch.dict(os.environ, env, clear=True):
-                    user_config.set_max_children(source, 2)
+                    installed = global_install.install(
+                        source, version=RELEASE_VERSION, commit="fixture-python-install",
+                    )
+                    self.assertEqual(("install", "committed"), (installed.operation, installed.result))
                 with mock.patch.dict(os.environ, env, clear=True):
                     renderer = load_renderer(source)
                     default = global_readonly._expected(
@@ -1811,13 +1827,257 @@ class GlobalCli(unittest.TestCase):
                     manifest = json.loads(
                         (global_root / "olympus/orchestrator-install.json").read_text(encoding="utf-8")
                     )
-                for relative, raw in (
-                    ("agents/kael.md", installed_kael),
-                    ("agents/atlas.md", installed_atlas),
-                    ("agents/nox.md", installed_nox),
-                ):
-                    entry = next(item for item in manifest["managed_files"] if item["path"] == relative)
-                    self.assertEqual(hashlib.sha256(raw).hexdigest(), entry["sha256"])
+                    for relative, raw in (
+                        ("agents/kael.md", installed_kael),
+                        ("agents/atlas.md", installed_atlas),
+                        ("agents/nox.md", installed_nox),
+                    ):
+                        entry = next(item for item in manifest["managed_files"] if item["path"] == relative)
+                        self.assertEqual(hashlib.sha256(raw).hexdigest(), entry["sha256"])
+                    verified = global_install.verify(
+                        source, version=RELEASE_VERSION, commit="fixture-python-install",
+                    )
+                    self.assertEqual(("verify", "verified"), (verified.operation, verified.result))
+
+    def test_global_max_parallel_rejects_legacy_mismatched_primary_state_without_writes(self):
+        source = self.sandbox / "legacy-primary-source"
+        self._copy_global_source(source)
+        renderer = load_renderer(source)
+        expected_four = global_readonly._expected(
+            source, renderer, ("opencode",), include_default_agent=True, max_children=4,
+        )["opencode"]
+        expected_six = global_readonly._expected(
+            source, renderer, ("opencode",), include_default_agent=True, max_children=6,
+        )["opencode"]
+
+        for requested in (6, 8):
+            with self.subTest(requested=requested):
+                global_root = self.sandbox / f"legacy-primary-{requested}" / "opencode"
+                global_root.mkdir(parents=True)
+                settings = self.sandbox / f"legacy-primary-{requested}" / "Olympus/config.json"
+                env = self.env.copy()
+                env.update({
+                    "OPENCODE_CONFIG_DIR": str(global_root),
+                    "OLYMPUS_CONFIG_FILE": str(settings),
+                    "OLYMPUS_PYTHON": sys.executable,
+                })
+                with mock.patch.dict(os.environ, env, clear=True):
+                    installed = global_install.install(
+                        source, version=RELEASE_VERSION, commit="fixture-legacy-primary",
+                    )
+                    self.assertEqual(("install", "committed"), (installed.operation, installed.result))
+
+                kael = global_root / "agents/kael.md"
+                atlas = global_root / "agents/atlas.md"
+                kael.write_bytes(expected_six["agents/kael.md"])
+                self.assertEqual(expected_four["agents/atlas.md"], atlas.read_bytes())
+                settings.parent.mkdir(parents=True, exist_ok=True)
+                preference_bytes = (
+                    json.dumps({
+                        "schema_version": 1, "overrides": {}, "orchestration": {"max_children": 6},
+                    }, indent=2) + "\n"
+                ).encode("utf-8")
+                settings.write_bytes(preference_bytes)
+                manifest_path = global_root / "olympus/orchestrator-install.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                for role, agent in (("kael", kael), ("atlas", atlas)):
+                    entry = next(
+                        item for item in manifest["managed_files"] if item["path"] == f"agents/{role}.md"
+                    )
+                    entry["sha256"] = hashlib.sha256(agent.read_bytes()).hexdigest()
+                manifest_path.write_text(
+                    json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+                )
+                entries = {item["path"]: item["sha256"] for item in manifest["managed_files"]}
+                for item in manifest["managed_files"]:
+                    managed = global_root / item["path"]
+                    self.assertTrue(managed.is_file(), item["path"])
+                    self.assertEqual(
+                        hashlib.sha256(managed.read_bytes()).hexdigest(), item["sha256"], item["path"],
+                    )
+                for role, agent in (("kael", kael), ("atlas", atlas)):
+                    self.assertEqual(hashlib.sha256(agent.read_bytes()).hexdigest(), entries[f"agents/{role}.md"])
+                self.assertIn(b"MAX_ACTIVE_CHILDREN = 6", kael.read_bytes())
+                self.assertIn(b"MAX_ACTIVE_CHILDREN = 4", atlas.read_bytes())
+                before_root = self._global_files(global_root)
+                self.assertFalse((global_root / ".olympus-cli-config-apply").exists())
+
+                output = io.StringIO()
+                errors = io.StringIO()
+                with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(output), \
+                        contextlib.redirect_stderr(errors):
+                    code = main(["--source", str(source), "config", "set-max-parallel", str(requested)])
+                diagnostic = output.getvalue() + errors.getvalue()
+                after_root = self._global_files(global_root)
+                changed_paths = sorted(
+                    path for path in before_root.keys() | after_root.keys()
+                    if before_root.get(path) != after_root.get(path)
+                )
+                preferences_unchanged = settings.read_bytes() == preference_bytes
+                journal_present = (global_root / ".olympus-cli-config-apply").exists()
+                self.assertTrue(
+                    code != 0 and before_root == after_root and preferences_unchanged and not journal_present,
+                    f"requested={requested} exit={code} root_unchanged={before_root == after_root} "
+                    f"preferences_unchanged={preferences_unchanged} journal_present={journal_present} "
+                    f"changed_paths={changed_paths}; {diagnostic}",
+                )
+
+    def test_global_update_rejects_mismatched_shared_primary_caps_without_writes(self):
+        old_version = "v0.12.9"
+        self.assertGreater(global_install._version_compare(RELEASE_VERSION, old_version), 0)
+        source = self.sandbox / "upgrade-mismatch-source"
+        self._copy_global_source(source)
+        global_root = self.sandbox / "upgrade-mismatch" / "opencode"
+        global_root.mkdir(parents=True)
+        settings = self.sandbox / "upgrade-mismatch" / "Olympus/config.json"
+        env = self.env.copy()
+        env.update({
+            "OPENCODE_CONFIG_DIR": str(global_root),
+            "OLYMPUS_CONFIG_FILE": str(settings),
+            "OLYMPUS_PYTHON": sys.executable,
+        })
+        with mock.patch.dict(os.environ, env, clear=True):
+            installed = global_install.install(source, version=old_version, commit="fixture-old-release")
+            self.assertEqual(("install", "committed"), (installed.operation, installed.result))
+
+            expected_six = global_readonly._expected(
+                source, load_renderer(source), ("opencode",), max_children=6,
+            )["opencode"]
+            kael = global_root / "agents/kael.md"
+            atlas = global_root / "agents/atlas.md"
+            kael.write_bytes(expected_six["agents/kael.md"])
+            self.assertIn(b"MAX_ACTIVE_CHILDREN = 6", kael.read_bytes())
+            self.assertIn(b"MAX_ACTIVE_CHILDREN = 4", atlas.read_bytes())
+            settings.parent.mkdir(parents=True, exist_ok=True)
+            preference_bytes = (
+                json.dumps({
+                    "schema_version": 1, "overrides": {},
+                    "orchestration": {"max_children": 6},
+                }, indent=2) + "\n"
+            ).encode("utf-8")
+            settings.write_bytes(preference_bytes)
+
+            manifest_path = global_root / "olympus/orchestrator-install.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(old_version, manifest["installed_version"])
+            for role, agent in (("kael", kael), ("atlas", atlas)):
+                entry = next(
+                    item for item in manifest["managed_files"] if item["path"] == f"agents/{role}.md"
+                )
+                entry["sha256"] = hashlib.sha256(agent.read_bytes()).hexdigest()
+            manifest_path.write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+            )
+            before_root = self._global_files(global_root)
+            before_settings = settings.read_bytes()
+            self.assertFalse((global_root / global_install._SCRATCH).exists())
+
+            update_error = ""
+            update_result = None
+            try:
+                update_result = global_install.update(
+                    source, version=RELEASE_VERSION, commit="fixture-new-release",
+                )
+            except global_install.GlobalInstallError as error:
+                update_error = str(error)
+
+        after_root = self._global_files(global_root)
+        changed_paths = sorted(
+            path for path in before_root.keys() | after_root.keys()
+            if before_root.get(path) != after_root.get(path)
+        )
+        preferences_unchanged = settings.read_bytes() == before_settings
+        journal_present = (global_root / global_install._SCRATCH).exists()
+        self.assertTrue(
+            "primary cap mismatch" in update_error.lower()
+            and before_root == after_root and preferences_unchanged and not journal_present,
+            f"expected non-destructive update refusal for installed caps Kael=6/Atlas=4; "
+            f"update_result={update_result!r} error={update_error!r} "
+            f"root_unchanged={before_root == after_root} preferences_unchanged={preferences_unchanged} "
+            f"journal_present={journal_present} changed_paths={changed_paths}",
+        )
+
+    def test_global_update_accepts_coherent_old_caps_after_preference_change(self):
+        old_version = "v0.12.9"
+        self.assertGreater(global_install._version_compare(RELEASE_VERSION, old_version), 0)
+        old_source = self.sandbox / "upgrade-coherent-old-source"
+        new_source = self.sandbox / "upgrade-coherent-new-source"
+        self._copy_global_source(old_source)
+        self._copy_global_source(new_source)
+        for role in ("kael", "atlas"):
+            role_source = new_source / "olympus" / "harnesses" / "opencode" / "agent-prompts" / f"{role}.md"
+            role_source.write_text(
+                role_source.read_text(encoding="utf-8") +
+                f"\n\nFixture candidate release wording for {role}.\n",
+                encoding="utf-8", newline="\n",
+            )
+
+        global_root = self.sandbox / "upgrade-coherent" / "opencode"
+        global_root.mkdir(parents=True)
+        settings = self.sandbox / "upgrade-coherent" / "Olympus/config.json"
+        env = self.env.copy()
+        env.update({
+            "OPENCODE_CONFIG_DIR": str(global_root),
+            "OLYMPUS_CONFIG_FILE": str(settings),
+            "OLYMPUS_PYTHON": sys.executable,
+        })
+        with mock.patch.dict(os.environ, env, clear=True):
+            installed = global_install.install(
+                old_source, version=old_version, commit="fixture-old-release",
+            )
+            self.assertEqual(("install", "committed"), (installed.operation, installed.result))
+            old_manifest = json.loads(
+                (global_root / "olympus/orchestrator-install.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(old_version, old_manifest["installed_version"])
+            for role in ("kael", "atlas"):
+                self.assertIn(b"MAX_ACTIVE_CHILDREN = 4", (global_root / f"agents/{role}.md").read_bytes())
+
+            preference_bytes = (
+                json.dumps({
+                    "schema_version": 1,
+                    "overrides": {"nox": {"model": "openai/gpt-6.1-sol", "effort": "high"}},
+                    "orchestration": {"max_children": 6},
+                }, indent=2) + "\n"
+            ).encode("utf-8")
+            settings.parent.mkdir(parents=True, exist_ok=True)
+            settings.write_bytes(preference_bytes)
+            old_note = b"\n\nFixture previous-release prompt text.\n"
+            for role in ("kael", "atlas"):
+                agent = global_root / f"agents/{role}.md"
+                agent.write_bytes(agent.read_bytes() + old_note)
+            old_manifest = json.loads(
+                (global_root / "olympus/orchestrator-install.json").read_text(encoding="utf-8")
+            )
+            for role in ("kael", "atlas"):
+                agent = global_root / f"agents/{role}.md"
+                entry = next(
+                    item for item in old_manifest["managed_files"] if item["path"] == f"agents/{role}.md"
+                )
+                entry["sha256"] = hashlib.sha256(agent.read_bytes()).hexdigest()
+            (global_root / "olympus/orchestrator-install.json").write_text(
+                json.dumps(old_manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+            )
+
+            updated = global_install.update(
+                new_source, version=RELEASE_VERSION, commit="fixture-new-release",
+            )
+
+        self.assertEqual(("update", "committed"), (updated.operation, updated.result))
+        self.assertEqual(preference_bytes, settings.read_bytes())
+        manifest = json.loads((global_root / "olympus/orchestrator-install.json").read_text(encoding="utf-8"))
+        self.assertEqual(RELEASE_VERSION, manifest["installed_version"])
+        entries = {item["path"]: item["sha256"] for item in manifest["managed_files"]}
+        for role in ("kael", "atlas"):
+            raw = (global_root / f"agents/{role}.md").read_bytes()
+            self.assertIn(b"MAX_ACTIVE_CHILDREN = 6", raw)
+            self.assertIn(f"Fixture candidate release wording for {role}.".encode(), raw)
+            self.assertNotIn(b"Fixture previous-release prompt text", raw)
+            self.assertEqual(hashlib.sha256(raw).hexdigest(), entries[f"agents/{role}.md"])
+        nox = (global_root / "agents/nox.md").read_bytes()
+        self.assertIn(b'model: "openai/gpt-6.1-sol#high"', nox)
+        self.assertEqual(hashlib.sha256(nox).hexdigest(), entries["agents/nox.md"])
+        self.assertFalse((global_root / global_install._SCRATCH).exists())
 
     def test_global_max_parallel_refuses_pending_lock_and_managed_drift(self):
         settings = self.appdata / "Olympus/config.json"
@@ -2189,18 +2449,22 @@ class GlobalCli(unittest.TestCase):
         self.assertIn("OLYMPUS_GLOBAL_INSTALL:", result.stdout)
 
     def test_global_installer_refuses_a_pending_python_apply_journal(self):
-        agent = self._agent("kael")
-        before_agent, before_manifest = agent.read_bytes(), self.manifest_path.read_bytes()
+        before_agents = {role: self._agent(role).read_bytes() for role in ("kael", "atlas")}
+        before_manifest = self.manifest_path.read_bytes()
         pending = self.root / ".olympus-cli-config-apply"
         pending.mkdir()
         (pending / "unconfirmed-fixture.txt").write_bytes(b"preserve pending evidence")
-        result = self._engine(update=False)
-        output = result.stdout + result.stderr
-        self.assertNotEqual(0, result.returncode, output)
-        self.assertIn("GLOBAL_APPLY_RECOVERY_PENDING", output)
-        self.assertEqual(before_agent, agent.read_bytes())
-        self.assertEqual(before_manifest, self.manifest_path.read_bytes())
-        self.assertEqual(b"preserve pending evidence", (pending / "unconfirmed-fixture.txt").read_bytes())
+        for update in (False, True):
+            with self.subTest(update=update):
+                result = self._engine(update=update)
+                output = result.stdout + result.stderr
+                self.assertNotEqual(0, result.returncode, output)
+                self.assertIn("GLOBAL_APPLY_RECOVERY_PENDING", output)
+                self.assertEqual(before_agents, {
+                    role: self._agent(role).read_bytes() for role in ("kael", "atlas")
+                })
+                self.assertEqual(before_manifest, self.manifest_path.read_bytes())
+                self.assertEqual(b"preserve pending evidence", (pending / "unconfirmed-fixture.txt").read_bytes())
 
     def test_global_installer_fails_closed_when_journal_inspection_errors(self):
         agent = self._agent("kael")

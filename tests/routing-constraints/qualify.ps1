@@ -78,8 +78,8 @@ try {
     $nativeConfig = Text 'opencode.jsonc'
     Check 'POLICY_NATIVE_AUTHORITY_ASK' ($nativeConfig -match '(?s)"action":\s*"edit"\s*,\s*"resource":\s*"\*"\s*,\s*"effect":\s*"ask"' -and
         $nativeConfig -match '(?s)"action":\s*"external_directory"\s*,\s*"resource":\s*"\*"\s*,\s*"effect":\s*"ask"' -and
-        $kovan -match '\.opencode/plugins/\*\*"\s+effect: ask' -and
-        $kovan -match '\.opencode/agents/\*\*"\s+effect: deny' -and
+        $kovan -match '\.opencode/plugins/\*\*"\s+effect: allow' -and
+        $kovan -match '(?s)\.opencode/agents/\*\*"\s+effect: allow.*?\.opencode/agents/kovan\.md"\s+effect: deny' -and
         $kovan -notmatch '(?m)^  - action: external_directory\b')
 
     $normalCommit = Route 'user-project' 'commit'

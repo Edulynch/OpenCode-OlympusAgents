@@ -96,7 +96,7 @@ try {
         $section -match 'cross-cutting or\s+cross-subsystem' -and $section -match 'not destructive, high-risk, security-sensitive' -and
         $section -match 'explicit request for independent review' -and $section -match 'assessed cheaply from supplied evidence')
     Check 'FAST_POLICY_NATIVE_ASK' ($section -match 'exact operation,\s+`WRITE_SCOPE`, canonical repository root' -and
-        $section -match 'positive project-ownership evidence,\s+protected-path exclusions, and current task grant before assigning one Kovan\s+writer' -and
+        $section -match 'positive\s+project-ownership evidence,\s+protected-path exclusions, and current task grant\s+before assigning one Kovan\s+writer' -and
         $section -match 'The writer attempts only that native tool operation' -and
         $section -match 'rejection or\s+cancellation stops it without fallback' -and
         $section -match 'requested target was written within exact scope' -and

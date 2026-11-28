@@ -192,7 +192,7 @@ That returns Git to an inherited global/system path if one exists, or its defaul
 
 ## Architecture
 
-Olympus Core defines canonical role responsibilities, model intent, routing, authority, result lifecycle, and contextual maintenance semantics; see the [contextual maintenance policy](../olympus/policies/maintenance-context.md). OpenCode is the only currently supported runtime and the target for new capabilities. Kael is the single conceptual ROOT ORCHESTRATOR, represented as OpenCode's primary agent. The eleven canonical Core roles and their responsibilities remain intact; maintenance uses Kael's normal workflow, selected from the identified target repository and task intent.
+Olympus Core defines canonical role responsibilities, model intent, routing, authority, result lifecycle, and contextual maintenance semantics; see the [contextual maintenance policy](../olympus/policies/maintenance-context.md). OpenCode is the only currently supported runtime and the target for new capabilities. The nine Core roles include two OpenCode primaries: Kael is the sole execution orchestrator; Atlas plans and analyzes without writing. Maintenance uses Kael's normal workflow, selected from the identified target repository and task intent.
 
 ### Current support and adapter contract
 
@@ -202,7 +202,11 @@ Olympus Core defines canonical role responsibilities, model intent, routing, aut
 
 The OpenCode capability contract and its evidence are documented in the [harness guide](HARNESSES.md) and [capability matrix](HARNESS-CAPABILITIES.md).
 
-Kael checks feasibility, repository identity, and task scope using minimal preflight before delegating research or planning. The same Kael workflow handles OlympusAgents development and ordinary project work; there is no separate maintenance command, role, or authorization plane. Kael does not explore repositories, conduct technical research, implement, or execute technical validation; responsible roles gather evidence and perform those tasks, while Kael reconciles their results and owns acceptance. A direct answer from existing context uses no tools or children. The native `/goal` surface remains opt-in and user-selected where available. Feasible work uses only materially needed task-scoped discovery (none, targeted, or bounded subsystem), widening only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request.
+Kael checks feasibility, repository identity, and task scope using minimal preflight. For execution, Mission Readiness adds the acceptance path, roles and tool capabilities, Git/external effects, predictable native ASK/DENY, decisions, independent work and stop conditions before expensive work. `READY` proceeds without artificial questions; `NEEDS_UPFRONT_DECISION` groups material choices and missing authorities in one initial request, naming what each answer unlocks; `IMPOSSIBLE` stops doomed work early with the exact cause. Host ASK still requires a real native decision. Authorization for investigation, edits, tests, corrections, commit, push and PR is reused across phases when it was granted initially; merge and release still require separate explicit authority.
+
+The same Kael workflow handles OlympusAgents development and ordinary project work; there is no separate maintenance command, role, or authorization plane. Kael does not explore repositories, conduct technical research, implement, or execute technical validation; responsible roles gather evidence and perform those tasks, while Kael reconciles their results and owns acceptance. A direct answer from existing context uses no tools or children. The native `/goal` surface remains opt-in and user-selected where available. Feasible work uses only materially needed task-scoped discovery (none, targeted, or bounded subsystem), widening only for an unresolved target/boundary, evidence of wider impact, or a genuinely repository-wide request.
+
+Continue independent authorized work while another workstream is blocked. Preserve evidence, reconcile children, and group any late material questions when useful progress is exhausted; never replay an indeterminate effect. `BLOCKED` means a required acceptance criterion cannot be met, not that an optional check, release-only gate, or independent gap is unrun. See the [execution blocker dispositions](../olympus/policies/routing.md#execution-blockers).
 
 ### Authority Grants — beta.3
 
@@ -241,19 +245,33 @@ and waits for the native permission result. Approval allows continuation;
 rejection/cancellation means stop with no fallback or retry. A write grant does
 not authorize deletion, rename, destructive replacement, Git side effects or
 other high-impact work. Role/tool limits continue to apply. User prohibitions
-(including “do not modify .opencode”) deny without a question. The native edit
-policy makes project-owned `.opencode/**` resources ASK, with explicit DENY for `.opencode/agents/**`,
-`.opencode/plugins/olympus-activity/**`, the
-installer manifest, OpenCode config files, and other known Olympus-managed
-assets. Root `opencode.json[c]` is DENY. A project-owned
-`.opencode/plugins/<name>/**` is eligible only with positive project-ownership
-evidence and no Olympus-owned collision. Its exact native ASK is the user
-authorization point; Kael must not also send a duplicate QUESTION. The child
-must reach the native permission layer by attempting the exact scoped tool;
-reject means no write, approval is one-shot and grants no sibling paths. Do not
-special-case project names. Kovan's broad project edit ALLOW must not be paired with a
-blanket `edit * deny`, which blocks project-owned paths from reaching their
-more-specific native ASK rules; the explicit Olympus-owned DENYs remain in force.
+(including "do not modify .opencode") deny without a question. The `.opencode`
+prefix is not proof of ownership. Kovan's native edit ALLOW rules for
+`.opencode/{skills,plugins,agents,commands}/**` are followed by exact Olympus
+asset denials from the renderer inventory, plus reserved Activity and
+installation records. They never replace positive ownership evidence, exact
+`WRITE_SCOPE`, and checks for manifest or receipt collisions. Manifest-owned
+resources are protected even when a path matcher cannot identify ownership.
+Do not special-case project names.
+
+Project-owned root or `.opencode` `opencode.json[c]` requires explicitly
+authorized scope and intended effects and reaches native ASK. Kael must not also send a duplicate QUESTION
+for that consent. The same `opencode.jsonc` filename can be installer-owned or
+a generated candidate; direct edits to those are still denied by contract.
+Unknown ownership, global config, authentication and credentials remain outside
+project write authority. For installed resources, use the separately authorized
+supported install/update/apply/uninstall flow; `--force` is not ownership.
+
+For authorized self-development, prove the OlympusAgents target and absence of
+foreign work, then assign the exact `RENDER_GENERATED_OUTPUTS` effect to Kovan.
+Kovan changes canonical source, runs the official renderer and its read-only
+check, rerenders to verify zero writes/prunes, and inspects the diff. Kael
+accepts the evidence; Nox is needed only for distinct checks. Generated paths are
+not manual edit targets, and candidate production does not activate or install
+them. Shell is not a path sandbox and must not bypass scope, ASK or DENY. When
+reload can affect the executing session, establish an isolated executor or
+validation environment as appropriate; a new session alone is not isolation.
+No switch to `build` is part of this workflow.
 
 The project-wide `external_directory` default is ASK, not blanket ALLOW or DENY;
 OpenCode agent metadata must not append wildcard `external_directory` rules.
@@ -320,8 +338,10 @@ verification stages (not wall-clock time):
 routing, dependencies, session families, reconciliation, retry decisions and final
 synthesis; it evaluates supplied evidence and does not perform repository exploration,
 technical research, implementation, or technical validation. Veyra supplies
-discovery; Orin architecture; Kovan implementation; Nox runtime/test evidence;
-Vera independent review. Atlas optionally plans execution order for already-scoped, already-architected changes without discovering, editing or validating; Thales reasons over actual
+discovery; Kovan implementation; Nox runtime/test evidence; Vera independent
+review. Atlas, as a separate primary, can collect bounded read-only evidence,
+analyze architecture and plan a handoff without implementing or running tests.
+Thales reasons over actual
 evidence under the existing Diagnostic Gate; straightforward bugs do not trigger
 Thales. Reasoners identify hypotheses and discriminating evidence, not execute
 specialist work or self-review in place of Vera.
@@ -487,7 +507,7 @@ FULL are not included. Direct qualifier defaults remain unchanged.
 **FULL** runs FAST exactly once, then the offline global OpenCode API-query
 contract, the Windows global-installer fixture, the release qualifier with
 `-MockOpenCode`, installer compatibility, and dirty-worktree checks, followed by the Offline
-slices of Authority, Activity HUD, Argus, Atlas, Helios, Talos, Thales, Phase 4C,
+slices of Authority, Activity HUD, roster retirement, Atlas, Helios, Talos, Thales, Phase 4C,
 and Autonomy. Those nine slices execute their existing
 local installation, history, upgrade, drift, conflict, and synthetic checks;
 Activity also runs its local Node presentation tests. For bootstrap-driven
@@ -520,7 +540,7 @@ cases if you change a selector or the test names it matches.
 
 **RUNTIME** does not include FULL or FAST. It runs external-work ownership
 disposable process cases and the
-existing effective-agent/plugin boundaries for Authority, Activity HUD, Argus,
+existing effective-agent/plugin boundaries for Authority, Activity HUD,
 Atlas, Helios, Talos, Thales, Phase 4C, and Autonomy. Phase 4C's runtime
 selector includes P4C-2/11/12/14 and the contextual-maintenance roster check.
 Managed-file drift and fail-closed refusal/preservation checks for unsupported

@@ -28,30 +28,28 @@ _HASH = re.compile(r"[0-9a-fA-F]{64}\Z")
 _POWERSHELL_VERSION = re.compile(r"(?m)^PowerShell ([0-9]+)\.")
 _CONFIG_PATH = re.compile(r"(?m)^\s*config\s{2,}(?P<path>.+?)\s*$")
 _REPARSE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+_GLOBAL_REINSTALL_GUIDANCE = (
+    "Uninstall it with the Olympus version that created this installation, then install the current version; "
+    "do not manually delete files or use --force to adopt it."
+)
 _GLOBAL_COMMANDS = frozenset({
     "commands/olympus.ultra.md",
     "commands/olympus.performance.md",
+    "commands/olympus.performance-ultra.md",
 })
-_LEGACY_GLOBAL_BASE = frozenset({
-    "agents/argus.md",
+_CURRENT_GLOBAL_BASE = frozenset({
     "agents/atlas.md",
     "agents/helios.md",
     "agents/kael.md",
     "agents/kovan.md",
     "agents/nox.md",
-    "agents/orin.md",
     "agents/talos.md",
     "agents/thales.md",
     "agents/vera.md",
     "agents/veyra.md",
     "plugins/olympus-activity/activity.ts",
     "plugins/olympus-activity/tui.tsx",
-})
-_CURRENT_GLOBAL_BASE = _LEGACY_GLOBAL_BASE | _GLOBAL_COMMANDS
-_LEGACY_GLOBAL_INVENTORIES = {
-    _LEGACY_GLOBAL_BASE,
-    _LEGACY_GLOBAL_BASE | {"opencode.jsonc"},
-}
+}) | _GLOBAL_COMMANDS
 
 
 class GlobalFault(ValueError):
@@ -284,8 +282,11 @@ def _expected(source: Path, renderer, selected: tuple[str, ...], *, include_defa
                 raise GlobalFault("source_invalid", "Global permission guard template is not an object.", 1)
             guard = guard[:opening + 1] + b'\n  "default_agent": "kael",' + guard[opening + 1:]
         outputs["opencode"]["opencode.jsonc"] = guard
-    if len(outputs["opencode"]) != 16:
-        raise GlobalFault("source_inventory_unsupported", "Global renderer inventory differs from the official engine.")
+    if frozenset(outputs["opencode"]) != _CURRENT_GLOBAL_BASE | {"opencode.jsonc"}:
+        raise GlobalFault(
+            "source_inventory_unsupported",
+            "Global renderer inventory differs from the current nine-role, three-command OpenCode inventory.",
+        )
     return outputs
 
 
@@ -319,12 +320,22 @@ def _parse_manifest_bytes(raw: bytes, harness: str, expected: dict[str, bytes] |
     # An unknown string must not silently become an actionable global preview.
     if data["installed_version"] != "local" and install_routing._RELEASE_TAG.fullmatch(data["installed_version"]) is None:
         raise GlobalFault("unsupported_global_version", "Global manifest has an unsupported installed version.")
+    if data["installed_version"] == "v0.10.0":
+        raise GlobalFault(
+            "unsupported_global_version",
+            f"Global manifest version '{data['installed_version']}' is historically unsupported. "
+            + _GLOBAL_REINSTALL_GUIDANCE,
+        )
     if harness != "opencode":
         raise GlobalFault("global_harness_unsupported", "Only the OpenCode global installation is supported.")
     if _DEFAULT_AGENT_RECEIPT not in data:
         raise GlobalFault("global_default_agent_receipt_missing",
-                          "Receipt-less global OpenCode manifests are unsupported; reconcile ownership before a matching-version removal.")
-    _validate_default_agent_receipt(data[_DEFAULT_AGENT_RECEIPT])
+                          "Receipt-less global OpenCode manifests are unsupported. "
+                          + _GLOBAL_REINSTALL_GUIDANCE)
+    try:
+        _validate_default_agent_receipt(data[_DEFAULT_AGENT_RECEIPT])
+    except GlobalFault as error:
+        raise GlobalFault(error.reason, f"{error} {_GLOBAL_REINSTALL_GUIDANCE}", error.code) from error
     entries: dict[str, str] = {}
     for item in data["managed_files"]:
         if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("sha256"), str):
@@ -337,24 +348,27 @@ def _parse_manifest_bytes(raw: bytes, harness: str, expected: dict[str, bytes] |
             raise GlobalFault("invalid_global_manifest", "Global manifest has a duplicate or unsafe managed resource.")
         if (path.startswith(".codex/") or path in ("CODEX.md", "AGENTS.md", "olympus.config.toml")
                 or (path.startswith("agents/") and path.endswith(".toml"))):
-            raise GlobalFault("unsupported_global_inventory", "Global manifest contains an obsolete Codex resource.")
+            raise GlobalFault(
+                "unsupported_global_inventory",
+                f"Global manifest contains an obsolete resource: {path}. {_GLOBAL_REINSTALL_GUIDANCE}",
+            )
         if expected is not None and path not in expected:
-            raise GlobalFault("unsupported_global_inventory", "Global manifest owns a resource outside the current adapter inventory.")
+            raise GlobalFault(
+                "unsupported_global_inventory",
+                f"Global manifest owns a resource outside the current adapter inventory: {path}. "
+                + _GLOBAL_REINSTALL_GUIDANCE,
+            )
         entries[path] = digest.lower()
-    current_inventory = {
-        frozenset(expected) if expected is not None else _CURRENT_GLOBAL_BASE | {"opencode.jsonc"},
-        frozenset(set(expected) - {"opencode.jsonc"}) if expected is not None else _CURRENT_GLOBAL_BASE,
-    }
-    legacy_inventory = _LEGACY_GLOBAL_INVENTORIES if data["installed_version"] == "v0.10.0" else set()
-    if frozenset(entries) not in current_inventory | legacy_inventory:
+    if expected is None:
+        current_inventory = {_CURRENT_GLOBAL_BASE, _CURRENT_GLOBAL_BASE | {"opencode.jsonc"}}
+    else:
+        installed = frozenset(expected)
+        current_inventory = {installed, installed - {"opencode.jsonc"}}
+    if frozenset(entries) not in current_inventory:
         raise GlobalFault("unsupported_global_inventory",
-                          "Global manifest inventory is neither the current 15/16-resource set nor the exact v0.10.0 legacy 13/14-resource set.")
+                          "Global manifest inventory is not the current OpenCode inventory. "
+                          + _GLOBAL_REINSTALL_GUIDANCE)
     return data, entries
-
-
-def _is_legacy_inventory(manifest: dict, entries: dict[str, str]) -> bool:
-    return (manifest.get("installed_version") == "v0.10.0"
-            and frozenset(entries) in _LEGACY_GLOBAL_INVENTORIES)
 
 
 def _validate_default_agent_receipt(receipt: Any) -> dict:
@@ -392,7 +406,8 @@ def _default_agent_status(root: Path, manifest: dict) -> str:
     receipt = manifest.get(_DEFAULT_AGENT_RECEIPT)
     if receipt is None:
         raise GlobalFault("global_default_agent_receipt_missing",
-                          "Receipt-less global OpenCode manifests are unsupported; reconcile ownership before a matching-version removal.")
+                          "Receipt-less global OpenCode manifests are unsupported. "
+                          + _GLOBAL_REINSTALL_GUIDANCE)
     if receipt["state"] != "committed":
         raise GlobalFault("global_default_agent_recovery_pending",
                           f"OpenCode default-agent receipt is {receipt['state']}; reconcile with a normal install or uninstall.")
@@ -635,9 +650,6 @@ def _python_verify(source: Path, root: Path, version: str,
         if manifest["installed_version"] != version:
             raise GlobalFault("version_mismatch",
                               f"Global manifest records '{manifest['installed_version']}'; requested '{version}'.")
-        if _is_legacy_inventory(manifest, entries):
-            raise GlobalFault("global_upgrade_required",
-                              "The verified v0.10.0 global inventory requires an explicit update.")
         current = _verified_files(root, entries)
         if expected is not None:
             for relative, raw in current.items():
@@ -661,7 +673,12 @@ def _python_verify(source: Path, root: Path, version: str,
             ),
             "global_default_agent_drift": ("default_agent_drift", "global_default_agent_drift", 1),
             "global_apply_recovery_pending": ("recovery_pending", "global_apply_recovery_pending", 3),
-            "global_upgrade_required": ("upgrade_required", "global_upgrade_required", 3),
+            "unsupported_global_inventory": (
+                "unsupported_inventory", "unsupported_global_inventory", 3,
+            ),
+            "unsupported_global_version": (
+                "unsupported_version", "unsupported_global_version", 3,
+            ),
             "version_mismatch": ("version_mismatch", "version_mismatch", 3),
             "global_install_absent": ("absent", "global_install_absent", 3),
             "global_default_agent_config_invalid": ("config_invalid", "global_default_agent_config_invalid", 3),
@@ -793,16 +810,6 @@ def inspect(source: Path, args, response: dict, *, source_query: Callable, load_
                     raise GlobalFault("global_guard_recovery_pending", "An OpenCode guard transaction is pending; rerun the global installer to reconcile ownership.")
                 if "opencode.jsonc" not in entries:
                     item["external_guard"] = _unowned_opencode_guard(root)
-                if _is_legacy_inventory(manifest, entries):
-                    item["state"] = "upgrade_required"
-                    blocked.append(harness)
-                    failure_codes.append(3)
-                    response["issues"].append({
-                        "code": "global_upgrade_required",
-                        "message": "This verified v0.10.0 global inventory predates the namespaced commands; run olympus update before config apply or doctor.",
-                        "harness": harness,
-                    })
-                    continue
                 if operation == "config apply":
                     if "opencode.jsonc" in current:
                         # The installer owns this field lifecycle, not the renderer.

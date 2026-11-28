@@ -188,7 +188,12 @@ class LinuxGlobalCli(unittest.TestCase):
             {path for path in paths if path.startswith("olympus/") and path.endswith(".py")},
         )
         self.assertIn("scripts/launch-latest.py", paths)
-        self.assertEqual(17, len(generated), "generated renderer inventory must remain canonical")
+        self.assertEqual(16, len(generated), "generated renderer inventory must remain canonical")
+        self.assertEqual(
+            {".opencode/commands/olympus.ultra.md", ".opencode/commands/olympus.performance.md",
+             ".opencode/commands/olympus.performance-ultra.md"},
+            {path for path in generated if path.startswith(".opencode/commands/")},
+        )
         for unlisted in (
             "scripts/side-loaded.py",
             "olympus/unlisted_module.py", "olympus/core/unlisted.json",

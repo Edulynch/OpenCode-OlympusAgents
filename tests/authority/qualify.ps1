@@ -5,12 +5,14 @@ $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $exactManagedCommandPaths = @(
     '.opencode/commands/olympus.ultra.md',
-    '.opencode/commands/olympus.performance.md'
+    '.opencode/commands/olympus.performance.md',
+    '.opencode/commands/olympus.performance-ultra.md'
 )
-$expectedOlympusAgentIds = @('kael','veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios')
+$expectedOlympusAgentIds = @('kael','veyra','atlas','kovan','nox','vera','talos','thales','helios')
+$retiredOlympusAgentIds = @('orin','argus')
 $automationActionsV240 = @('automation_create','automation_list','automation_pause','automation_resume','automation_delete')
 $protectedToolActionsV240 = @($automationActionsV240) + @('browser')
-$newToolDenyAgentIds = @('kael','kovan','nox','orin','vera','veyra')
+$newToolDenyAgentIds = @('kael','atlas','kovan','nox','vera','veyra')
 function Text([string]$path) { [IO.File]::ReadAllText((Join-Path $root $path)) }
 function Check([string]$id, [bool]$ok) {
     if (-not $ok) { throw "$id FAIL" }
@@ -27,12 +29,13 @@ function Covers([string]$scope, [string]$path) {
 function Is-OlympusOwned([string]$path, [string[]]$manifestPaths = @(),
                          [bool]$canonicalSourceTarget = $false) {
     $p = $path.Replace('\','/').TrimStart('/').ToLowerInvariant()
-    $fixed = @('.opencode/agents/',
+    $fixed = @(
         '.opencode/plugins/olympus-activity/', '.opencode/scripts/worktree-setup.ps1',
-        '.opencode/orchestrator-install.json',
-        '.opencode/opencode.json', '.opencode/opencode.jsonc', '.codex/', 'CODEX.md',
-        'olympus/', 'scripts/render_harnesses.py', 'opencode.jsonc', 'opencode.json')
+        '.opencode/orchestrator-install.json', '.opencode/olympus-config.json',
+        '.codex/', 'CODEX.md', 'olympus/', 'scripts/render_harnesses.py')
     if ($p -in $exactManagedCommandPaths) { return $true }
+    if ($p -in @($expectedOlympusAgentIds | ForEach-Object { ".opencode/agents/$_.md" })) { return $true }
+    if ($canonicalSourceTarget -and $p -eq 'opencode.jsonc') { return $true }
     # Canonical source is editable only when OlympusAgents is the proven task
     # target; installed runtime resources stay protected in every repository.
     $canonicalSource = $canonicalSourceTarget -and ($p.StartsWith('olympus/') -or $p -eq 'scripts/render_harnesses.py')
@@ -48,12 +51,17 @@ function Decide([string]$agent, [string]$operation, [string]$path, [string]$norm
                  [string]$repositoryRoot, $grant, [bool]$taskActive = $true,
                  [bool]$projectOwned = $true, [bool]$explicitProhibition = $false,
                  [string[]]$manifestPaths = @(), [string]$nativeDecision = 'ALLOW',
-                 [bool]$canonicalSourceTarget = $false) {
+                 [bool]$canonicalSourceTarget = $false, [bool]$explicitConfigEffect = $false) {
     # nativeDecision models the effective rule outcome, not a tool attempt or host ASK event.
     # A null grant models omitted AUTHORITY_GRANT; normalScope is the validated assignment scope.
     if ($explicitProhibition) { return [pscustomobject]@{ decision='DENY'; question=0; reason='USER_PROHIBITION' } }
     if (Is-OlympusOwned $path $manifestPaths $canonicalSourceTarget) { return [pscustomobject]@{ decision='DENY'; question=0; reason='OLYMPUS_OWNED' } }
     if (-not $projectOwned) { return [pscustomobject]@{ decision='DENY'; question=0; reason='OWNERSHIP_UNPROVEN' } }
+    if ($nativeDecision -eq 'DENY') { return [pscustomobject]@{ decision='DENY'; question=0; reason='NATIVE_DENY' } }
+    if (-not $explicitConfigEffect -and $path -in @('opencode.json','opencode.jsonc',
+        '.opencode/opencode.json','.opencode/opencode.jsonc')) {
+        return [pscustomobject]@{ decision='NEED_AUTHORITY'; question=0; reason='EXPLICIT_CONFIG_EFFECT_REQUIRED' }
+    }
     $normal = Covers $normalScope $path
     $valid = $false
     if ($null -ne $grant) {
@@ -65,7 +73,6 @@ function Decide([string]$agent, [string]$operation, [string]$path, [string]$norm
     if ($normal -and $nativeDecision -eq 'ALLOW') {
         return [pscustomobject]@{ decision='ALLOW'; question=0; reason='NORMAL_SCOPE' }
     }
-    if ($nativeDecision -eq 'DENY') { return [pscustomobject]@{ decision='DENY'; question=0; reason='NATIVE_DENY' } }
     if ($valid) {
         if ($grant.permission_mode -eq 'NATIVE_ASK' -and $nativeDecision -eq 'ASK') {
             return [pscustomobject]@{ decision='NATIVE_ASK'; question=0; reason='EXACT_NATIVE_ASK_GRANT' }
@@ -254,6 +261,11 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
             $failures.Add("roster_${agentId}=duplicated (matches=$count)")
         }
     }
+    foreach ($agentId in $retiredOlympusAgentIds) {
+        if ($additionalAgentIds -contains $agentId) {
+            $failures.Add("retired_agent_${agentId}=present")
+        }
+    }
     $kaelCount = $kaelMatches.Count
     $kovanCount = $kovanMatches.Count
     if ($kaelCount -eq 0) {
@@ -315,8 +327,8 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                 $editWildcardDeny = @($permissions | Where-Object {
                     $_.action -eq 'edit' -and $_.resource -eq '*' -and $_.effect -eq 'deny'
                 }).Count
-                $editPluginsAsk = @($permissions | Where-Object {
-                    $_.action -eq 'edit' -and $_.resource -eq '.opencode/plugins/**' -and $_.effect -eq 'ask'
+                $editPluginsAllow = @($permissions | Where-Object {
+                    $_.action -eq 'edit' -and $_.resource -eq '.opencode/plugins/**' -and $_.effect -eq 'allow'
                 }).Count
                 $activityDeny = @($permissions | Where-Object {
                     $_.action -eq 'edit' -and $_.resource -eq '.opencode/plugins/olympus-activity/**' -and $_.effect -eq 'deny'
@@ -327,10 +339,10 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                 $externalAllow = @($permissions | Where-Object {
                     $_.action -eq 'external_directory' -and $_.resource -eq '*' -and $_.effect -eq 'allow'
                 }).Count
-                $permissionEvidence = "task_edit=$taskEditDecision/$taskEditRuleCount rules, project_plugin_edit=$pluginEditDecision, activity_edit=$activityEditDecision, edit_*_deny=$editWildcardDeny/0, edit_plugins_ask=$editPluginsAsk/1, activity_deny=$activityDeny/1, external_ask=$externalAsk/inherited, external_allow=$externalAllow/0"
-                if ($editWildcardDeny -ne 0 -or $editPluginsAsk -ne 1 -or $activityDeny -ne 1 -or
+                $permissionEvidence = "task_edit=$taskEditDecision/$taskEditRuleCount rules, project_plugin_edit=$pluginEditDecision, activity_edit=$activityEditDecision, edit_*_deny=$editWildcardDeny/0, edit_plugins_allow=$editPluginsAllow/1, activity_deny=$activityDeny/1, external_ask=$externalAsk/inherited, external_allow=$externalAllow/0"
+                if ($editWildcardDeny -ne 0 -or $editPluginsAllow -ne 1 -or $activityDeny -ne 1 -or
                     $externalAllow -ne 0 -or $taskEditDecision -ne 'ALLOW' -or $taskEditRuleCount -eq 0 -or
-                    $pluginEditDecision -ne 'ASK' -or $activityEditDecision -ne 'DENY') {
+                    $pluginEditDecision -ne 'ALLOW' -or $activityEditDecision -ne 'DENY') {
                     $failures.Add('effective_permission_rules_mismatch (' + $permissionEvidence + ')')
                 }
             } catch {
@@ -366,18 +378,14 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                 $shellWildcardDeny = @($permissions | Where-Object {
                     $_.action -eq 'shell' -and $_.resource -eq '*' -and $_.effect -eq 'deny'
                 }).Count
-                $rootProbeAllow = @($permissions | Where-Object {
-                    $_.action -eq 'shell' -and $_.resource -eq 'git rev-parse --show-toplevel' -and $_.effect -eq 'allow'
+                $shellAllowRules = @($permissions | Where-Object {
+                    $_.action -eq 'shell' -and $_.effect -eq 'allow'
                 }).Count
-                $otherShellAllows = @($permissions | Where-Object {
-                    $_.action -eq 'shell' -and $_.effect -eq 'allow' -and $_.resource -ne 'git rev-parse --show-toplevel'
-                }).Count
-                $commandDecisionEvidence.Add("kael:edit_*_deny=$editWildcardDeny;shell_*_deny=$shellWildcardDeny;root_probe_allow=$rootProbeAllow;other_shell_allows=$otherShellAllows")
-                if ($editWildcardDeny -lt 1 -or $shellWildcardDeny -lt 1 -or $rootProbeAllow -lt 1 -or
-                    $otherShellAllows -ne 0) {
+                $commandDecisionEvidence.Add("kael:edit_*_deny=$editWildcardDeny;shell_*_deny=$shellWildcardDeny;shell_allow_rules=$shellAllowRules/0")
+                if ($editWildcardDeny -lt 1 -or $shellWildcardDeny -lt 1 -or $shellAllowRules -ne 0) {
                     $failures.Add('kael_least_privilege_metadata_mismatch')
                 }
-                foreach ($command in @('git status --short','git branch --show-current','git diff --check','python scripts/check_docs.py')) {
+                foreach ($command in @('git rev-parse --show-toplevel','git status --short','git branch --show-current','git diff --check','python scripts/check_docs.py')) {
                     $decision = Native-Decision $permissions 'shell' $command
                     $commandDecisionEvidence.Add("kael:shell:$command=$decision")
                     if ($decision -ne 'DENY') {
@@ -430,7 +438,7 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                     $failures.Add("kael_serena_effective_decision_mismatch=denied:$serenaDeniedCount/$($serenaNavigationActions.Count);source_deny:$($sourceSerenaDenyRules.Count);loaded_direct_deny:$($serenaDenyIndices.Count);base_allow_before_deny:$([int]$serenaBaselineBeforeDeny);deny_rules:$($serenaDenyRules.Count);allow_ask_rules:$($serenaOverrideRules.Count);non_deny:$($serenaDecisionFailures -join ',')")
                 }
 
-                $expectedSpecialists = @('veyra','orin','kovan','nox','vera','thales','atlas','argus','talos','helios')
+                $expectedSpecialists = @('veyra','kovan','nox','vera','talos','helios','thales')
                 $subagentDenyIndices = @(Get-ExactRuleIndices $permissions 'subagent' '*' 'deny')
                 $subagentBaselineBeforeDeny = $baselineAllowIndex -ge 0 -and
                     $subagentDenyIndices.Count -gt 0 -and $baselineAllowIndex -lt $subagentDenyIndices[-1]
@@ -452,12 +460,19 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                     $decision = Native-Decision $permissions 'subagent' $specialist
                     if ($decision -ne 'ALLOW') { $specialistDecisionFailures.Add("${specialist}=$decision") }
                 }
+                $nonChildRoleIds = @('atlas') + $retiredOlympusAgentIds
+                $nonChildRoleDecisions = @($nonChildRoleIds | ForEach-Object {
+                    [pscustomobject]@{ id=$_; decision=(Native-Decision $permissions 'subagent' $_) }
+                })
+                $nonChildRoleFailures = @($nonChildRoleDecisions | Where-Object { $_.decision -ne 'DENY' })
+                $nonChildRoleEvidence = ($nonChildRoleDecisions | ForEach-Object { "$($_.id):$($_.decision)" }) -join ','
                 $unlistedSpecialistDecision = Native-Decision $permissions 'subagent' '__authority_unlisted_specialist__'
-                $commandDecisionEvidence.Add("kael:subagent_allow_rules=$($specialistAllowRules.Count)/$($expectedSpecialists.Count);named_allow=$($expectedSpecialists.Count - $specialistDecisionFailures.Count)/$($expectedSpecialists.Count);expanded=$($expandedSpecialistRules.Count);duplicates=$duplicateSpecialists;base_allow_before_deny=$([int]$subagentBaselineBeforeDeny);unlisted=$unlistedSpecialistDecision")
+                $commandDecisionEvidence.Add("kael:subagent_allow_rules=$($specialistAllowRules.Count)/$($expectedSpecialists.Count);named_allow=$($expectedSpecialists.Count - $specialistDecisionFailures.Count)/$($expectedSpecialists.Count);expanded=$($expandedSpecialistRules.Count);duplicates=$duplicateSpecialists;base_allow_before_deny=$([int]$subagentBaselineBeforeDeny);unlisted=$unlistedSpecialistDecision;atlas_and_retired=$nonChildRoleEvidence")
                 if ($specialistAllowRules.Count -ne $expectedSpecialists.Count -or
                     $expandedSpecialistRules.Count -ne 0 -or $duplicateSpecialists -ne 0 -or
-                    $specialistDecisionFailures.Count -ne 0 -or $unlistedSpecialistDecision -ne 'DENY') {
-                    $failures.Add("kael_subagent_allowlist_mismatch=rules:$($specialistAllowRules.Count)/$($expectedSpecialists.Count);expanded:$($expandedSpecialistRules.Count);duplicates:$duplicateSpecialists;base_allow_before_deny:$([int]$subagentBaselineBeforeDeny);unlisted:$unlistedSpecialistDecision;non_allow:$($specialistDecisionFailures -join ',')")
+                    $specialistDecisionFailures.Count -ne 0 -or $unlistedSpecialistDecision -ne 'DENY' -or
+                    $nonChildRoleFailures.Count -ne 0) {
+                    $failures.Add("kael_subagent_allowlist_mismatch=rules:$($specialistAllowRules.Count)/$($expectedSpecialists.Count);expanded:$($expandedSpecialistRules.Count);duplicates:$duplicateSpecialists;base_allow_before_deny:$([int]$subagentBaselineBeforeDeny);unlisted:$unlistedSpecialistDecision;non_child:$($nonChildRoleFailures.id -join ',');non_allow:$($specialistDecisionFailures -join ',')")
                 }
 
                 $sourceExternalRules = @($kaelSourceRules | Where-Object {
@@ -509,7 +524,7 @@ function Inspect-EffectiveRules([object]$runtimeExit, [string]$runtimeJson,
                     $failures.Add("kael_external_directory_mismatch=decision:$externalDecision;source_agent_rules:$($sourceExternalRules.Count);inherited_rules:$($expectedInheritedExternalRules.Count);loaded_category_rules:$($loadedExternalRules.Count);missing:$($missingExternalRules -join ',');unexpected:$($unexpectedExternalRules -join ',');category_allow:$($loadedExternalAllows.Count);base_allow_before_ask:$([int]$externalBaselineBeforeAsk)")
                 }
             }
-            $expectedControl = if ($roleName -eq 'kael') { 'DENY' } else { 'ASK' }
+            $expectedControl = if ($roleName -eq 'kael') { 'DENY' } else { 'ALLOW' }
             $controls = @(
                 '.opencode/commands/project-owned.md',
                 '.opencode/commands/speckit.plan.md',
@@ -1249,7 +1264,7 @@ try {
     $docs = Text 'docs/DEVELOPMENT.md'
     $configText = (Text 'opencode.jsonc') -replace '(?m)^\s*//.*(?:\r?\n|$)', ''
     $config = $configText | ConvertFrom-Json -Depth 100
-    $nativeRules = Read-NativeRules $kovanSourceMetadata @($config.permissions)
+    $nativeRules = Read-NativeRules $kovan @($config.permissions)
     $kaelNativeRules = Read-NativeRules $kaelSourceMetadata @($config.permissions)
     $kaelSourceRules = Read-NativeRules $kaelSourceMetadata @()
     $minimalGlobalText = (Text 'olympus/harnesses/opencode/global-permissions.jsonc') -replace '(?m)^\s*//.*(?:\r?\n|$)', ''
@@ -1258,7 +1273,7 @@ try {
     $harnessDocs = Text 'docs/HARNESSES.md'
     $rootPath = 'C:\fixture\project'
     $operation = 'WRITE_SCOPE:create-or-update'
-    $grant = New-Grant 'kovan' $operation '.opencode/plugins/project-owned/**' $rootPath 'NATIVE_ASK'
+    $grant = New-Grant 'kovan' $operation 'opencode.jsonc' $rootPath 'NATIVE_ASK'
 
     Check 'AUTH0_NATIVE_DEFAULTS_ASK_NOT_DENY' (@($config.permissions | Where-Object {
         $_.action -eq 'edit' -and $_.resource -eq '*' -and $_.effect -eq 'ask'
@@ -1363,18 +1378,23 @@ try {
         $normalizedAlternatePolicy -match 'correctly assigns the exact operation.*?actual pending native ASK event.*?not `NEED_AUTHORITY`' -and
         $normalizedAlternatePolicy -match 'does not widen, renew, or transfer a task scope or grant')
 
-    $authorityWorkers = @('veyra','orin','nox','vera','atlas','argus','helios','talos','thales')
+    $authorityWorkers = @('veyra','nox','vera','kovan','helios','talos','thales')
+    $authorityHandoffWorkers = @('veyra','nox','vera','helios','talos','thales')
     $workerPromptSources = @{}
     foreach ($roleName in $authorityWorkers) {
         $workerPromptSources[$roleName] = Text ('olympus/harnesses/opencode/agent-prompts/' + $roleName + '.md')
     }
+    $atlasPromptSource = Text 'olympus/harnesses/opencode/agent-prompts/atlas.md'
+    $atlasRoleSource = Text 'olympus/roles/atlas.md'
+    $atlasMetadataSource = Text 'olympus/harnesses/opencode/agent-metadata/atlas.md'
+    $atlasNativeRules = Read-NativeRules $atlasMetadataSource @()
     $alternateResultClause = 'For an otherwise role-eligible operation/path outside this task''s exact assigned scope, use the distinct `STATUS: NEED_AUTHORITY` alternate result defined by the `Scope and Authority handoff` section only while the operation remains unattempted; it takes precedence over this normal/specialized result contract for this case only and is not a normal completion/failure status. It grants no authority or retry, does not replace native ASK/DENY/rejection, erase already-applied authorized effects, or apply to role, ownership, or user-prohibition blockers.'
-    $workerClauseFailures = @($authorityWorkers | Where-Object {
+    $workerClauseFailures = @($authorityHandoffWorkers | Where-Object {
         ($workerPromptSources[$_] -replace '\s+', ' ') -notmatch [regex]::Escape($alternateResultClause)
     })
     $handoffFields = @('STATUS: NEED_AUTHORITY','OPERATION','MINIMUM_SCOPE','REPOSITORY_ROOT','REASON','TASK_BLOCKED')
     $workerHandoffsValid = $true
-    foreach ($roleName in $authorityWorkers) {
+    foreach ($roleName in $authorityHandoffWorkers) {
         $handoffSplit = $workerPromptSources[$roleName] -split '## Scope and Authority handoff',2
         $handoffBody = if ($handoffSplit.Count -gt 1) { ($handoffSplit[1] -split '\r?\n## ',2)[0] } else { '' }
         foreach ($field in $handoffFields) {
@@ -1387,11 +1407,8 @@ try {
         Where-Object { $kovanPromptSource -notmatch [regex]::Escape($_) } | Measure-Object | Select-Object -ExpandProperty Count
     $specializedStatusContracts = @(
         @('veyra','STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED'),
-        @('orin','STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED'),
         @('nox','STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED'),
         @('vera','STATUS: SUCCESS | PARTIAL | BLOCKED | FAILED'),
-        @('atlas','STATUS: PLAN','STATUS: EVIDENCE_REQUEST'),
-        @('argus','STATUS: BUG_DIAGNOSIS','STATUS: EVIDENCE_REQUEST','STATUS: NOT_FUNCTIONAL_BUG'),
         @('helios','STATUS: OPTIMIZATION_PROPOSAL','STATUS: DO_NOT_OPTIMIZE','STATUS: EVIDENCE_REQUEST'),
         @('talos','STATUS: SECURITY_DIAGNOSIS','STATUS: EVIDENCE_REQUEST','STATUS: NOT_SECURITY_BUG'),
         @('thales','STATUS: EVIDENCE_REQUEST','STATUS: ADVICE | INCONCLUSIVE | BLOCKED')
@@ -1405,7 +1422,21 @@ try {
             }
         }
     }
+    $normalizedAtlasPromptSource = $atlasPromptSource -replace '\s+', ' '
+    $normalizedAtlasRoleSource = $atlasRoleSource -replace '\s+', ' '
+    $atlasPrimaryContractValid = $atlasMetadataSource -match '(?m)^mode:\s*primary\s*$' -and
+        (Native-Decision $atlasNativeRules 'edit' 'olympus/primary-write-probe') -eq 'DENY' -and
+        (Native-Decision $atlasNativeRules 'write' 'olympus/primary-write-probe') -eq 'DENY' -and
+        $normalizedAtlasPromptSource -match 'primary read-only technical analyst and planner, separate from Kael.*?Never ask the user, grant or infer authority, implement, mutate Git, execute tests, review a final candidate, or claim completion' -and
+        $normalizedAtlasPromptSource -match 'Every proposed execution handoff to Kael states relevant ownership evidence, required authority, exact candidate paths and required effects.*?proposed scopes for Kovan/Nox/Vera as applicable.*?Proposed scopes are not grants or approval and Atlas does not execute them' -and
+        $normalizedAtlasPromptSource -match 'Never invoke Kael, Atlas, Kovan, Nox, Vera, or any other agent; do not ask a child to write, test, measure, review, or perform another role.s work' -and
+        $normalizedAtlasPromptSource -match 'STATUS: PLAN_READY \| NEEDS_DECISION \| NEEDS_EVIDENCE \| BLOCKED' -and
+        $normalizedAtlasPromptSource -match 'SCOPED_HANDOFF_TO_KAEL: ownership, required authority and effects, predictable ASK/DENY, pending decisions, execution risks, exact candidate paths and proposed role/scope, acceptance, validation criteria, dependencies, and stop conditions' -and
+        $normalizedAtlasRoleSource -match 'PRIMARY TECHNICAL ANALYST AND PLANNER.*?bounded read-only.*?May delegate only read-only evidence or reasoning to Veyra, Helios, Talos, and Thales.*?Never implements, mutates Git, runs tests, reviews a final candidate' -and
+        ($kaelPromptSource -replace '\s+', ' ') -match 'Atlas is a separate read-only primary, not a Kael child or execution authority.*?it cannot route Kovan, Nox, Vera, or other writers.*?Kael never invokes Atlas as a child, gives Atlas permission to execute, or treats an Atlas plan as approval'
     Check 'AUTH2B_WORKER_RESULT_PRECEDENCE_AND_EXISTING_FORMATS' (
+        $authorityWorkers.Count -eq 7 -and
+        $authorityWorkers -notcontains 'atlas' -and
         $workerClauseFailures.Count -eq 0 -and
         $workerHandoffsValid -and
         $kovanAlternateFieldsValid -eq 0 -and
@@ -1413,7 +1444,8 @@ try {
         $kovanPromptSource -match 'STATUS: NEED_AUTHORITY\s+OPERATION: exact capability and effect required' -and
         $kovanPromptSource -match 'STATUS: SUCCESS \| PARTIAL \| BLOCKED \| FAILED' -and
         $kovanPromptSource -notmatch '(?m)^STATUS: SUCCESS \| PARTIAL \| BLOCKED \| FAILED \| NEED_AUTHORITY\r?$' -and
-        $specializedStatusContractsValid
+        $specializedStatusContractsValid -and
+        $atlasPrimaryContractValid
     )
 
     $normalizedKaelPromptSource = $kaelPromptSource -replace '\s+', ' '
@@ -1426,22 +1458,24 @@ try {
         $normalizedKaelPromptSource -match 'Do not ask when native ASK can obtain the exact required human consent'
     )
 
-    $assignedAskPath = '.opencode/plugins/project-owned/index.ts'
+    $assignedAskPath = 'opencode.jsonc'
     $assignedNativeRule = Native-Decision $nativeRules 'edit' $assignedAskPath
-    $approved = Decide 'kovan' $operation $assignedAskPath 'src/**' $rootPath $grant $true $true $false @() $assignedNativeRule
+    $approved = Decide 'kovan' $operation $assignedAskPath $assignedAskPath $rootPath $grant `
+        -nativeDecision $assignedNativeRule -explicitConfigEffect $true
     $assignedAskFlow = Synthetic-ToolFlow $approved.decision
     Check 'AUTH3_EXACT_SCOPE_NATIVE_ASK_GRANT' ($approved.decision -eq 'NATIVE_ASK' -and $approved.reason -eq 'EXACT_NATIVE_ASK_GRANT' -and
         $assignedNativeRule -eq 'ASK' -and $approved.decision -ne 'NEED_AUTHORITY' -and
         $assignedAskFlow.attempted -and $assignedAskFlow.pending -and -not $assignedAskFlow.executed -and
         $assignedAskFlow.question -eq 0 -and -not $assignedAskFlow.fallback -and -not $assignedAskFlow.retry -and
-        $grant.agent -eq 'kovan' -and $grant.scope -ceq '.opencode/plugins/project-owned/**' -and
+        $grant.agent -eq 'kovan' -and $grant.scope -ceq $assignedAskPath -and
         $grant.repository_root -ceq $rootPath -and $grant.permission_mode -ceq 'NATIVE_ASK' -and
         $grant.lifetime -ceq 'current_task' -and $grant.task_id -ceq 'task-7')
 
     # Effective rule ASK is not a host event when the sibling scope is unassigned.
-    $siblingPath = '.opencode/plugins/sibling/index.ts'
+    $siblingPath = '.opencode/opencode.jsonc'
     $siblingNativeRule = Native-Decision $nativeRules 'edit' $siblingPath
-    $sibling = Decide 'kovan' $operation $siblingPath 'src/**' $rootPath $grant $true $true $false @() $siblingNativeRule
+    $sibling = Decide 'kovan' $operation $siblingPath 'src/**' $rootPath $grant `
+        -nativeDecision $siblingNativeRule -explicitConfigEffect $true
     Check 'AUTH4_SIBLING_SCOPE_NEEDS_NEW_AUTHORITY' ($sibling.decision -eq 'NEED_AUTHORITY' -and
         $siblingNativeRule -eq 'ASK' -and $sibling.reason -eq 'SCOPE_NOT_DELEGATED' -and
         -not (Synthetic-ToolFlow $sibling.decision).attempted)
@@ -1460,32 +1494,42 @@ try {
         -not (Synthetic-ToolFlow $ownedByManifest.decision).attempted -and
         $kael -match '\.opencode/agents/\*\*' -and $kael -match 'Every manifest-declared\s+Olympus-managed resource is protected')
 
-    $pluginResource = '.opencode/plugins/project-owned/index.ts'
-    $pluginNative = Native-Decision $nativeRules 'edit' $pluginResource
-    $protectedAdjacent = Native-Decision $nativeRules 'edit' '.opencode/commands/project-owned.md'
-    $approvedWrite = Write-Decision $pluginNative 'APPROVE_ONCE'
-    $rejectedWrite = Write-Decision $pluginNative 'REJECT'
-    $pluginNotOwned = Decide 'kovan' $operation $pluginResource 'src/**' $rootPath $null $true $false
-    Check 'AUTH8_PROJECT_PLUGIN_NATIVE_ASK_AND_ONE_SHOT' ($pluginNative -eq 'ASK' -and
-        $protectedAdjacent -eq 'ASK' -and $approvedWrite -and -not $rejectedWrite -and
-        $pluginNotOwned.decision -eq 'DENY' -and $approved.decision -eq 'NATIVE_ASK' -and
-        $kovan -match '\.opencode/plugins/\*\*"\s+effect: ask' -and
-        $kovan -match '\.opencode/\*\*"\s+effect: ask')
-
-    $siblingPlugin = Native-Decision $nativeRules 'edit' '.opencode/plugins/sibling/index.ts'
-    Check 'AUTH8B_ONE_SHOT_APPROVAL_NOT_SIBLING' ($siblingPlugin -eq 'ASK' -and
-        -not (Write-Decision $siblingPlugin 'NONE') -and $approvedWrite)
+    foreach ($path in @('.opencode/skills/example/SKILL.md', '.opencode/plugins/example/index.ts',
+        '.opencode/agents/project-reviewer.md', '.opencode/commands/project-release.md')) {
+        $native = Native-Decision $nativeRules 'edit' $path
+        $allowed = Decide 'kovan' $operation $path $path $rootPath $null -nativeDecision $native
+        $unowned = Decide 'kovan' $operation $path $path $rootPath $null -projectOwned $false -nativeDecision $native
+        $outOfScope = Decide 'kovan' $operation $path 'src/**' $rootPath $null -nativeDecision $native
+        $manifestOwned = Decide 'kovan' $operation $path $path $rootPath $null -manifestPaths @($path) -nativeDecision $native
+        Check ('AUTH8_CONTEXTUAL_EXTENSION_' + $path.Split('/')[1].ToUpperInvariant()) (
+            $native -eq 'ALLOW' -and (Synthetic-ToolFlow $allowed.decision).executed -and
+            $unowned.reason -eq 'OWNERSHIP_UNPROVEN' -and $outOfScope.decision -eq 'NEED_AUTHORITY' -and
+            -not (Synthetic-ToolFlow $manifestOwned.decision).attempted -and $manifestOwned.reason -eq 'OLYMPUS_OWNED')
+    }
+    $configNoInference = Decide 'kovan' $operation $assignedAskPath $assignedAskPath $rootPath $null -nativeDecision $assignedNativeRule
+    $configManaged = Decide 'kovan' $operation $assignedAskPath $assignedAskPath $rootPath $grant `
+        -manifestPaths @($assignedAskPath) -nativeDecision $assignedNativeRule -explicitConfigEffect $true
+    $configGenerated = Decide 'kovan' $operation $assignedAskPath $assignedAskPath $rootPath $grant `
+        -nativeDecision $assignedNativeRule -canonicalSourceTarget $true -explicitConfigEffect $true
+    $approvedWrite = Write-Decision $assignedNativeRule 'APPROVE_ONCE'
+    Check 'AUTH8_PROJECT_CONFIG_EXPLICIT_NATIVE_ASK_AND_ONE_SHOT' (
+        $configNoInference.reason -eq 'EXPLICIT_CONFIG_EFFECT_REQUIRED' -and
+        -not (Synthetic-ToolFlow $configNoInference.decision).attempted -and $approvedWrite -and
+        -not (Write-Decision $assignedNativeRule 'REJECT') -and -not (Write-Decision $siblingNativeRule 'NONE') -and
+        $configManaged.reason -eq 'OLYMPUS_OWNED' -and $configGenerated.reason -eq 'OLYMPUS_OWNED' -and
+        -not (Synthetic-ToolFlow $configManaged.decision).attempted -and -not (Synthetic-ToolFlow $configGenerated.decision).attempted)
 
     $activityPath = '.opencode/plugins/olympus-activity/activity.ts'
     $activity = Decide 'kovan' $operation $activityPath 'src/**' $rootPath $grant
     Check 'AUTH9_ACTIVITY_PLUGIN_DENIED' ($activity.decision -eq 'DENY' -and $activity.reason -eq 'OLYMPUS_OWNED' -and
         (Native-Decision $nativeRules 'edit' $activityPath) -eq 'DENY' -and
-        $kael -match '\.opencode/plugins/olympus-activity/\*\*')
+        $kovan -match '\.opencode/plugins/olympus-activity/\*\*"\s+effect: deny')
 
     foreach ($path in @('.opencode/agents/kovan.md',
-        '.opencode/orchestrator-install.json','.opencode/opencode.json','.opencode/opencode.jsonc',
+        '.opencode/orchestrator-install.json','.opencode/olympus-config.json',
         '.codex/agents/kovan.toml','.codex/config.toml','CODEX.md',
-        'opencode.json','opencode.jsonc')) {
+        'auth.json','/fixture/.local/share/opencode/auth.json',
+        'C:/Users/fixture/.config/opencode/opencode.jsonc')) {
         Check ('AUTH9_NATIVE_DENY_' + ($path -replace '[^A-Za-z0-9]','_')) ((Native-Decision $nativeRules 'edit' $path) -eq 'DENY')
     }
 
@@ -1505,8 +1549,8 @@ try {
         (Native-Decision $kaelNativeRules 'edit' $canonicalPath) -eq 'DENY' -and
         $kael -match 'Canonical Olympus source is writable only when target repository'
     )
-    $kaelRootProbe = Native-Decision $kaelNativeRules 'shell' 'git rev-parse --show-toplevel'
     $blockedKaelShell = @(
+        'git rev-parse --show-toplevel',
         'git status --short','git branch --show-current','git diff --check',
         'git diff --stat','python scripts/check_docs.py'
     ) | Where-Object {
@@ -1518,8 +1562,8 @@ try {
     $kaelSerenaWildcardDeny = @($kaelSourceRules | Where-Object {
         $_.action -ceq 'serena_*' -and $_.resource -ceq '*' -and $_.effect -eq 'deny'
     }).Count
-    Check 'AUTH9E_KAEL_NATIVE_ROOT_PROBE_ONLY' (
-        $kaelRootProbe -eq 'ALLOW' -and @($blockedKaelShell).Count -eq 0
+    Check 'AUTH9E_KAEL_NATIVE_SHELL_DENIED' (
+        @($blockedKaelShell).Count -eq 0
     )
     Check 'AUTH9F_KAEL_NATIVE_EDIT_DENIED' (
         $kaelEditWildcardDeny -eq 1 -and
@@ -1543,14 +1587,10 @@ try {
         }).Count -gt 0
     }).Count -eq 0
     Check 'AUTH9_CORE_AND_GENERATOR_PROTECTED_FOR_READ_ONLY_SPECIALISTS' ($readOnlyAgents.Count -gt 0 -and $coreProtectionValid)
-    # Match scripts/bootstrap.ps1:Get-GeneratedHarnessOutputs: agent files are
-    # inventoried only in their dedicated directories, while other generated
-    # destinations are explicit. Do not recurse whole adapter trees, where
-    # unrelated project files such as SpecKit commands may also reside.
-    $managedPaths = @('opencode.jsonc', '.opencode/orchestrator-install.json')
-    $managedPaths += @(Get-ChildItem -LiteralPath (Join-Path $root '.opencode/agents') -Filter '*.md' -File -Recurse -Force | ForEach-Object {
-        $_.FullName.Substring(([IO.Path]::GetFullPath($root).TrimEnd([char[]]@('\','/')).Length + 1)).Replace('\','/')
-    })
+    # The root config shares a project-owned name (tested above). Everything
+    # with a reserved built-in path has native DENY. Custom peers are controls.
+    $managedPaths = @('.opencode/orchestrator-install.json', '.opencode/olympus-config.json')
+    $managedPaths += @($expectedOlympusAgentIds | ForEach-Object { ".opencode/agents/$_.md" })
     $managedPaths += @('.opencode/plugins/olympus-activity/activity.ts',
         '.opencode/plugins/olympus-activity/tui.tsx', '.opencode/scripts/worktree-setup.ps1')
     $managedPaths += $exactManagedCommandPaths
@@ -1563,12 +1603,12 @@ try {
     $managedPathsWithoutDeny = @($managedPaths | Where-Object {
         (Native-Decision $nativeRules 'edit' $_) -ne 'DENY'
     })
-    Check 'AUTH9B_EVERY_INSTALLER_MANAGED_PATH_HAS_NATIVE_DENY' ($managedPathsWithoutDeny.Count -eq 0)
+    Check 'AUTH9B_EVERY_RESERVED_MANAGED_PATH_HAS_NATIVE_DENY' ($managedPathsWithoutDeny.Count -eq 0)
     $specKitProjectCommand = '.opencode/commands/speckit.plan.md'
     $specKitPermission = Native-Decision $nativeRules 'edit' $specKitProjectCommand
-    Check 'AUTH9B_FOREIGN_SPECKIT_EXCLUDED_AND_NATIVE_ASK' (
+    Check 'AUTH9B_FOREIGN_SPECKIT_EXCLUDED_AND_SCOPED_ALLOW' (
         $specKitProjectCommand -notin $managedPaths -and -not (Is-OlympusOwned $specKitProjectCommand) -and
-        $specKitPermission -eq 'ASK' -and (Classify-NewScope $specKitPermission $true) -eq 'NATIVE_ASK'
+        $specKitPermission -eq 'ALLOW' -and (Classify-NewScope $specKitPermission $true) -eq 'ALLOW'
     )
     $commandRuleFailures = [Collections.Generic.List[string]]::new()
     foreach ($path in $exactManagedCommandPaths) {
@@ -1590,7 +1630,7 @@ try {
     $unrelatedCommandControlMismatch = @($unrelatedCommandControls | Where-Object {
         (Is-OlympusOwned $_) -or
         (Native-Decision $kaelNativeRules 'edit' $_) -ne 'DENY' -or
-        (Native-Decision $nativeRules 'edit' $_) -ne 'ASK'
+        (Native-Decision $nativeRules 'edit' $_) -ne 'ALLOW'
     })
     Check 'AUTH9D_MANAGED_COMMANDS_EXACT_DENY_AND_UNRELATED_CONTROLS' (
         $commandRuleFailures.Count -eq 0 -and
@@ -1598,10 +1638,10 @@ try {
         $unrelatedCommandControlMismatch.Count -eq 0
     )
     $missingAgentDenyRule = @($nativeRules | Where-Object {
-        $_.action -eq 'edit' -and $_.resource -eq '.opencode/agents/**' -and $_.effect -eq 'deny'
+        $_.action -eq 'edit' -and $_.resource -eq '.opencode/agents/kovan.md' -and $_.effect -eq 'deny'
     })
     $nativeRulesWithoutAgentDeny = @($nativeRules | Where-Object {
-        -not ($_.action -eq 'edit' -and $_.resource -eq '.opencode/agents/**' -and $_.effect -eq 'deny')
+        -not ($_.action -eq 'edit' -and $_.resource -eq '.opencode/agents/kovan.md' -and $_.effect -eq 'deny')
     })
     $managedPathsWithoutAgentDeny = @($managedPaths | Where-Object {
         (Native-Decision $nativeRulesWithoutAgentDeny 'edit' $_) -ne 'DENY'
@@ -1633,7 +1673,7 @@ try {
     }
     $globalWithDeny = @($config.permissions) + @($explicitExternalDeny)
     $rolesThatOverrideDeny = [Collections.Generic.List[string]]::new()
-    foreach ($role in @('kael', 'kovan', 'nox', 'orin', 'vera', 'veyra', 'thales')) {
+    foreach ($role in $expectedOlympusAgentIds) {
         $roleRules = Read-NativeRules (Text ('.opencode/agents/' + $role + '.md')) $globalWithDeny
         if ((Native-Decision $roleRules 'external_directory' $prohibitedPath) -ne 'DENY') {
             $rolesThatOverrideDeny.Add($role)
@@ -1688,21 +1728,53 @@ try {
         $kael -notmatch 'Master verifies every requested target is within the active repository'
     )
 
-    Check 'AUTH10B_EXPLICIT_PROHIBITION_OVERRIDES_NATIVE_ASK' ((Native-Decision $nativeRules 'edit' $pluginResource $true) -eq 'DENY' -and
+    Check 'AUTH10B_EXPLICIT_PROHIBITION_OVERRIDES_NATIVE_ASK' ((Native-Decision $nativeRules 'edit' $assignedAskPath $true) -eq 'DENY' -and
         -not (Write-Decision 'DENY' 'APPROVE_ONCE') -and $kael -match '(?s)Explicit user prohibitions.*?override every other outcome')
 
-    $workerPaths = @('.opencode/agents/argus.md','.opencode/agents/atlas.md','.opencode/agents/helios.md',
-        '.opencode/agents/kovan.md','.opencode/agents/nox.md','.opencode/agents/orin.md',
-        '.opencode/agents/talos.md','.opencode/agents/thales.md','.opencode/agents/vera.md','.opencode/agents/veyra.md')
-    $workerTexts = @($workerPaths | ForEach-Object { Text $_ })
-    $directAskBlocked = @($workerPaths | Where-Object { $file = Text $_; $file -notmatch '(?s)action: question\s+resource: "?\*"?\s+effect: deny' }).Count -eq 0 -and
-        @($workerTexts | Where-Object { $_ -notmatch 'Never ask the user' }).Count -eq 0
+    $specialists = @('veyra','kovan','nox','vera','helios','talos','thales')
+    $atlas = Text '.opencode/agents/atlas.md'
+    $workerTexts = @($specialists | ForEach-Object { Text ".opencode/agents/$_.md" })
+    $directAskBlocked = @($workerTexts | Where-Object {
+        (Native-Decision (Read-NativeRules $_ $config.permissions) 'question' '*') -ne 'DENY' -or
+        $_ -notmatch 'Never ask the user'
+    }).Count -eq 0
     Check 'AUTH10_CHILD_DIRECT_QUESTION_DENIED' $directAskBlocked
 
-    $childSelfRoutes = @($workerPaths | Where-Object { $file = Text $_; $file -notmatch '(?s)action: subagent\s+resource: "?\*"?\s+effect: deny' }).Count
+    $agentsToProbe = @($expectedOlympusAgentIds) + @($retiredOlympusAgentIds) + @('build','general','other-writer')
+    $childSelfRoutes = @(foreach ($worker in $workerTexts) {
+        $rules = Read-NativeRules $worker $config.permissions
+        if ($worker -notmatch '(?m)^mode: subagent\r?$' -or
+            @(Get-ExactRuleIndices $rules 'subagent' '*' 'deny').Count -eq 0) { 'missing child deny' }
+        foreach ($id in $agentsToProbe) {
+            if ((Native-Decision $rules 'subagent' $id) -ne 'DENY') { $id }
+        }
+    }).Count
     Check 'AUTH11_CHILD_SELF_ESCALATION_DENIED' ($childSelfRoutes -eq 0 -and
         @($workerTexts | Where-Object { $_ -notmatch 'never (?:ask the user, grant|grant)\s+or infer your own authority' }).Count -eq 0 -and
-        $kael -match 'Only veyra, orin, kovan, nox, vera, thales, atlas, argus, talos, and helios are valid child role IDs')
+        $kael -match 'Kael''s seven child IDs are veyra, kovan, nox, vera, helios, talos, and thales\. Atlas is a separate primary, not a Kael child')
+
+    foreach ($primary in @(
+        @{ Id='KAEL'; Text=$kael; Children=$specialists },
+        @{ Id='ATLAS'; Text=$atlas; Children=@('veyra','helios','talos','thales') }
+    )) {
+        $rules = Read-NativeRules $primary.Text $config.permissions
+        $ownRoutes = @(Read-NativeRules $primary.Text @() | Where-Object { Matches-Glob $_.action 'subagent' })
+        $names = @($ownRoutes | Where-Object effect -eq 'allow' | ForEach-Object resource)
+        $decisions = @(foreach ($id in $agentsToProbe) {
+            $expected = if ($id -cin $primary.Children) { 'ALLOW' } else { 'DENY' }
+            if ((Native-Decision $rules 'subagent' $id) -cne $expected) { $id }
+        })
+        Check ("AUTH11_{0}_EXACT_PRIMARY_ROUTES" -f $primary.Id) (
+            $primary.Text -match '(?m)^mode: primary\r?$' -and
+            $ownRoutes.Count -eq (1 + $primary.Children.Count) -and
+            $ownRoutes[0].resource -ceq '*' -and $ownRoutes[0].effect -ceq 'deny' -and
+            $names.Count -eq $primary.Children.Count -and
+            @(Compare-Object $primary.Children $names -CaseSensitive).Count -eq 0 -and
+            $decisions.Count -eq 0)
+    }
+    Check 'AUTH11_RETIRED_ROLES_ABSENT' (@($retiredOlympusAgentIds | Where-Object {
+        Test-Path -LiteralPath (Join-Path $root ".opencode/agents/$_.md")
+    }).Count -eq 0)
 
     $needs = @(
         [pscustomobject]@{ root=$rootPath; operation='WRITE_SCOPE'; scope='src/one/**' },
@@ -1710,7 +1782,7 @@ try {
     )
     $compatible = @($needs | Where-Object { $_.root -ceq $rootPath -and $_.operation -ceq 'WRITE_SCOPE' }).Count -eq $needs.Count
     $questionCount = if ($compatible) { 1 } else { $needs.Count }
-    $consolidationPolicy = $kael -match '(?s)If multiple needs share the same root and operation.*?consolidate them into one precise user QUESTION'
+    $consolidationPolicy = $kael -match 'Group distinct pending material decisions in one request, with\s+separate minimum scopes and consequences per item'
     $documentedPolicy = $docs -match '(?s)If no applicable native ASK exists.*?compatible needs may be consolidated into\s+one precise Kael QUESTION'
     Check 'AUTH12_COMPATIBLE_NEEDS_CONSOLIDATED' ($questionCount -eq 1 -and $consolidationPolicy -and $documentedPolicy)
 
@@ -1735,7 +1807,7 @@ try {
         $kael -match 'do not send a duplicate Kael\s+QUESTION')
 
     Check 'AUTH19_NATIVE_ASK_EXACT_SCOPE_AND_TASK_LIFETIME' ($grant.agent -ceq 'kovan' -and
-        $grant.operation -ceq $operation -and $grant.scope -ceq '.opencode/plugins/project-owned/**' -and
+        $grant.operation -ceq $operation -and $grant.scope -ceq $assignedAskPath -and
         $grant.repository_root -ceq $rootPath -and $grant.permission_mode -ceq 'NATIVE_ASK' -and
         $grant.lifetime -ceq 'current_task' -and $grant.task_id -ceq 'task-7' -and
         $kael -match 'same exact scope in WRITE_SCOPE' -and $kael -match 'current task identity')
@@ -1757,10 +1829,11 @@ try {
         $kovan -match '(?s)For otherwise legitimate project\s+work outside the assigned scope.*?STATUS: NEED_AUTHORITY' -and
         $kovan -match 'MINIMUM_SCOPE:' -and $kovan -match 'REPOSITORY_ROOT:')
 
-    $newMinimumScope = '.opencode/plugins/authority-smoke/**'
-    $newMode = Classify-NewScope (Native-Decision $nativeRules 'edit' '.opencode/plugins/authority-smoke/index.ts')
+    $newMinimumScope = '.opencode/opencode.json'
+    $newMode = Classify-NewScope (Native-Decision $nativeRules 'edit' $newMinimumScope)
     $redelegated = New-Grant 'kovan' $operation $newMinimumScope $rootPath $newMode
-    $redelegatedDecision = Decide 'kovan' $operation '.opencode/plugins/authority-smoke/index.ts' 'src/**' $rootPath $redelegated $true $true $false @() 'ASK'
+    $redelegatedDecision = Decide 'kovan' $operation $newMinimumScope $newMinimumScope $rootPath $redelegated `
+        -nativeDecision 'ASK' -explicitConfigEffect $true
     Check 'AUTH23_KAEL_REDELEGATES_NATIVE_ASK_NO_DUPLICATE_CONSENT' ($newMode -eq 'NATIVE_ASK' -and
         $redelegatedDecision.decision -eq 'NATIVE_ASK' -and $redelegated.scope -ceq $newMinimumScope -and
         $redelegated.permission_mode -ceq 'NATIVE_ASK' -and $redelegated.lifetime -ceq 'current_task' -and
@@ -1781,27 +1854,23 @@ try {
         [pscustomobject]@{ action='edit'; resource=$_; effect='deny' }
     })
     $runtimeAgentFixture = @(
-        [pscustomobject]@{
-            id='kael'
-            permissions=@(
-                [pscustomobject]@{ action='*'; resource='*'; effect='allow' }
-                [pscustomobject]@{ action='automation_*'; resource='*'; effect='deny' }
-                [pscustomobject]@{ action='browser'; resource='*'; effect='deny' }
-                [pscustomobject]@{ action='shell'; resource='*'; effect='deny' }
-                [pscustomobject]@{ action='shell'; resource='git rev-parse --show-toplevel'; effect='allow' }
-                [pscustomobject]@{ action='serena_*'; resource='*'; effect='deny' }
+                [pscustomobject]@{
+                    id='kael'
+                    permissions=@(
+                        [pscustomobject]@{ action='*'; resource='*'; effect='allow' }
+                        [pscustomobject]@{ action='automation_*'; resource='*'; effect='deny' }
+                        [pscustomobject]@{ action='browser'; resource='*'; effect='deny' }
+                        [pscustomobject]@{ action='shell'; resource='*'; effect='deny' }
+                        [pscustomobject]@{ action='serena_*'; resource='*'; effect='deny' }
                 [pscustomobject]@{ action='edit'; resource='*'; effect='deny' }
                 [pscustomobject]@{ action='subagent'; resource='*'; effect='deny' }
                 [pscustomobject]@{ action='subagent'; resource='veyra'; effect='allow' }
-                [pscustomobject]@{ action='subagent'; resource='orin'; effect='allow' }
                 [pscustomobject]@{ action='subagent'; resource='kovan'; effect='allow' }
                 [pscustomobject]@{ action='subagent'; resource='nox'; effect='allow' }
                 [pscustomobject]@{ action='subagent'; resource='vera'; effect='allow' }
-                [pscustomobject]@{ action='subagent'; resource='thales'; effect='allow' }
-                [pscustomobject]@{ action='subagent'; resource='atlas'; effect='allow' }
-                [pscustomobject]@{ action='subagent'; resource='argus'; effect='allow' }
                 [pscustomobject]@{ action='subagent'; resource='talos'; effect='allow' }
                 [pscustomobject]@{ action='subagent'; resource='helios'; effect='allow' }
+                [pscustomobject]@{ action='subagent'; resource='thales'; effect='allow' }
                 [pscustomobject]@{ action='external_directory'; resource='*'; effect='ask' }
             ) + $runtimeCommandDenies
         }
@@ -1813,7 +1882,8 @@ try {
                 [pscustomobject]@{ action='browser'; resource='*'; effect='deny' }
                 [pscustomobject]@{ action='edit'; resource='*'; effect='allow' }
                 [pscustomobject]@{ action='edit'; resource='.opencode/**'; effect='ask' }
-                [pscustomobject]@{ action='edit'; resource='.opencode/plugins/**'; effect='ask' }
+                [pscustomobject]@{ action='edit'; resource='.opencode/plugins/**'; effect='allow' }
+                [pscustomobject]@{ action='edit'; resource='.opencode/commands/**'; effect='allow' }
                 [pscustomobject]@{ action='edit'; resource='.opencode/plugins/olympus-activity/**'; effect='deny' }
             ) + $runtimeCommandDenies
         }
@@ -1844,18 +1914,26 @@ try {
     $duplicateNoxProbe = Inspect-EffectiveRules 0 (ConvertTo-Json -InputObject $duplicateNoxFixture -Compress -Depth 10)
     Check 'AUTH14_DUPLICATE_EXPECTED_OLYMPUS_ID_REJECTED' (-not $duplicateNoxProbe.passed -and
         $duplicateNoxProbe.evidence -match 'roster_nox=duplicated \(matches=2\)')
+    $retiredRuntimeFixture = @($runtimeAgentFixture) + @(
+        [pscustomobject]@{ id='argus'; permissions=@() }
+        [pscustomobject]@{ id='orin'; permissions=@() }
+    )
+    $retiredRuntimeProbe = Inspect-EffectiveRules 0 (ConvertTo-Json -InputObject $retiredRuntimeFixture -Compress -Depth 10)
+    Check 'AUTH14_RETIRED_OLYMPUS_IDS_REJECTED' (-not $retiredRuntimeProbe.passed -and
+        $retiredRuntimeProbe.evidence -match 'retired_agent_argus=present' -and
+        $retiredRuntimeProbe.evidence -match 'retired_agent_orin=present')
     $singleKovanProbe = Inspect-EffectiveRules 0 $validRuntimeFixture
     Check 'AUTH14_SINGLE_KOVAN_EVALUATES_EFFECTIVE_RULES' ($singleKovanProbe.passed -and
-        $singleKovanProbe.evidence -match 'olympus_roster=kael=1,veyra=1,orin=1,kovan=1,nox=1,vera=1,thales=1,atlas=1,argus=1,talos=1,helios=1' -and
-        $singleKovanProbe.evidence -match 'tool_denies=66/66;tool_checks=66;additional_agent_ids=1' -and
+        $singleKovanProbe.evidence -match 'olympus_roster=kael=1,veyra=1,atlas=1,kovan=1,nox=1,vera=1,talos=1,thales=1,helios=1' -and
+        $singleKovanProbe.evidence -match 'tool_denies=54/54;tool_checks=54;additional_agent_ids=1' -and
         $singleKovanProbe.evidence -match 'kael_matches=1' -and $singleKovanProbe.evidence -match 'kovan_matches=1' -and
-        $singleKovanProbe.evidence -match 'task_edit=ALLOW/2 rules, project_plugin_edit=ASK, activity_edit=DENY' -and
-        $singleKovanProbe.evidence -match 'edit_plugins_ask=1/1' -and
+        $singleKovanProbe.evidence -match 'task_edit=ALLOW/2 rules, project_plugin_edit=ALLOW, activity_edit=DENY' -and
+        $singleKovanProbe.evidence -match 'edit_plugins_allow=1/1' -and
         $singleKovanProbe.evidence -match 'serena_nav_denied=6/6;source_deny=1;loaded_direct_deny=1;base_allow_before_deny=1;deny_rules=1;allow_ask_rules=0' -and
-        $singleKovanProbe.evidence -match 'subagent_allow_rules=10/10;named_allow=10/10;expanded=0;duplicates=0;base_allow_before_deny=1;unlisted=DENY' -and
+        $singleKovanProbe.evidence -match 'subagent_allow_rules=7/7;named_allow=7/7;expanded=0;duplicates=0;base_allow_before_deny=1;unlisted=DENY;atlas_and_retired=atlas:DENY,orin:DENY,argus:DENY' -and
         $singleKovanProbe.evidence -match 'external_directory=ASK;source_agent_rules=0;inherited_rules=1;loaded_category_rules=1;missing=0;unexpected=0;category_allow=0;base_allow_before_ask=1;read_question=NOT_ASSESSED' -and
         $singleKovanProbe.evidence -match 'kael:\.opencode/commands/olympus\.ultra\.md=DENY' -and
-        $singleKovanProbe.evidence -match 'kovan:\.opencode/commands/project-owned\.md=ASK')
+        $singleKovanProbe.evidence -match 'kovan:\.opencode/commands/project-owned\.md=ALLOW')
     $lateOverridePermissions = @($runtimeAgentFixture[0].permissions | Where-Object {
         -not ($_.action -ceq '*' -and $_.resource -ceq '*' -and $_.effect -ceq 'allow')
     }) + @([pscustomobject]@{ action='*'; resource='*'; effect='allow' })
@@ -1866,8 +1944,9 @@ try {
     $lateOverrideProbe = Inspect-EffectiveRules 0 (ConvertTo-Json -InputObject $lateOverrideRuntimeFixture -Compress -Depth 10)
     Check 'AUTH14_LATE_BASE_ALLOW_OVERRIDE_REJECTED' (-not $lateOverrideProbe.passed -and
         $lateOverrideProbe.evidence -match 'serena_nav_denied=0/6' -and
-        $lateOverrideProbe.evidence -match 'subagent_allow_rules=11/10' -and
+        $lateOverrideProbe.evidence -match 'subagent_allow_rules=8/7' -and
         $lateOverrideProbe.evidence -match 'unlisted=ALLOW' -and
+        $lateOverrideProbe.evidence -match 'kael:shell:git rev-parse --show-toplevel=ALLOW' -and
         $lateOverrideProbe.evidence -match 'kael/automation_create=ALLOW' -and
         $lateOverrideProbe.evidence -match 'kael/browser=ALLOW' -and
         $lateOverrideProbe.evidence -match 'external_directory=ALLOW')
@@ -1878,6 +1957,7 @@ try {
         $integrationRouteSource -match 'AUTHORITY_INTEGRATION_CONTEXT: PASS' -and
         $integrationRouteSource -notmatch 'AUTHORITY_PLUGIN_ACTIVATION|Start-Sleep|while\s*\(' -and
         $normalizedQualificationDocs -match 'a 200 may arrive before plugin activation completes.*?not a readiness signal.*?bounded internal wait.*?no polling loop or arbitrary sleep' -and
+        # Keep the historical runtime receipt tied to the roster it actually exercised.
         $normalizedQualificationDocs -match '`AUTH14_OPENCODE_EFFECTIVE_RULES PASS`.*?all 11 Olympus IDs exactly once.*?effective DENY for all 66 checks.*?did not establish plugin activation/readiness'
     )
     $badPermissionProbe = Inspect-EffectiveRules 0 '[{"id":"kovan","permissions":[{"action":"edit","resource":"*","effect":"deny"}]}]'

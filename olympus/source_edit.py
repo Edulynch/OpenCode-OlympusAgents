@@ -128,7 +128,14 @@ def _acquire_lock(source_root: os.PathLike[str] | str, *, create: bool) -> _Lock
     never creates, truncates, or replaces the stable lock.
     """
     source = _canonical_source(source_root)
-    path = source / _LOCK_NAME
+    return _acquire_path_lock(source / _LOCK_NAME, create=create)
+
+
+def _acquire_path_lock(path: os.PathLike[str] | str, *, create: bool) -> _Lock:
+    """Acquire a stable lock file at an already-authorized absolute path."""
+    path = Path(os.path.abspath(os.fspath(path)))
+    if not path.name or path == Path(path.anchor):
+        raise LockError("Lock path must name a file below the filesystem root")
     flags = os.O_RDWR | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
     flags |= getattr(os, "O_NOFOLLOW", 0)
 

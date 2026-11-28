@@ -26,13 +26,11 @@ $ReleaseVersion = 'v0.12.10' # Must equal this installer's default and the relea
 $owned = $null
 $ArchiveGeneratedPaths = @(
     'opencode.jsonc',
-    '.opencode/agents/argus.md',
     '.opencode/agents/atlas.md',
     '.opencode/agents/helios.md',
     '.opencode/agents/kael.md',
     '.opencode/agents/kovan.md',
     '.opencode/agents/nox.md',
-    '.opencode/agents/orin.md',
     '.opencode/agents/talos.md',
     '.opencode/agents/thales.md',
     '.opencode/agents/vera.md',
@@ -42,6 +40,7 @@ $ArchiveGeneratedPaths = @(
     '.opencode/scripts/worktree-setup.ps1',
     '.opencode/commands/olympus.ultra.md',
     '.opencode/commands/olympus.performance.md',
+    '.opencode/commands/olympus.performance-ultra.md',
     'docs/HARNESS-CAPABILITIES.md'
 )
 
@@ -218,11 +217,11 @@ function Invoke-ArchiveRender([string]$Source, [string]$OwnedRoot) {
     $actualPaths = @($rendered.Files.Keys | Sort-Object)
     $expectedDirectories = @(Get-ArchiveGeneratedDirectories)
     $actualDirectories = @($rendered.Directories | Sort-Object)
-    if ($actualPaths.Count -ne 18 -or
+    if ($actualPaths.Count -ne $ArchiveGeneratedPaths.Count -or
         [string]::Join("`n", [string[]]$actualPaths) -cne [string]::Join("`n", [string[]]$expectedPaths) -or
         [string]::Join("`n", [string[]]$actualDirectories) -cne
             [string]::Join("`n", [string[]]$expectedDirectories)) {
-        throw "SOURCE_RENDER_STAGE_INVALID: Renderer stage inventory does not match the 18 expected generated files. $($renderOutput.Trim())"
+        throw "SOURCE_RENDER_STAGE_INVALID: Renderer stage inventory does not match the $($ArchiveGeneratedPaths.Count) expected generated files. $($renderOutput.Trim())"
     }
 
     $checkOutput = (& $python -B $renderer check --harness opencode --root $Source --output-root $stage 2>&1 | Out-String)
@@ -236,7 +235,7 @@ function Invoke-ArchiveRender([string]$Source, [string]$OwnedRoot) {
             $checked.Files[$relative] -cne $rendered.Files[$relative]) { $stageUnchanged = $false }
     }
     if ($checkCode -ne 0 -or
-        $checkOutput -notmatch 'HARNESS_RENDER_CHECK: PASS \(opencode; 18 managed output\(s\); read-only\)' -or
+        $checkOutput -notmatch "HARNESS_RENDER_CHECK: PASS \(opencode; $($ArchiveGeneratedPaths.Count) managed output\(s\); read-only\)" -or
         -not $stageUnchanged -or
         [string]::Join("`n", [string[]]@($checked.Directories | Sort-Object)) -cne
             [string]::Join("`n", [string[]]$expectedDirectories)) {
@@ -296,7 +295,7 @@ function Invoke-ArchiveRender([string]$Source, [string]$OwnedRoot) {
             }
         }
     }
-    Write-Output 'OLYMPUS_SOURCE_RENDER: PASS (18 generated files; isolated stage checked read-only before install)'
+    Write-Output "OLYMPUS_SOURCE_RENDER: PASS ($($ArchiveGeneratedPaths.Count) generated files; isolated stage checked read-only before install)"
 }
 
 try {

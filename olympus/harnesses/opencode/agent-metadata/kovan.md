@@ -44,6 +44,39 @@ permissions:
     resource: "*"
     effect: allow
   - action: edit
+    resource: ".opencode"
+    effect: deny
+  - action: edit
+    resource: ".opencode/**"
+    effect: ask
+  # Path eligibility is not proof of ownership or task authority.
+  - action: edit
+    resource: ".opencode/skills/**"
+    effect: allow
+  - action: edit
+    resource: ".opencode/plugins/**"
+    effect: allow
+  - action: edit
+    resource: ".opencode/agents/**"
+    effect: allow
+  - action: edit
+    resource: ".opencode/commands/**"
+    effect: allow
+  # These rules concern project config only. Manifest ownership is checked by
+  # contract before delegation: identical filenames can be user- or installer-owned.
+  - action: edit
+    resource: ".opencode/opencode.json"
+    effect: ask
+  - action: edit
+    resource: ".opencode/opencode.jsonc"
+    effect: ask
+  - action: edit
+    resource: "opencode.json"
+    effect: ask
+  - action: edit
+    resource: "opencode.jsonc"
+    effect: ask
+  - action: edit
     resource: "*.env"
     effect: deny
   - action: edit
@@ -58,46 +91,38 @@ permissions:
   - action: edit
     resource: ".git/*"
     effect: deny
+  # Reserve the Activity plugin namespace, including files outside today's inventory.
   - action: edit
-    resource: ".opencode"
-    effect: deny
-  - action: edit
-    resource: ".opencode/**"
-    effect: ask
-  - action: edit
-    resource: ".opencode/plugins/**"
-    effect: ask
-  - action: edit
-    resource: ".opencode/agents/**"
+    resource: ".opencode/plugins/olympus-activity"
     effect: deny
   - action: edit
     resource: ".opencode/plugins/olympus-activity/**"
     effect: deny
   - action: edit
-    resource: ".opencode/commands/olympus.ultra.md"
-    effect: deny
-  - action: edit
-    resource: ".opencode/commands/olympus.performance.md"
-    effect: deny
-  # The worktree provisioning script is Olympus-owned, not a project plugin.
-  - action: edit
-    resource: ".opencode/scripts/worktree-setup.ps1"
-    effect: deny
-  - action: edit
     resource: ".opencode/orchestrator-install.json"
     effect: deny
   - action: edit
-    resource: ".opencode/opencode.json"
+    resource: ".opencode/olympus-config.json"
+    effect: deny
+  # Defense in depth for standard profile paths and credential files. Custom
+  # profile roots must also be excluded by the ownership and effect contract.
+  - action: edit
+    resource: "*/.config/opencode/*"
     effect: deny
   - action: edit
-    resource: ".opencode/opencode.jsonc"
+    resource: "*/.local/share/opencode/*"
     effect: deny
   - action: edit
-    resource: "opencode.json"
+    resource: "*/AppData/*/opencode/*"
     effect: deny
   - action: edit
-    resource: "opencode.jsonc"
+    resource: "auth.json"
     effect: deny
+  - action: edit
+    resource: "*/auth.json"
+    effect: deny
+  # Keep these exact denials after the project namespace rules.
+{{managed_edit_denies}}
   - action: read
     resource: "*"
     effect: allow

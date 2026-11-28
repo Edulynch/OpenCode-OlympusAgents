@@ -16,6 +16,7 @@ $ErrorActionPreference = "Stop"
 $SourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $Utf8NoBom = [Text.UTF8Encoding]::new($false)
 $OpenCodeManifestRel = '.opencode/orchestrator-install.json'
+$CurrentOpenCodeRoles = @('atlas', 'helios', 'kael', 'kovan', 'nox', 'talos', 'thales', 'vera', 'veyra')
 $ManifestRel = $null
 $CurrentManifestRel = $null
 $SelectedHarnesses = @()
@@ -41,7 +42,8 @@ if ($SourceVersion -cne 'local' -and $SourceVersion -notmatch '^v(?:0|[1-9][0-9]
     throw 'SOURCE_VERSION_INVALID: Expected an Olympus SemVer release or local.'
 }
 $RetiredOpenCodeResources = @('.opencode/agents/sorin.md', '.opencode/agents/maintenance.md',
-    '.opencode/agents/aegis.md', '.opencode/commands/maintain.md')
+    '.opencode/agents/aegis.md', '.opencode/agents/orin.md', '.opencode/agents/argus.md',
+    '.opencode/commands/maintain.md')
 
 function Fail([string]$Code, [string]$Message) { throw "$Code`: $Message" }
 function Rel([string]$Path) { ($Path -replace "\\", "/").TrimStart([char[]]@('/')) }
@@ -191,6 +193,13 @@ function Get-GeneratedHarnessOutputs([string]$Name) {
     foreach ($agentFile in @(Get-ChildItem -LiteralPath $agentsRoot -Filter '*.md' -File -Recurse -Force | Sort-Object FullName)) {
         $managedSourcePaths.Add($agentFile.FullName.Substring($prefix.Length).Replace('\', '/'))
     }
+    $sourceRoles = @($managedSourcePaths |
+        Where-Object { $_ -match '^\.opencode/agents/(?<role>[a-z][a-z0-9_-]*)\.md$' } |
+        ForEach-Object { [regex]::Match($_, '^\.opencode/agents/(?<role>[a-z][a-z0-9_-]*)\.md$').Groups['role'].Value } |
+        Sort-Object)
+    if (($sourceRoles -join "`n") -cne (@($CurrentOpenCodeRoles | Sort-Object) -join "`n")) {
+        Fail 'SOURCE_AGENT_ROSTER_INVALID' 'Generated OpenCode role files do not match the current nine-role roster.'
+    }
     $managedSourcePaths.AddRange([string[]]@(
         '.opencode/plugins/olympus-activity/activity.ts',
         '.opencode/plugins/olympus-activity/tui.tsx',
@@ -220,7 +229,7 @@ function Get-GeneratedHarnessOutputs([string]$Name) {
         Fail 'SOURCE_INVALID' ("Harness root file is not a generated Harness Core output: $rootOutput")
     }
     $outputs[$rootOutput] = $rootText
-    if ($outputs.Count -ne 15) { Fail 'SOURCE_INVALID' "Unexpected OpenCode output inventory: $($outputs.Count)." }
+    if ($outputs.Count -ne 13) { Fail 'SOURCE_INVALID' "Unexpected OpenCode project output inventory: $($outputs.Count)." }
     return ,$outputs
 }
 
@@ -247,6 +256,7 @@ function Apply-OpenCodeProjectOverrides([string]$Repo, [System.Collections.IDict
         Fail 'USER_CONFIG_INVALID' 'OLYMPUS_CONFIG_FILE must be an absolute path.'
     }
     $configs = @()
+    $globalMaxChildren = $null
     foreach ($layerName in @('global', 'project')) {
         $configPath = if ($layerName -eq 'global') { $globalPath } else { $projectPath }
         if (-not (Test-Path -LiteralPath $configPath)) { continue }
@@ -272,10 +282,48 @@ function Apply-OpenCodeProjectOverrides([string]$Repo, [System.Collections.IDict
                 $maxChildren -lt 1 -or $maxChildren -gt 8) {
                 Fail 'USER_CONFIG_INVALID' 'Global max_children must be an integer from 1 to 8.'
             }
+            $globalMaxChildren = [int]$maxChildren
         }
         $configs += ,$config
     }
     if (-not $configs.Count) { return }
+    if ($null -ne $globalMaxChildren) {
+        $python = if ($env:OLYMPUS_PYTHON) {
+            Get-Command -Name $env:OLYMPUS_PYTHON -CommandType Application -ErrorAction SilentlyContinue
+        } else { $null }
+        if (-not $python) {
+            $python = Get-Command python.exe -CommandType Application -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+        }
+        if (-not $python) {
+            $python = Get-Command python -CommandType Application -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+        }
+        if (-not $python) {
+            Fail 'PYTHON_UNAVAILABLE' 'Python is required to apply the shared max-parallel prompt preference.'
+        }
+        $rendererPath = Join-Path $SourceRoot 'scripts/render_harnesses.py'
+        $renderedJson = & $python.Source -B $rendererPath primaries --root $SourceRoot --max-children $globalMaxChildren 2>&1 |
+            Out-String
+        $rendererExitCode = $LASTEXITCODE
+        if ($rendererExitCode -ne 0) {
+            Fail 'SOURCE_INVALID' "Could not render the current primary prompts for max_children=$globalMaxChildren."
+        }
+        try { $primaries = $renderedJson | ConvertFrom-Json -AsHashtable -Depth 30 -ErrorAction Stop }
+        catch { Fail 'SOURCE_INVALID' 'The current primary-prompt renderer returned invalid JSON.' }
+        if ($primaries -isnot [System.Collections.IDictionary] -or
+            (@($primaries.Keys | Sort-Object) -join "`n") -cne "atlas`nkael") {
+            Fail 'SOURCE_INVALID' 'The current primary-prompt renderer returned an unexpected role set.'
+        }
+        foreach ($role in @('kael', 'atlas')) {
+            $relative = ".opencode/agents/$role.md"
+            if (-not $Outputs.Contains($relative) -or $primaries[$role] -isnot [string] -or
+                $primaries[$role] -notmatch 'GENERATED BY scripts/render_harnesses\.py') {
+                Fail 'SOURCE_INVALID' "The current primary-prompt renderer returned invalid content for $role."
+            }
+            $Outputs[$relative] = [string]$primaries[$role]
+        }
+    }
     $catalogPath = Join-Path $SourceRoot 'olympus/core/models-dev.json'
     if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) { Fail 'SOURCE_FILE_MISSING' 'The offline Models.dev catalog is missing.' }
     try { $catalog = [IO.File]::ReadAllText($catalogPath) | ConvertFrom-Json -AsHashtable -Depth 30 -ErrorAction Stop }
@@ -446,6 +494,9 @@ function Assert-Managed([string]$Repo, $Manifest) {
         $Manifest.installed_from_commit -isnot [string] -or [string]::IsNullOrWhiteSpace($Manifest.installed_from_commit) -or
         $null -eq $Manifest.managed_files) {
         Fail 'INSTALL_MANIFEST_INCOMPATIBLE' 'Current schema v1 project metadata is incomplete or unsupported.'
+    }
+    if ($Manifest.installed_version -ceq 'v0.10.0') {
+        Fail 'PROJECT_MANIFEST_LEGACY' "Project manifest records '$($Manifest.installed_version)'; uninstall with its source version before installing the current version."
     }
     $script:ExistingHarnesses = @(Get-ManifestHarnesses $Manifest)
     $entries = @($Manifest.managed_files)
@@ -675,8 +726,13 @@ function Detect-Project([string]$Repo) {
 
 function Manifest-Text($Detection, $Content, [string]$Version, $ExistingManifest) {
     $files = foreach ($p in @($Content.Keys | Sort-Object)) { [ordered]@{ path=$p; sha256=Sha-Text ([string]$Content[$p]) } }
-    $commit = (& git -C $SourceRoot rev-parse HEAD 2>$null | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $commit) { $commit = "unknown" }
+    $commit = 'unknown'
+    # A rendered package may live inside an unrelated checkout. Its ancestor's
+    # HEAD is not provenance for a source root with no Git metadata of its own.
+    if (Test-Path -LiteralPath (Join-Path $SourceRoot '.git')) {
+        $head = (& git -C $SourceRoot rev-parse HEAD 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0 -and $head -match '^(?:[0-9a-f]{40}|[0-9a-f]{64})$') { $commit = $head }
+    }
     $record = [ordered]@{
         schema_version = 1
         scope = 'project'
@@ -750,8 +806,11 @@ function Get-Expected-Agents($Content) {
         }
         $expected[[IO.Path]::GetFileNameWithoutExtension($path)] = @($modelId, $effort, $mode.Groups['mode'].Value)
     }
-    $managedAgentCount = @($OpenCodeManaged | Where-Object { $_ -match '^\.opencode/agents/[^/]+\.md$' }).Count
-    if ($files.Count -ne $managedAgentCount -or $expected.Count -ne $managedAgentCount) {
+    $managedRoles = @($OpenCodeManaged |
+        Where-Object { $_ -match '^\.opencode/agents/[^/]+\.md$' } |
+        ForEach-Object { [IO.Path]::GetFileNameWithoutExtension($_) } | Sort-Object)
+    if ((@($expected.Keys | Sort-Object) -join "`n") -cne ($managedRoles -join "`n") -or
+        (@($expected.Keys | Sort-Object) -join "`n") -cne (@($CurrentOpenCodeRoles | Sort-Object) -join "`n")) {
         Fail 'SOURCE_AGENT_ROSTER_INVALID' 'Generated OpenCode role files do not match the installer-managed roster.'
     }
     return $expected
@@ -788,7 +847,8 @@ function Validate-Install([string]$Repo) {
                         break
                     }
                 }
-                if ($null -eq $lastMismatch -and @($agents | Where-Object { $_.id -in @('sorin','maintenance','aegis') }).Count -gt 0) {
+                if ($null -eq $lastMismatch -and
+                    @($agents | Where-Object { $_.id -in @('sorin','maintenance','aegis','orin','argus') }).Count -gt 0) {
                     $lastMismatch = 'A retired Olympus agent remains active.'
                 }
                 if ($null -eq $lastMismatch) { return }

@@ -17,9 +17,9 @@ $MockBin = $null
 $ManagedPaths = @(
     'opencode.jsonc',
     '.opencode/agents/kael.md', '.opencode/agents/veyra.md',
-    '.opencode/agents/orin.md', '.opencode/agents/kovan.md',
+    '.opencode/agents/kovan.md',
     '.opencode/agents/nox.md', '.opencode/agents/vera.md',
-    '.opencode/agents/thales.md', '.opencode/agents/atlas.md', '.opencode/agents/argus.md', '.opencode/agents/talos.md', '.opencode/agents/helios.md',
+    '.opencode/agents/thales.md', '.opencode/agents/atlas.md', '.opencode/agents/talos.md', '.opencode/agents/helios.md',
     '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx',
     '.opencode/scripts/worktree-setup.ps1',
     '.opencode/orchestrator-install.json'
@@ -224,7 +224,9 @@ function Assert-ModelMapping($Agents) {
         'kael' = @('gpt-6.2-sol', 'high', 'primary')
         'thales' = @('gpt-6.2-sol', 'xhigh', 'subagent')
         'veyra' = @('gpt-6-luna', 'max', 'subagent')
-        'orin' = @('gpt-6-luna', 'max', 'subagent')
+        'atlas' = @('gpt-6.2-sol', 'high', 'primary')
+        'talos' = @('gpt-6.2-sol', 'high', 'subagent')
+        'helios' = @('gpt-6.2-sol', 'high', 'subagent')
         'kovan' = @('gpt-6-luna', 'max', 'subagent')
         'nox' = @('gpt-6-luna', 'max', 'subagent')
         'vera' = @('gpt-6-luna', 'max', 'subagent')
@@ -483,7 +485,7 @@ try {
         $diagnostics = Assert-Installed $repo 'READY'
         if ($QualificationSlice -ne 'Offline') {
         $agents = $diagnostics.Agents
-        foreach ($id in @('kael', 'thales', 'atlas', 'argus', 'talos', 'helios', 'veyra', 'orin', 'vera')) {
+        foreach ($id in @('kael', 'thales', 'talos', 'helios', 'veyra', 'vera')) {
             $agent = Get-Agent $agents $id
             Assert-Condition (Has-Rule $agent 'edit' '*' 'deny') ($id + ' edit DENY missing.') 'BOOTSTRAP_BUG'
             Assert-Condition (Has-Rule $agent 'shell' '*' 'deny') ($id + ' shell DENY missing.') 'BOOTSTRAP_BUG'
@@ -491,8 +493,12 @@ try {
         }
         $kael = Get-Agent $agents 'kael'
         $allowedChildren = @($kael.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object { $_.resource } | Select-Object -Unique)
-        $expectedChildren = @('veyra', 'orin', 'kovan', 'nox', 'vera', 'thales', 'atlas', 'argus', 'talos', 'helios')
+        $expectedChildren = @('veyra', 'kovan', 'nox', 'vera', 'thales', 'talos', 'helios')
         Assert-Condition ($allowedChildren.Count -eq $expectedChildren.Count -and @($allowedChildren | Where-Object { $_ -notin $expectedChildren }).Count -eq 0 -and @($expectedChildren | Where-Object { $allowedChildren -notcontains $_ }).Count -eq 0) 'Kael delegation allowlist mismatch.' 'BOOTSTRAP_BUG'
+        $atlas = Get-Agent $agents 'atlas'
+        $atlasChildren = @($atlas.permissions | Where-Object { $_.action -eq 'subagent' -and $_.effect -eq 'allow' } | ForEach-Object resource | Sort-Object)
+        Assert-Condition ((Has-Rule $atlas 'shell' '*' 'ask') -and (Has-Rule $atlas 'edit' '*' 'deny') -and
+            (Has-Rule $atlas 'subagent' '*' 'deny') -and ($atlasChildren -join ',') -ceq 'helios,talos,thales,veyra') 'Atlas analysis permission or allowlist mismatch.' 'BOOTSTRAP_BUG'
         }
         if ($QualificationSlice -ne 'Runtime') {
         $thalesPrompt = [IO.File]::ReadAllText((Join-Path $repo '.opencode/agents/thales.md'))
@@ -507,12 +513,17 @@ try {
         Assert-Condition (Has-Rule $kovan 'shell' '*' 'allow') 'Kovan shell ALLOW missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (Has-Rule $kovan 'subagent' '*' 'deny') 'Kovan subagent DENY missing.' 'BOOTSTRAP_BUG'
         Assert-Condition (@($kovan.permissions | Where-Object { $_.action -eq 'external_directory' }).Count -eq 0) 'Kovan must inherit project external-directory rules without overriding a specific DENY.' 'BOOTSTRAP_BUG'
-        Assert-Condition (Has-Rule $kovan 'edit' '.opencode/**' 'ask' -and Has-Rule $kovan 'edit' '.opencode/plugins/**' 'ask') 'Project-owned protected-adjacent edit ASK missing.' 'BOOTSTRAP_BUG'
-        foreach ($resource in @('.git', '.git/*', '.opencode', '.opencode/agents/**',
+        foreach ($namespace in @('skills','plugins','agents','commands')) {
+            Assert-Condition (Has-Rule $kovan 'edit' ".opencode/$namespace/**" 'allow') "Missing project source allow: $namespace" 'BOOTSTRAP_BUG'
+        }
+        foreach ($resource in @('.git', '.git/*', '.opencode', '.opencode/agents/kovan.md',
             '.opencode/plugins/olympus-activity/**',
-            '.opencode/orchestrator-install.json', '.opencode/opencode.json', '.opencode/opencode.jsonc',
-            'opencode.json', 'opencode.jsonc', '*.env', '*.env.*')) {
+            '.opencode/orchestrator-install.json', '.opencode/olympus-config.json',
+            '*.env', '*.env.*')) {
             Assert-Condition (Has-Rule $kovan 'edit' $resource 'deny') ('Kovan protected edit path missing: ' + $resource) 'BOOTSTRAP_BUG'
+        }
+        foreach ($resource in @('opencode.json', 'opencode.jsonc', '.opencode/opencode.json', '.opencode/opencode.jsonc')) {
+            Assert-Condition (Has-Rule $kovan 'edit' $resource 'ask') "Missing project configuration ASK: $resource" 'BOOTSTRAP_BUG'
         }
         Assert-Condition (Has-Rule $kovan 'edit' '*.env.example' 'allow') 'Documented env-example exception missing.' 'BOOTSTRAP_BUG'
         }
@@ -549,8 +560,8 @@ try {
             -not (Test-Path (Join-Path $repo '.opencode/commands/maintain.md')) -and
             @($manifest.managed_files).Count -eq ($ManagedPaths.Count - 1)) 'Fresh project install retained a retired maintenance route or wrong manifest inventory.' 'BOOTSTRAP_BUG'
         if ($QualificationSlice -ne 'Offline') {
-            Assert-Condition (@($diagnostics.Agents).Count -eq 11 -and
-                @($diagnostics.Agents | Where-Object id -eq 'aegis').Count -eq 0) 'Effective OpenCode roster is not the single-Kael 11-role roster.' 'BOOTSTRAP_BUG'
+            Assert-Condition (@($diagnostics.Agents | Where-Object id -in @('kael','atlas','veyra','kovan','nox','vera','thales','talos','helios')).Count -eq 9 -and
+                @($diagnostics.Agents | Where-Object id -in @('aegis','orin','argus')).Count -eq 0) 'Effective OpenCode roster is not the current nine-role roster.' 'BOOTSTRAP_BUG'
         }
     }
 

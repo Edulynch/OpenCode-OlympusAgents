@@ -115,6 +115,30 @@ function Snapshot([string]$Root) {
     ) -join "`n"
 }
 
+function Test-LineEndingsMatchSource([string]$SourcePath, [string]$TargetPath) {
+    $sourceText = [IO.File]::ReadAllText($SourcePath)
+    $targetText = [IO.File]::ReadAllText($TargetPath)
+    if ($sourceText.Contains("`r`n")) {
+        return $targetText -notmatch '(?<!\r)\n' -and $targetText -notmatch '\r(?!\n)'
+    }
+    return $targetText -notmatch '\r'
+}
+
+function Set-GlobalFixtureManifestState([string]$Root, [string]$InstalledVersion) {
+    $manifestPath = Join-Path $Root 'olympus/orchestrator-install.json'
+    $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
+    $manifest.installed_version = $InstalledVersion
+    foreach ($role in @('kael', 'atlas')) {
+        $agentPath = Join-Path $Root "agents/$role.md"
+        $entry = @($manifest.managed_files | Where-Object { $_.path -ceq "agents/$role.md" })
+        if ($entry.Count -ne 1 -or -not (Test-Path -LiteralPath $agentPath -PathType Leaf)) {
+            throw "GLOBAL_FIXTURE_INVALID: expected one receipt and installed prompt for $role"
+        }
+        $entry[0].sha256 = (Get-FileHash -LiteralPath $agentPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    [IO.File]::WriteAllText($manifestPath, (($manifest | ConvertTo-Json -Depth 30) + "`n"), $utf8)
+}
+
 function Get-AccessDaclSnapshot([string]$Path) {
     $acl = [IO.FileSystemAclExtensions]::GetAccessControl(
         [IO.FileInfo]::new($Path), [Security.AccessControl.AccessControlSections]::Access)
@@ -219,6 +243,228 @@ try {
     $previousCapRoot = $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT
     $previousConfigFile = $env:OLYMPUS_CONFIG_FILE
     try {
+        $capRegressionFailures = [System.Collections.Generic.List[string]]::new()
+        foreach ($value in @(1, 6, 8)) {
+            $existingCapRoot = Join-Path $run "existing-cap-$value"
+            $existingCapConfig = Join-Path $run "existing-cap-config-$value.json"
+            [IO.Directory]::CreateDirectory($existingCapRoot) | Out-Null
+            $settings = [ordered]@{
+                schema_version = 1
+                overrides = [ordered]@{}
+                orchestration = [ordered]@{ max_children = $value }
+            }
+            $settingsText = ($settings | ConvertTo-Json -Depth 10) + "`n"
+            [IO.File]::WriteAllText($existingCapConfig, $settingsText, $utf8)
+            $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $existingCapRoot
+            $env:OLYMPUS_CONFIG_FILE = $existingCapConfig
+            $existingCapInstall = Global-Install $project 'opencode'
+            $existingCapManifest = [IO.File]::ReadAllText(
+                (Join-Path $existingCapRoot 'olympus/orchestrator-install.json')
+            ) | ConvertFrom-Json
+            $existingCapEntries = @{}
+            foreach ($entry in $existingCapManifest.managed_files) {
+                $existingCapEntries[[string]$entry.path] = [string]$entry.sha256
+            }
+            $existingCapConsistent = $true
+            $existingCapEvidence = @()
+            foreach ($role in @('kael', 'atlas')) {
+                $agentPath = Join-Path $existingCapRoot "agents/$role.md"
+                $agentText = [IO.File]::ReadAllText($agentPath)
+                $observedCap = [regex]::Match($agentText, 'MAX_ACTIVE_CHILDREN = (?<cap>\d+)').Groups['cap'].Value
+                $actualHash = (Get-FileHash -LiteralPath $agentPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                $manifestHash = [string]$existingCapEntries["agents/$role.md"]
+                $lineEndingsMatch = Test-LineEndingsMatchSource `
+                    (Join-Path $source ".opencode/agents/$role.md") $agentPath
+                $existingCapEvidence += "$role expected_cap=$value observed_cap=$observedCap manifest_sha256=$manifestHash actual_sha256=$actualHash line_endings_match_source=$lineEndingsMatch"
+                if (-not $agentText.Contains("MAX_ACTIVE_CHILDREN = $value") -or
+                    -not $existingCapEntries.ContainsKey("agents/$role.md") -or
+                    $manifestHash -cne $actualHash -or -not $lineEndingsMatch) {
+                    $existingCapConsistent = $false
+                }
+            }
+            $existingCapPreferencesUnchanged = [IO.File]::ReadAllText($existingCapConfig) -ceq $settingsText
+            try {
+                Check "GLOBAL_EXISTING_MAX_PARALLEL_INITIAL_$value" (
+                    $existingCapInstall.Code -eq 0 -and $existingCapConsistent -and
+                    $existingCapPreferencesUnchanged
+                ) ("exit=$($existingCapInstall.Code) preferences_unchanged=$existingCapPreferencesUnchanged`n" +
+                    ($existingCapEvidence -join "`n") +
+                    "`n$($existingCapInstall.Text)")
+            } catch { $capRegressionFailures.Add($_.Exception.Message) }
+
+            if ($value -eq 6) {
+                $settings.overrides = [ordered]@{
+                    nox = [ordered]@{ model = 'openai/gpt-6.1-sol'; effort = 'high' }
+                }
+                $updateSettingsText = ($settings | ConvertTo-Json -Depth 10) + "`n"
+                [IO.File]::WriteAllText($existingCapConfig, $updateSettingsText, $utf8)
+                $existingCapUpdate = Run-Installer $project @(
+                    '-Scope', 'global', '-Harness', 'opencode', '-Update'
+                )
+                $updatedCapManifest = [IO.File]::ReadAllText(
+                    (Join-Path $existingCapRoot 'olympus/orchestrator-install.json')
+                ) | ConvertFrom-Json
+                $updatedCapEntries = @{}
+                foreach ($entry in $updatedCapManifest.managed_files) {
+                    $updatedCapEntries[[string]$entry.path] = [string]$entry.sha256
+                }
+                $updatedCapConsistent = $true
+                $updatedCapEvidence = @()
+                foreach ($role in @('kael', 'atlas')) {
+                    $agentPath = Join-Path $existingCapRoot "agents/$role.md"
+                    $agentText = [IO.File]::ReadAllText($agentPath)
+                    $observedCap = [regex]::Match($agentText, 'MAX_ACTIVE_CHILDREN = (?<cap>\d+)').Groups['cap'].Value
+                    $actualHash = (Get-FileHash -LiteralPath $agentPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                    $manifestHash = [string]$updatedCapEntries["agents/$role.md"]
+                    $lineEndingsMatch = Test-LineEndingsMatchSource `
+                        (Join-Path $source ".opencode/agents/$role.md") $agentPath
+                    $updatedCapEvidence += "$role expected_cap=6 observed_cap=$observedCap manifest_sha256=$manifestHash actual_sha256=$actualHash line_endings_match_source=$lineEndingsMatch"
+                    if (-not $agentText.Contains('MAX_ACTIVE_CHILDREN = 6') -or
+                        -not $updatedCapEntries.ContainsKey("agents/$role.md") -or
+                        $manifestHash -cne $actualHash -or -not $lineEndingsMatch) {
+                        $updatedCapConsistent = $false
+                    }
+                }
+                $noxPath = Join-Path $existingCapRoot 'agents/nox.md'
+                $noxHash = (Get-FileHash -LiteralPath $noxPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                $updatedCapConsistent = $updatedCapConsistent -and
+                    [IO.File]::ReadAllText($noxPath).Contains('model: "openai/gpt-6.1-sol#high"') -and
+                    $updatedCapEntries['agents/nox.md'] -ceq $noxHash
+                $updatePreferencesUnchanged = [IO.File]::ReadAllText($existingCapConfig) -ceq $updateSettingsText
+                try {
+                    Check 'GLOBAL_EXISTING_MAX_PARALLEL_UPDATE_WITH_MODEL_OVERRIDE' (
+                        $existingCapUpdate.Code -eq 0 -and $updatedCapConsistent -and
+                        $updatePreferencesUnchanged
+                    ) ("exit=$($existingCapUpdate.Code) preferences_unchanged=$updatePreferencesUnchanged`n" +
+                        ($updatedCapEvidence -join "`n") +
+                        "`nnox model expected=openai/gpt-6.1-sol#high actual=" +
+                        [regex]::Match([IO.File]::ReadAllText($noxPath),
+                            '(?m)^model:\s*"(?<model>[^"]+)"').Groups['model'].Value +
+                        " manifest_sha256=$($updatedCapEntries['agents/nox.md']) actual_sha256=$noxHash" +
+                        "`n$($existingCapUpdate.Text)")
+                } catch { $capRegressionFailures.Add($_.Exception.Message) }
+            }
+        }
+        if ($capRegressionFailures.Count -gt 0) {
+            throw ("GLOBAL_EXISTING_MAX_PARALLEL_REGRESSIONS FAIL`n" + ($capRegressionFailures -join "`n"))
+        }
+
+        foreach ($mismatchMode in @('install', 'update')) {
+            $mismatchRoot = Join-Path $run "mismatched-primary-caps-$mismatchMode"
+            $mismatchConfig = Join-Path $run "mismatched-primary-config-$mismatchMode.json"
+            [IO.Directory]::CreateDirectory($mismatchRoot) | Out-Null
+            $mismatchPreferences = '{"schema_version":1,"overrides":{},"orchestration":{"max_children":6}}' + "`n"
+            [IO.File]::WriteAllText($mismatchConfig, $mismatchPreferences, $utf8)
+            $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $mismatchRoot
+            $env:OLYMPUS_CONFIG_FILE = $mismatchConfig
+            $mismatchSeed = Global-Install $project 'opencode'
+            $mismatchAtlasPath = Join-Path $mismatchRoot 'agents/atlas.md'
+            $mismatchAtlasText = [IO.File]::ReadAllText($mismatchAtlasPath)
+            if (-not $mismatchAtlasText.Contains('MAX_ACTIVE_CHILDREN = 6')) {
+                throw 'GLOBAL_FIXTURE_INVALID: initial mismatch fixture did not render Atlas cap 6'
+            }
+            $mismatchAtlasText = $mismatchAtlasText.Replace('MAX_ACTIVE_CHILDREN = 6', 'MAX_ACTIVE_CHILDREN = 4')
+            [IO.File]::WriteAllText($mismatchAtlasPath, $mismatchAtlasText, $utf8)
+            Set-GlobalFixtureManifestState $mismatchRoot 'v0.12.9'
+            $mismatchBefore = Snapshot $mismatchRoot
+            $mismatchPreferencesBefore = [IO.File]::ReadAllBytes($mismatchConfig)
+            $mismatchKaelTextBefore = [IO.File]::ReadAllText((Join-Path $mismatchRoot 'agents/kael.md'))
+            $mismatchKaelCapBefore = [regex]::Match($mismatchKaelTextBefore, 'MAX_ACTIVE_CHILDREN = (?<cap>\d+)').Groups['cap'].Value
+            $mismatchAtlasCapBefore = [regex]::Match($mismatchAtlasText, 'MAX_ACTIVE_CHILDREN = (?<cap>\d+)').Groups['cap'].Value
+            $mismatchArguments = @('-Scope', 'global', '-Harness', 'opencode')
+            if ($mismatchMode -eq 'update') { $mismatchArguments += '-Update' }
+            $mismatchRun = Run-Installer $project $mismatchArguments
+            $mismatchAfter = Snapshot $mismatchRoot
+            $mismatchPreferencesUnchanged = [Convert]::ToBase64String($mismatchPreferencesBefore) -ceq
+                [Convert]::ToBase64String([IO.File]::ReadAllBytes($mismatchConfig))
+            $mismatchNoJournal = -not (Test-Path -LiteralPath (Join-Path $mismatchRoot '.olympus-cli-config-apply')) -and
+                -not (Test-Path -LiteralPath (Join-Path $mismatchRoot '.olympus-cli-edit')) -and
+                -not (Test-Path -LiteralPath (Join-Path $mismatchRoot 'olympus/opencode-guard-pending.json'))
+            $mismatchEvidence = "mode=$mismatchMode seed_exit=$($mismatchSeed.Code) run_exit=$($mismatchRun.Code) " +
+                "installed_version_before=v0.12.9 candidate_version=$candidateVersion " +
+                "caps_before=kael:$mismatchKaelCapBefore,atlas:$mismatchAtlasCapBefore " +
+                "root_unchanged=$($mismatchBefore -ceq $mismatchAfter) " +
+                "preferences_unchanged=$mismatchPreferencesUnchanged no_new_journal=$mismatchNoJournal`n" +
+                "$($mismatchRun.Text)"
+            $mismatchCheckId = if ($mismatchMode -eq 'update') {
+                'GLOBAL_UPDATE_REJECTS_INCONSISTENT_SHARED_PRIMARY_CAPS_WITHOUT_WRITES'
+            } else {
+                'GLOBAL_INSTALL_REJECTS_INCONSISTENT_SHARED_PRIMARY_CAPS_WITHOUT_WRITES'
+            }
+            try {
+                Check $mismatchCheckId (
+                    $mismatchSeed.Code -eq 0 -and $candidateVersion -ne 'v0.12.9' -and
+                    $mismatchKaelCapBefore -ceq '6' -and $mismatchAtlasCapBefore -ceq '4' -and
+                    $mismatchRun.Code -ne 0 -and
+                    $mismatchRun.Text -match 'GLOBAL_PRIMARY_CAP_INCONSISTENT' -and
+                    $mismatchBefore -ceq $mismatchAfter -and $mismatchPreferencesUnchanged -and $mismatchNoJournal
+                ) $mismatchEvidence
+            } catch { $capRegressionFailures.Add($_.Exception.Message) }
+        }
+
+        $coherentUpdateRoot = Join-Path $run 'update-coherent-primary-caps'
+        $coherentUpdateConfig = Join-Path $run 'update-coherent-primary-config.json'
+        [IO.Directory]::CreateDirectory($coherentUpdateRoot) | Out-Null
+        $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $coherentUpdateRoot
+        $env:OLYMPUS_CONFIG_FILE = $coherentUpdateConfig
+        $coherentSeed = Global-Install $project 'opencode'
+        if ($coherentSeed.Code -ne 0) {
+            throw "GLOBAL_FIXTURE_INVALID: coherent update seed failed`n$($coherentSeed.Text)"
+        }
+        foreach ($role in @('kael', 'atlas')) {
+            $agentPath = Join-Path $coherentUpdateRoot "agents/$role.md"
+            $oldText = [IO.File]::ReadAllText($agentPath)
+            $newline = if ($oldText.Contains("`r`n")) { "`r`n" } else { "`n" }
+            [IO.File]::WriteAllText($agentPath, $oldText + $newline + 'Fixture previous-release prompt text.' + $newline, $utf8)
+        }
+        $coherentPreferences = '{"schema_version":1,"overrides":{"nox":{"model":"openai/gpt-6.1-sol","effort":"high"}},"orchestration":{"max_children":6}}' + "`n"
+        [IO.File]::WriteAllText($coherentUpdateConfig, $coherentPreferences, $utf8)
+        Set-GlobalFixtureManifestState $coherentUpdateRoot 'v0.12.9'
+        $coherentBefore = Snapshot $coherentUpdateRoot
+        $coherentUpdate = Run-Installer $project @(
+            '-Scope', 'global', '-Harness', 'opencode', '-Update'
+        )
+        $coherentManifestPath = Join-Path $coherentUpdateRoot 'olympus/orchestrator-install.json'
+        $coherentManifest = [IO.File]::ReadAllText($coherentManifestPath) | ConvertFrom-Json
+        $coherentEntries = @{}
+        foreach ($entry in $coherentManifest.managed_files) {
+            $coherentEntries[[string]$entry.path] = [string]$entry.sha256
+        }
+        $coherentPromptsValid = $true
+        foreach ($role in @('kael', 'atlas')) {
+            $agentPath = Join-Path $coherentUpdateRoot "agents/$role.md"
+            $agentText = [IO.File]::ReadAllText($agentPath)
+            $agentHash = (Get-FileHash -LiteralPath $agentPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if (-not $agentText.Contains('MAX_ACTIVE_CHILDREN = 6') -or
+                $agentText.Contains('Fixture previous-release prompt text.') -or
+                $coherentEntries["agents/$role.md"] -cne $agentHash) {
+                $coherentPromptsValid = $false
+            }
+        }
+        $coherentNoxPath = Join-Path $coherentUpdateRoot 'agents/nox.md'
+        $coherentNoxHash = (Get-FileHash -LiteralPath $coherentNoxPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $coherentOverrideValid = [IO.File]::ReadAllText($coherentNoxPath).Contains('model: "openai/gpt-6.1-sol#high"') -and
+            $coherentEntries['agents/nox.md'] -ceq $coherentNoxHash
+        $coherentPreferencesUnchanged = [IO.File]::ReadAllText($coherentUpdateConfig) -ceq $coherentPreferences
+        $coherentAfter = Snapshot $coherentUpdateRoot
+        $coherentUpdateEvidence = "seed_exit=$($coherentSeed.Code) update_exit=$($coherentUpdate.Code) " +
+            "installed_version_before=v0.12.9 candidate_version=$candidateVersion root_changed=$($coherentBefore -cne $coherentAfter) " +
+            "primary_prompts_valid=$coherentPromptsValid override_valid=$coherentOverrideValid " +
+            "preferences_unchanged=$coherentPreferencesUnchanged`n$($coherentUpdate.Text)"
+        try {
+            Check 'GLOBAL_UPDATE_ACCEPTS_COHERENT_OLD_CAP_AFTER_PREFERENCE_OVERRIDE_CHANGE' (
+                $candidateVersion -ne 'v0.12.9' -and
+                $coherentUpdate.Code -eq 0 -and
+                [string]$coherentManifest.installed_version -ceq $candidateVersion -and
+                $coherentBefore -cne $coherentAfter -and $coherentPromptsValid -and
+                $coherentOverrideValid -and $coherentPreferencesUnchanged
+            ) $coherentUpdateEvidence
+        } catch { $capRegressionFailures.Add($_.Exception.Message) }
+
+        if ($capRegressionFailures.Count -gt 0) {
+            throw ("GLOBAL_UPDATE_CAP_REGRESSIONS FAIL`n" + ($capRegressionFailures -join "`n"))
+        }
+
         $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $capRoot
         $env:OLYMPUS_CONFIG_FILE = $capConfig
         [IO.File]::WriteAllText($capConfig,
@@ -344,22 +590,26 @@ try {
         @($denyManifest.installed_harnesses).Count -eq 1 -and $denyManifest.installed_harnesses[0] -ceq 'opencode' -and
         -not [string]::IsNullOrWhiteSpace([string]$denyManifest.installed_version) -and
         -not [string]::IsNullOrWhiteSpace([string]$denyManifest.installed_from_commit) -and
-        $denyManifest.managed_files.Count -eq 15 -and
+        $denyManifest.managed_files.Count -eq 14 -and
         @($denyManifest.managed_files | Where-Object { [string]$_.sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0 -and
         $denyManifest.default_agent_receipt.state -ceq 'committed' -and
         @($denyManifest.managed_files | Where-Object { $_.path -eq 'opencode.jsonc' }).Count -eq 0 -and
         [IO.File]::ReadAllText($userDenyPath) -ceq $userDenyText.Insert($userDenyText.IndexOf('"permissions"'), '"default_agent":"kael",')
     ) ("exit=$($denyInstall.Code)`n$($denyInstall.Text)")
-    # A 15-resource current install is valid only with its user-config receipt.
+    # A 14-resource current install is valid only with its user-config receipt.
     $userDenyManifestPath = Join-Path $userDenyRoot 'olympus/orchestrator-install.json'
     $userDenyManifestBytes = [IO.File]::ReadAllBytes($userDenyManifestPath)
     [void]$denyManifest.PSObject.Properties.Remove('default_agent_receipt')
     [IO.File]::WriteAllText($userDenyManifestPath, ($denyManifest | ConvertTo-Json -Depth 20), $utf8)
     $missingReceiptBefore = Snapshot $userDenyRoot
     $missingReceiptInstall = Global-Install $project 'opencode'
-    Check 'GLOBAL_15_RESOURCE_MANIFEST_REQUIRES_RECEIPT_READONLY' (
+    $missingReceiptVerify = Global-Verify $project 'opencode'
+    Check 'GLOBAL_14_RESOURCE_MANIFEST_REQUIRES_RECEIPT_READONLY' (
         $missingReceiptInstall.Code -ne 0 -and
         $missingReceiptInstall.Text -match 'GLOBAL_DEFAULT_AGENT_RECEIPT_MISSING' -and
+        $missingReceiptVerify.Code -ne 0 -and
+        $missingReceiptVerify.Text -match 'GLOBAL_DEFAULT_AGENT_RECEIPT_MISSING' -and
+        $missingReceiptVerify.Text -match 'Uninstall it with the Olympus version that created this installation, then install the current version' -and
         (Snapshot $userDenyRoot) -ceq $missingReceiptBefore
     ) ("exit=$($missingReceiptInstall.Code)`n$($missingReceiptInstall.Text)")
     [IO.File]::WriteAllBytes($userDenyManifestPath, $userDenyManifestBytes)
@@ -379,19 +629,30 @@ try {
     $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeOnlyRoot
     $openCodeOnly = Run-Installer $project @('-Scope','global','-Harness','opencode')
     $openCodeOnlyManifest = Get-Content (Join-Path $openCodeOnlyRoot 'olympus/orchestrator-install.json') -Raw | ConvertFrom-Json
+    $requiredGlobalCommands = @(
+        'commands/olympus.ultra.md',
+        'commands/olympus.performance.md',
+        'commands/olympus.performance-ultra.md'
+    )
+    $expectedGlobalPaths = @(
+        'agents/kael.md', 'agents/atlas.md', 'agents/veyra.md', 'agents/kovan.md',
+        'agents/nox.md', 'agents/vera.md', 'agents/helios.md', 'agents/talos.md', 'agents/thales.md',
+        'plugins/olympus-activity/activity.ts', 'plugins/olympus-activity/tui.tsx'
+    ) + $requiredGlobalCommands
     Check 'GLOBAL_OPENCODE_ONLY_SELECTOR' ($openCodeOnly.Code -eq 0 -and $openCodeOnlyManifest.schema_version -eq 1 -and
         $openCodeOnlyManifest.scope -ceq 'global' -and $openCodeOnlyManifest.installed_harnesses.Count -eq 1 -and
         $openCodeOnlyManifest.installed_harnesses[0] -ceq 'opencode' -and
         -not [string]::IsNullOrWhiteSpace([string]$openCodeOnlyManifest.installed_version) -and
         -not [string]::IsNullOrWhiteSpace([string]$openCodeOnlyManifest.installed_from_commit) -and
-        $openCodeOnlyManifest.managed_files.Count -eq 16 -and
+        $openCodeOnlyManifest.managed_files.Count -eq 15 -and
         @($openCodeOnlyManifest.managed_files | Where-Object { [string]$_.sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0 -and
-        $openCodeOnlyManifest.default_agent_receipt.state -ceq 'committed')
-    $requiredGlobalCommands = @('commands/olympus.ultra.md','commands/olympus.performance.md')
+        $openCodeOnlyManifest.default_agent_receipt.state -ceq 'committed' -and
+        [string]::Join("`n", @($openCodeOnlyManifest.managed_files | ForEach-Object { $_.path } | Sort-Object)) -ceq
+            [string]::Join("`n", @($expectedGlobalPaths + 'opencode.jsonc' | Sort-Object)))
     $managedGlobalCommands = @($openCodeOnlyManifest.managed_files |
         Where-Object { $_.path -in $requiredGlobalCommands })
     Check 'GLOBAL_NAMESPACED_COMMANDS_ARE_MANAGED' (
-        $managedGlobalCommands.Count -eq 2 -and
+        $managedGlobalCommands.Count -eq 3 -and
         @($requiredGlobalCommands | Where-Object {
             -not (Test-Path -LiteralPath (Join-Path $openCodeOnlyRoot $_) -PathType Leaf)
         }).Count -eq 0 -and (Global-Verify $project 'opencode').Code -eq 0
@@ -402,39 +663,33 @@ try {
         @($openCodeOnlyManifest.managed_files | Where-Object { $_.path -eq 'opencode.jsonc' }).Count -eq 1 -and
         (Global-Verify $project 'opencode').Code -eq 0
     )
+    $legacyRoot = Join-Path $run 'OpenCode v0.10.0 Inventory Refused'
+    [IO.Directory]::CreateDirectory($legacyRoot) | Out-Null
+    Copy-Item -Path (Join-Path $openCodeOnlyRoot '*') -Destination $legacyRoot -Recurse
+    $legacyManifestPath = Join-Path $legacyRoot 'olympus/orchestrator-install.json'
+    $legacyManifest = Get-Content -LiteralPath $legacyManifestPath -Raw | ConvertFrom-Json
+    $legacyManifest.installed_version = 'v0.10.0'
+    $legacyManifest.managed_files = @($legacyManifest.managed_files | Where-Object {
+        $_.path -notin $requiredGlobalCommands
+    })
     foreach ($commandPath in $requiredGlobalCommands) {
-        $malformedRoot = Join-Path $run ('malformed-legacy-' + [IO.Path]::GetFileNameWithoutExtension($commandPath))
-        [IO.Directory]::CreateDirectory($malformedRoot) | Out-Null
-        Copy-Item -Path (Join-Path $openCodeOnlyRoot '*') -Destination $malformedRoot -Recurse
-        $malformedManifestPath = Join-Path $malformedRoot 'olympus/orchestrator-install.json'
-        $malformedManifest = Get-Content -LiteralPath $malformedManifestPath -Raw | ConvertFrom-Json
-        $malformedManifest.installed_version = 'v0.10.0'
-        # Fourteen entries must mean legacy base + guard, never base + a user command.
-        $malformedManifest.managed_files = @($malformedManifest.managed_files | Where-Object {
-            $_.path -ne 'opencode.jsonc' -and
-            ($_.path -notin $requiredGlobalCommands -or $_.path -eq $commandPath)
-        })
-        foreach ($otherCommand in @($requiredGlobalCommands | Where-Object { $_ -ne $commandPath })) {
-            [IO.File]::Delete((Join-Path $malformedRoot $otherCommand))
-        }
-        $userCommandPath = Join-Path $malformedRoot $commandPath
-        [IO.File]::WriteAllText($userCommandPath, "User command must survive: $commandPath`n", $utf8)
-        ($malformedManifest.managed_files | Where-Object path -eq $commandPath).sha256 =
-            (Get-FileHash -LiteralPath $userCommandPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        Check 'GLOBAL_MALFORMED_LEGACY_FIXTURE_SHAPE' (
-            $malformedManifest.managed_files.Count -eq 14 -and
-            @($malformedManifest.managed_files | Where-Object path -eq 'opencode.jsonc').Count -eq 0 -and
-            $malformedManifest.default_agent_receipt.config_path -eq 'opencode.jsonc')
-        [IO.File]::WriteAllText($malformedManifestPath, ($malformedManifest | ConvertTo-Json -Depth 30), $utf8)
-        $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $malformedRoot
-        $beforeMalformed = Snapshot $malformedRoot
-        foreach ($operation in @('Update','Force','Uninstall','VerifyOnly')) {
-            $rejected = Run-Installer $project @('-Scope','global','-Harness','opencode',('-' + $operation))
-            Check ('GLOBAL_MALFORMED_LEGACY_' + $operation.ToUpperInvariant() + '_PRESERVES_USER_COMMAND') (
-                $rejected.Code -ne 0 -and $rejected.Text -match 'GLOBAL_MANIFEST_INVALID' -and
-                (Snapshot $malformedRoot) -ceq $beforeMalformed
-            ) ("command=$commandPath; exit=$($rejected.Code)`n$($rejected.Text)")
-        }
+        [IO.File]::Delete((Join-Path $legacyRoot $commandPath))
+    }
+    [IO.File]::WriteAllText($legacyManifestPath, ($legacyManifest | ConvertTo-Json -Depth 30), $utf8)
+    $legacyLockPath = Join-Path $legacyRoot '.olympus-cli-edit.lock'
+    if (Test-Path -LiteralPath $legacyLockPath) { [IO.File]::Delete($legacyLockPath) }
+    $beforeLegacy = Snapshot $legacyRoot
+    $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $legacyRoot
+    foreach ($operation in @('Install','Update','Force','Uninstall','VerifyOnly')) {
+        $arguments = @('-Scope','global','-Harness','opencode')
+        if ($operation -ne 'Install') { $arguments += ('-' + $operation) }
+        $rejected = Run-Installer $project $arguments
+        Check ('GLOBAL_V010_' + $operation.ToUpperInvariant() + '_REFUSED_BEFORE_LOCK') (
+            $rejected.Code -ne 0 -and $rejected.Text -match 'GLOBAL_MANIFEST_INVALID' -and
+            $rejected.Text -match 'Uninstall it with the Olympus version that created this installation, then install the current version' -and
+            (Snapshot $legacyRoot) -ceq $beforeLegacy -and
+            -not (Test-Path -LiteralPath $legacyLockPath)
+        ) ("operation=$operation; exit=$($rejected.Code)`n$($rejected.Text)")
     }
     $env:OLYMPUS_GLOBAL_FIXTURE_OPENCODE_ROOT = $openCodeOnlyRoot
     # ASK requires approval (a rejected approval blocks the read). A following
@@ -476,7 +731,7 @@ try {
     Check 'GLOBAL_INTERRUPTED_GUARD_RECOVERED_AND_OWNED' (
         $recoverVerifyBefore.Code -ne 0 -and
         $recoverInstall.Code -eq 0 -and $null -ne $recoverManifest -and
-        $recoverManifest.managed_files.Count -eq 16 -and
+        $recoverManifest.managed_files.Count -eq 15 -and
         @($recoverManifest.managed_files | Where-Object { $_.path -eq 'opencode.jsonc' }).Count -eq 1 -and
         [IO.File]::ReadAllText($recoverGuardPath) -ceq $defaultGuardText -and
         -not (Test-Path -LiteralPath $recoverIntentPath) -and
@@ -682,12 +937,12 @@ try {
     $openManifestPath = Join-Path $openCodeRoot 'olympus/orchestrator-install.json'
     $openManifestText = [IO.File]::ReadAllText($openManifestPath)
     $openManifest = $openManifestText | ConvertFrom-Json
-    Check 'GLOBAL_USER_CONFIG_MANIFEST_CURRENT_15_RESOURCE_FORM' (
+    Check 'GLOBAL_USER_CONFIG_MANIFEST_CURRENT_14_RESOURCE_FORM' (
         $openManifest.schema_version -eq 1 -and $openManifest.scope -ceq 'global' -and
         @($openManifest.installed_harnesses).Count -eq 1 -and $openManifest.installed_harnesses[0] -ceq 'opencode' -and
         -not [string]::IsNullOrWhiteSpace([string]$openManifest.installed_version) -and
         -not [string]::IsNullOrWhiteSpace([string]$openManifest.installed_from_commit) -and
-        $openManifest.managed_files.Count -eq 15 -and
+        $openManifest.managed_files.Count -eq 14 -and
         @($openManifest.managed_files | Where-Object { [string]$_.sha256 -notmatch '^(?i:[0-9a-f]{64})$' }).Count -eq 0 -and
         $openManifest.default_agent_receipt.state -ceq 'committed' -and
         (Test-Path -LiteralPath $openUserConfig) -and

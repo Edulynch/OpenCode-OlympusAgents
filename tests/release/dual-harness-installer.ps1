@@ -75,9 +75,9 @@ function Has-GeneratedSurface([string]$target) {
     try { $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json }
     catch { return $false }
     $expected = @(
-        '.opencode/agents/argus.md', '.opencode/agents/atlas.md', '.opencode/agents/helios.md',
+        '.opencode/agents/atlas.md', '.opencode/agents/helios.md',
         '.opencode/agents/kael.md', '.opencode/agents/kovan.md', '.opencode/agents/nox.md',
-        '.opencode/agents/orin.md', '.opencode/agents/talos.md', '.opencode/agents/thales.md',
+        '.opencode/agents/talos.md', '.opencode/agents/thales.md',
         '.opencode/agents/vera.md', '.opencode/agents/veyra.md',
         '.opencode/plugins/olympus-activity/activity.ts', '.opencode/plugins/olympus-activity/tui.tsx',
         '.opencode/scripts/worktree-setup.ps1', 'opencode.jsonc'
@@ -87,7 +87,7 @@ function Has-GeneratedSurface([string]$target) {
         @($manifest.installed_harnesses).Count -ne 1 -or $manifest.installed_harnesses[0] -cne 'opencode' -or
         [string]::IsNullOrWhiteSpace([string]$manifest.installed_version) -or
         [string]::IsNullOrWhiteSpace([string]$manifest.installed_from_commit) -or
-        $managedPaths.Count -ne 15 -or
+        $managedPaths.Count -ne 13 -or
         [string]::Join("`n", @($managedPaths | Sort-Object)) -cne [string]::Join("`n", $expected)) { return $false }
     foreach ($entry in @($manifest.managed_files)) {
         $relative = ([string]$entry.path).Replace('\','/')
@@ -108,7 +108,7 @@ try {
     [IO.File]::WriteAllText((Join-Path $mockBin 'opencode.cmd'), "@echo off`r`npwsh -NoProfile -File `"%~dp0opencode.ps1`" %*`r`nexit /b %ERRORLEVEL%`r`n", [Text.Encoding]::ASCII)
     $env:PATH = $mockBin + [IO.Path]::PathSeparator + $env:PATH
 
-    # A: the current default owns exactly the 15-resource OpenCode inventory.
+    # A: the current default owns exactly the 13-resource project inventory.
     $defaultTarget = New-Target 'default-opencode'
     $specKitPath = '.opencode/commands/speckit.plan.md'
     Write-Fixture $defaultTarget $specKitPath "user-owned SpecKit command`n"
@@ -120,7 +120,7 @@ try {
         -not (Test-Path -LiteralPath (Join-Path $defaultTarget '.codex')) -and
         $defaultManifest.scope -eq 'project' -and @($defaultManifest.installed_harnesses).Count -eq 1 -and
         $defaultManifest.installed_harnesses[0] -eq 'opencode' -and
-        $defaultManifest.managed_files.Count -eq 15 -and
+        $defaultManifest.managed_files.Count -eq 13 -and
         -not [string]::IsNullOrWhiteSpace([string]$defaultManifest.installed_from_commit))
     $defaultManagedPaths = @($defaultManifest.managed_files | ForEach-Object { ([string]$_.path).Replace('\','/') })
     $defaultVerify = Verify $defaultTarget 'opencode'

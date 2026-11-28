@@ -73,6 +73,7 @@ function Invoke-FastSlice {
     Write-Output "`n######## FAST — offline-only qualification ########"
     Invoke-Check 'Local pre-push gate' $script:Python @('-B','-m','unittest','discover','-s','tests/pre-push','-p','test_pre_push.py','-v')
     Invoke-PythonCheck 'Harness Core (read-only root)' 'tests/harness-core/qualify.py'
+    Invoke-Check 'Renderer candidates (isolated)' $script:Python @('-B','-m','unittest','discover','-s','tests/harness-core','-p','test_renderer.py','-v')
 
     $offlineSuites = @(
         'tests/bootstrap-source-validation/qualify.ps1',
@@ -119,7 +120,7 @@ function Invoke-FullAdditions {
     $offlineSlices = @(
         @('Authority grants','tests/authority/qualify.ps1'),
         @('Activity HUD','tests/activity-hud/qualify.ps1'),
-        @('Argus','tests/argus/qualify.ps1'),
+        @('Retired roster','tests/argus/qualify.ps1'),
         @('Atlas','tests/atlas/qualify.ps1'),
         @('Helios','tests/helios/qualify.ps1'),
         @('Talos','tests/talos/qualify.ps1'),
@@ -140,7 +141,6 @@ function Invoke-RuntimeSlice {
         foreach ($suite in @(
             @('Authority effective rules','tests/authority/qualify.ps1'),
             @('Activity plugin discovery','tests/activity-hud/qualify.ps1'),
-            @('Argus effective agent','tests/argus/qualify.ps1'),
             @('Atlas effective agent','tests/atlas/qualify.ps1'),
             @('Helios effective agent','tests/helios/qualify.ps1'),
             @('Talos effective agent','tests/talos/qualify.ps1'),
@@ -156,7 +156,6 @@ function Invoke-RuntimeSlice {
     Invoke-PwshCheck 'Authority effective rules' 'tests/authority/qualify.ps1' @('-QualificationSlice','Runtime')
     Invoke-PwshCheck 'Activity plugin discovery' 'tests/activity-hud/qualify.ps1' @('-QualificationSlice','Runtime')
     foreach ($slice in @(
-        @('Argus effective agent','tests/argus/qualify.ps1'),
         @('Atlas effective agent','tests/atlas/qualify.ps1'),
         @('Helios effective agent','tests/helios/qualify.ps1'),
         @('Talos effective agent','tests/talos/qualify.ps1'),

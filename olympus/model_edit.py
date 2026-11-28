@@ -478,8 +478,8 @@ def _make_candidate(source_root: str | Path, operation: str,
     try:
         old_models, policies, capabilities, identities, roles = renderer.checked_sources(source)
         roles = set(roles)
-        if len(roles) != 11:
-            raise ModelEditError(f"Expected eleven canonical roles, found {len(roles)}")
+        if len(roles) != 9:
+            raise ModelEditError(f"Expected nine canonical roles, found {len(roles)}")
         if set(identities) != roles or set(old_models.get("roles", {})) != roles:
             raise ModelEditError("Source roster, identities, and model roles are ambiguous")
         old_models = dict(old_models)

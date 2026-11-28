@@ -26,9 +26,9 @@ function New-SourceFixture([string]$Name) {
         '.opencode/plugins/olympus-activity/tui.tsx',
         '.opencode/scripts/worktree-setup.ps1'
     )
-    if ($agentSources.Count -ne 11 -or
+    if ($agentSources.Count -ne 9 -or
         @($requiredGeneratedSources | Where-Object { $_ -notin $trackedOpenCodeFiles }).Count -ne 0) {
-        throw 'Current OpenCode source fixture does not contain the 15-resource generated inventory.'
+        throw 'Current OpenCode source fixture does not contain the 13-resource project inventory.'
     }
     foreach ($relative in $trackedOpenCodeFiles) {
         $sourcePath = Join-Path $repoRoot $relative
@@ -50,7 +50,11 @@ function New-SourceFixture([string]$Name) {
     Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts/target-writer-lock.ps1') -Destination $scripts
     $core = Join-Path $source 'olympus/core'
     [IO.Directory]::CreateDirectory($core) | Out-Null
-    Copy-Item -LiteralPath (Join-Path $repoRoot 'olympus/core/models-dev.json') -Destination $core
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'olympus/core') -Destination (Split-Path -Parent $core) -Recurse -Force
+    foreach ($directory in @('roles','policies','harnesses')) {
+        Copy-Item -LiteralPath (Join-Path $repoRoot "olympus/$directory") -Destination (Split-Path -Parent $core) -Recurse
+    }
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'scripts/render_harnesses.py') -Destination $scripts
     return $source
 }
 
@@ -146,12 +150,19 @@ try {
         '{"schema_version":1,"overrides":{"kael":{"model":"openai/gpt-6-luna","effort":"max"}},"orchestration":{"max_children":1}}', $utf8)
     $preferred = Invoke-Bootstrap $validSource $preferenceTarget
     Assert-Condition ($preferred.ExitCode -eq 0 -and $preferred.Text -match '(?m)^READY\s*$') ('Valid global preferences were rejected: ' + $preferred.Text)
-    $sourceKael = [IO.File]::ReadAllText((Join-Path $validSource '.opencode/agents/kael.md'))
-    $installedKael = [IO.File]::ReadAllText((Join-Path $preferenceTarget '.opencode/agents/kael.md'))
-    Assert-Condition ($installedKael -match '(?m)^model:\s*"openai/gpt-6-luna#max"\s*$') 'Global Kael model override was not applied.'
-    Assert-Condition (([regex]::Replace($installedKael, '(?m)^model:.*$', 'model: "<model>"')) -ceq
-        ([regex]::Replace($sourceKael, '(?m)^model:.*$', 'model: "<model>"'))) 'Global max_children altered the project Kael prompt.'
-    Write-Output 'BOOTSTRAP_GLOBAL_PREFERENCES: PASS (model override applied; orchestration not applied to project output)'
+    $manifest = [IO.File]::ReadAllText((Join-Path $preferenceTarget '.opencode/orchestrator-install.json')) | ConvertFrom-Json
+    foreach ($role in @('kael','atlas')) {
+        $relative = ".opencode/agents/$role.md"
+        $installed = Join-Path $preferenceTarget $relative
+        $text = [IO.File]::ReadAllText($installed)
+        Assert-Condition ($text -match 'MAX_ACTIVE_CHILDREN = 1\b') "Global max_children did not reach project $role."
+        if ($role -eq 'kael') {
+            Assert-Condition ($text -match '(?m)^model:\s*"openai/gpt-6-luna#max"\s*$') 'Global Kael model override was not applied.'
+        }
+        $entry = @($manifest.managed_files | Where-Object path -ceq $relative)
+        Assert-Condition ($entry.Count -eq 1 -and $entry[0].sha256 -ieq (Get-FileHash -LiteralPath $installed).Hash) "Manifest does not identify the installed $role bytes."
+    }
+    Write-Output 'BOOTSTRAP_GLOBAL_PREFERENCES: PASS (Kael model override and shared Kael/Atlas orchestration)'
 
     $invalidGlobalConfigs = @(
         '{"schema_version":1,"overrides":{},"orchestration":{"max_children":0}}',
@@ -166,6 +177,7 @@ try {
         $invalidPreferenceTarget = New-Target "invalid-global-preferences-$index"
         $invalidPreference = Invoke-Bootstrap $validSource $invalidPreferenceTarget -DryRun
         Assert-Condition ($invalidPreference.ExitCode -ne 0 -and $invalidPreference.Text -match 'USER_CONFIG_INVALID') ('Malformed or unsupported global preferences were accepted: ' + $invalidPreference.Text)
+        Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $invalidPreferenceTarget '.olympus-cli-edit.lock'))) 'Rejected preference preflight created a lock.'
     }
     Write-Output 'BOOTSTRAP_INVALID_GLOBAL_PREFERENCES: PASS (range, extra fields, and case mismatches rejected)'
 

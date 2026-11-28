@@ -4,7 +4,7 @@
 
 <img src="docs/assets/olympus-cover.png" alt="El equipo de Olympus Agents en el monte Olimpo" width="100%">
 
-**Tu equipo de programación con IA. Una instrucción, once roles. Tú tienes el control.**
+**Tu equipo de programación con IA. Una instrucción, nueve roles. Tú tienes el control.**
 
 🌐 **[English](README.md) · Español**
 
@@ -80,19 +80,24 @@ curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/do
 
 ## 👥 Conoce al equipo
 
+| Primario | Responsabilidad |
+| --- | --- |
+| 🧭 **Kael** | Decide y coordina la ejecución, reconcilia la evidencia, evalúa la aceptación y cierra la tarea. No inspecciona repositorios, investiga, ejecuta shell/Git/pruebas ni edita archivos. |
+| 🗺️ **Atlas** | Primario independiente de análisis y planificación de solo lectura. Entrega un plan acotado a Kael; no ejecuta ni acepta el trabajo. |
+
+**Los siete especialistas de Kael**
+
 | Agente | Cuándo te ayuda |
 | --- | --- |
-| 🧭 **Kael** | Coordina tu tarea y reúne los resultados. |
 | 🔎 **Veyra** | Encuentra código, documentación y evidencia relevante. |
-| 🏗️ **Orin** | Diseña interfaces y compara opciones de arquitectura. |
-| 🗺️ **Atlas** | Convierte un cambio acordado en un plan paso a paso. |
-| 💻 **Kovan** | Implementa cambios dentro del alcance acordado. |
-| 🐛 **Argus** | Diagnostica errores cuando la causa no es evidente. |
+| 💻 **Kovan** | Implementa cambios acotados y realiza el trabajo Git normal autorizado. |
 | 🧪 **Nox** | Ejecuta pruebas y comprueba qué pasó realmente. |
 | ⚖️ **Vera** | Revisa cambios de forma independiente para detectar errores y regresiones. |
 | 🛡️ **Talos** | Diagnostica fallas de seguridad y evalúa su impacto. |
-| 🧠 **Thales** | Ayuda a resolver fallas técnicas difíciles de explicar. |
+| 🧠 **Thales** | Ayuda a resolver fallas técnicas difíciles cuando la evidencia acotada no basta. |
 | 🚀 **Helios** | Evalúa si una mejora de rendimiento justifica su costo y riesgo. |
+
+Atlas no es un agente hijo de Kael. Orin y Argus están retirados y no forman parte del equipo actual de nueve roles.
 
 🧠 **Modelos predeterminados:** los roles Sol usan GPT‑6.2 Sol. Los roles Luna y los modelos que elegiste explícitamente no cambian. [Configuración de modelos (en inglés) →](docs/INSTALLATION.md#olympus-cli)
 
@@ -100,15 +105,17 @@ curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/do
 
 ## 🧭 Comandos de OpenCode
 
-⚡ **`/olympus.ultra <prompt>`** — ejecuta trabajo independiente hasta el límite configurado (de 1 a 8). Si solo hay dos tareas útiles, usa como máximo dos subagentes aunque haya seis espacios disponibles.
+⚡ **`/olympus.ultra <prompt>`** — busca trabajo listo e independiente hasta el límite de instrucciones (de 1 a 8) de la sesión actual de Kael o Atlas. El límite no es una meta y no se añade ningún scheduler.
 
 > `/olympus.ultra Revisa estos módulos independientes y resume las pruebas.`
 
-📈 **`/olympus.performance <prompt>`** — parte de una medición inicial y propone una mejora. Kael te pide autorización antes de aplicarla, salvo que ya hayas aprobado ese cambio específico. Después compara los resultados y verifica que nada se haya roto.
+📈 **`/olympus.performance <prompt>`** — expresa una intención explícita de optimizar. Usa el método de Helios cuando aporte valor y requiere aprobación de una dirección concreta aún no resuelta antes de implementarla. La validación compara antes/después/delta/meta y comprueba la corrección.
 
 > `/olympus.performance Evalúa cómo reducir el tiempo de respuesta de este endpoint sin cambiar su comportamiento.`
 
-💬 **Los dos necesitan una instrucción.** No hay alias `/ultra` ni `/performance`. Si dejas los argumentos vacíos, el agente debe mostrar cómo usar el comando; OpenCode no lo impone desde su parser. [Detalles de uso (en inglés) →](docs/WORKFLOWS.md#native-task-commands)
+🚀 **`/olympus.performance-ultra <prompt>`** — combina una intención explícita de optimización con la admisión Ultra; no autoriza la implementación ni evita ninguna de las dos barreras.
+
+💬 **Los tres comandos se ejecutan desde un primario Kael o Atlas y necesitan una instrucción.** Con argumentos vacíos o solo espacios, muestran el uso; desde un primario no compatible, indican el primario permitido. Ninguno invoca herramientas ni agentes en esos casos. No hay alias simples. [Detalles de uso (en inglés) →](docs/WORKFLOWS.md#native-task-commands)
 
 <a id="portable-cli"></a>
 
@@ -119,7 +126,7 @@ curl -fsSL https://github.com/Edulynch/OpenCode-OlympusAgents/releases/latest/do
 | `olympus --help` | Consulta los comandos más usados y sus ejemplos. |
 | `olympus update` | Busca una versión estable más reciente. |
 | `olympus agents list` | Consulta los modelos y el nivel de razonamiento de los agentes. |
-| `olympus config set-max-parallel 6` | Guarda el límite global de subagentes directos activos por sesión principal. |
+| `olympus config set-max-parallel 6` | Guarda el límite compartido de instrucciones (1–8) para los agentes hijos directos de Kael o Atlas en cada sesión principal. |
 | `olympus doctor --scope global` | Revisa la instalación global sin modificarla. |
 
 🔍 **¿Necesitas más detalles?** Prueba `olympus update --help` para ver la ayuda del comando o agrega `--verbose` para ver qué se ejecutó. Para automatizar, usa `--json` en los comandos que lo admiten. [Todos los comandos y opciones avanzadas (en inglés) →](docs/INSTALLATION.md#olympus-cli)

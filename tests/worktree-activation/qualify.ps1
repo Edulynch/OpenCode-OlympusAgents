@@ -73,7 +73,7 @@ function Assert-InstalledManifest([string]$Directory) {
     $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -Depth 100
     if ($manifest.schema_version -ne 1 -or $manifest.scope -cne 'project' -or
         @($manifest.installed_harnesses).Count -ne 1 -or $manifest.installed_harnesses[0] -cne 'opencode' -or
-        @($manifest.managed_files).Count -ne 15) { return $false }
+        @($manifest.managed_files).Count -ne 13) { return $false }
     foreach ($entry in @($manifest.managed_files)) {
         $path = Join-Path $Directory ([string]$entry.path -replace '/', [IO.Path]::DirectorySeparatorChar)
         if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
@@ -128,7 +128,7 @@ try {
     $sourceManifest = Get-Content -LiteralPath $sourceManifestPath -Raw | ConvertFrom-Json
     Check 'INSTALL_MANIFEST_OWNS_EXPECTED_RESOURCES' ($sourceManifest.schema_version -eq 1 -and
         $sourceManifest.scope -ceq 'project' -and @($sourceManifest.installed_harnesses).Count -eq 1 -and
-        $sourceManifest.installed_harnesses[0] -ceq 'opencode' -and $sourceManifest.managed_files.Count -eq 15 -and
+        $sourceManifest.installed_harnesses[0] -ceq 'opencode' -and $sourceManifest.managed_files.Count -eq 13 -and
         -not [string]::IsNullOrWhiteSpace([string]$sourceManifest.installed_version) -and
         -not [string]::IsNullOrWhiteSpace([string]$sourceManifest.installed_from_commit) -and
         $sourceManifest.managed_files.path -contains '.opencode/scripts/worktree-setup.ps1')

@@ -515,6 +515,38 @@ def _version_compare(left: str, right: str) -> int | None:
     return (int(a["sequence"]) > int(b["sequence"])) - (int(a["sequence"]) < int(b["sequence"]))
 
 
+_SHARED_PRIMARY_CAP_MARKER = b"MAX_ACTIVE_CHILDREN = "
+_SHARED_PRIMARY_CAP = re.compile(rb"MAX_ACTIVE_CHILDREN = ([0-9]+)(?=`|\))")
+
+
+def _assert_shared_primary_caps_coherent(
+    current: dict[str, tuple[bytes | None, os.stat_result | None]],
+) -> None:
+    pair = [current.get(f"agents/{role}.md") for role in ("kael", "atlas")]
+    if any(item is None or item[0] is None for item in pair):
+        return
+    kael, atlas = (item[0] for item in pair)
+    if (_SHARED_PRIMARY_CAP_MARKER not in kael
+            or _SHARED_PRIMARY_CAP_MARKER not in atlas):
+        return
+
+    caps = []
+    for prompt in (kael, atlas):
+        matches = list(_SHARED_PRIMARY_CAP.finditer(prompt))
+        if (len(matches) != prompt.count(_SHARED_PRIMARY_CAP_MARKER)
+                or not matches
+                or any(not 1 <= int(match.group(1)) <= 8 for match in matches)
+                or len({int(match.group(1)) for match in matches}) != 1):
+            raise GlobalInstallError(
+                "Installed primary cap mismatch: shared Kael/Atlas markers are malformed or inconsistent."
+            )
+        caps.append(int(matches[0].group(1)))
+    if caps[0] != caps[1]:
+        raise GlobalInstallError(
+            f"Installed primary cap mismatch: Kael={caps[0]}, Atlas={caps[1]}; refusing update."
+        )
+
+
 def _inventory_for_receipt(expected: dict[str, bytes], owns_guard: bool) -> dict[str, bytes]:
     return {path: raw for path, raw in expected.items()
             if path != "opencode.jsonc" or owns_guard}
@@ -660,6 +692,8 @@ def _build_install(root: Path, candidate: _Candidate, *, update: bool,
         raise GlobalInstallError(f"Refusing to downgrade OpenCode global installation from {old_version} to {candidate.version}.")
     owns_guard = "opencode.jsonc" in old_entries
     current = _validate_owned_files(root, old_entries, allow_drift=force)
+    if update:
+        _assert_shared_primary_caps_coherent(current)
     if force and owns_guard:
         guard, _ = _read(root, "opencode.jsonc")
         if guard is None or _digest(guard) != old_entries["opencode.jsonc"]:
@@ -1630,7 +1664,11 @@ def _commit(root: Path, root_identity: tuple[int, int], candidate: _Candidate, o
 def _operate(source: Path, version: str, commit: str, operation: str, *,
              force: bool = False) -> LifecycleOutcome:
     candidate = _candidate(source, version, commit)
-    root, root_identity = _resolve_root(create=operation in ("install", "update"))
+    if version == "v0.10.0":
+        raise GlobalInstallError(
+            f"Staged global source version '{version}' is historically unsupported; use the current source.",
+        )
+    root, root_identity = _resolve_root(create=operation == "install")
     _check_roots(candidate.source, root)
     lock = _existing_lock(root, root_identity)
     try:
@@ -1769,8 +1807,6 @@ def verify(source: Path, *, version: str = "local", commit: str = "unknown") -> 
             raise GlobalInstallError(
                 f"Installed global version is {manifest['installed_version']}; requested {version}.", 3,
             )
-        if global_readonly._is_legacy_inventory(manifest, entries):
-            raise GlobalInstallError("The installed global inventory requires an explicit update.", 3)
         current = _validate_owned_files(root, entries)
         if any(raw != candidate.expected.get(path) for path, (raw, _) in current.items()):
             raise GlobalInstallError("Installed managed resources differ from this staged source.", 1)

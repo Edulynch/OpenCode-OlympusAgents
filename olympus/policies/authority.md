@@ -10,6 +10,15 @@ approval, or is refused; Core separately governs Olympus task scope, consent, an
 non-elevatable boundaries. A task grant or approval cannot override an effective
 native DENY or weaken Core DENY. Historical Codex deny assertions remain
 defensive checks only; they do not declare Codex a currently supported adapter.
+Kael is the sole task authority. Atlas analysis and any role handoff are evidence
+only; neither grants scope, permission, user approval, or authority to execute.
+
+## Initial mission authority
+
+Kael carries forward exact authority across phases, not native consent or
+authority for merge and release. Apply the [initial mission authority
+rules](routing.md#initial-mission-authority) within Capability Preflight and
+each later task delegation.
 
 ## Out-of-scope task result
 

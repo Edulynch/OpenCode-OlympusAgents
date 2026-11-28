@@ -227,8 +227,8 @@ def main() -> int:
         capabilities = tomllib.load(stream)
     maintenance_policy = (ROOT / "olympus" / "policies" / "maintenance-context.md").read_text(encoding="utf-8").strip()
     canonical_roles = {path.stem for path in (ROOT / "olympus" / "roles").glob("*.md")}
-    check("CANONICAL_11_UNIQUE_ROLE_FILES", len(canonical_roles) == 11 and canonical_roles == set(models["roles"]))
-    check("CANONICAL_11_UNIQUE_DISPLAY_IDENTITIES", set(identities) == canonical_roles and len(set(identities.values())) == 11 and
+    check("CANONICAL_9_UNIQUE_ROLE_FILES", len(canonical_roles) == 9 and canonical_roles == set(models["roles"]))
+    check("CANONICAL_9_UNIQUE_DISPLAY_IDENTITIES", set(identities) == canonical_roles and len(set(identities.values())) == 9 and
         all(display.split(" — ", 1)[0].casefold() == role for role, display in identities.items()))
     check("ONE_ROOT_ORCHESTRATOR", "ROOT ORCHESTRATOR" in (ROOT / "olympus/roles/kael.md").read_text(encoding="utf-8"))
 
@@ -271,7 +271,7 @@ def main() -> int:
     check(
         "INSTALLER_HAS_NO_HARDCODED_ROLE_MODEL_MAP",
         re.search(
-            r'(?m)^\s*"(?:kael|thales|atlas|argus|talos|helios|veyra|orin|kovan|nox|vera)"=@\(',
+            r'(?m)^\s*"(?:kael|thales|atlas|talos|helios|veyra|kovan|nox|vera)"=@\(',
             bootstrap_text,
         ) is None,
     )
@@ -299,29 +299,35 @@ def main() -> int:
         path.stem: path.read_text(encoding="utf-8")
         for path in (ROOT / "olympus/harnesses/opencode/commands").glob("*.md")
     }
-    expected_commands = {"olympus.ultra", "olympus.performance"}
+    expected_commands = {"olympus.ultra", "olympus.performance", "olympus.performance-ultra"}
     check("EXACT_NAMESPACED_COMMAND_SOURCE_SET", set(command_sources) == expected_commands)
     for name, command in command_sources.items():
         metadata = yaml_frontmatter(command)
-        rendered_path = ROOT / ".opencode" / "commands" / f"{name}.md"
-        rendered = rendered_path.read_text(encoding="utf-8") if rendered_path.is_file() else ""
         check(f"COMMAND_{name.upper().replace('.', '_')}_NATIVE_SHAPE",
-              metadata is not None and "agent: kael" in metadata[0].splitlines()
-              and "subagent: false" in metadata[0].splitlines()
-              and not any(line.startswith(("model:", "template:")) for line in metadata[0].splitlines())
+              metadata is not None and "subagent: false" in metadata[0].splitlines()
+              and not any(line.startswith(("agent:", "model:", "template:")) for line in metadata[0].splitlines())
               and "$ARGUMENTS" in command and "empty or contains only whitespace" in command
-              and "Do not call tools or launch agents." in command and "!`" not in command
-              and rendered_path.is_file()
-              and GENERATED_MARKER in rendered)
+              and "Do not call tools or launch agents." in command
+              and "Before using tools, check the already-known current primary." in command
+              and "!`" not in command)
     check("ULTRA_COMMAND_PRESERVES_CEILING_AND_GATES",
-          "MAX_ACTIVE_CHILDREN" in command_sources.get("olympus.ultra", "")
-          and "Do not add filler" in command_sources.get("olympus.ultra", "")
-          and "completion gates" in command_sources.get("olympus.ultra", ""))
+          all(term in command_sources.get("olympus.ultra", "") for term in (
+              "ULTRA_CEILING", "READY_WORKSTREAMS", "TARGET_ACTIVE", "CURRENT_ACTIVE",
+              "UNDERFILL_REASON", "Do not wait for a whole wave, require a single batch",
+              "Same-role sessions are permitted only for genuinely independent work",
+          )))
     check("PERFORMANCE_COMMAND_RETAINS_APPROVAL_AND_MEASUREMENT",
-          "explicit optimization request" in command_sources.get("olympus.performance", "")
-          and "human approval before implementation" in command_sources.get("olympus.performance", "")
+          "explicit optimization intent" in command_sources.get("olympus.performance", "")
+          and "obtains approval for any concrete unsettled direction before implementation" in command_sources.get("olympus.performance", "")
           and "before/after/delta/target measurements" in command_sources.get("olympus.performance", "")
           and "does not select `/olympus.ultra`" in command_sources.get("olympus.performance", ""))
+    check("PERFORMANCE_ULTRA_COMBINES_BOTH_MODES_AND_GATES",
+          all(term in command_sources.get("olympus.performance-ultra", "") for term in (
+              "DOMAIN_MODE: PERFORMANCE", "EXECUTION_MODE: ULTRA",
+              "stop for approval of a concrete unsettled direction",
+              "before/after/delta/target measurements plus correctness validation",
+              "Use native child sessions only where allowed for the current primary",
+          )))
     check("NO_RETIRED_AEGIS_OR_MAINTAIN_OUTPUT", "aegis" not in opencode_files and
           not (ROOT / ".opencode/commands/maintain.md").exists())
     generated_agent_frontmatter = {
@@ -341,7 +347,7 @@ def main() -> int:
         ),
     )
     check("OPENCODE_KAEL_DERIVES_CONTEXTUAL_MAINTENANCE_POLICY", maintenance_policy in kael_prompt and
-          "Kael is the only root orchestrator" in kael_prompt and "project-identity evidence" in kael_prompt and
+          "Kael is the only root orchestrator" in kael_prompt and "independent project identity" in kael_prompt and
           "do not silently broaden" in kael_prompt.lower())
 
     for role, intent in models["roles"].items():
@@ -353,15 +359,15 @@ def main() -> int:
     kael_intent = models["roles"]["kael"]
     check("MODEL_FAMILIES_OPENCODE_ONLY", all(set(family) == {"opencode"} for family in models["families"].values()))
     check("SOL_OPENCODE_MODEL", models["families"]["sol"]["opencode"] == "openai/gpt-6.2-sol")
-    check("LUNA_REMAINS_LUNA", models["families"]["luna"]["opencode"].endswith("gpt-6-luna") and all(models["roles"][r]["family"] == "luna" for r in ("veyra", "orin", "kovan", "nox", "vera")))
+    check("LUNA_REMAINS_LUNA", models["families"]["luna"]["opencode"].endswith("gpt-6-luna") and all(models["roles"][r]["family"] == "luna" for r in ("veyra", "kovan", "nox", "vera")))
     check("NO_STALE_GPT_6_SOL_OUTPUT", all("gpt-6-sol" not in path.read_text(encoding="utf-8") for path in [*opencode_files.values(), ROOT / "opencode.jsonc"]))
-    check("EFFORTS_CANONICAL", models["roles"]["thales"]["effort"] == "xhigh" and models["roles"]["kovan"]["effort"] == "max" and all(models["roles"][r]["effort"] == "high" for r in ("kael", "atlas", "argus", "talos", "helios")))
+    check("EFFORTS_CANONICAL", models["roles"]["thales"]["effort"] == "xhigh" and models["roles"]["kovan"]["effort"] == "max" and all(models["roles"][r]["effort"] == "high" for r in ("kael", "atlas", "talos", "helios")))
 
     check("MAX_CHILDREN_CANONICAL_FOUR", orchestration["max_children"] == 4)
     routing = (ROOT / "olympus/policies/routing.md").read_text(encoding="utf-8")
     check("TRIVIAL_FAST_PATH_CANONICAL", "A direct answer from existing context uses zero tools and zero children" in routing and
-          "Every source change, including a trivial deterministic edit, goes to one scoped Kovan writer" in routing and
-          "Kael does not explore repositories, conduct technical research, implement, or execute technical validation" in routing and
+          "Every product-source change goes to one scoped Kovan writer" in routing and
+          "Kael does not read/search repositories, research, run shell/Git/tests, implement, or mutate files" in routing and
           "Kael may directly implement" not in routing)
     check("PENDING_WORK_ROUTING_CANONICAL", "dispatch only work already necessary to the objective, ready, and independent" in routing and
           "Do not start opportunistic research, verification, or unrelated work" in routing and
@@ -429,7 +435,8 @@ def main() -> int:
         "**Blocker** only when one exists", "finish with a useful **Next** action",
         "Exact `EXPECTED_OUTPUT` takes precedence", "ordinary conversation and direct answers stay natural",
         "Required validation pending after implementation is PARTIAL", "required work actively running is IN PROGRESS",
-        "required checks unavailable because of a blocker are BLOCKED", "observed required execution failure is FAILED",
+        "use overall BLOCKED only when a required acceptance gate is blocked and no useful independent authorized work remains",
+        "terminal required execution failure without a proportionate correction is FAILED",
         "optional check is skipped", "report COMPLETE", "Say idle only when you know no work remains active",
         "COMPLETION_UNCONFIRMED", "if either is unknown, say so",
     )))
@@ -517,7 +524,7 @@ def main() -> int:
           len(matrix_rows) == len(EXPECTED_CAPABILITIES) + 2
           and all(len(line.strip().strip("|").split("|")) == 2 for line in matrix_rows)
           and "HARNESSES.md#capability-evidence" in rendered_capability_doc)
-    managed = set(outputs)
+    managed = set(outputs) | {ROOT / "docs/HARNESS-CAPABILITIES.md"}
     before = snapshot_outputs(managed)
     print(f"ROOT_MANAGED_OUTPUT_COUNT {len(managed)}")
     report_output_snapshot("ROOT_MANAGED_OUTPUT_BEFORE", before)
@@ -544,9 +551,9 @@ def main() -> int:
     check("CHECK_MODE_READ_ONLY", opencode_check.returncode == 0 and
           "read-only" in opencode_check.stdout and before == after)
 
-    temp_base = Path.home() / "AppData" / "Local" / "Temp" / "opencode"
-    if not temp_base.is_dir():
-        temp_base = Path(tempfile.gettempdir())
+    temp_base = Path(tempfile.gettempdir())
+    if (temp_base / "opencode").is_dir():
+        temp_base /= "opencode"
     with tempfile.TemporaryDirectory(prefix="olympus-harness-qual-", dir=temp_base) as temporary:
         fixture = Path(temporary)
         shutil.copytree(ROOT / "olympus", fixture / "olympus")
@@ -633,17 +640,6 @@ def main() -> int:
               "DRIFT missing: .opencode/scripts/worktree-setup.ps1" in missing_check.stdout)
         check("MISSING_GENERATED_OUTPUT_RESTORED",
               run_renderer("render", "opencode", fixture).returncode == 0)
-
-        retired_agent = fixture / ".opencode" / "agents" / "aegis.md"
-        retired_command = fixture / ".opencode" / "commands" / "maintain.md"
-        retired_agent.write_text(f"<!-- {GENERATED_MARKER} -->\n", encoding="utf-8")
-        retired_command.parent.mkdir(parents=True, exist_ok=True)
-        retired_command.write_text(f"<!-- {GENERATED_MARKER} -->\n", encoding="utf-8")
-        retired_snapshot = snapshot_outputs((retired_agent, retired_command))
-        retired_check = run_renderer("check", "opencode", fixture)
-        retired_render = run_renderer("render", "opencode", fixture)
-        check("RETIRED_OUTPUTS_NOT_AUTOMATICALLY_REMOVED", retired_check.returncode == 0 and
-              retired_render.returncode == 0 and snapshot_outputs((retired_agent, retired_command)) == retired_snapshot)
 
     print("OLYMPUS_HARNESS_CORE_QUALIFICATION: PASS")
     return 0

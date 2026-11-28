@@ -78,6 +78,7 @@ try {
         self.environment["PYTHONPATH"] = str(ROOT)
         self.environment["PYTHONDONTWRITEBYTECODE"] = "1"
         self.environment["PYTHONUTF8"] = "1"
+        self.environment["OLYMPUS_CONFIG_FILE"] = str(self.sandbox / "fixture-preferences.json")
         self.pwsh = os.environ.get("OLYMPUS_TEST_POWERSHELL") or shutil.which("pwsh")
         self.helper = ROOT / "scripts/target-writer-lock.ps1"
         self.ps_lock_script = self.sandbox / "lock fixture.ps1"
@@ -480,7 +481,7 @@ try {
         self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
         before = self.snapshot_target()
         verify = self.run_ps(ROOT / "scripts/bootstrap.ps1", "-Target", self.target,
-                             "-Harness", "opencode", "-VerifyOnly")
+                             "-Harness", "opencode", "-VerifyOnly", env=self.mock_opencode_environment())
         self.assertEqual(0, verify.returncode, verify.stdout + verify.stderr)
         self.assertIn("OLYMPUS_VERIFY: local PASS", verify.stdout)
         self.assertFalse((self.target / ".olympus-cli-edit.lock").exists(),

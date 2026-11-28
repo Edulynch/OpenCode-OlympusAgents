@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
+import re
 import shutil
 import stat
 import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from fnmatch import fnmatchcase
 from io import StringIO
 from pathlib import Path
 
@@ -68,10 +71,11 @@ class CandidateRendererTests(unittest.TestCase):
         self.assertTrue(all(not path.exists() for path in self.expected))
 
     def test_detached_render_check_drift_and_idempotence(self):
+        managed_count = len(self.expected)
         self.assert_source_outputs_absent()
         code, stdout, stderr = self.invoke("render", "--output-root", str(self.destination))
         self.assertEqual(0, code, stderr)
-        self.assertIn("wrote 18 changed output(s), 0 unchanged", stdout)
+        self.assertIn(f"wrote {managed_count} changed output(s), 0 unchanged", stdout)
         expected_paths = {path.relative_to(self.source).as_posix() for path in self.expected}
         actual_paths = {
             path.relative_to(self.destination).as_posix()
@@ -84,7 +88,7 @@ class CandidateRendererTests(unittest.TestCase):
         before_check = self.snapshot(self.destination)
         code, stdout, stderr = self.invoke("check", "--output-root", str(self.destination))
         self.assertEqual(0, code, stderr)
-        self.assertIn("18 managed output(s); read-only", stdout)
+        self.assertIn(f"{managed_count} managed output(s); read-only", stdout)
         self.assertEqual(before_check, self.snapshot(self.destination))
 
         drifted = self.destination / ".opencode" / "agents" / "kael.md"
@@ -97,10 +101,10 @@ class CandidateRendererTests(unittest.TestCase):
 
         code, stdout, stderr = self.invoke("render", "--output-root", str(self.destination))
         self.assertEqual(0, code, stderr)
-        self.assertIn("wrote 1 changed output(s), 17 unchanged", stdout)
+        self.assertIn(f"wrote 1 changed output(s), {managed_count - 1} unchanged", stdout)
         code, stdout, stderr = self.invoke("render", "--output-root", str(self.destination))
         self.assertEqual(0, code, stderr)
-        self.assertIn("wrote 0 changed output(s), 18 unchanged", stdout)
+        self.assertIn(f"wrote 0 changed output(s), {managed_count} unchanged", stdout)
         self.assert_source_outputs_absent()
 
     def test_overlapping_roots_are_rejected_before_writing(self):
@@ -112,6 +116,50 @@ class CandidateRendererTests(unittest.TestCase):
                 self.assertIn("--output-root must not overlap", stderr)
                 self.assert_source_outputs_absent()
                 self.assertEqual(before, self.snapshot(self.sandbox))
+
+    def test_prunes_only_stale_generated_headers_in_managed_namespaces(self):
+        destination = str(self.destination)
+        code, _, stderr = self.invoke("render", "--output-root", destination)
+        self.assertEqual(0, code, stderr)
+        marker = renderer.GENERATED
+        stale = {
+            ".opencode/agents/retired.md": (
+                f"---\n# {marker} Canonical Olympus role: olympus/roles/retired.md (Retired).\n---\n"
+            ),
+            ".opencode/commands/olympus.retired.md": f"---\ndescription: Retired\n---\n<!-- {marker} -->\n",
+            ".opencode/plugins/olympus-activity/retired.ts": f"// {marker}\n",
+            ".opencode/scripts/retired.ps1": f"# {marker}\n",
+        }
+        preserved = {
+            ".opencode/agents/custom.md": f"---\ndescription: Custom\n---\nNotes mention {marker}\n",
+            ".opencode/commands/olympus.custom.md": f"---\ndescription: Custom\n---\n<!-- {marker} (example) -->\n",
+            ".opencode/agents/nested/retired.md": stale[".opencode/agents/retired.md"],
+            ".opencode/plugins/custom/retired.ts": stale[".opencode/plugins/olympus-activity/retired.ts"],
+            "scripts/retired.ps1": stale[".opencode/scripts/retired.ps1"],
+        }
+        for relative, content in (stale | preserved).items():
+            target = self.destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+
+        before = self.snapshot(self.destination)
+        code, stdout, stderr = self.invoke("check", "--output-root", destination)
+        self.assertEqual(1, code, stderr)
+        self.assertEqual(set(stale), set(re.findall(r"^DRIFT obsolete: (.+)$", stdout, re.M)))
+        self.assertEqual(before, self.snapshot(self.destination))
+        code, stdout, stderr = self.invoke("render", "--output-root", destination)
+        self.assertEqual(0, code, stderr)
+        self.assertIn(f"pruned {len(stale)} obsolete output(s)", stdout)
+        after = self.snapshot(self.destination)
+        self.assertFalse(set(stale) & after.keys())
+        self.assertEqual({path: before[path] for path in preserved}, {path: after[path] for path in preserved})
+        code, stdout, stderr = self.invoke("render", "--output-root", destination)
+        self.assertEqual(0, code, stderr)
+        self.assertIn("wrote 0 changed output(s)", stdout)
+        self.assertIn("pruned 0 obsolete output(s)", stdout)
+        self.assertEqual(after, self.snapshot(self.destination))
+        self.assertEqual(0, self.invoke("check", "--output-root", destination)[0])
+        self.assert_source_outputs_absent()
 
     def test_symlinked_output_parent_is_rejected_before_writing(self):
         self.destination.mkdir()
@@ -130,6 +178,23 @@ class CandidateRendererTests(unittest.TestCase):
         self.assertEqual(before_redirect, self.snapshot(redirected))
         self.assertEqual([link], list(self.destination.iterdir()))
         self.assert_source_outputs_absent()
+
+    def test_pruning_does_not_follow_or_remove_unexpected_file_symlink(self):
+        sentinel = self.sandbox / "linked-sentinel.md"
+        sentinel.write_text(f"---\n# {renderer.GENERATED}\n---\n", encoding="utf-8")
+        target = self.destination / ".opencode/agents/custom-link.md"
+        target.parent.mkdir(parents=True)
+        try:
+            target.symlink_to(sentinel)
+        except (NotImplementedError, OSError) as error:
+            self.skipTest(f"file symlink creation unavailable: {error}")
+        before = sentinel.read_bytes()
+        for action in ("render", "check"):
+            code, stdout, stderr = self.invoke(action, "--output-root", str(self.destination))
+            self.assertEqual(0, code, stderr)
+            self.assertNotIn("custom-link", stdout)
+            self.assertTrue(target.is_symlink())
+            self.assertEqual(before, sentinel.read_bytes())
 
     def test_hardlinked_output_is_rejected_before_render_or_check(self):
         target = self.destination / ".opencode" / "agents" / "kael.md"
@@ -152,11 +217,12 @@ class CandidateRendererTests(unittest.TestCase):
                 self.assert_source_outputs_absent()
 
     def test_legacy_source_output_and_kael_behavior_without_output_root(self):
+        managed_count = len(self.expected)
         stdout = StringIO()
         with redirect_stdout(stdout):
             code = renderer.run(self.source, "render", "opencode")
         self.assertEqual(0, code)
-        self.assertIn("wrote 18 changed output(s), 0 unchanged", stdout.getvalue())
+        self.assertIn(f"wrote {managed_count} changed output(s), 0 unchanged", stdout.getvalue())
         for path, content in self.expected.items():
             self.assertEqual(content, path.read_text(encoding="utf-8"))
 
@@ -171,6 +237,133 @@ class CandidateRendererTests(unittest.TestCase):
                 ])
         self.assertEqual(2, raised.exception.code)
         self.assertIn("--output-root is only supported with render/check", error.getvalue())
+
+    def test_renderer_works_from_exact_linux_package_inputs(self):
+        from olympus import global_cli
+        from olympus.cli import load_renderer
+
+        package = self.sandbox / "package inputs"
+        # No checkout fallback: the Linux CLI stage carries only this verified
+        # source inventory plus generated outputs, not every Core document.
+        for relative in global_cli._PACKAGE_INPUTS:
+            target = package / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, target)
+        # Match the real loader's canonical source root, including when the
+        # Windows runner supplies TEMP through an 8.3 alias.
+        package = package.resolve(strict=True)
+        from_package = load_renderer(package).outputs_for(package, "opencode")
+        self.assertEqual(
+            {path.relative_to(ROOT): text for path, text in renderer.outputs_for(ROOT, "opencode").items()},
+            {path.relative_to(package): text for path, text in from_package.items()},
+        )
+
+    def test_project_extensions_and_inventory_denials_follow_last_matching_rule(self):
+        def decision(resource, content):
+            header = content.split("\n---\n", 1)[0]
+            rules = re.findall(r'\n  - action: edit\n    resource: "([^"]+)"\n    effect: (\w+)', header)
+            return [effect for pattern, effect in rules if fnmatchcase(resource, pattern)][-1]
+
+        kovan = self.source / ".opencode/agents/kovan.md"
+        content = self.expected[kovan]
+        project_paths = (
+            ".opencode/skills/example/SKILL.md",
+            ".opencode/plugins/example/index.ts",
+            ".opencode/agents/project-reviewer.md",
+            ".opencode/commands/project-release.md",
+        )
+        for path in project_paths:
+            self.assertEqual("allow", decision(path, content), path)
+            target = self.source / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("project-owned fixture\n", encoding="utf-8")
+        for config in ("opencode.json", "opencode.jsonc", ".opencode/opencode.json", ".opencode/opencode.jsonc"):
+            self.assertEqual("ask", decision(config, content), config)
+        for target in self.expected.keys() - {self.source / "opencode.jsonc"}:
+            relative = target.relative_to(self.source).as_posix()
+            self.assertEqual("deny", decision(relative, content), relative)
+        for path in (
+            ".opencode/orchestrator-install.json",
+            ".opencode/olympus-config.json",
+            ".opencode/plugins/olympus-activity/other.ts",
+            ".opencode/plugins/example/private.env",
+            "/home/fixture/.config/opencode/opencode.jsonc",
+            "/home/fixture/.local/share/opencode/auth.json",
+            "C:/Users/fixture/AppData/Roaming/opencode/opencode.jsonc",
+        ):
+            self.assertEqual("deny", decision(path, content), path)
+
+        # Exercise an actual canonical roster change in an isolated source
+        # fixture. The same inventory must drive both candidates and exact rules.
+        self.assertEqual(0, self.invoke("render")[0])
+        fixture_role = "fixture-specialist"
+        for base in ("olympus/roles", "olympus/harnesses/opencode/agent-metadata",
+                     "olympus/harnesses/opencode/agent-prompts"):
+            shutil.copyfile(self.source / base / "veyra.md", self.source / base / f"{fixture_role}.md")
+        for relative, snippet in (
+            ("olympus/core/models.toml", 'family = "luna"\neffort = "max"'),
+            ("olympus/core/identities.toml", f'display = "{fixture_role} — Fixture"'),
+        ):
+            with (self.source / relative).open("a", encoding="utf-8") as stream:
+                stream.write(f"\n[roles.{fixture_role}]\n{snippet}\n")
+        role_path = f".opencode/agents/{fixture_role}.md"
+        self.assertEqual("allow", decision(role_path, content))
+        self.assertEqual(1, self.invoke("check")[0])
+        code, stdout, stderr = self.invoke("render")
+        self.assertEqual(0, code, stderr)
+        self.assertIn("pruned 0 obsolete output(s)", stdout)
+        self.assertTrue((self.source / role_path).is_file())
+        self.assertEqual("deny", decision(role_path, kovan.read_text(encoding="utf-8")))
+        self.assertEqual(0, self.invoke("check")[0])
+        before = self.snapshot(self.source)
+        code, stdout, stderr = self.invoke("render")
+        self.assertEqual(0, code, stderr)
+        self.assertIn("wrote 0 changed output(s)", stdout)
+        self.assertIn("pruned 0 obsolete output(s)", stdout)
+        self.assertEqual(before, self.snapshot(self.source))
+        for path in project_paths:
+            self.assertEqual("project-owned fixture\n", (self.source / path).read_text(encoding="utf-8"))
+
+    def test_shared_primary_ceiling_and_three_current_primary_commands(self):
+        outputs = renderer.outputs_for(self.source, "opencode", 7)
+        for role in ("kael", "atlas"):
+            prompt = outputs[self.source / ".opencode" / "agents" / f"{role}.md"]
+            self.assertIn("MAX_ACTIVE_CHILDREN = 7", prompt)
+            if role == "kael":
+                self.assertIn("adapt from zero to seven children", prompt)
+
+        command_paths = {
+            path.name: content
+            for path, content in outputs.items()
+            if path.parent == self.source / ".opencode" / "commands"
+        }
+        self.assertEqual(
+            set(command_paths),
+            {"olympus.ultra.md", "olympus.performance.md", "olympus.performance-ultra.md"},
+        )
+        for name, content in command_paths.items():
+            frontmatter = content.split("\n---\n", 1)[0]
+            self.assertRegex(frontmatter, r"(?m)^subagent: false$")
+            self.assertNotRegex(frontmatter, r"(?m)^agent:")
+            self.assertIn(f"Usage: /{name.removesuffix('.md')} <prompt>", content)
+            self.assertIn("Do not call tools or launch agents.", content)
+            self.assertIn("Kael or Atlas primary session", content)
+        self.assertIn("ULTRA_CEILING", command_paths["olympus.ultra.md"])
+        self.assertIn("READY_WORKSTREAMS", command_paths["olympus.ultra.md"])
+        self.assertIn("TARGET_ACTIVE", command_paths["olympus.ultra.md"])
+        self.assertIn("CURRENT_ACTIVE", command_paths["olympus.ultra.md"])
+        self.assertIn("DOMAIN_MODE: PERFORMANCE", command_paths["olympus.performance-ultra.md"])
+        self.assertIn("EXECUTION_MODE: ULTRA", command_paths["olympus.performance-ultra.md"])
+
+        rendered_primaries = renderer.rendered_primaries(self.source, 7)
+        self.assertEqual(set(rendered_primaries), {"kael", "atlas"})
+        self.assertTrue(all("MAX_ACTIVE_CHILDREN = 7" in prompt for prompt in rendered_primaries.values()))
+
+        code, stdout, stderr = self.invoke("primaries", "--max-children", "6")
+        self.assertEqual(0, code, stderr)
+        primaries = json.loads(stdout)
+        self.assertEqual(set(primaries), {"kael", "atlas"})
+        self.assertTrue(all("MAX_ACTIVE_CHILDREN = 6" in prompt for prompt in primaries.values()))
 
 
 if __name__ == "__main__":

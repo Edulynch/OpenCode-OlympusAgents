@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
+import base64
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -275,12 +276,21 @@ class SliceA(unittest.TestCase):
     def downgrade_global_install_to_v010(self, manifest_path):
         root = manifest_path.parent.parent
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        legacy_commands = {"commands/olympus.ultra.md", "commands/olympus.performance.md"}
+        commands_added_since_v010 = {
+            "commands/olympus.ultra.md", "commands/olympus.performance.md",
+            "commands/olympus.performance-ultra.md",
+        }
         manifest["managed_files"] = [
-            item for item in manifest["managed_files"] if item["path"] not in legacy_commands
+            item for item in manifest["managed_files"] if item["path"] not in commands_added_since_v010
         ]
-        for relative in legacy_commands:
+        for relative in commands_added_since_v010:
             (root / relative).unlink()
+        # The older inventory still owned two roles that are no longer shipped.
+        for role in ("orin", "argus"):
+            relative = f"agents/{role}.md"
+            payload = f"Historical {role} fixture, not a current agent.\n".encode("utf-8")
+            (root / relative).write_bytes(payload)
+            manifest["managed_files"].append({"path": relative, "sha256": hashlib.sha256(payload).hexdigest()})
         manifest["installed_version"] = "v0.10.0"
         manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
         return manifest
@@ -324,8 +334,9 @@ class SliceA(unittest.TestCase):
                         collect_help_paths(child, route)
 
         collect_help_paths(cli_parser())
-        self.assertEqual(54, len(paths))
-        self.assertEqual(40, sum(
+        self.assertEqual(48, len(paths))
+        self.assertFalse(any(path[0] in {"orin", "argus"} for path in paths))
+        self.assertEqual(36, sum(
             not any(len(other) > len(path) and other[:len(path)] == path for other in paths)
             for path in paths
         ))
@@ -379,7 +390,7 @@ class SliceA(unittest.TestCase):
         cli = cli_parser()
         self.assertIn("upgrade", _completion_candidates(cli, [], "up"))
         self.assertTrue(
-            {"kael", "veyra", "orin", "atlas", "kovan", "argus", "nox", "vera", "talos", "thales", "helios"}
+            {"kael", "veyra", "atlas", "kovan", "nox", "vera", "talos", "thales", "helios"}
             <= set(_completion_candidates(cli, [], ""))
         )
         self.assertIn("set-effort", _completion_candidates(cli, ["nox"], ""))
@@ -518,7 +529,7 @@ test ! -e "{sentinel}"
         self.assertEqual("models list", response["operation"])
         self.assertEqual("ok", response["result"])
         rows = response["data"]["roles"]
-        self.assertEqual(11, len(rows))
+        self.assertEqual(9, len(rows))
         with (self.source / "olympus/core/models.toml").open("rb") as stream:
             models = tomllib.load(stream)
         human = self.query("models", "list")
@@ -948,13 +959,26 @@ test ! -e "{sentinel}"
         command_paths = {
             ".opencode/commands/olympus.ultra.md",
             ".opencode/commands/olympus.performance.md",
+            ".opencode/commands/olympus.performance-ultra.md",
         }
-        self.assertEqual(15, len(expected))
+        roles = {"atlas", "helios", "kael", "kovan", "nox", "talos", "thales", "vera", "veyra"}
+        expected_inventory = {
+            f".opencode/agents/{role}.md" for role in roles
+        } | {
+            ".opencode/plugins/olympus-activity/activity.ts",
+            ".opencode/plugins/olympus-activity/tui.tsx",
+            ".opencode/scripts/worktree-setup.ps1",
+            "opencode.jsonc",
+        }
+        self.assertEqual(9, len(roles))
+        self.assertEqual(13, len(expected))
+        self.assertEqual(expected_inventory, set(expected))
         self.assertTrue(command_paths.isdisjoint(expected))
 
         manifest_path = self.create_managed_install()
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        self.assertEqual(15, len(manifest["managed_files"]))
+        self.assertEqual(13, len(manifest["managed_files"]))
+        self.assertEqual(expected_inventory, {item["path"] for item in manifest["managed_files"]})
         self.assertTrue(command_paths.isdisjoint(
             {item["path"] for item in manifest["managed_files"]}
         ))
@@ -962,6 +986,92 @@ test ! -e "{sentinel}"
         self.assertEqual("ok", preview["result"])
         self.assertEqual([], preview["data"]["changes"])
         self.assertTrue(all(not (self.target / relative).exists() for relative in command_paths))
+
+    def test_slice_c7_project_apply_uses_the_shared_ceiling_for_kael_and_atlas(self):
+        self.create_managed_install()
+        Path(self.env["OLYMPUS_CONFIG_FILE"]).write_text(json.dumps({
+            "schema_version": 1,
+            "overrides": {},
+            "orchestration": {"max_children": 2},
+        }) + "\n", encoding="utf-8")
+
+        arguments = self.config_apply_arguments()
+        preview = self.json_query(*arguments)
+        self.assertEqual("ok", preview["result"])
+        changes = {item["path"]: item for item in preview["data"]["changes"]}
+        rendered = self.renderer.outputs_for(self.source, "opencode", 2)
+        for role in ("kael", "atlas"):
+            relative = f".opencode/agents/{role}.md"
+            expected = rendered[self.source / relative].encode("utf-8")
+            self.assertIn("MAX_ACTIVE_CHILDREN = 2", expected.decode("utf-8"))
+            self.assertEqual(hashlib.sha256(expected).hexdigest(), changes[relative]["proposed_sha256"])
+
+        applied = self.invoke_cli(*arguments[:-1], "--execute")
+        self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
+        for role in ("kael", "atlas"):
+            relative = f".opencode/agents/{role}.md"
+            self.assertEqual(rendered[self.source / relative].encode("utf-8"),
+                             (self.target / relative).read_bytes())
+
+    def test_slice_c7_project_apply_rejects_v010_manifest_before_writes(self):
+        manifest_path = self.create_managed_install(version="v0.10.0")
+        before = self.snapshot()
+        preview = self.json_query(*self.config_apply_arguments(), code=3)
+        self.assertEqual("legacy_project_manifest", preview["issues"][0]["code"])
+        self.assertIn("uninstall with its source version", preview["issues"][0]["message"])
+        executed = self.invoke_cli(*self.config_apply_arguments()[:-1], "--execute")
+        self.assertEqual(3, executed.returncode, executed.stdout + executed.stderr)
+        self.assertIn("legacy_project_manifest", executed.stdout + executed.stderr)
+        self.assertEqual(before, self.snapshot())
+        self.assertFalse((self.target / ".olympus-cli-edit.lock").exists())
+        self.assertFalse((self.target / ".olympus-cli-config-apply").exists())
+        self.assertTrue(manifest_path.is_file())
+
+    def test_slice_c7_project_recovery_rejects_v010_manifest_receipt_without_writes(self):
+        # Recovery gets the canonical trusted source from CLI preflight. Mirror
+        # that boundary when calling internals directly (Windows TEMP may use
+        # an 8.3 alias that is not a valid lexical containment base).
+        trusted_source = self.source.resolve(strict=True)
+        manifest_path = self.create_managed_install(version="v0.10.0")
+        legacy_raw = manifest_path.read_bytes()
+        current_data = json.loads(legacy_raw)
+        current_data["installed_version"] = "local"
+        current_raw = (json.dumps(current_data) + "\n").encode("utf-8")
+        record_path = ".opencode/orchestrator-install.json"
+
+        for legacy_side in ("old", "new"):
+            with self.subTest(legacy_side=legacy_side):
+                old_raw, new_raw = ((legacy_raw, current_raw) if legacy_side == "old"
+                                    else (current_raw, legacy_raw))
+                manifest_path.write_bytes(old_raw)
+                old_hash, new_hash = hashlib.sha256(old_raw).hexdigest(), hashlib.sha256(new_raw).hexdigest()
+                record = {
+                    "state": "PREPARED",
+                    "manifest_path": record_path,
+                    "manifest_old_b64": base64.b64encode(old_raw).decode("ascii"),
+                    "manifest_new_b64": base64.b64encode(new_raw).decode("ascii"),
+                }
+                file_map = {record_path: {"old_sha256": old_hash, "new_sha256": new_hash}}
+                before = self.snapshot()
+                with self.assertRaisesRegex(
+                    config_apply_transaction.TransactionError, "Legacy project manifest receipt",
+                ):
+                    config_apply_transaction._manifest_maps(
+                        self.target, record, file_map, {}, trusted_source, self.renderer,
+                    )
+                self.assertEqual(before, self.snapshot())
+
+        manifest_path.write_bytes(legacy_raw)
+        before = self.snapshot()
+        with self.assertRaisesRegex(
+            config_apply_transaction.TransactionError, "Legacy project manifest receipt",
+        ):
+            config_apply_transaction._settings_manifest_data(
+                self.target, trusted_source,
+                {"scope": "project", "manifest_path": record_path},
+                legacy_raw, legacy_raw,
+            )
+        self.assertEqual(before, self.snapshot())
 
     def test_slice_c6_opencode_reports_custom_agent_and_independent_root_assignments(self):
         self.create_managed_install()
@@ -1574,7 +1684,7 @@ test ! -e "{sentinel}"
                 self.assertEqual(0, human.returncode, human.stderr)
                 self.assertIn(str(self.source), human.stdout)
                 if arguments[0] == "models":
-                    self.assertEqual(11, len(response["data"]["roles"]))
+                    self.assertEqual(9, len(response["data"]["roles"]))
                     for row in response["data"]["roles"]:
                         for value in (row["identity"], row["family"], row["effort"], *row["models"].values()):
                             self.assertIn(value, human.stdout)
@@ -1925,6 +2035,88 @@ test ! -e "{sentinel}"
         self.assertNotIn("-Scope", command)
         self.assertNotIn("-Harness", command)
 
+    @unittest.skipUnless(os.name == "nt", "Native project bootstrap is Windows-qualified only")
+    def test_slice_c5_windows_bootstrap_rejects_v010_before_lock_without_writes(self):
+        if shutil.which("pwsh") is None:
+            self.skipTest("PowerShell 7 is unavailable")
+
+        bootstrap_target = self.sandbox / "bootstrap target"
+        bootstrap_target.mkdir()
+        subprocess.run(["git", "init", "--quiet", str(bootstrap_target)], check=True, timeout=15,
+                       capture_output=True, text=True, encoding="utf-8")
+        self.target = bootstrap_target
+        manifest_path = self.create_managed_install(version="v0.10.0")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(13, len(manifest["managed_files"]))
+        for entry in manifest["managed_files"]:
+            managed_path = self.target / entry["path"]
+            self.assertEqual(entry["sha256"], hashlib.sha256(managed_path.read_bytes()).hexdigest())
+
+        lock_marker = self.sandbox / "writer-lock-entered.txt"
+        lock_script = self.source / "scripts/target-writer-lock.ps1"
+        lock_script.write_text(
+            "function Enter-OlympusTargetWriterLock([string]$Repo) {\n"
+            "    [IO.File]::WriteAllText($env:OLYMPUS_TEST_LOCK_MARKER, 'entered')\n"
+            "    return [pscustomobject]@{ Root = $Repo }\n"
+            "}\n"
+            "function Assert-OlympusTargetWriterLock($Lock) {}\n"
+            "function Exit-OlympusTargetWriterLock($Lock) {}\n",
+            encoding="utf-8",
+        )
+        fake_bin = self.sandbox / "fake-bin"
+        fake_bin.mkdir()
+        (fake_bin / "opencode.cmd").write_text(
+            "@echo off\r\necho opencode fixture 1.0\r\nexit /b 0\r\n",
+            encoding="ascii",
+        )
+        environment = self.env.copy()
+        environment["PATH"] = str(fake_bin) + os.pathsep + environment.get("PATH", "")
+        environment["OLYMPUS_TEST_LOCK_MARKER"] = str(lock_marker)
+
+        def target_snapshot():
+            return {
+                path.relative_to(bootstrap_target).as_posix(): (
+                    path.read_bytes() if path.is_file() else None,
+                    stat.S_IMODE(path.stat().st_mode),
+                )
+                for path in (bootstrap_target, *bootstrap_target.rglob("*"))
+            }
+
+        before = target_snapshot()
+        rejected = subprocess.run(
+            ["pwsh", "-NoProfile", "-NonInteractive", "-File",
+             str(self.source / "scripts/bootstrap.ps1"), "-Target", str(self.target),
+             "-SourceVersion", self.source_version],
+            cwd=self.source, env=environment, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", check=False, timeout=30,
+        )
+        self.assertNotEqual(0, rejected.returncode, rejected.stdout + rejected.stderr)
+        self.assertIn("PROJECT_MANIFEST_LEGACY", rejected.stdout + rejected.stderr)
+        self.assertIn("uninstall with its source version", rejected.stdout + rejected.stderr)
+        self.assertFalse(lock_marker.exists(), "legacy rejection must precede writer-lock acquisition")
+        self.assertEqual(before, target_snapshot())
+
+        verified = subprocess.run(
+            ["pwsh", "-NoProfile", "-NonInteractive", "-File",
+             str(self.source / "scripts/bootstrap.ps1"), "-Target", str(self.target),
+             "-SourceVersion", self.source_version, "-VerifyOnly"],
+            cwd=self.source, env=environment, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", check=False, timeout=30,
+        )
+        self.assertNotEqual(0, verified.returncode, verified.stdout + verified.stderr)
+        self.assertIn("OLYMPUS_VERIFY:", verified.stdout)
+        self.assertIn("FAIL", verified.stdout)
+        self.assertEqual(before, target_snapshot())
+
+        diagnosed = subprocess.run(
+            [sys.executable, "-B", "-m", "olympus", "doctor", "--scope", "project",
+             "--target", str(bootstrap_target), "--harness", "opencode", "--json"],
+            cwd=self.source, env=environment, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", check=False, timeout=30,
+        )
+        self.assertNotEqual(0, diagnosed.returncode, diagnosed.stdout + diagnosed.stderr)
+        self.assertEqual(before, target_snapshot())
+
     def test_slice_c5_update_ignores_managed_project_cwd(self):
         self.create_managed_install()
         previous = Path.cwd()
@@ -2029,7 +2221,35 @@ test ! -e "{sentinel}"
         sentinel = self.target / "user sentinel.txt"
         sentinel.write_bytes(b"keep this file\n")
         sentinel_mode = stat.S_IMODE(sentinel.stat().st_mode)
-        self.create_managed_install()
+        install_target = self.sandbox / "project install verification"
+        install_target.mkdir()
+        subprocess.run(["git", "init", "--quiet", str(install_target)], check=True, timeout=15,
+                       capture_output=True, text=True, encoding="utf-8")
+        original_target = self.target
+        self.target = install_target
+        self.create_managed_install(version=self.source_version)
+        install_before = {
+            path.relative_to(install_target).as_posix():
+            (path.read_bytes() if path.is_file() else None, stat.S_IMODE(path.stat().st_mode))
+            for path in (install_target, *install_target.rglob("*"))
+        }
+        verified_install = subprocess.run(
+            ["pwsh", "-NoProfile", "-NonInteractive", "-File",
+             str(self.source / "scripts/bootstrap.ps1"), "-Target", str(install_target),
+             "-SourceVersion", self.source_version, "-VerifyOnly"],
+            cwd=self.source, env=self.env, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", check=False, timeout=30,
+        )
+        self.assertEqual(0, verified_install.returncode, verified_install.stdout + verified_install.stderr)
+        self.assertIn(f"OLYMPUS_VERIFY: {self.source_version} PASS", verified_install.stdout)
+        install_after = {
+            path.relative_to(install_target).as_posix():
+            (path.read_bytes() if path.is_file() else None, stat.S_IMODE(path.stat().st_mode))
+            for path in (install_target, *install_target.rglob("*"))
+        }
+        self.assertEqual(install_before, install_after, "VerifyOnly must not mutate the project fixture")
+        self.target = original_target
+        self.create_managed_install(version=self.source_version)
         source_before = {
             path.relative_to(self.source).as_posix():
             (path.read_bytes() if path.is_file() else None, stat.S_IMODE(path.stat().st_mode))
@@ -2095,6 +2315,30 @@ test ! -e "{sentinel}"
             for path in ownership_target.rglob("*")
         }
         self.assertEqual(ownership_before, ownership_after)
+
+        legacy_target = self.sandbox / "legacy target"
+        legacy_target.mkdir()
+        subprocess.run(["git", "init", "--quiet", str(legacy_target)], check=True, timeout=15,
+                       capture_output=True, text=True, encoding="utf-8")
+        self.target = legacy_target
+        manifest_path = self.create_managed_install(version="v0.10.0")
+        legacy_before = {
+            path.relative_to(legacy_target).as_posix():
+            (path.read_bytes() if path.is_file() else None, stat.S_IMODE(path.stat().st_mode))
+            for path in legacy_target.rglob("*")
+        }
+        legacy_uninstall = invoke_internal_uninstall(legacy_target)
+        self.assertNotEqual(0, legacy_uninstall.returncode, legacy_uninstall.stdout + legacy_uninstall.stderr)
+        self.assertIn("PROJECT_MANIFEST_LEGACY", legacy_uninstall.stderr + legacy_uninstall.stdout)
+        self.assertIn("uninstall with its source version", legacy_uninstall.stderr + legacy_uninstall.stdout)
+        legacy_after = {
+            path.relative_to(legacy_target).as_posix():
+            (path.read_bytes() if path.is_file() else None, stat.S_IMODE(path.stat().st_mode))
+            for path in legacy_target.rglob("*")
+        }
+        self.assertEqual(legacy_before, legacy_after)
+        self.assertTrue(manifest_path.is_file())
+        self.assertFalse((legacy_target / ".olympus-cli-edit.lock").exists())
         self.target = original_target
 
         roots = {
@@ -2167,10 +2411,10 @@ test ! -e "{sentinel}"
         self.assertEqual("unverified", item["integrity"])
         self.assertEqual("synthetic-commit", item["installed_from_commit"])
         self.assertEqual(str(manifest.parent.parent), item["root"])
-        self.assertEqual(16, item["managed_files"])
+        self.assertEqual(15, item["managed_files"])
         self.assertEqual("not_performed", response["data"]["runtime_discovery"])
 
-    def test_slice_c7_v010_global_status_reports_legacy_but_doctor_and_apply_require_upgrade(self):
+    def test_slice_c7_v010_global_status_doctor_and_apply_refuse_historical_inventory(self):
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         for owned_guard, expected_count in ((True, 14), (False, 13)):
             with self.subTest(owned_guard=owned_guard):
@@ -2183,26 +2427,21 @@ test ! -e "{sentinel}"
                 self.assertEqual(expected_count, len(manifest["managed_files"]))
                 before = self.snapshot()
 
-                status = self.json_query("status", "--scope", "global", "--harness", "opencode")
-                self.assertEqual("ok", status["result"])
-                item = status["data"]["harnesses"]["opencode"]
-                self.assertEqual("v0.10.0", item["installed_version"])
-                self.assertEqual(expected_count, item["managed_files"])
-                self.assertEqual("unverified", item["integrity"])
-
                 for arguments in (
+                    ("status", "--scope", "global", "--harness", "opencode"),
                     ("doctor", "--scope", "global", "--harness", "opencode"),
                     ("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run"),
                 ):
                     with self.subTest(operation=arguments[0]):
                         response = self.json_query(*arguments, code=3)
                         self.assertEqual("blocked", response["result"])
-                        self.assertEqual("global_upgrade_required", response["issues"][0]["code"])
+                        self.assertEqual("unsupported_global_version", response["issues"][0]["code"])
+                        self.assertIn("v0.10.0", response["issues"][0]["message"])
                         if arguments[0] == "config":
                             self.assertEqual([], response["data"]["changes"])
                 self.assertEqual(before, self.snapshot(), "Legacy status, doctor, and apply must not write.")
 
-    def test_slice_c7_global_current_15_resource_user_config_is_preserved(self):
+    def test_slice_c7_global_current_user_config_is_preserved(self):
         manifest_path = self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         manifest_path = self.make_global_user_config_install()
@@ -2210,11 +2449,11 @@ test ! -e "{sentinel}"
         preview = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run")
         self.assertEqual("no_changes", preview["result"])
         self.assertEqual([], preview["data"]["changes"])
-        self.assertEqual(15, preview["data"]["harnesses"]["opencode"]["managed_files"])
+        self.assertEqual(14, preview["data"]["harnesses"]["opencode"]["managed_files"])
         self.assertEqual(user_config, (root / "opencode.json").read_bytes())
         self.assertTrue(manifest_path.is_file())
 
-    def test_slice_c7_global_15_resource_inventory_without_receipted_config_is_refused(self):
+    def test_slice_c7_global_inventory_without_receipted_config_is_refused(self):
         manifests = self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         manifest = json.loads(manifests["opencode"].read_text(encoding="utf-8"))
@@ -2229,7 +2468,7 @@ test ! -e "{sentinel}"
         self.assertEqual(before, self.snapshot())
         self.assertFalse((root / "opencode.jsonc").exists())
 
-    def test_slice_c7_global_current_15_resource_unsafe_user_config_blocks_preview(self):
+    def test_slice_c7_global_current_unsafe_user_config_blocks_preview(self):
         self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
         self.make_global_user_config_install()
@@ -2245,7 +2484,7 @@ test ! -e "{sentinel}"
         again = self.json_query("config", "apply", "--scope", "global", "--harness", "opencode", "--dry-run", code=3)
         self.assertEqual("global_external_guard_unsafe", again["issues"][0]["code"])
 
-    def test_slice_c7_global_current_15_resource_ambiguous_wildcards_do_not_bypass_ask(self):
+    def test_slice_c7_global_current_ambiguous_wildcards_do_not_bypass_ask(self):
         # V2 treats '**', '?*', '*/**', and '?:/**' as broad matches on paths.
         # A later ALLOW must not be certified as an ASK/DENY fallback.
         self.create_global_managed_install()
@@ -2303,7 +2542,7 @@ test ! -e "{sentinel}"
         self.assertEqual("safe_user_config", response["data"]["harnesses"]["opencode"]["external_guard"])
         self.assertEqual(safe_text, user_config.read_text(encoding="utf-8"))
 
-    def test_slice_c7_global_current_15_resource_safe_jsonc_is_preserved(self):
+    def test_slice_c7_global_current_safe_jsonc_is_preserved(self):
         # Comments, URLs in strings, and trailing commas are supported by V2.
         manifests = self.create_global_managed_install()
         root = Path(self.env["OPENCODE_CONFIG_DIR"])
@@ -2550,7 +2789,7 @@ test ! -e "{sentinel}"
         self.assertEqual(expected, (root / "agents/veyra.md").read_bytes())
         self.assertEqual(user_config, (root / "opencode.json").read_bytes())
         manifest = json.loads((root / "olympus/orchestrator-install.json").read_text(encoding="utf-8"))
-        self.assertEqual(15, len(manifest["managed_files"]))
+        self.assertEqual(14, len(manifest["managed_files"]))
         self.assertNotIn("opencode.json", {item["path"] for item in manifest["managed_files"]})
 
     def test_slice_c8_global_apply_blocks_a_pending_journal_before_lock_or_writes(self):
@@ -3349,7 +3588,7 @@ class SliceBModelEdit(unittest.TestCase):
             self.source, "sol", "openai/sol-next"
         )
         self.assertEqual(before, self.snapshot(), "Preview must be completely in memory")
-        self.assertEqual(["argus", "atlas", "helios", "kael", "talos", "thales"],
+        self.assertEqual(["atlas", "helios", "kael", "talos", "thales"],
                          candidate.preview["data"]["affected_roles"])
         self.assertEqual("openai/gpt-6.2-sol", candidate.preview["data"]["roles"][0]
                          ["models"]["opencode"]["old"])
@@ -4325,7 +4564,7 @@ source_edit._recover_batch(Path(sys.argv[1]))
 
         self._t017_seed_sentinels()
         candidate = self._family_candidate()
-        self.assertEqual(8, len(candidate.files), "T017 must use the current OpenCode write-set")
+        self.assertEqual(7, len(candidate.files), "T017 must use the current OpenCode write-set")
         before_targets = {
             item.relative_path: (item.old_bytes, item.mode, item.path.stat().st_mtime_ns)
             for item in candidate.files
@@ -4361,7 +4600,7 @@ source_edit._recover_batch(Path(sys.argv[1]))
         self.assertEqual(before_external, self._t017_external_snapshot())
 
     def test_slice_b_t017_crash_at_all_current_write_set_boundaries_recovers_old(self):
-        expected_targets = 8
+        expected_targets = 7
         for boundary in range(expected_targets + 1):
             with self.subTest(replacement_boundary=boundary):
                 if boundary:
@@ -4369,7 +4608,7 @@ source_edit._recover_batch(Path(sys.argv[1]))
                 else:
                     self._t017_seed_sentinels()
                 candidate, prepared = self._prepared_family()
-                self.assertEqual(expected_targets, len(candidate.files), "current family edit must have 8 targets")
+                self.assertEqual(expected_targets, len(candidate.files), "current family edit must have seven targets")
                 self.assertEqual(expected_targets, len(prepared.write_set))
                 before_outside = self._snapshot_outside_targets(candidate)
                 before_external = self._t017_external_snapshot()
@@ -4867,7 +5106,7 @@ raise SystemExit(main(sys.argv[1:]))
         self.assertEqual(1, preview["schema_version"])
         self.assertEqual("models set-family", preview["operation"])
         self.assertEqual("ok", preview["result"])
-        self.assertEqual(8, len(preview["data"]["write_set"]))
+        self.assertEqual(7, len(preview["data"]["write_set"]))
         self.assertEqual("openai/t018-sol", preview["data"]["request"]["models"]["opencode"])
 
         human = self._run("agents", "set-model", "veyra", "--effort", "high", "--dry-run")
@@ -4943,7 +5182,7 @@ raise SystemExit(main(sys.argv[1:]))
         self.assertEqual(0, applied.returncode, (applied.stdout, applied.stderr))
         self.assertIn("Execution preview (not yet applied):", applied.stdout)
         self.assertIn("execution: committed", applied.stdout)
-        self.assertEqual(8, len(changed))
+        self.assertEqual(7, len(changed))
         self._assert_renderer_coherent()
         self.assertTrue((self.source / ".olympus-cli-edit.lock").is_file())
         self.assertEqual(0, (self.source / ".olympus-cli-edit.lock").stat().st_size)
@@ -5192,7 +5431,7 @@ raise SystemExit(main(sys.argv[1:]))
             cwd=ROOT, env=self.env, capture_output=True, text=True, encoding="utf-8", check=False, timeout=20,
         )
         self.assertEqual(0, result.returncode, (result.stdout, result.stderr))
-        self.assertEqual(11, len(json.loads(result.stdout)["data"]["roles"]))
+        self.assertEqual(9, len(json.loads(result.stdout)["data"]["roles"]))
         self.assertEqual("False", subprocess.run(
             [sys.executable, "-B", "-c",
              "import sys; import olympus.cli; print('tomlkit' in sys.modules)"]
@@ -5201,8 +5440,8 @@ raise SystemExit(main(sys.argv[1:]))
 
     def test_slice_b_t019_public_preview_write_sets_match_fixture_mutations(self):
         cases = (
-            ("sol", ("models", "set-family", "sol", "--opencode", "openai/t019-sol"), 8),
-            ("luna", ("models", "set-family", "luna", "--opencode", "openai/t019-luna"), 6),
+            ("sol", ("models", "set-family", "sol", "--opencode", "openai/t019-sol"), 7),
+            ("luna", ("models", "set-family", "luna", "--opencode", "openai/t019-luna"), 5),
             ("specialist", ("agents", "set-model", "veyra", "--family", "sol", "--effort", "high"), 2),
             ("kael", ("agents", "set-model", "kael", "--family", "luna", "--effort", "max"), 3),
             ("no-op", ("models", "set-family", "sol", "--opencode", "openai/gpt-6.2-sol"), 0),
@@ -5278,7 +5517,7 @@ raise SystemExit(main(sys.argv[1:]))
             (("--help",), lambda result: self.assertIn("config recover", result.stdout)),
             (("--version",), lambda result: self.assertIn("olympus ", result.stdout)),
             (("models", "list", "--json"), lambda result: self.assertEqual(
-                11, len(json.loads(result.stdout)["data"]["roles"]))),
+                9, len(json.loads(result.stdout)["data"]["roles"]))),
             (("config", "check", "--json"), lambda result: self.assertTrue(
                 json.loads(result.stdout)["data"]["coherent"])),
             (("status", "--scope", "project", "--target", str(target), "--json"),

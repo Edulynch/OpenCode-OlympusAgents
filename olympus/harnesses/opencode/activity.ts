@@ -2,6 +2,14 @@
 type Session = { id: string; parentID?: string | null; agent?: string; title?: string }
 type Row = { id: string; agent: string; title: string }
 export type Job = { kind?: string; sessionID?: string; childSessionID?: string; status?: string }
+export type ActivityState = { observedChildren: ReadonlySet<string>; peakActive: number }
+export type ActivitySnapshot = {
+  observed: number
+  active: number
+  peak: number
+  visibleRows: Row[]
+  state: ActivityState
+}
 
 const jobKinds = new Set(["shell", "subagent", "image", "video", "codemode"])
 
@@ -49,4 +57,29 @@ export function activeChildren(
   return sessions.filter((session) => session.parentID === currentID &&
       (status(session.id) === "running" || jobOwners.has(session.id)))
     .map((session) => ({ id: session.id, agent: label(session.agent), title: title(session) }))
+}
+
+export function activitySnapshot(
+  currentID: string,
+  sessions: readonly Session[],
+  status: (id: string) => string,
+  jobs: readonly Job[] = [],
+  previous: ActivityState = { observedChildren: new Set(), peakActive: 0 },
+): ActivitySnapshot {
+  const current = sessions.find((session) => session.id === currentID)
+  const observedChildren = new Set(previous.observedChildren)
+  if (current && current.parentID == null) {
+    for (const session of sessions) {
+      if (session.parentID === currentID) observedChildren.add(session.id)
+    }
+  }
+  const activeRows = activeChildren(currentID, sessions, status, jobs)
+  const peakActive = Math.max(previous.peakActive, activeRows.length)
+  return {
+    observed: observedChildren.size,
+    active: activeRows.length,
+    peak: peakActive,
+    visibleRows: activeRows.slice(0, 4),
+    state: { observedChildren, peakActive },
+  }
 }

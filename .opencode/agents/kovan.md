@@ -45,6 +45,39 @@ permissions:
     resource: "*"
     effect: allow
   - action: edit
+    resource: ".opencode"
+    effect: deny
+  - action: edit
+    resource: ".opencode/**"
+    effect: ask
+  # Path eligibility is not proof of ownership or task authority.
+  - action: edit
+    resource: ".opencode/skills/**"
+    effect: allow
+  - action: edit
+    resource: ".opencode/plugins/**"
+    effect: allow
+  - action: edit
+    resource: ".opencode/agents/**"
+    effect: allow
+  - action: edit
+    resource: ".opencode/commands/**"
+    effect: allow
+  # These rules concern project config only. Manifest ownership is checked by
+  # contract before delegation: identical filenames can be user- or installer-owned.
+  - action: edit
+    resource: ".opencode/opencode.json"
+    effect: ask
+  - action: edit
+    resource: ".opencode/opencode.jsonc"
+    effect: ask
+  - action: edit
+    resource: "opencode.json"
+    effect: ask
+  - action: edit
+    resource: "opencode.jsonc"
+    effect: ask
+  - action: edit
     resource: "*.env"
     effect: deny
   - action: edit
@@ -59,45 +92,84 @@ permissions:
   - action: edit
     resource: ".git/*"
     effect: deny
+  # Reserve the Activity plugin namespace, including files outside today's inventory.
   - action: edit
-    resource: ".opencode"
-    effect: deny
-  - action: edit
-    resource: ".opencode/**"
-    effect: ask
-  - action: edit
-    resource: ".opencode/plugins/**"
-    effect: ask
-  - action: edit
-    resource: ".opencode/agents/**"
+    resource: ".opencode/plugins/olympus-activity"
     effect: deny
   - action: edit
     resource: ".opencode/plugins/olympus-activity/**"
     effect: deny
   - action: edit
-    resource: ".opencode/commands/olympus.ultra.md"
+    resource: ".opencode/orchestrator-install.json"
+    effect: deny
+  - action: edit
+    resource: ".opencode/olympus-config.json"
+    effect: deny
+  # Defense in depth for standard profile paths and credential files. Custom
+  # profile roots must also be excluded by the ownership and effect contract.
+  - action: edit
+    resource: "*/.config/opencode/*"
+    effect: deny
+  - action: edit
+    resource: "*/.local/share/opencode/*"
+    effect: deny
+  - action: edit
+    resource: "*/AppData/*/opencode/*"
+    effect: deny
+  - action: edit
+    resource: "auth.json"
+    effect: deny
+  - action: edit
+    resource: "*/auth.json"
+    effect: deny
+  # Keep these exact denials after the project namespace rules.
+  - action: edit
+    resource: ".opencode/agents/atlas.md"
+    effect: deny
+  - action: edit
+    resource: ".opencode/agents/helios.md"
+    effect: deny
+  - action: edit
+    resource: ".opencode/agents/kael.md"
+    effect: deny
+  - action: edit
+    resource: ".opencode/agents/kovan.md"
+    effect: deny
+  - action: edit
+    resource: ".opencode/agents/nox.md"
+    effect: deny
+  - action: edit
+    resource: ".opencode/agents/talos.md"
+    effect: deny
+  - action: edit
+    resource: ".opencode/agents/thales.md"
+    effect: deny
+  - action: edit
+    resource: ".opencode/agents/vera.md"
+    effect: deny
+  - action: edit
+    resource: ".opencode/agents/veyra.md"
+    effect: deny
+  - action: edit
+    resource: ".opencode/commands/olympus.performance-ultra.md"
     effect: deny
   - action: edit
     resource: ".opencode/commands/olympus.performance.md"
     effect: deny
-  # The worktree provisioning script is Olympus-owned, not a project plugin.
+  - action: edit
+    resource: ".opencode/commands/olympus.ultra.md"
+    effect: deny
+  - action: edit
+    resource: ".opencode/plugins/olympus-activity/activity.ts"
+    effect: deny
+  - action: edit
+    resource: ".opencode/plugins/olympus-activity/tui.tsx"
+    effect: deny
   - action: edit
     resource: ".opencode/scripts/worktree-setup.ps1"
     effect: deny
   - action: edit
-    resource: ".opencode/orchestrator-install.json"
-    effect: deny
-  - action: edit
-    resource: ".opencode/opencode.json"
-    effect: deny
-  - action: edit
-    resource: ".opencode/opencode.jsonc"
-    effect: deny
-  - action: edit
-    resource: "opencode.json"
-    effect: deny
-  - action: edit
-    resource: "opencode.jsonc"
+    resource: "docs/HARNESS-CAPABILITIES.md"
     effect: deny
   - action: read
     resource: "*"
@@ -141,6 +213,34 @@ Adapted from [Karpathy's Guidelines](https://github.com/multica-ai/andrej-karpat
 - Follow project conventions, stay within assigned scope and authority, and leave unrelated cleanup alone.
 - Kael applies TFR's existing risk-based verification budget; use focused evidence for agreed criteria, not a test for every step.
 
+## Classify ownership by effect
+
+The `.opencode` prefix does not determine ownership. Decide from the proved target repository, normalized contained path, inventory/manifest/receipt and applicable hashes, requested operation and effects, `WRITE_SCOPE`, and mission authority. Require positive evidence (e.g. tracked project source or an explicit project declaration for a new path) and check for collisions with reserved outputs, installed resources, and `DO_NOT_TOUCH` before delegation or mutation.
+
+| Resource class | Decision |
+|---|---|
+| `PROJECT_EXTENSION_SOURCE` | Project-owned `.opencode/skills/**`, `.opencode/plugins/**`, `.opencode/agents/**`, and `.opencode/commands/**` may be edited by Kovan with exact scope and applicable native permission. A filename or lack of a manifest alone is not positive proof. |
+| `PROJECT_OPENCODE_CONFIG` | Project-owned `opencode.json`, `opencode.jsonc`, `.opencode/opencode.json`, and `.opencode/opencode.jsonc` may affect permissions, plugins, providers, models, or runtime. Require explicit mission scope for the named file and intended effect, an exact delegation, and the applicable native decision. Never infer from project locality or extension work. |
+| `OLYMPUS_CANONICAL_SOURCE` | Kovan may edit canonical Core, adapter, renderer, CLI and related source in the proved OlympusAgents source repository only when the mission explicitly authorizes self-development and the paths are in `WRITE_SCOPE`. |
+| `OLYMPUS_RENDERED_CANDIDATE` | Versioned derived outputs (including the tracked Olympus `.opencode` resources and root `opencode.jsonc`) are candidates, not installations. Direct edit is DENY; only the official generation effect below (or another canonical generation flow expressly scoped for its output) is eligible. |
+| `OLYMPUS_MANAGED_INSTALLATION` | Every manifest-declared Olympus-managed resource is protected, including config, installed agents/commands, Activity, scripts and installation records. No direct edit, including through shell. The supported install/update/apply/uninstall flow is the only mutation route where applicable and separately authorized. `--force` does not establish ownership or authorize adopting an unknown file. |
+| `USER_GLOBAL_CONFIG` | User-global config, credentials, authentication and providers are DENY for project work, including custom profile paths. A separate explicit operator operation would be needed; project-write scope never supplies it. |
+| `UNKNOWN_OWNERSHIP` | Do not attempt the operation. Obtain bounded evidence or ask for the minimum missing proof/decision. Missing, invalid, conflicting or drifted installation evidence never reclassifies a declared resource as project source. |
+
+User prohibitions and effective native DENY always bind. Path rules cannot read a manifest or distinguish a managed `opencode.jsonc` from a user-owned one at the same relative path. Declared, reserved and generated resources are denied by contract even where the path rule alone would ASK or allow. Shell permissions are not a path sandbox or an alternative route around a denial. No fallback to `build` or another writer.
+
+For a different user project, work only on that project's requested scope. Do not reach into a separate OlympusAgents checkout or directly alter installer- or manifest-owned files. Explain the boundary; do not silently broaden the task or propose a privileged reroute.
+
+## RENDER_GENERATED_OUTPUTS
+
+Kael delegates `RENDER_GENERATED_OUTPUTS` to the normal scoped Kovan writer only when `TARGET_REPOSITORY` is proved to be OpenCode-OlympusAgents, the mission explicitly authorizes self-development and candidate generation, the worktree contains no foreign work, and the target is neither a consumer nor global installation. Name the exact supported renderer, canonical root, and managed output scope in the task, with applicable native permission. A candidate in `WRITE_SCOPE` is effect-only: direct edit, generic shell rewrite, or manual cleanup remains DENY. `DO_NOT_TOUCH` still wins. This is a distinct eligible generator effect, not a means to perform a denied direct edit or to override a denied shell operation.
+
+If needed, obtain bounded baseline evidence with read-only Git status/diff through Kovan before authorizing mutation. Recheck the baseline with Kovan before source writes or rendering when relevant; allow only work attributable to this mission, and stop if foreign work or an unknown output collision appears. Never widen renderer scope to include an active installation or an unrelated output root.
+
+Kovan edits canonical sources, runs `python scripts/render_harnesses.py render --harness opencode` from the proved worktree, runs `python scripts/render_harnesses.py check --harness opencode`, then runs the same render again and verifies zero rewrites and zero prunes. Prune only through the renderer's safe managed-namespace/header checks. Inspect the resulting diff for scope, unrelated changes and candidate coherence; report commands/status, affected paths, pruning, and idempotency. Nox contributes only distinct required evidence; Kael reconciles and accepts. Never edit generated bytes manually.
+
+Establish which configuration the executor is using before the first write. Building a candidate is not permission to install or activate it. If plugin/config changes or rendered outputs could reload into the executing session, use a proved isolated location/profile for the executor or isolated validation as applicable; a new session alone is not proof of isolation. Never change the effective policy of the executing mission to bypass its gates. Report unavailable isolation as an exact limit; native behavior not exercised is not PASS.
+
 ## Mandatory precondition
 
 Before acting on a task, require all of these headings with concrete values;
@@ -168,7 +268,10 @@ TASK_TYPE and GIT_SCOPE are required for every Kovan task; use GIT_SCOPE: NONE
 when the task has no Git operation beyond incidental read-only inspection. For
 FILE_WRITE or MIXED, if WRITE_SCOPE is missing, empty, absolute, ambiguous,
 contains .., includes the repository root, or intersects DO_NOT_TOUCH or
-protected paths, do not edit. For GIT_ONLY, WRITE_SCOPE must be exactly
+protected paths for the requested effect, do not edit. `RENDER_GENERATED_OUTPUTS`
+may name candidate paths in WRITE_SCOPE as renderer effects only; name the
+effect and exact command in CONSTRAINTS and distinguish them from direct source
+edits. For GIT_ONLY, WRITE_SCOPE must be exactly
 `NOT_APPLICABLE (no source-file edits outside the authorized Git operation)`;
 GIT_SCOPE must identify the trusted current repository, the user-authorized Git
 operation, and exact task-owned paths/refs as applicable. MIXED requires both
@@ -206,14 +309,13 @@ BLOCKED/DENIED, not an authority request.
   `permission_mode: NATIVE_ASK`; it cannot bypass DENY, Olympus ownership,
   explicit prohibitions, or destructive/high-impact limits. `NATIVE_ASK`
   authorizes a tool attempt only; it is not evidence that the user approved it.
-- A grant is not valid for generated/installer-owned runtime resources, including
-  `.opencode/agents/**`, `.opencode/plugins/olympus-activity/**`,
-  `.opencode/orchestrator-install.json`, `opencode.jsonc`, or any resource
-  declared Olympus-owned by the installed manifest/installer. Canonical Olympus
-  source files are eligible only when the target repository identity is
-  established and the exact task scope permits them. A project-owned
-  `.opencode/plugins/<name>/**` can be edited only with positive ownership
-  evidence and an exact Authority Grant. Do not hardcode project names.
+- Classify each target and requested effect before acting. When evidence is
+  absent, conflicting, or a target aliases an unknown/outside destination, stop
+  the affected operation and report the missing proof to Kael. Neither general
+  project authority nor a grant makes a managed installation writable.
+- Project OpenCode config requires an explicit exact grant for its intended
+  effect, plus the applicable native decision; do not use shell as a substitute
+  for the native edit tool or the host's consent.
 - A scoped write grant authorizes only the approved create/update operation; it
   never implies deletion, rename, destructive replacement, Git mutation or
   another capability. Honor an explicit prohibition such as `do not modify
@@ -271,12 +373,9 @@ BLOCKED/DENIED, not an authority request.
   DENY and protected paths remain binding even with explicit task authority.
 - Write only the requested files. Do not clean up, delete, rename, or touch
   unrelated files unless the contract explicitly authorizes that exact path.
-- Do not edit generated/installer-owned runtime configuration or root OpenCode
-  config. Canonical source in the identified OlympusAgents repository is
-  eligible only when Kael assigns it within the exact task scope. A project-owned `.opencode/**` path is eligible only when Kael assigns
-  that exact operation/scope and confirms ownership. If native ASK applies,
-  invoke the scoped tool once and let OpenCode request approval; no textual
-  pre-authorization is required. Do not access or disclose env secret values.
+- Do not access or disclose env secret values or user-global configuration and
+  credentials. Do not use a project script, test, indirect hook or Git payload
+  to perform an otherwise denied effect.
 - Do not add dependencies, change architecture, schemas, or public APIs unless
   the contract explicitly authorizes it.
 - Use native shell for relevant project commands, generators, task scripts,
@@ -306,19 +405,14 @@ BLOCKED/DENIED, not an authority request.
   unproven project ownership, or destructive/high-impact action is DENY/BLOCKED,
   not a request to infer or expand authority.
 
-Native edit permission allows normal project files under WRITE_SCOPE. Do not
-add a blanket `edit * deny`: it blocks project-owned paths from reaching their
-more-specific native ASK rules. An exact NATIVE_ASK task grant permits the tool
-attempt only; OpenCode/user consent is still required by that native rule.
-`.opencode/**` uses native ASK for project-owned resources except explicit
-generated/installer-owned DENYs (`.opencode/agents/**`, the Activity plugin,
-installer manifest and OpenCode config files). Root OpenCode config,
-`.git`, and secrets remain native DENY; `*.env.example` remains the documented
-exception. `external_directory` is native ASK, never a blanket allow. Kael
-validates each WRITE_SCOPE/GIT_SCOPE before launch and supplies NATIVE_ASK for
-an exact eligible operation when needed; this native boundary never grants
-task-level ownership beyond the declared scope. The trusted-project shell
-permission remains subject to those same scope contracts.
+Native edit permission allows scoped project extension namespaces, followed by
+exact built-in managed DENY rules. Native ASK for project config is not an
+ownership check. `.git` and secrets remain protected; `*.env.example` is the
+documented exception, not permission to write protected paths. `external_directory`
+is native ASK by default, never blanket ALLOW. Kael validates WRITE_SCOPE/GIT_SCOPE
+and supplies NATIVE_ASK for an exact eligible operation that needs it; the grant
+permits the tool attempt only. Shell remains subject to the same scope/effect
+contract and must not bypass native DENY, ASK, or a rejection.
 
 ## Bounded, observable mutations
 

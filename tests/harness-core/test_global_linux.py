@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import errno
+import hashlib
 import json
 import contextlib
 import io
 import os
 import shutil
+import stat
 import subprocess
 import struct
 import sys
@@ -81,6 +83,19 @@ class LinuxGlobalBackend(unittest.TestCase):
             for path in self.root.rglob("*") if path.is_file()
         }
 
+    def _tree_snapshot(self) -> dict[str, tuple[int, int, bytes | None]]:
+        if not self.root.exists():
+            return {}
+        snapshot = {}
+        for path in (self.root, *self.root.rglob("*")):
+            metadata = path.lstat()
+            relative = "." if path == self.root else path.relative_to(self.root).as_posix()
+            snapshot[relative] = (
+                metadata.st_mode, metadata.st_mtime_ns,
+                path.read_bytes() if path.is_file() else None,
+            )
+        return snapshot
+
     def _require_acl_free_fixture(self, *roots: Path) -> None:
         if not hasattr(os, "listxattr"):
             self.skipTest("force ACL regression requires Linux ACL xattr inspection")
@@ -125,8 +140,18 @@ class LinuxGlobalBackend(unittest.TestCase):
         self.assertEqual("committed", installed.result)
         manifest_path = self.root / "olympus/orchestrator-install.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        self.assertEqual(16, len(manifest["managed_files"]))
-        self.assertIn("opencode.jsonc", {item["path"] for item in manifest["managed_files"]})
+        paths = {item["path"] for item in manifest["managed_files"]}
+        self.assertEqual(15, len(paths))
+        self.assertEqual(
+            {"atlas", "helios", "kael", "kovan", "nox", "talos", "thales", "vera", "veyra"},
+            {path.removeprefix("agents/").removesuffix(".md") for path in paths if path.startswith("agents/")},
+        )
+        self.assertEqual(
+            {"commands/olympus.ultra.md", "commands/olympus.performance.md",
+             "commands/olympus.performance-ultra.md"},
+            {path for path in paths if path.startswith("commands/")},
+        )
+        self.assertIn("opencode.jsonc", paths)
         self.assertEqual("committed", manifest["default_agent_receipt"]["state"])
         guard = (self.root / "opencode.jsonc").read_bytes()
         self.assertIn(b'"default_agent": "kael"', guard)
@@ -150,6 +175,158 @@ class LinuxGlobalBackend(unittest.TestCase):
         )
         self.assertEqual(("verified", None, 0), (state, issue, code))
 
+    def test_previous_inventory_is_read_only_rejected_before_lifecycle_actions(self):
+        global_install.install(ROOT, version="local", commit="fixture-previous")
+        manifest_path = self.root / "olympus/orchestrator-install.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+        # Recreate the previous 11-role, no-command inventory in this disposable root.
+        for command in (
+            "olympus.ultra.md", "olympus.performance.md", "olympus.performance-ultra.md",
+        ):
+            (self.root / "commands" / command).unlink()
+        old_roles = ("argus", "atlas", "helios", "kael", "kovan", "nox",
+                     "orin", "talos", "thales", "vera", "veyra")
+        old_entries = [
+            item for item in manifest["managed_files"]
+            if item["path"].startswith("plugins/") or item["path"] == "opencode.jsonc"
+            or item["path"].startswith("agents/")
+        ]
+        for role in ("argus", "orin"):
+            path = self.root / f"agents/{role}.md"
+            path.write_bytes(f"previous {role} agent\n".encode())
+            old_entries.append({
+                "path": f"agents/{role}.md",
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            })
+        self.assertEqual(old_roles, tuple(sorted(
+            item["path"].removeprefix("agents/").removesuffix(".md")
+            for item in old_entries if item["path"].startswith("agents/")
+        )))
+        manifest["managed_files"] = sorted(old_entries, key=lambda item: item["path"])
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                                 encoding="utf-8")
+        before = self._tree_snapshot()
+        guidance = "Olympus version that created this installation"
+
+        for name, operation in (
+            ("install", lambda: global_install.install(ROOT, version="local", commit="new")),
+            ("update", lambda: global_install.update(ROOT, version="v1.0.0", commit="new")),
+            ("force", lambda: global_install.update(
+                ROOT, version="v1.0.0", commit="new", force=True,
+            )),
+            ("uninstall", lambda: global_install.uninstall(ROOT)),
+            ("verify", lambda: global_install.verify(ROOT, version="local")),
+        ):
+            with self.subTest(operation=name):
+                with self.assertRaisesRegex(global_install.GlobalInstallError, guidance):
+                    operation()
+                self.assertEqual(before, self._tree_snapshot())
+
+        expected = global_readonly._expected(
+            ROOT, load_renderer(ROOT), ("opencode",), include_default_agent=True,
+        )["opencode"]
+        state, detail, issue, code = global_readonly._python_verify(
+            ROOT, self.root, "local", expected,
+        )
+        self.assertEqual(("unsupported_inventory", "unsupported_global_inventory", 3),
+                         (state, issue, code))
+        self.assertIn(guidance, detail)
+        with self.assertRaisesRegex(global_readonly.GlobalFault, guidance):
+            global_readonly._manifest(self.root, "opencode", None)
+        self.assertEqual(before, self._tree_snapshot())
+
+    def test_previous_default_agent_receipt_is_rejected_even_with_force_without_mutation(self):
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        manifest_path = self.root / "olympus/orchestrator-install.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["default_agent_receipt"]["version"] = 0
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                                 encoding="utf-8")
+        before = self._tree_snapshot()
+        guidance = "Olympus version that created this installation"
+
+        for name, operation in (
+            ("install", lambda: global_install.install(ROOT, version="local", commit="fixture-local")),
+            ("force", lambda: global_install.update(
+                ROOT, version="local", commit="fixture-local", force=True,
+            )),
+            ("uninstall", lambda: global_install.uninstall(ROOT)),
+        ):
+            with self.subTest(operation=name):
+                with self.assertRaisesRegex(global_install.GlobalInstallError, guidance):
+                    operation()
+                self.assertEqual(before, self._tree_snapshot())
+
+        expected = global_readonly._expected(
+            ROOT, load_renderer(ROOT), ("opencode",), include_default_agent=True,
+        )["opencode"]
+        state, detail, issue, code = global_readonly._python_verify(
+            ROOT, self.root, "local", expected,
+        )
+        self.assertEqual(("invalid_manifest", "invalid_global_manifest", 3),
+                         (state, issue, code))
+        self.assertIn(guidance, detail)
+        self.assertEqual(before, self._tree_snapshot())
+
+    def test_v010_version_is_rejected_with_current_inventory_and_receipt_before_mutations(self):
+        before = self._tree_snapshot()
+        guidance = "Olympus version that created this installation"
+        with self.assertRaisesRegex(global_install.GlobalInstallError, "historically unsupported"):
+            global_install.install(ROOT, version="v0.10.0", commit="old-source")
+        self.assertFalse(self.root.exists())
+        self.assertEqual(before, self._tree_snapshot())
+
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        manifest_path = self.root / "olympus/orchestrator-install.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(15, len(manifest["managed_files"]))
+        self.assertEqual(1, manifest["default_agent_receipt"]["version"])
+        self.assertEqual("committed", manifest["default_agent_receipt"]["state"])
+        manifest["installed_version"] = "v0.10.0"
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                                 encoding="utf-8")
+        before = self._tree_snapshot()
+
+        for name, operation in (
+            ("install", lambda: global_install.install(ROOT, version="local", commit="new")),
+            ("update", lambda: global_install.update(ROOT, version="v1.0.0", commit="new")),
+            ("force", lambda: global_install.update(
+                ROOT, version="v1.0.0", commit="new", force=True,
+            )),
+            ("uninstall", lambda: global_install.uninstall(ROOT)),
+            ("verify", lambda: global_install.verify(ROOT, version="v0.10.0")),
+        ):
+            with self.subTest(operation=name):
+                with self.assertRaisesRegex(global_install.GlobalInstallError, guidance):
+                    operation()
+                self.assertEqual(before, self._tree_snapshot())
+
+        expected = global_readonly._expected(
+            ROOT, load_renderer(ROOT), ("opencode",), include_default_agent=True,
+        )["opencode"]
+        state, detail, issue, code = global_readonly._python_verify(
+            ROOT, self.root, "v0.10.0", expected,
+        )
+        self.assertEqual(("unsupported_version", "unsupported_global_version", 3),
+                         (state, issue, code))
+        self.assertIn(guidance, detail)
+        with self.assertRaisesRegex(global_readonly.GlobalFault, guidance):
+            global_readonly._manifest(self.root, "opencode", None)
+        self.assertEqual(before, self._tree_snapshot())
+
+    def test_update_with_or_without_force_does_not_create_missing_global_root(self):
+        before = self._tree_snapshot()
+        self.assertFalse(self.root.exists())
+        for force in (False, True):
+            with self.subTest(force=force):
+                with self.assertRaises(global_install.GlobalInstallError):
+                    global_install.update(
+                        ROOT, version="v1.0.0", commit="missing-root", force=force,
+                    )
+                self.assertFalse(self.root.exists())
+                self.assertEqual(before, self._tree_snapshot())
+
     def test_existing_jsonc_splices_only_default_agent_and_restores_exact_bytes(self):
         self.root.mkdir()
         original = self._safe_user_config()
@@ -159,7 +336,7 @@ class LinuxGlobalBackend(unittest.TestCase):
         installed = (self.root / "opencode.jsonc").read_bytes()
         self.assertEqual(original.replace(b'"other"', b'"kael"', 1), installed)
         manifest = json.loads((self.root / "olympus/orchestrator-install.json").read_text(encoding="utf-8"))
-        self.assertEqual(15, len(manifest["managed_files"]))
+        self.assertEqual(14, len(manifest["managed_files"]))
         self.assertNotIn("opencode.jsonc", {item["path"] for item in manifest["managed_files"]})
         self.assertIn(b"keep this comment and all unrelated preferences", installed)
         self.assertIn(b'"user_setting": {"theme": "dark",}', installed)
@@ -609,7 +786,7 @@ class LinuxGlobalBackend(unittest.TestCase):
                 global_install.install(ROOT, version="local", commit="fixture-local")
         self.assertTrue((self.root / ".olympus-cli-config-apply").exists())
         self.assertTrue(config_apply_transaction.pending(self.root))
-        self.assertTrue((self.root / "agents/argus.md").exists())
+        self.assertTrue((self.root / "agents/atlas.md").exists())
 
         if sys.platform.startswith("linux"):
             outcome = config_apply_transaction.recover_global(
@@ -618,7 +795,7 @@ class LinuxGlobalBackend(unittest.TestCase):
         else:
             outcome = global_install.recover(ROOT).result
         self.assertEqual("rolled_back", outcome)
-        self.assertFalse((self.root / "agents/argus.md").exists())
+        self.assertFalse((self.root / "agents/atlas.md").exists())
         self.assertFalse((self.root / "olympus/orchestrator-install.json").exists())
         self.assertFalse((self.root / ".olympus-cli-config-apply").exists())
         self.assertFalse(config_apply_transaction.pending(self.root))
@@ -661,7 +838,7 @@ class LinuxGlobalBackend(unittest.TestCase):
                         side_effect=stop_after_first_published_file):
             with self.assertRaises(KeyboardInterrupt):
                 global_install.install(ROOT, version="local", commit="fixture-local")
-        target = self.root / "agents/argus.md"
+        target = self.root / "agents/atlas.md"
         target.write_bytes(b"changed outside the pending lifecycle\n")
         before = self._files()
 
@@ -720,6 +897,153 @@ class LinuxGlobalBackend(unittest.TestCase):
         )
         self.assertTrue((self.root / source_edit._LOCK_NAME).is_file())
         self.assertFalse((self.root / ".olympus-cli-config-apply").exists())
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Directory durability checks require Linux.")
+    def test_standalone_preferences_do_not_return_success_when_parent_sync_fails(self):
+        settings = self.preferences
+        real_fsync = os.fsync
+        failed_syncs = []
+
+        def fail_preferences_directory(descriptor):
+            metadata = os.fstat(descriptor)
+            try:
+                parent = settings.parent.stat()
+            except FileNotFoundError:
+                parent = None
+            if (parent is not None and stat.S_ISDIR(metadata.st_mode)
+                    and (metadata.st_dev, metadata.st_ino) == (parent.st_dev, parent.st_ino)
+                    and settings.exists()):
+                failed_syncs.append((metadata.st_dev, metadata.st_ino))
+                raise OSError(errno.EIO, "injected preferences-directory sync failure")
+            real_fsync(descriptor)
+
+        with mock.patch("os.fsync", side_effect=fail_preferences_directory):
+            with self.assertRaises(OSError):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+
+        self.assertTrue(failed_syncs, "the published preference parent must be synchronized before success")
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Directory durability checks require Linux.")
+    def test_transactional_preferences_keep_recovery_evidence_after_parent_sync_failure(self):
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        settings = self.preferences
+        real_fsync = os.fsync
+        failed_syncs = []
+
+        def fail_preferences_directory(descriptor):
+            metadata = os.fstat(descriptor)
+            try:
+                parent = settings.parent.stat()
+            except FileNotFoundError:
+                parent = None
+            if (parent is not None and stat.S_ISDIR(metadata.st_mode)
+                    and (metadata.st_dev, metadata.st_ino) == (parent.st_dev, parent.st_ino)
+                    and settings.exists()):
+                failed_syncs.append((metadata.st_dev, metadata.st_ino))
+                raise OSError(errno.EIO, "injected preferences-directory sync failure")
+            real_fsync(descriptor)
+
+        with mock.patch("os.fsync", side_effect=fail_preferences_directory):
+            with self.assertRaises(user_config.UserConfigError):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+
+        self.assertTrue(failed_syncs, "the preference namespace barrier must be attempted after replacement")
+        record_path = self.root / ".olympus-cli-config-apply/record.json"
+        self.assertTrue(record_path.is_file())
+        self.assertEqual("PREPARED", json.loads(record_path.read_bytes())["state"])
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+        self.assertEqual(
+            "committed_cleanup",
+            config_apply_transaction.recover_global(self.root, ROOT, load_renderer=load_renderer),
+        )
+        self.assertFalse((self.root / ".olympus-cli-config-apply").exists())
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Directory durability checks require Linux.")
+    def test_committed_record_sync_failure_is_unconfirmed_and_recoverable(self):
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        settings = self.preferences
+        scratch = self.root / ".olympus-cli-config-apply"
+        real_fsync = os.fsync
+        failed_syncs = []
+
+        def fail_committed_record_directory(descriptor):
+            metadata = os.fstat(descriptor)
+            record_path = scratch / "record.json"
+            if (stat.S_ISDIR(metadata.st_mode) and record_path.is_file()
+                    and (metadata.st_dev, metadata.st_ino)
+                    == (scratch.stat().st_dev, scratch.stat().st_ino)):
+                record = json.loads(record_path.read_bytes())
+                if record.get("state") == "COMMITTED":
+                    failed_syncs.append((metadata.st_dev, metadata.st_ino))
+                    raise OSError(errno.EIO, "injected COMMITTED journal-directory sync failure")
+            real_fsync(descriptor)
+
+        with mock.patch("os.fsync", side_effect=fail_committed_record_directory):
+            with self.assertRaisesRegex(user_config.UserConfigError, "COMMITTED record.*preserve recovery evidence"):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+
+        self.assertTrue(failed_syncs, "COMMITTED must be directory-synchronized before success")
+        record = json.loads((scratch / "record.json").read_bytes())
+        self.assertEqual("COMMITTED", record["state"])
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+        self.assertEqual(
+            "committed_cleanup",
+            config_apply_transaction.recover_global(self.root, ROOT, load_renderer=load_renderer),
+        )
+        self.assertFalse(scratch.exists())
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Directory durability checks require Linux.")
+    def test_record_removal_sync_failure_restores_committed_recovery_journal(self):
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        settings = self.preferences
+        scratch = self.root / ".olympus-cli-config-apply"
+        record_path = scratch / "record.json"
+        real_sync = config_apply_transaction._settings_sync_directory
+        observed_committed = []
+        failed_syncs = []
+
+        def fail_after_record_removal(path, expected_identity=None):
+            if Path(path) == scratch:
+                if record_path.is_file():
+                    record = json.loads(record_path.read_bytes())
+                    if record.get("state") == "COMMITTED":
+                        observed_committed.append(True)
+                elif observed_committed and not failed_syncs:
+                    failed_syncs.append(path)
+                    raise OSError(errno.EIO, "injected final journal-removal sync failure")
+            real_sync(path, expected_identity)
+
+        with mock.patch(
+                "olympus.config_apply_transaction._settings_sync_directory",
+                side_effect=fail_after_record_removal):
+            with self.assertRaisesRegex(
+                    user_config.UserConfigError,
+                    "final record-removal synchronization failed; recovery record was restored"):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+
+        self.assertTrue(observed_committed, "the COMMITTED journal must be observed before cleanup")
+        self.assertEqual([scratch], failed_syncs, "only the post-COMMITTED record-removal barrier may fail")
+        record = json.loads(record_path.read_bytes())
+        self.assertEqual("COMMITTED", record["state"])
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+        self.assertEqual(
+            "committed_cleanup",
+            config_apply_transaction.recover_global(self.root, ROOT, load_renderer=load_renderer),
+        )
+        self.assertFalse(scratch.exists())
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "Linux global settings recovery requires Linux.")
     def test_global_user_settings_recovery_rolls_back_interrupted_setters(self):

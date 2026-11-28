@@ -181,13 +181,11 @@ try {
 
     # Installed projects lack Core renderer sources; require the current exact roster.
     $expectedOpenCode = @(
-        '.opencode/agents/argus.md',
         '.opencode/agents/atlas.md',
         '.opencode/agents/helios.md',
         '.opencode/agents/kael.md',
         '.opencode/agents/kovan.md',
         '.opencode/agents/nox.md',
-        '.opencode/agents/orin.md',
         '.opencode/agents/talos.md',
         '.opencode/agents/thales.md',
         '.opencode/agents/vera.md',

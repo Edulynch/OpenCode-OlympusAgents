@@ -34,6 +34,7 @@ _RETIRED_OPEN_CODE_AGENTS = (
     ".opencode/agents/sorin.md",
     ".opencode/agents/maintenance.md",
 )
+_LEGACY_PROJECT_MANIFEST_VERSIONS = frozenset({"v0.10.0"})
 _GLOBAL_ONLY_OPENCODE_OUTPUTS = frozenset({
     ".opencode/commands/olympus.ultra.md",
     ".opencode/commands/olympus.performance.md",
@@ -247,7 +248,8 @@ def _render_managed_outputs(source: Path, renderer, installed: tuple[str, ...]) 
             relative = path.relative_to(source).as_posix()
         except ValueError as error:
             raise PreviewFault(3, "source_path_unsafe", f"Rendered source output is outside the checkout: {path}") from error
-        if relative in _GLOBAL_ONLY_OPENCODE_OUTPUTS:
+        # Project installs own no OpenCode command outputs, including global-only commands.
+        if relative in _GLOBAL_ONLY_OPENCODE_OUTPUTS or relative.startswith(".opencode/commands/"):
             continue
         if relative.startswith(".opencode/") or relative == "opencode.jsonc":
             harness = "opencode"
@@ -550,6 +552,14 @@ def preview(source: Path, args, response: dict, *, source_query: Callable, load_
         record, manifest_raw, blockers = _manifest_record(target)
         if blockers or record is None or manifest_raw is None:
             return _blocked(response, blockers or [{"code": "manifest_missing", "message": "No verifiable project manifest was found."}])
+        if record.installed_version in _LEGACY_PROJECT_MANIFEST_VERSIONS:
+            return _blocked(response, [{
+                "code": "legacy_project_manifest",
+                "message": (
+                    f"Project manifest {record.installed_version} is unsupported; "
+                    "uninstall with its source version, then install the current release."
+                ),
+            }])
 
         selected = (args.harness,)
         installed = record.installed_harnesses

@@ -50,7 +50,6 @@ def no_bundled_mcp_servers(config: dict) -> bool:
 def main() -> int:
     policy = text("olympus/policies/maintenance-context.md")
     routing = text("olympus/policies/routing.md")
-    prompt = text(".opencode/agents/kael.md")
     source_prompt = text("olympus/harnesses/opencode/agent-prompts/kael.md")
     kael_metadata = text("olympus/harnesses/opencode/agent-metadata/kael.md")
     roles = {path.stem for path in (ROOT / "olympus/roles").glob("*.md")}
@@ -65,8 +64,9 @@ def main() -> int:
 
     check("ONE_KAEL_ROOT", "root orchestrator for both ordinary project work and OlympusAgents development" in policy
           and "There is no separate maintenance role" in policy
-          and "never create a second Kael or route around Kael" in routing)
-    check("CANONICAL_ROSTER_ALIGNED", len(roles) == 11 and roles == set(models["roles"]) == set(identities["roles"]))
+          and "Kael is the single ROOT ORCHESTRATOR" in routing
+          and "Atlas is a separate primary analyst/planner" in routing)
+    check("CANONICAL_ROSTER_ALIGNED", len(roles) == 9 and roles == set(models["roles"]) == set(identities["roles"]))
     check("NO_RETIRED_PRODUCT_ROUTE", "aegis" not in roles and not (ROOT / "olympus/roles/aegis.md").exists()
           and not (ROOT / "olympus/policies/maintenance-plane.md").exists()
           and not (ROOT / "olympus/harnesses/opencode/maintain.md").exists()
@@ -76,47 +76,43 @@ def main() -> int:
           and not (ROOT / ".opencode/commands/maintain.md").exists())
     check("CONTEXTUAL_TARGET_IDENTITY", all(marker in policy for marker in (
         "olympus/core/models.toml", "olympus/core/identities.toml",
-        "olympus/policies/routing.md", "project-identity evidence",
-        "If identity, ownership, or target is unclear or conflicting, stop before dependent work")))
+        "olympus/policies/routing.md", "independent project identity",
+        "If identity, ownership, or target is unclear or conflicting, stop dependent work")))
     check("EXTERNAL_PROJECT_BOUNDARY", "different user project" in policy
           and re.search(r"do not reach into a separate OlympusAgents checkout", policy, re.IGNORECASE)
           and "manifest-owned files" in policy)
     check("GOAL_REMAINS_OPT_IN", "/goal" in policy and "remains opt-in" in policy
           and "do not require it" in policy and "assume it delegates work" in policy)
-    check("KAEL_PROMPT_USES_CANONICAL_POLICY", policy.strip() in prompt
-          and "project-identity evidence" in policy
-          and "ordinary Kael workflow" in policy)
-    preflight = " ".join(prompt.partition("### OpenCode repository preflight\n")[2].split("\n## ", 1)[0].split())
-    check("KAEL_SCOPED_REPOSITORY_PREFLIGHT_WITHOUT_EXPANDED_AUTHORITY", all(
+    check("KAEL_PROMPT_USES_CANONICAL_POLICY", source_prompt.count("{{maintenance_context_policy}}") == 1
+          and "independent project identity" in policy
+          and "normal routing and authority rules" in policy)
+    preflight = " ".join(source_prompt.partition("### OpenCode repository preflight\n")[2].split("\n## ", 1)[0].split())
+    check("KAEL_REPOSITORY_PREFLIGHT_IS_EVIDENCE_ONLY", all(
         marker in preflight for marker in (
-            "Reuse an explicitly identified Git worktree root",
-            "`git rev-parse --show-toplevel` alone",
-            "read all three Core markers, independent project identity",
-            "positive ownership evidence",
-            "applicable install-manifest/installer ownership evidence",
-            "no-approval constraint, stop before dependent work",
+            "Kael never runs `git rev-parse`, shell, or repository read/search tools",
+            "Reuse an explicit root and identity only from native session context",
+            "an Atlas handoff, or Veyra's bounded evidence",
+            "If evidence is missing or conflicting, route Veyra",
         )
-    ))
-    check("KAEL_DIRECT_TOOLS_ARE_SCOPE_BOUND", "Kael's direct repository access is limited to minimum root, identity, ownership, and applicable manifest preflight" in source_prompt
-          and "Kael never directly implements or executes" in source_prompt
-          and "technical validation" in source_prompt
+    ) and "run `git rev-parse --show-toplevel` alone" not in preflight
+      and "Kael never probes the root or reads repository files" in policy)
+    check("KAEL_DIRECT_REPOSITORY_ACCESS_DENIED", "Kael does not read or search repositories, research, run shell/Git/tests, implement, or mutate files" in source_prompt
+          and re.search(r"Kael never reads/searches repositories, runs\s+shell/Git/tests, implements, or executes technical validation", source_prompt)
           and "`WRITE_SCOPE`/`GIT_SCOPE`" in source_prompt
           and "`DO_NOT_TOUCH`" in source_prompt
           and "Kael may directly implement" not in source_prompt
           and "Kael may use native `edit` for small" not in source_prompt
-          and "Kael may use native `shell` for small" not in source_prompt
-          and "Master Orchestrator is read-only" not in source_prompt
-          and "Kael remains shell DENY" not in source_prompt)
+          and "Kael may use native `shell` for small" not in source_prompt)
     kael_rules = metadata_rules(kael_metadata)
     check("KAEL_NATIVE_METADATA_LEAST_PRIVILEGE",
-          {"action": "shell", "resource": "*", "effect": "deny"} in kael_rules
-          and {"action": "shell", "resource": "git rev-parse --show-toplevel", "effect": "allow"} in kael_rules
-          and {"action": "edit", "resource": "*", "effect": "deny"} in kael_rules
-          and {"action": "serena_*", "resource": "*", "effect": "deny"} in kael_rules
-          and not any(rule["action"] == "shell" and rule["effect"] == "allow"
-                      and rule["resource"] != "git rev-parse --show-toplevel" for rule in kael_rules)
-          and not any(rule["action"].startswith("serena_") and rule["effect"] == "allow" for rule in kael_rules))
-    expected_children = ("veyra", "orin", "kovan", "nox", "vera", "thales", "atlas", "argus", "talos", "helios")
+           {"action": "shell", "resource": "*", "effect": "deny"} in kael_rules
+           and {"action": "edit", "resource": "*", "effect": "deny"} in kael_rules
+           and {"action": "serena_*", "resource": "*", "effect": "deny"} in kael_rules
+           and all({"action": action, "resource": "*", "effect": "deny"} in kael_rules
+                   for action in ("execute", "read", "glob", "grep", "list", "lsp", "webfetch", "websearch"))
+           and not any(rule["action"] == "shell" and rule["effect"] == "allow" for rule in kael_rules)
+           and not any(rule["action"].startswith("serena_") and rule["effect"] == "allow" for rule in kael_rules))
+    expected_children = ("veyra", "kovan", "nox", "vera", "talos", "helios", "thales")
     kael_children = tuple(rule["resource"] for rule in kael_rules
                           if rule["action"] == "subagent" and rule["effect"] == "allow")
     check("KAEL_SPECIALIST_ALLOWLIST_UNCHANGED", kael_children == expected_children)
@@ -173,10 +169,10 @@ def main() -> int:
         permission_effect(global_rules, role_metadata["kael"], f"serena_{tool}") == "deny"
         for tool in semantic_tools
     ))
-    check("KAEL_SHELL_ROOT_PROBE_ONLY", all(
+    check("KAEL_SHELL_DENIED_FOR_ALL_COMMANDS", all(
         permission_effect(global_rules, kael_metadata, "shell", command) == expected
         for command, expected in (
-            ("git rev-parse --show-toplevel", "allow"),
+            ("git rev-parse --show-toplevel", "deny"),
             ("git status --short", "deny"),
             ("git branch --show-current", "deny"),
             ("git ls-files -- olympus/core/models.toml", "deny"),
@@ -188,14 +184,26 @@ def main() -> int:
             ("Remove-Item docs/DEVELOPMENT.md", "deny"),
         )
     ))
-    check("KAEL_EDIT_DENIED_KOVAN_AND_PLUGIN_BOUNDARIES_UNCHANGED", all(
+    kovan_generated = text(".opencode/agents/kovan.md")
+    check("KAEL_EDIT_DENIED_KOVAN_SCOPED_EXTENSION_BOUNDARIES", all(
         permission_effect(global_rules, kael_metadata, "edit", path) == "deny"
         for path in ("src/cart.ts", "olympus/core/models.toml")
-    ) and permission_effect(global_rules, role_metadata["kovan"], "edit", "src/cart.ts") == "allow"
-      and permission_effect(global_rules, role_metadata["kovan"], "edit", "olympus/core/models.toml") == "allow"
-      and permission_effect(global_rules, role_metadata["kovan"], "edit", ".opencode/plugins/project-owned/index.ts") == "ask"
-      and permission_effect(global_rules, role_metadata["kovan"], "edit", ".opencode/plugins/olympus-activity/activity.ts") == "deny"
-      and permission_effect(global_rules, role_metadata["kovan"], "edit", ".opencode/agents/kovan.md") == "deny")
+    ) and all(permission_effect(global_rules, kovan_generated, "edit", path) == "allow"
+              for path in ("src/cart.ts", "olympus/core/models.toml", ".opencode/skills/example/SKILL.md",
+                           ".opencode/plugins/project-owned/index.ts", ".opencode/agents/project-reviewer.md",
+                           ".opencode/commands/project-release.md"))
+      and all(permission_effect(global_rules, kovan_generated, "edit", path) == "deny"
+              for path in (".opencode/plugins/olympus-activity/activity.ts", ".opencode/agents/kovan.md",
+                           ".opencode/commands/olympus.ultra.md", ".opencode/scripts/worktree-setup.ps1"))
+      and permission_effect(global_rules, kovan_generated, "edit", "opencode.jsonc") == "ask")
+    check("SELF_DEVELOPMENT_AND_OWNERSHIP_PROPAGATED",
+          all(section in kovan_generated and section in policy for section in (
+              "PROJECT_EXTENSION_SOURCE", "PROJECT_OPENCODE_CONFIG", "OLYMPUS_CANONICAL_SOURCE",
+              "OLYMPUS_RENDERED_CANDIDATE", "OLYMPUS_MANAGED_INSTALLATION", "USER_GLOBAL_CONFIG",
+              "UNKNOWN_OWNERSHIP", "RENDER_GENERATED_OUTPUTS", "worktree contains no foreign work",
+              "zero rewrites and zero prunes", "No fallback to `build`",
+              "Shell permissions are not a path sandbox", "Never edit generated bytes manually",
+          )))
     check("KAEL_EXTERNAL_DIRECTORY_RULES_UNCHANGED",
           not any(rule["action"] == "external_directory" for rule in kael_rules)
           and permission_effect(global_rules, kael_metadata, "external_directory", "C:/workspace/sibling/src/cart.ts") == "ask")

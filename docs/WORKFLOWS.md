@@ -75,11 +75,31 @@ Open OpenCode in your project and describe the outcome:
 
 > `/olympus.ultra Review these four independent modules for reproducible issues. Fix confirmed bugs, preserve required checks, and summarize the results.`
 
-The command asks Kael to maximize useful, safe concurrency within the configured ceiling; it does not grant broader permissions or guarantee that any particular number of workers will run.
+Run this execution example from Kael. From Atlas, the same command remains
+read-only and ends with analysis plus a scoped handoff. Neither mode grants
+broader permissions or guarantees that a particular number of workers will run.
 
-## The team
+## Primaries and specialists
 
-Kael coordinates the [eleven-agent team](../README.md#the-team) ([Español](../README.ES.md#the-team)). [Olympus Core](../olympus/README.md) defines the role boundaries.
+The current roster has nine roles: Kael and Atlas are separate primaries, and
+Kael has seven specialist children. Orin and Argus are retired; neither is a
+current role. [Olympus Core](../olympus/README.md) defines the role boundaries.
+
+- **Kael** owns user decisions, execution routing, dependencies, evidence
+  reconciliation, acceptance, and task completion. Kael does not directly read
+  or search repositories, research, run shell/Git/tests, or edit files. It
+  routes implementation and normal authorized Git work to Kovan, and distinct
+  testing/runtime evidence to Nox.
+- **Atlas** is a separate read-only primary for bounded repository analysis,
+  architecture, trade-offs, defect hypotheses, and plans. It hands a scoped
+  proposal to Kael; it cannot implement, mutate Git, test, review a final
+  candidate, or accept work. Its shell access is only for bounded inspection
+  and diagnostics through native ASK; ASK is not a sandbox. Atlas may delegate
+  only to Veyra, Helios, Talos, or Thales.
+- **Kael's seven children:** Veyra (evidence), Kovan (implementation and normal
+  project Git), Nox (reproduction/tests/runtime/measurement), Vera (independent
+  review), Helios (explicit optimization method), Talos (security diagnosis),
+  and Thales (exceptional technical diagnosis). Atlas is not a Kael child.
 
 ## Task results and handoffs
 
@@ -140,28 +160,68 @@ completion.
 
 | Policy | Selection | What changes |
 | --- | --- | --- |
-| **Default** | Any ordinary task | Kael adapts parallelism to useful independent work; simple tasks need no fan-out. The global prompt ceiling can be set from 1 to 8 per root session. |
-| **Ultra** | `/olympus.ultra <prompt>` | Kael actively seeks useful independent work up to the configured ceiling. It is not a target; dependencies, ownership, permissions, validation and completion gates remain unchanged. This prompt policy does not enforce the native scheduler. |
+| **Default** | Any ordinary task | Kael or Atlas adapts concurrency to useful, independent work; simple tasks need no fan-out. The shared prompt-ceiling preference is 1–8 for each primary root session, not a quota across sessions. |
+| **Ultra** | `/olympus.ultra <prompt>` | The current primary seeks ready, independent work up to the effective prompt ceiling. The ceiling is not a target; no scheduler is added, and dependencies, ownership, permissions, validation, and completion gates remain unchanged. |
+
+Only one mutative writer may use a worktree at a time. Parallel writers need
+isolated worktrees and non-conflicting refs and shared resources; disjoint file
+paths in one worktree are not enough.
 
 ### Native task commands
 
-The global OpenCode installation provides exactly these two namespaced commands:
+The global OpenCode installation provides exactly these three namespaced commands:
 
 ```text
 /olympus.ultra <prompt>
 /olympus.performance <prompt>
+/olympus.performance-ultra <prompt>
 ```
 
-There are no bare `/ultra` or `/performance` aliases. Both commands run in the current Kael session, accept the full task text, and retain normal role, authority, native-permission, dependency, validation, reconciliation and completion gates. Empty or whitespace-only arguments display usage and must not trigger tools or agents; this guard is in the prompt because native command metadata has no required-argument field, so it is not deterministic runtime enforcement.
+All three commands run in the current **Kael or Atlas primary** session and
+accept the full task text. There are no bare aliases. Empty or whitespace-only
+arguments return usage; invocation from another primary returns
+supported-primary guidance. Neither case triggers tools or agents. This is a
+prompt guard, not deterministic native argument enforcement. Every command
+retains the active primary's normal role, authority, native-permission,
+dependency, validation, reconciliation, and completion boundaries.
 
-`/olympus.ultra` asks Kael to launch ready, independent assignments together up to the configured 1–8 ceiling. More eligible work can start as slots free up. Kael does not fill slots with duplicate, overlapping, dependent or otherwise unhelpful work.
+`/olympus.ultra` is latency-first: admit only ready, independent work and
+dispatch/refill slots as they become available. Before dispatch, Kael or Atlas
+records `ULTRA_CEILING`, `READY_WORKSTREAMS`,
+`TARGET_ACTIVE = min(ULTRA_CEILING, READY_WORKSTREAMS)`, and observed
+`CURRENT_ACTIVE`. The final receipt records `ULTRA_WORKSTREAMS`,
+`PEAK_ACTIVE_CHILDREN`, `TOTAL_CHILD_SESSIONS`, `WRITER_WORKTREES`,
+`DUPLICATE_CHECKS`, and `UNDERFILL_REASON`. Underfill must use the canonical
+reason: `ONLY_N_INDEPENDENT_WORKSTREAMS` (with observed N),
+`DEPENDENCY_UNRESOLVED`, `WRITER_OR_RESOURCE_CONFLICT`, `PERMISSION_BLOCKED`,
+`NO_ELIGIBLE_ROLE`, or `COORDINATION_COST_EXCEEDS_EXPECTED_LATENCY_BENEFIT`;
+use `NONE` when there is no underfill and `UNKNOWN` only when the cause cannot
+be established. Never invent counts or add a scheduler, controller, or
+artificial fan-out. For Atlas, Ultra ends in read-only analysis and a scoped
+handoff; it does not authorize execution.
 
-`/olympus.performance` is explicit optimization intent. Kael uses the existing target/baseline/Helios gate when useful, presents a concrete proposal and stops for human approval before implementation unless the user already approved a sufficiently specific direction with understood tradeoffs. Optimization does not automatically select Ultra. Successful implementation still requires before/after/delta/target evidence and correctness validation. The canonical behavior is maintained in [Kael's OpenCode adapter source](../olympus/harnesses/opencode/agent-prompts/kael.md).
+`/olympus.performance` is explicit optimization intent. Helios supplies the
+exclusive method. Kael routes missing measurements to Nox; Atlas requests that
+evidence from Kael. If a concrete
+direction or trade-offs remain unsettled, Kael presents the proposal and waits
+for user approval before implementation. A sufficiently specific direction
+already approved by the user does not need duplicate approval. Implementation
+acceptance requires measured `BEFORE`, `AFTER`, `DELTA`, `TARGET`, and
+`CORRECTNESS`; unknown values stay unknown.
+
+`/olympus.performance-ultra` combines the same Performance gate with Ultra
+admission. It does not make Ultra automatic for other requests, authorize
+implementation, or bypass approval and validation. Atlas remains read-only and
+returns a performance plan and scoped handoff. Canonical behavior is maintained
+in [Kael's OpenCode adapter source](../olympus/harnesses/opencode/agent-prompts/kael.md)
+and [routing policy](../olympus/policies/routing.md).
 
 ## Contextual maintenance and ownership
 
 - **Kael orchestrates** work inside OlympusAgents and other projects using the same normal team. There is no active Aegis role or `/maintain` command.
+- **Project-owned OpenCode extensions** (skills, plugins, custom agents and commands) can be implemented by Kovan in the assigned scope. Managed files are protected; project OpenCode config needs explicit scope and the applicable native decision. Candidate rendering in the OlympusAgents source worktree is not installation.
 - **The user owns product decisions.** Kael checks project identity, scope and feasibility before involving specialists; it cannot silently expand authorization.
+- **Readiness comes before expensive work.** Kael groups foreseeable material decisions, reuses authority already granted, and continues useful independent work when a workstream is blocked. Native permission questions remain with the host.
 - **OpenCode owns runtime execution.** Sessions, subprocesses, tools and permissions belong to the host; Olympus coordinates and reconciles results. Do not interpret static tests as live provider/runtime guarantees.
 - **OpenCode is the only currently supported runtime.** Historical Codex behavior is not a support or compatibility promise; see the [capability contract](HARNESS-CAPABILITIES.md).
 - **Optional native `/goal`** is chosen by the user when available; it is not silently invoked or required.

@@ -3,7 +3,7 @@ param([ValidateSet('Both','Offline','Runtime')][string]$QualificationSlice = 'Bo
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$run = Join-Path (Join-Path $env:LOCALAPPDATA 'Temp/opencode') ('helios-qualification-' + [guid]::NewGuid().ToString('N'))
+$run = Join-Path (Join-Path ([IO.Path]::GetTempPath()) 'opencode') ('helios-qualification-' + [guid]::NewGuid().ToString('N'))
 $script:CollectOfflineContracts = $QualificationSlice -eq 'Offline'
 $script:OfflineContractFailures = [Collections.Generic.List[string]]::new()
 function Check([string]$id, [bool]$ok) {
@@ -69,12 +69,14 @@ function Simulate([string]$case) {
     if ($case -eq 'regression') { $state = 'VALIDATION_FAILED' }
     [pscustomobject]@{ Status=$state; Sessions=[int]$intent; Calls=$calls; Worker=$worker; WorkerParent=$workerParent; SameSession=$same; Implemented=$implementation }
 }
-$expected = @{ kael='gpt-6.2-sol#high'; atlas='gpt-6.2-sol#high'; argus='gpt-6.2-sol#high'; talos='gpt-6.2-sol#high'; helios='gpt-6.2-sol#high'; thales='gpt-6.2-sol#xhigh'; veyra='gpt-6-luna#max'; orin='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
+$expected = @{ kael='gpt-6.2-sol#high'; atlas='gpt-6.2-sol#high'; talos='gpt-6.2-sol#high'; helios='gpt-6.2-sol#high'; thales='gpt-6.2-sol#xhigh'; veyra='gpt-6-luna#max'; kovan='gpt-6-luna#max'; nox='gpt-6-luna#max'; vera='gpt-6-luna#max' }
 try {
     [IO.Directory]::CreateDirectory($run) | Out-Null
     if ($QualificationSlice -ne 'Runtime') {
     $h = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/helios.md'))
     $k = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/kael.md'))
+    $atlas = [IO.File]::ReadAllText((Join-Path $source '.opencode/agents/atlas.md'))
+    $gate = [regex]::Match($k, '(?ms)^## Performance Gate[^\r\n]*\r?\n(.*?)(?=^## |\z)').Value
     $b = [IO.File]::ReadAllText((Join-Path $source 'scripts/bootstrap.ps1'))
     $renderer = [IO.File]::ReadAllText((Join-Path $source 'scripts/render_harnesses.py'))
     $r = [IO.File]::ReadAllText((Join-Path $source 'docs/ROADMAP.md'))
@@ -85,34 +87,37 @@ try {
         (Test-Path -LiteralPath (Join-Path $source 'olympus/roles/helios.md') -PathType Leaf) -and
         (Test-OpenCodeGeneratedAgentManaged $b $renderer $source 'helios'))
     Check HE2 ($h -match 'model: openai/gpt-6.2-sol#high')
-    Check HE3 ($k -match '(?s)action: subagent\s+resource: helios\s+effect: allow' -and $k -match 'and helios are valid child role IDs')
+    Check HE3 ($k -match '(?s)action: subagent\s+resource: helios\s+effect: allow' -and $atlas -match '(?s)action: subagent\s+resource: helios\s+effect: allow')
     foreach ($pair in @(@('HE4','shell'),@('HE5','edit'),@('HE6','subagent'))) { Check $pair[0] ($h -match ('(?s)action: ' + $pair[1] + '\s+resource: "\*"\s+effect: deny')) }
     Check HE7 (@('read','glob','grep','list','lsp' | Where-Object { $h -notmatch ('(?s)action: ' + $_ + '\s+resource: "\*"\s+effect: deny') }).Count -eq 0)
-    Check HE8 ($k -match '## Optimization Gate — explicit-only Helios' -and $h -match 'User intent must explicitly ask')
-    Check HE9 ($k -match 'HELIOS COUNT = 0' -and $h -match 'fact alone' -and -not (Test-Path (Join-Path $source '.opencode/commands/helios.md')) -and -not (Test-Path (Join-Path $source '.opencode/commands/performance.md')))
-    Check HE10 ($k -match 'CHEAP FEASIBILITY TRIAGE' -and $h -match 'TARGET_METRIC, CURRENT_EVIDENCE, DESIRED_THRESHOLD and MEANINGFUL_DELTA')
-    Check HE11 ($k -match 'DO_NOT_OPTIMIZE is a successful outcome' -and $h -match 'STATUS: DO_NOT_OPTIMIZE')
+    Check HE8 ($gate -match 'Consult Helios only when the user explicitly asks to optimize' -and $h -match 'Route only on explicit user intent')
+    Check HE9 ($gate -match 'Do not infer intent from a slow endpoint, large artifact, warning, benchmark, or inefficient-looking code' -and $h -match 'fact alone' -and -not (Test-Path (Join-Path $source '.opencode/commands/helios.md')) -and -not (Test-Path (Join-Path $source '.opencode/commands/performance.md')))
+    Check HE10 ($gate -match 'Helios owns the exclusive performance method' -and $h -match 'Before expensive evidence requests identify TARGET_METRIC, CURRENT_EVIDENCE, DESIRED_THRESHOLD and MEANINGFUL_DELTA')
+    Check HE11 ($gate -match '`DO_NOT_OPTIMIZE` is a successful outcome' -and $h -match 'STATUS: DO_NOT_OPTIMIZE')
     Check HE12 (@('STATUS: OPTIMIZATION_PROPOSAL','OBJECTIVE:','BASELINE:','TARGET:','BOTTLENECK:','OPPORTUNITY:','PROPOSAL:','EXPECTED_BENEFIT:','EFFORT:','RISK:','CONFIDENCE:','VALIDATION:','TRADEOFFS:','STOP_CONDITIONS:','APPROVAL_REQUIRED: YES' | Where-Object { -not $h.Contains($_) }).Count -eq 0)
     Check HE13 (@('STATUS: EVIDENCE_REQUEST','TARGET_ROLE: veyra | nox','QUESTION:','SCOPE:','WHY_NEEDED:','EXPECTED_DISCRIMINATION:' | Where-Object { -not $h.Contains($_) }).Count -eq 0)
-    Check HE14 ($k -match 'MANDATORY USER APPROVAL GATE' -and $h -match 'STOP FOR USER APPROVAL')
-    Check HE15 ($k -match 'No automatic Kovan, Atlas, implementation' -and $h -match 'No automatic Atlas, Kovan')
-    Check HE16 ($k -match 'BEFORE, AFTER, DELTA, TARGET and CORRECTNESS' -and $h -match 'target unmet or correctness regression')
-    Check HE17 ($h -match 'Atlas asks HOW' -and $k -match 'Helios asks WHETHER/WHAT')
-    Check HE18 ($h -match 'Argus diagnoses WRONG functional behavior')
+    Check HE14 ($gate -match 'obtains the user''s decision before implementation' -and $h -match 'STOP FOR USER APPROVAL')
+    Check HE15 ($gate -match 'An earlier general request to optimize is not approval of a concrete direction' -and $h -match 'No automatic Atlas, Kovan')
+    Check HE16 ($gate -match 'before/after/delta/target evidence\s+and correctness validation' -and $h -match 'target unmet or correctness regression')
+    Check HE17 ($h -match 'Atlas owns architecture/interfaces/trade-offs and functional-defect hypotheses/plans; Helios exclusively evaluates whether/what performance optimization is worthwhile')
+    Check HE18 ($h -match 'Do not consult for measurement-only requests, correctness defects' -and $gate -match 'Do not consult Helios for measurement-only requests.*?correctness defects')
     Check HE19 ($h -match 'Talos diagnoses security defects' -and $h -match 'never recommend weakening')
-    Check HE20 ($h -match "Thales handles high-uncertainty technical diagnosis" -and $k -match 'Do not invoke Thales merely because performance')
-    Check HE21 ($h -match 'STATUS: NEEDS_ARCHITECTURE' -and $k -match 'Kael decides whether Orin')
-    Check HE22 ($h -match 'Nox MEASURES' -and $k -match 'Nox MEASURES')
+    Check HE20 ($h -match 'Thales handles high-uncertainty technical diagnosis.*?difficult performance work alone does not invoke Thales' -and $h -match 'Helios cannot invoke him')
+    Check HE21 ($h -match 'STATUS: NEEDS_ARCHITECTURE' -and $h -match 'Kael owns any Atlas handoff' -and $k -match 'Kael never invokes Atlas as a child')
+    Check HE22 ($h -match 'Nox MEASURES' -and $gate -match 'Any missing measurement is a bounded Nox assignment through Kael')
     Check HE23 ($h -match 'Vera independently reviews implemented correctness' -and $k -match 'Vera independently reviews')
-    Check HE24 ($k -match 'Kael → Helios → EVIDENCE_REQUEST → Kael' -and $h -match 'direct Kael-owned Veyra or Nox')
-    Check HE25 ($k -match 'SAME Helios session' -and $h -match 'SAME Helios session')
-    Check HE26 ($k -match 'up to 2 Helios consultations' -and $h -match 'up to 2 Helios consultations')
-    Check HE27 ($k -match 'Third automatic consultation DENIED' -and $h -match 'Third automatic consultation DENIED')
-    Check HE28 ($k -match 'NO_PROGRESS:' -and $h -match 'NO_PROGRESS:')
+    Check HE24 ($h -match 'Kael → Helios → EVIDENCE_REQUEST → Kael.*?direct Kael-owned Veyra or Nox' -and
+        $h -match 'When Atlas is the parent, return the result or evidence request to Atlas' -and
+        $h -match 'missing measurement is a handoff to Kael for Nox, never\s+an Atlas delegation to Nox' -and
+        $atlas -match 'request Nox measurement through Kael' -and $atlas -match 'analysis only, never implementation')
+    Check HE25 ($gate -match 'Continue the same original Helios session.*?reconciling it' -and $h -match 'SAME Helios session')
+    Check HE26 ($gate -match 'at most once automatically, only after.*?materially new evidence' -and $h -match 'up to 2 Helios consultations')
+    Check HE27 ($h -match 'Third automatic consultation DENIED; only explicit user authorization permits deeper analysis')
+    Check HE28 ($gate -match 'Do not open a replacement or repeat the same check' -and $h -match 'NO_PROGRESS:')
     Check HE29 ($k -match 'MISSING OUTPUT != WORKER FAILURE' -and $h -match 'reconciles that original')
-    Check HE32 ($k -match 'Kael retains all routing, reconciliation and root completion' -and $h -match 'Kael retains routing, reconciliation and root completion')
+    Check HE32 ($k -match 'Kael alone approves, routes, reconciles, and decides completion' -and $h -match 'Kael retains routing, reconciliation and root completion' -and $h -match 'Neither Atlas nor Helios approves or starts execution')
     Check HE33 (@($expected.Keys | Where-Object { ([IO.File]::ReadAllText((Join-Path $source ".opencode/agents/$_.md"))) -notmatch ('(?m)^model: "?openai/' + [regex]::Escape($expected[$_]) + '"?\r?$') }).Count -eq 0)
-    Check HE34 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'Four is a ceiling, never a target')
+    Check HE34 ($k -match 'MAX_ACTIVE_CHILDREN = 4' -and $k -match 'never a target')
     Check HE35 (-not (Test-Path (Join-Path $source '.opencode/agents/sorin.md')) -and
         $b.Contains("'.opencode/agents/sorin.md'") -and
         $b.Contains('foreach ($retiredPath in $RetiredOpenCodeResources)') -and
@@ -123,12 +128,12 @@ try {
     $c=Simulate already-met; Check CASE_B ($c.Status -eq 'DO_NOT_OPTIMIZE' -and -not $c.Implemented)
     $c=Simulate fact; Check CASE_C ($c.Sessions -eq 0 -and $c.Calls -eq 0)
     $c=Simulate architecture; Check CASE_D ($c.Status -eq 'NEEDS_ARCHITECTURE' -and -not $c.Implemented)
-    Check CASE_E ((Simulate functional).Sessions -eq 0 -and $k -match 'Correctness defects belong to Argus')
-    Check CASE_F ((Simulate security).Sessions -eq 0 -and $k -match 'security boundary defects belong to Talos')
+    Check CASE_E ((Simulate functional).Sessions -eq 0 -and $k -match 'Do not diagnose correctness issues as performance problems')
+    Check CASE_F ((Simulate security).Sessions -eq 0 -and $k -match 'use Talos for established/strongly evidenced security-boundary defects')
     $c=Simulate third; Check CASE_G ($c.Status -eq 'THIRD_DENIED' -and $c.Calls -eq 2)
     $c=Simulate indeterminate; Check CASE_H ($c.Status -eq 'COMPLETION_UNCONFIRMED' -and $c.Worker -eq 'ORIGINAL_UNRESOLVED' -and $c.Calls -eq 1)
-    $c=Simulate approval; Check CASE_I ($c.Status -eq 'OPTIMIZATION_PROPOSAL' -and -not $c.Implemented -and $k -match 'STOP')
-    $c=Simulate regression; Check CASE_J ($c.Status -eq 'VALIDATION_FAILED' -and $k -match 'correctness regression = NOT successful')
+    $c=Simulate approval; Check CASE_I ($c.Status -eq 'OPTIMIZATION_PROPOSAL' -and -not $c.Implemented -and $gate -match 'decision before implementation')
+    $c=Simulate regression; Check CASE_J ($c.Status -eq 'VALIDATION_FAILED' -and $gate -match 'correctness regression is not success')
     }
     $script:CollectOfflineContracts = $false
 

@@ -2298,6 +2298,18 @@ print("DONE", flush=True)
         self.assertEqual(before_agent, agent.read_bytes())
         self.assertEqual(before_manifest, manifest.read_bytes())
 
+    def test_preference_lock_parent_diagnostic_is_scope_specific(self):
+        path = self.sandbox / "settings" / "config.json"
+        for scope, message in (
+                ("global", "Global user configuration parent is unsafe"),
+                ("project", "Project user configuration parent is unsafe")):
+            with self.subTest(scope=scope):
+                with mock.patch.object(
+                        user_config, "_open_parent_directory", side_effect=OSError("linked parent")):
+                    with self.assertRaisesRegex(OSError, message) as raised:
+                        user_config._acquire_preference_lock(path, scope=scope)
+                self.assertIn("linked parent", str(raised.exception))
+
     def test_global_max_parallel_config_only_root_and_strict_global_project_schema(self):
         absent_root = self.sandbox / "config-only" / "opencode"
         settings = self.sandbox / "config-only-user" / "Olympus" / "config.json"

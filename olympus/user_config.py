@@ -769,14 +769,15 @@ def _write_atomic(path: Path, content: bytes, *, mode: int | None = None,
         _close_parent_directory(parent_handle)
 
 
-def _acquire_preference_lock(path: Path, *, create_parent: bool = True):
+def _acquire_preference_lock(path: Path, *, create_parent: bool = True, scope: str | None = None):
     from . import source_edit
 
     path = Path(os.path.abspath(os.fspath(path)))
     try:
         parent_handle, identity = _open_parent_directory(path, create=create_parent)
     except OSError as error:
-        raise OSError(f"User configuration parent is unsafe: {error}") from error
+        context = f"{scope.capitalize()} " if scope in ("global", "project") else ""
+        raise OSError(f"{context}user configuration parent is unsafe: {error}") from error
     try:
         lock = source_edit._acquire_path_lock(path.parent / _PREFERENCE_LOCK_NAME, create=True)
         try:
@@ -1065,7 +1066,7 @@ def set_override(source: Path, role: str, field: str, value: str,
             from . import config_apply_transaction
 
             try:
-                preference_lock = _acquire_preference_lock(path)
+                preference_lock = _acquire_preference_lock(path, scope="project")
             except (source_edit.LockError, OSError) as error:
                 raise UserConfigError(
                     f"Cannot safely acquire the shared preferences lock; no configuration was changed: {error}"
@@ -1075,7 +1076,7 @@ def set_override(source: Path, role: str, field: str, value: str,
         else:
             _check_global_recovery(global_root)
             try:
-                preference_lock = _acquire_preference_lock(path)
+                preference_lock = _acquire_preference_lock(path, scope="global")
             except (source_edit.LockError, OSError) as error:
                 raise UserConfigError(
                     f"Cannot safely acquire the shared preferences lock; no configuration was changed: {error}"
@@ -1157,7 +1158,7 @@ def set_max_children(source: Path, value: int) -> tuple[Path, bool]:
     try:
         _check_global_recovery(global_root)
         try:
-            preference_lock = _acquire_preference_lock(config_path())
+            preference_lock = _acquire_preference_lock(config_path(), scope="global")
         except (source_edit.LockError, OSError) as error:
             raise UserConfigError(
                 f"Cannot safely acquire the shared preferences lock; no configuration was changed: {error}"

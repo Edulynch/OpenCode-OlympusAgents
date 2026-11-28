@@ -286,6 +286,82 @@ class GlobalCli(unittest.TestCase):
         stdout, stderr = process.communicate(timeout=10)
         self.assertEqual(0, process.returncode, f"PowerShell global lock owner failed: {stdout!r} {stderr!r}")
 
+    def _start_preference_lock_owner(self, path: Path):
+        script = (
+            "import sys; from pathlib import Path; "
+            f"sys.path.insert(0, {str(SOURCE_ROOT)!r}); "
+            "from olympus import source_edit, user_config; "
+            "lock = user_config._acquire_preference_lock(Path(sys.argv[1])); "
+            "print('LOCKED', flush=True); sys.stdin.readline(); source_edit._release_lock(lock)"
+        )
+        process = subprocess.Popen(
+            [sys.executable, "-B", "-c", script, str(path)], cwd=SOURCE_ROOT, env=self.env,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", bufsize=1,
+        )
+        ready = queue.Queue()
+        reader = threading.Thread(target=lambda: ready.put(process.stdout.readline()), daemon=True)
+        reader.start()
+        try:
+            line = ready.get(timeout=15)
+        except queue.Empty:
+            process.kill()
+            stdout, stderr = process.communicate(timeout=10)
+            self.fail(f"Preferences lock owner did not acquire: {stdout!r} {stderr!r}")
+        if line.strip() != "LOCKED":
+            stdout, stderr = process.communicate(timeout=10)
+            self.fail(f"Preferences lock owner failed: {line!r} {stdout!r} {stderr!r}")
+        return process
+
+    def _stop_preference_lock_owner(self, process):
+        if process.poll() is None:
+            process.stdin.write("release\n")
+            process.stdin.flush()
+        stdout, stderr = process.communicate(timeout=10)
+        self.assertEqual(0, process.returncode, f"Preferences lock owner failed: {stdout!r} {stderr!r}")
+
+    def _start_paused_global_override(self, env: dict[str, str], role: str = "nox",
+                                      field: str = "effort", value: str = "high"):
+        script = """import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from olympus import user_config
+commit = user_config._commit_override
+def pause(*args, **kwargs):
+    print("LOCKED", flush=True)
+    sys.stdin.readline()
+    return commit(*args, **kwargs)
+user_config._commit_override = pause
+user_config.set_override(Path(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5], "global")
+print("DONE", flush=True)
+"""
+        process = subprocess.Popen(
+            [sys.executable, "-B", "-c", script, str(self.source_root), str(ROOT), role, field, value],
+            cwd=self.source_root, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1,
+        )
+        ready = queue.Queue()
+        reader = threading.Thread(target=lambda: ready.put(process.stdout.readline()), daemon=True)
+        reader.start()
+        try:
+            line = ready.get(timeout=20)
+        except queue.Empty:
+            process.kill()
+            stdout, stderr = process.communicate(timeout=10)
+            self.fail(f"Global preference writer did not reach its locked commit: {stdout!r} {stderr!r}")
+        if line.strip() != "LOCKED":
+            stdout, stderr = process.communicate(timeout=10)
+            self.fail(f"Global preference writer failed before locking: {line!r} {stdout!r} {stderr!r}")
+        return process
+
+    def _stop_paused_global_override(self, process):
+        if process.poll() is None:
+            process.stdin.write("release\n")
+            process.stdin.flush()
+        stdout, stderr = process.communicate(timeout=20)
+        self.assertEqual(0, process.returncode, f"Global preference writer failed: {stdout!r} {stderr!r}")
+        self.assertIn("DONE", stdout)
+
     def _global_files(self, root: Path | None = None):
         root = self.root if root is None else root
         return {
@@ -2337,6 +2413,529 @@ class GlobalCli(unittest.TestCase):
         self.assertFalse((root / "olympus/orchestrator-install.json").exists())
         self.assertEqual({"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
                          json.loads(settings.read_text(encoding="utf-8")))
+
+    def test_global_preferences_lock_serializes_writers_from_different_roots(self):
+        settings = self.appdata / "Olympus/config.json"
+        owner = self._start_preference_lock_owner(settings)
+        other_root = self.sandbox / "second-opencode-root"
+        env = self.env.copy()
+        env["OPENCODE_CONFIG_DIR"] = str(other_root)
+        try:
+            with mock.patch.dict(os.environ, env, clear=True):
+                with self.assertRaisesRegex(
+                        user_config.UserConfigError,
+                        "shared preferences lock.*owned by another process"):
+                    user_config.set_override(ROOT, "nox", "effort", "high")
+            self.assertFalse(settings.exists())
+            self.assertFalse((other_root / "olympus/orchestrator-install.json").exists())
+        finally:
+            self._stop_preference_lock_owner(owner)
+
+        with mock.patch.dict(os.environ, env, clear=True):
+            user_config.set_override(ROOT, "nox", "effort", "high")
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+        with mock.patch.dict(os.environ, env, clear=True):
+            user_config.set_override(ROOT, "nox", "effort", "medium")
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"nox": {"effort": "medium"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+
+    def test_project_and_global_entry_points_share_preference_lock_and_resume(self):
+        project = self._create_project()
+        settings = project / ".opencode/olympus-config.json"
+        env = self.env.copy()
+        env["OLYMPUS_CONFIG_FILE"] = str(settings)
+        with mock.patch.dict(os.environ, env, clear=True):
+            user_config.set_override(ROOT, "nox", "effort", "medium", "global")
+            user_config.set_override(ROOT, "nox", "effort", "medium", "project", project)
+
+        writer = self._start_paused_global_override(env, "atlas", "effort", "high")
+        try:
+            with mock.patch.dict(os.environ, env, clear=True):
+                with self.assertRaisesRegex(
+                        user_config.UserConfigError, "shared preferences lock.*owned by another process"):
+                    user_config.set_override(ROOT, "nox", "effort", "medium", "project", project)
+        finally:
+            self._stop_paused_global_override(writer)
+
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {
+                "nox": {"effort": "medium"}, "atlas": {"effort": "high"},
+            }},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+        with mock.patch.dict(os.environ, env, clear=True):
+            user_config.set_override(ROOT, "nox", "effort", "low", "project", project)
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {
+                "nox": {"effort": "low"}, "atlas": {"effort": "high"},
+            }},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+
+    def test_project_pending_settings_block_global_setter_until_project_recovery(self):
+        project = self._create_project()
+        settings = project / ".opencode/olympus-config.json"
+        settings.write_bytes(b'{"schema_version":1,"overrides":{}}\n')
+        before = settings.read_bytes()
+        original_agent = (project / ".opencode/agents/nox.md").read_bytes()
+        env = self.env.copy()
+        preference_alias = project / ".opencode/../.opencode/OLYMPUS-CONFIG.JSON"
+        env["OLYMPUS_CONFIG_FILE"] = str(preference_alias)
+        publish = config_apply_transaction._settings_publish
+
+        def interrupt_after_agent(*args, **kwargs):
+            result = publish(*args, **kwargs)
+            if args[4] == ".opencode/agents/nox.md":
+                raise KeyboardInterrupt("leave project settings recovery evidence")
+            return result
+
+        with mock.patch.dict(os.environ, env, clear=True):
+            with mock.patch("olympus.config_apply_transaction._settings_publish", side_effect=interrupt_after_agent):
+                with self.assertRaises(KeyboardInterrupt):
+                    user_config.set_override(ROOT, "nox", "effort", "high", "project", project)
+
+        pending = project / ".olympus-cli-config-apply/record.json"
+        self.assertTrue(pending.is_file())
+        blocked = None
+        with mock.patch.dict(os.environ, env, clear=True):
+            try:
+                user_config.set_override(ROOT, "atlas", "effort", "high", "global")
+            except user_config.UserConfigError as error:
+                blocked = error
+        self.assertEqual(before, settings.read_bytes())
+        self.assertIsNotNone(blocked, "global setter was allowed past the pending project recovery journal")
+        self.assertRegex(str(blocked), "pending.*recovery")
+        self.assertNotEqual(original_agent, (project / ".opencode/agents/nox.md").read_bytes())
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual("rolled_back", config_apply_transaction.recover(project, ROOT))
+            user_config.set_override(ROOT, "atlas", "effort", "high", "global")
+        self.assertEqual(original_agent, (project / ".opencode/agents/nox.md").read_bytes())
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"atlas": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+
+    def test_global_pending_settings_block_project_setter_until_global_recovery(self):
+        project = self._create_project()
+        settings = project / ".opencode/olympus-config.json"
+        settings.write_bytes(b'{"schema_version":1,"overrides":{}}\n')
+        before = settings.read_bytes()
+        original_agent = self._agent("nox").read_bytes()
+        env = self.env.copy()
+        env["OLYMPUS_CONFIG_FILE"] = str(settings)
+        publish = config_apply_transaction._settings_publish
+
+        def interrupt_after_agent(*args, **kwargs):
+            result = publish(*args, **kwargs)
+            if args[4] == "agents/nox.md":
+                raise KeyboardInterrupt("leave global settings recovery evidence")
+            return result
+
+        with mock.patch.dict(os.environ, env, clear=True):
+            with mock.patch("olympus.config_apply_transaction._settings_publish", side_effect=interrupt_after_agent):
+                with self.assertRaises(KeyboardInterrupt):
+                    user_config.set_override(ROOT, "nox", "effort", "high", "global")
+
+        pending = self.root / ".olympus-cli-config-apply/record.json"
+        self.assertTrue(pending.is_file())
+        project_env = env.copy()
+        project_env["OPENCODE_CONFIG_DIR"] = str(self.sandbox / "other-opencode-root")
+        with mock.patch.dict(os.environ, project_env, clear=True):
+            with self.assertRaisesRegex(user_config.UserConfigError, "pending.*recovery"):
+                user_config.set_override(ROOT, "atlas", "effort", "high", "project", project)
+            with self.assertRaisesRegex(
+                    config_apply_transaction.TransactionError, "another root or scope"):
+                config_apply_transaction.recover(project, ROOT)
+        self.assertEqual(before, settings.read_bytes())
+        self.assertTrue(pending.is_file())
+        self.assertNotEqual(original_agent, self._agent("nox").read_bytes())
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(
+                "rolled_back",
+                config_apply_transaction.recover_global(self.root, ROOT, load_renderer=load_renderer),
+            )
+        with mock.patch.dict(os.environ, project_env, clear=True):
+            user_config.set_override(ROOT, "atlas", "effort", "high", "project", project)
+        self.assertEqual(original_agent, self._agent("nox").read_bytes())
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"atlas": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+
+    def test_matching_recovery_clears_prejournal_shared_settings_marker(self):
+        project = self._create_project()
+        settings = project / ".opencode/olympus-config.json"
+        settings.write_bytes(b'{"schema_version":1,"overrides":{}}\n')
+        marker = settings.parent / config_apply_transaction._SETTINGS_RECOVERY_MARKER
+        env = self.env.copy()
+        env["OLYMPUS_CONFIG_FILE"] = str(settings)
+
+        with mock.patch.dict(os.environ, env, clear=True):
+            with mock.patch(
+                    "olympus.config_apply_transaction._write_record_new",
+                    side_effect=KeyboardInterrupt("leave only the shared recovery pointer")):
+                with self.assertRaises(KeyboardInterrupt):
+                    user_config.set_override(ROOT, "nox", "effort", "high", "project", project)
+        self.assertTrue(marker.is_file())
+        self.assertFalse((project / ".olympus-cli-config-apply").exists())
+
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual("no_changes", config_apply_transaction.recover(project, ROOT))
+            user_config.set_override(ROOT, "atlas", "effort", "high", "global")
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"atlas": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+
+    def test_global_writers_detect_markerless_project_settings_journal_on_shared_path(self):
+        project = self._create_project()
+        settings = project / ".opencode/olympus-config.json"
+        settings.write_bytes(b'{"schema_version":1,"overrides":{}}\n')
+        before = settings.read_bytes()
+        original_agent = (project / ".opencode/agents/nox.md").read_bytes()
+        env = self.env.copy()
+        env["OLYMPUS_CONFIG_FILE"] = str(
+            project / ".opencode/../.opencode/OLYMPUS-CONFIG.JSON"
+        )
+        publish = config_apply_transaction._settings_publish
+
+        def interrupt_after_agent(*args, **kwargs):
+            result = publish(*args, **kwargs)
+            if args[4] == ".opencode/agents/nox.md":
+                raise KeyboardInterrupt("leave markerless legacy project settings journal")
+            return result
+
+        with mock.patch.dict(os.environ, env, clear=True):
+            with mock.patch("olympus.config_apply_transaction._begin_settings_recovery", return_value=None):
+                with mock.patch(
+                        "olympus.config_apply_transaction._settings_publish",
+                        side_effect=interrupt_after_agent):
+                    with self.assertRaises(KeyboardInterrupt):
+                        user_config.set_override(ROOT, "nox", "effort", "high", "project", project)
+
+        pending = project / ".olympus-cli-config-apply/record.json"
+        marker = settings.parent / config_apply_transaction._SETTINGS_RECOVERY_MARKER
+        self.assertTrue(pending.is_file())
+        self.assertFalse(marker.exists())
+
+        blocked = None
+        with mock.patch.dict(os.environ, env, clear=True):
+            try:
+                user_config.set_override(ROOT, "atlas", "effort", "high", "global")
+            except user_config.UserConfigError as error:
+                blocked = error
+        self.assertEqual(before, settings.read_bytes())
+        self.assertIsNotNone(blocked, "global setter changed preferences past a markerless project journal")
+        self.assertRegex(str(blocked), "pending.*project")
+
+        unrelated_settings = self.sandbox / "unrelated-preferences/config.json"
+        unrelated_env = env.copy()
+        unrelated_env["OLYMPUS_CONFIG_FILE"] = str(unrelated_settings)
+        with mock.patch.dict(os.environ, unrelated_env, clear=True):
+            user_config.set_override(ROOT, "atlas", "effort", "high", "global")
+        self.assertTrue(unrelated_settings.is_file())
+
+        with mock.patch.dict(os.environ, env, clear=True):
+            with self.assertRaisesRegex(user_config.UserConfigError, "pending.*project"):
+                user_config.set_max_children(ROOT, 3)
+            self.assertEqual("rolled_back", config_apply_transaction.recover(project, ROOT))
+            user_config.set_override(ROOT, "veyra", "effort", "high", "global")
+        self.assertEqual(original_agent, (project / ".opencode/agents/nox.md").read_bytes())
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"veyra": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+
+    def test_preference_lock_identity_survives_leaf_replacement_and_case_alias(self):
+        settings = self.appdata / "Olympus/config.json"
+        settings.parent.mkdir(parents=True)
+        settings.write_bytes(b"old\n")
+        alias = (
+            settings.parent.parent / settings.parent.name.upper() / ".."
+            / settings.parent.name.upper() / settings.name.upper()
+        )
+        lock = user_config._acquire_preference_lock(settings)
+        lock_identity = lock.identity
+        probe = f"""import sys
+from pathlib import Path
+sys.path.insert(0, {str(self.source_root)!r})
+from olympus import source_edit, user_config
+try:
+    lock = user_config._acquire_preference_lock(Path(sys.argv[1]))
+except source_edit.LockBusy:
+    print("BUSY")
+else:
+    source_edit._release_lock(lock)
+    print("ACQUIRED")
+"""
+        try:
+            user_config._write_atomic(settings, b"replacement\n", expected_old=b"old\n")
+            self.assertEqual(lock_identity, source_edit._lock_identity(lock))
+            busy = subprocess.run(
+                [sys.executable, "-B", "-c", probe, str(alias)], cwd=self.source_root, env=self.env,
+                capture_output=True, text=True, encoding="utf-8", timeout=15, check=False,
+            )
+            self.assertEqual(0, busy.returncode, busy.stdout + busy.stderr)
+            self.assertEqual("BUSY", busy.stdout.strip())
+            self.assertEqual(b"replacement\n", settings.read_bytes())
+        finally:
+            source_edit._release_lock(lock)
+
+        released = subprocess.run(
+            [sys.executable, "-B", "-c", probe, str(alias)], cwd=self.source_root, env=self.env,
+            capture_output=True, text=True, encoding="utf-8", timeout=15, check=False,
+        )
+        self.assertEqual(0, released.returncode, released.stdout + released.stderr)
+        self.assertEqual("ACQUIRED", released.stdout.strip())
+
+    def test_project_recovery_obeys_preference_lock_and_releases_target_lock(self):
+        project = self._create_project()
+        agent = project / ".opencode/agents/nox.md"
+        original = agent.read_bytes()
+        publish = config_apply_transaction._settings_publish
+
+        def interrupt_after_agent(*args, **kwargs):
+            result = publish(*args, **kwargs)
+            if args[4] == ".opencode/agents/nox.md":
+                raise KeyboardInterrupt("leave project recovery evidence")
+            return result
+
+        with mock.patch("olympus.config_apply_transaction._settings_publish", side_effect=interrupt_after_agent):
+            with self.assertRaises(KeyboardInterrupt):
+                user_config.set_override(ROOT, "nox", "effort", "high", "project", project)
+
+        pending = project / ".olympus-cli-config-apply/record.json"
+        preferences = project / ".opencode/olympus-config.json"
+        owner = self._start_preference_lock_owner(preferences)
+        try:
+            with self.assertRaisesRegex(
+                    config_apply_transaction.TransactionError,
+                    "shared preferences lock.*owned by another process"):
+                config_apply_transaction.recover(project, ROOT)
+            self.assertTrue(pending.is_file())
+            self.assertNotEqual(original, agent.read_bytes())
+        finally:
+            self._stop_preference_lock_owner(owner)
+
+        self.assertEqual("rolled_back", config_apply_transaction.recover(project, ROOT))
+        self.assertEqual(original, agent.read_bytes())
+        self.assertFalse((project / ".olympus-cli-config-apply").exists())
+
+    def test_global_recovery_obeys_preference_lock_and_releases_target_lock(self):
+        settings = self.appdata / "Olympus/config.json"
+        agent = self._agent("nox")
+        original_agent, original_manifest = agent.read_bytes(), self.manifest_path.read_bytes()
+        publish = config_apply_transaction._settings_publish
+
+        def interrupt_after_agent(*args, **kwargs):
+            result = publish(*args, **kwargs)
+            if args[4] == "agents/nox.md":
+                raise KeyboardInterrupt("leave global recovery evidence")
+            return result
+
+        with mock.patch("olympus.config_apply_transaction._settings_publish", side_effect=interrupt_after_agent):
+            with self.assertRaises(KeyboardInterrupt):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+
+        pending = self.root / ".olympus-cli-config-apply/record.json"
+        owner = self._start_preference_lock_owner(settings)
+        try:
+            with self.assertRaisesRegex(
+                    config_apply_transaction.TransactionError,
+                    "shared preferences lock.*owned by another process"):
+                config_apply_transaction.recover_global(self.root, ROOT, load_renderer=load_renderer)
+            self.assertTrue(pending.is_file())
+            self.assertNotEqual(original_agent, agent.read_bytes())
+        finally:
+            self._stop_preference_lock_owner(owner)
+
+        self.assertEqual(
+            "rolled_back",
+            config_apply_transaction.recover_global(self.root, ROOT, load_renderer=load_renderer),
+        )
+        self.assertEqual(original_agent, agent.read_bytes())
+        self.assertEqual(original_manifest, self.manifest_path.read_bytes())
+        self.assertFalse(settings.exists())
+        self.assertFalse((self.root / ".olympus-cli-config-apply").exists())
+
+    @unittest.skipUnless(os.name == "nt", "Windows directory access-mask regression.")
+    def test_windows_preference_parent_read_uses_non_mutating_access_mask(self):
+        import ctypes
+        import ctypes.wintypes
+        from types import SimpleNamespace
+
+        parent = self.appdata / "read-mask-parent"
+        parent.mkdir()
+        metadata = os.lstat(parent)
+        requests = []
+
+        class Kernel:
+            @staticmethod
+            def CreateFileW(*args):
+                requests.append(args)
+                return 41
+
+            @staticmethod
+            def CloseHandle(_handle):
+                return 1
+
+        with mock.patch(
+                "olympus.user_config._win_api",
+                return_value=(ctypes, ctypes.wintypes, Kernel(), object()),
+        ), mock.patch(
+                "olympus.user_config._win_handle_info",
+                return_value=(SimpleNamespace(attributes=0x10), (metadata.st_dev, metadata.st_ino), 0),
+        ):
+            handle, identity = user_config._win_open_directory(parent)
+            user_config._win_api()[2].CloseHandle(handle)
+            self.assertEqual((metadata.st_dev, metadata.st_ino), identity)
+            write_handle, _ = user_config._win_open_directory(parent, create=True)
+            user_config._win_api()[2].CloseHandle(write_handle)
+
+        self.assertEqual(2, len(requests))
+        self.assertEqual(0x0001 | 0x0020 | 0x0080, requests[0][1])
+        self.assertEqual(0x0001 | 0x0002 | 0x0020 | 0x0040 | 0x0080, requests[1][1])
+
+    @unittest.skipUnless(os.name == "nt", "Native Windows ACL compatibility regression.")
+    def test_windows_readable_preferences_work_with_nonmodifiable_parent_acl(self):
+        settings = self.appdata / "read-only-parent" / "config.json"
+        settings.parent.mkdir()
+        settings.write_text('{"schema_version":1,"overrides":{}}\n', encoding="utf-8")
+        icacls = shutil.which("icacls")
+        if icacls is None:
+            self.skipTest("icacls is unavailable; native parent ACL compatibility NOT RUN")
+        identity = subprocess.run(
+            [self.pwsh, "-NoProfile", "-NonInteractive", "-Command",
+             "[Security.Principal.WindowsIdentity]::GetCurrent().Name"],
+            capture_output=True, text=True, encoding="utf-8", timeout=15, check=False,
+        )
+        if identity.returncode:
+            self.skipTest("Cannot establish the disposable ACL fixture identity: " + identity.stderr)
+        user = identity.stdout.strip()
+
+        def restore_acl():
+            result = subprocess.run(
+                [icacls, str(settings.parent), "/remove:d", user],
+                capture_output=True, text=True, encoding="utf-8", timeout=20, check=False,
+            )
+            if result.returncode:
+                result = subprocess.run(
+                    [icacls, str(settings.parent), "/grant:r", f"{user}:(OI)(CI)(F)", "/T", "/C"],
+                    capture_output=True, text=True, encoding="utf-8", timeout=20, check=False,
+                )
+            return result
+
+        deny = subprocess.run(
+            [icacls, str(settings.parent), "/deny", f"{user}:(WD,AD,DC)"],
+            capture_output=True, text=True, encoding="utf-8", timeout=20, check=False,
+        )
+        if deny.returncode:
+            restored = restore_acl()
+            self.assertEqual(0, restored.returncode, restored.stdout + restored.stderr)
+            self.skipTest("Disposable parent ACL setup unsupported or denied: " + deny.stdout + deny.stderr)
+        env = self.env.copy()
+        env["OLYMPUS_CONFIG_FILE"] = str(settings)
+        try:
+            with mock.patch.dict(os.environ, env, clear=True):
+                self.assertEqual(
+                    {"schema_version": 1, "overrides": {}},
+                    user_config.read_config(ROOT, "global"),
+                )
+            with self.assertRaises(PermissionError):
+                (settings.parent / "write-probe").write_bytes(b"must be denied")
+        finally:
+            restored = restore_acl()
+            self.assertEqual(0, restored.returncode, restored.stdout + restored.stderr)
+
+    @unittest.skipUnless(os.name == "nt", "Handle-bound Windows file mode check requires Windows.")
+    def test_global_preference_temporary_mode_is_set_through_open_handle(self):
+        settings = self.appdata / "Olympus/config.json"
+        settings.parent.mkdir(parents=True)
+        with mock.patch("olympus.user_config.os.chmod", side_effect=AssertionError("path-based chmod used")), \
+                mock.patch("olympus.user_config._win_set_mode", wraps=user_config._win_set_mode) as set_mode:
+            user_config._write_atomic(
+                settings, b'{"schema_version":1,"overrides":{}}\n', mode=0o444,
+            )
+
+        set_mode.assert_called_once()
+        self.assertEqual(0o444, set_mode.call_args.args[1])
+        self.assertEqual(0o444, settings.stat().st_mode & 0o777)
+
+    def test_global_preference_parent_identity_mismatch_preserves_destination(self):
+        settings = self.appdata / "Olympus/config.json"
+        settings.parent.mkdir(parents=True)
+        original = b'{"schema_version":1,"overrides":{}}\n'
+        settings.write_bytes(original)
+        parent = settings.parent.stat()
+        with self.assertRaisesRegex(OSError, "parent identity changed"):
+            user_config._write_atomic(
+                settings, b'{"schema_version":1,"overrides":{"nox":{"effort":"high"}}}\n',
+                expected_old=original, parent_identity=(parent.st_dev, parent.st_ino + 1),
+            )
+        self.assertEqual(original, settings.read_bytes())
+
+    def test_global_preference_unexpected_destination_is_preserved(self):
+        settings = self.appdata / "Olympus/config.json"
+        settings.parent.mkdir(parents=True)
+        foreign = b'{"schema_version":1,"overrides":{"atlas":{"effort":"low"}}}\n'
+        settings.write_bytes(foreign)
+        with self.assertRaisesRegex(OSError, "changed before its atomic replacement"):
+            user_config._write_atomic(
+                settings, b'{"schema_version":1,"overrides":{"nox":{"effort":"high"}}}\n',
+                expected_old=b'{"schema_version":1,"overrides":{}}\n',
+            )
+        self.assertEqual(foreign, settings.read_bytes())
+
+    def test_global_preference_read_treats_missing_parent_as_empty_without_creating_it(self):
+        missing = self.sandbox / "not-created" / "Olympus/config.json"
+        env = self.env.copy()
+        env["OLYMPUS_CONFIG_FILE"] = str(missing)
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(
+                {"schema_version": 1, "overrides": {}},
+                user_config.read_config(ROOT, "global"),
+            )
+        self.assertFalse(missing.parent.exists())
+
+    def test_global_preference_read_does_not_treat_midread_disappearance_as_absent(self):
+        settings = self.appdata / "Olympus/config.json"
+        settings.parent.mkdir(parents=True)
+        with mock.patch("olympus.user_config._read_entry", side_effect=FileNotFoundError("disappeared")):
+            with self.assertRaisesRegex(user_config.UserConfigError, "not valid JSON"):
+                user_config.read_config(ROOT, "global")
+
+    def test_global_override_recovery_keeps_journal_after_post_replace_error(self):
+        settings = self.appdata / "Olympus/config.json"
+        real_rename = user_config._win_rename
+
+        def replace_then_error(descriptor, parent_handle, name, *, replace):
+            real_rename(descriptor, parent_handle, name, replace=replace)
+            if replace and name.casefold() == settings.name.casefold():
+                raise OSError("injected post-replacement failure")
+
+        with mock.patch("olympus.user_config._win_rename", side_effect=replace_then_error):
+            with self.assertRaisesRegex(
+                    user_config.UserConfigError, "replacement occurred.*preserve.*recovery evidence"):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+        self.assertTrue((self.root / ".olympus-cli-config-apply/record.json").is_file())
+        output = io.StringIO()
+        with mock.patch.dict(os.environ, self.env), contextlib.redirect_stdout(output):
+            code = main([
+                "--source", str(ROOT), "config", "recover", "--scope", "global", "--harness", "opencode",
+            ])
+        self.assertEqual(0, code, output.getvalue())
+        self.assertIn("Recovery: committed_cleanup", output.getvalue())
+        self.assertFalse((self.root / ".olympus-cli-config-apply").exists())
 
     def test_global_override_fails_closed_for_unresolved_or_unsafe_root(self):
         settings = self.sandbox / "unresolved-override" / "Olympus" / "config.json"

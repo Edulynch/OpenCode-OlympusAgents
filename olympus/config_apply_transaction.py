@@ -30,6 +30,13 @@ class TransactionError(RuntimeError):
         self.code = code
 
 
+class TransactionUnconfirmed(TransactionError):
+    """A journaled publication happened, but a required barrier or check failed."""
+
+    def __init__(self, message: str):
+        super().__init__(message, 4)
+
+
 @dataclass(frozen=True, slots=True)
 class Change:
     path: str
@@ -426,7 +433,10 @@ def _persist_record(target: Path, scratch: Path, record: dict, lock, identity,
     temporary = scratch / ".record.json.tmp"
     payload = _canonical_record(record)
     record_mode = 0o666 if os.name == "nt" else 0o600
-    source_edit._write_private_file(temporary, target, relative_tmp, payload, record_mode, lock, identity)
+    temporary_identity = source_edit._write_private_file(
+        temporary, target, relative_tmp, payload, record_mode, lock, identity,
+    )
+    settings_record = record.get("kind") == _SETTINGS_KIND
     if previous is None:
         record_relative = f"{_SCRATCH}/{_RECORD}"
         try:
@@ -445,20 +455,58 @@ def _persist_record(target: Path, scratch: Path, record: dict, lock, identity,
     try:
         os.replace(temporary, target / f"{_SCRATCH}/{_RECORD}")
     except OSError as error:
+        if settings_record:
+            try:
+                _, current = _read(target, f"{_SCRATCH}/{_RECORD}")
+                if (current.st_dev, current.st_ino) == temporary_identity:
+                    raise TransactionUnconfirmed(
+                        f"User-settings {record['state']} record replacement occurred but was not "
+                        f"confirmed; preserve recovery evidence: {error}"
+                    ) from error
+            except TransactionUnconfirmed:
+                raise
+            except Exception:
+                pass
         raise TransactionError(f"Cannot persist project-apply {record['state']} record: {error}", 4) from error
-    source_edit._sync_directory(scratch)
-    written, metadata = _read(target, f"{_SCRATCH}/{_RECORD}")
-    if written != payload:
-        raise TransactionError(f"Persisted project-apply {record['state']} record failed verification", 4)
+    if settings_record:
+        try:
+            scratch_identity = record["scratch_identity"]
+            _settings_sync_directory(
+                scratch, (scratch_identity["st_dev"], scratch_identity["st_ino"]),
+            )
+            written, metadata = _read(target, f"{_SCRATCH}/{_RECORD}")
+            if (written != payload
+                    or (metadata.st_dev, metadata.st_ino) != temporary_identity):
+                raise OSError("Persisted user-settings record failed byte or identity verification")
+        except (OSError, TransactionError) as error:
+            raise TransactionUnconfirmed(
+                f"User-settings {record['state']} record was replaced but its namespace barrier or "
+                f"verification failed; preserve recovery evidence: {error}"
+            ) from error
+    else:
+        source_edit._sync_directory(scratch)
+        written, metadata = _read(target, f"{_SCRATCH}/{_RECORD}")
+        if written != payload:
+            raise TransactionError(f"Persisted project-apply {record['state']} record failed verification", 4)
     return record, written, metadata
 
 
 def _write_record_new(target: Path, record: dict, lock, identity):
     scratch = target / _SCRATCH
+    target_metadata = os.lstat(target)
+    target_identity = (target_metadata.st_dev, target_metadata.st_ino)
     source_edit._make_directory(scratch, target, lock, identity)
     scratch_stat = os.lstat(scratch)
     record["scratch_identity"] = {"st_dev": scratch_stat.st_dev, "st_ino": scratch_stat.st_ino}
-    source_edit._sync_directory(target)
+    if record.get("kind") == _SETTINGS_KIND:
+        try:
+            _settings_sync_directory(target, target_identity)
+        except OSError as error:
+            raise TransactionError(
+                f"Cannot persist the user-settings recovery directory entry: {error}", 4,
+            ) from error
+    else:
+        source_edit._sync_directory(target)
     return _persist_record(target, scratch, record, lock, identity)
 
 
@@ -530,6 +578,9 @@ def recover(target: Path, source: Path) -> str:
         lock = source_edit._acquire_lock(target, create=False)
     except source_edit.LockError as error:
         raise TransactionError(f"Project recovery requires the existing stable target lock: {error}", 3) from error
+    preference_lock = None
+    from . import user_config
+
     try:
         try:
             os.lstat(target / source_edit._SCRATCH_NAME)
@@ -539,10 +590,58 @@ def recover(target: Path, source: Path) -> str:
             raise TransactionError("A source-edit batch is pending in this target; recover it before project recovery.", 3)
         context = _record_context(target, lock, settings_source=source)
         if context is None:
+            preference_path = target / ".opencode/olympus-config.json"
+            marker, _ = _settings_marker_read(preference_path)
+            if marker is not None and marker["state"] == "pending":
+                try:
+                    preference_lock = user_config._acquire_preference_lock(
+                        preference_path, create_parent=False,
+                    )
+                except (source_edit.LockError, OSError) as error:
+                    raise TransactionError(
+                        f"Project recovery cannot acquire the shared preferences lock: {error}",
+                        4 if isinstance(error, source_edit.LockIdentityError) else 3,
+                    ) from error
+                _finish_orphan_settings_recovery(preference_path, target, "project", lock)
             return "no_changes"
         record, record_raw, record_metadata = context
-        return _recover_cycle(target, source, lock, record, record_raw, record_metadata)
+        if record.get("kind") == _SETTINGS_KIND:
+            preference_path = target / ".opencode/olympus-config.json"
+            try:
+                preference_lock = user_config._acquire_preference_lock(
+                    preference_path, create_parent=False,
+                )
+            except (source_edit.LockError, OSError) as error:
+                raise TransactionError(
+                    f"Project recovery cannot acquire the shared preferences lock: {error}",
+                    4 if isinstance(error, source_edit.LockIdentityError) else 3,
+                ) from error
+            confirmed_context = _record_context(target, lock, settings_source=source)
+            if (confirmed_context is None or confirmed_context[1] != record_raw
+                    or (confirmed_context[2].st_dev, confirmed_context[2].st_ino)
+                    != (record_metadata.st_dev, record_metadata.st_ino)):
+                raise TransactionError(
+                    "Project user-settings record changed while acquiring its shared lock; preserve recovery evidence",
+                    4,
+                )
+            record, record_raw, record_metadata = confirmed_context
+            _check_settings_recovery_owner(preference_path, record)
+        result = _recover_cycle(target, source, lock, record, record_raw, record_metadata)
+        if record.get("kind") == _SETTINGS_KIND:
+            _finish_settings_recovery(preference_path, record)
+        return result
     finally:
+        try:
+            if preference_lock is not None:
+                source_edit._release_lock(preference_lock)
+        except source_edit.LockError as error:
+            try:
+                source_edit._release_lock(lock)
+            except source_edit.LockError:
+                pass
+            raise TransactionError(
+                f"Shared preferences lock identity became unconfirmed during project recovery: {error}", 4,
+            ) from error
         try:
             source_edit._release_lock(lock)
         except source_edit.LockError as error:
@@ -1212,6 +1311,7 @@ def commit_global(target: Path, source: Path, changes: tuple[GlobalChange, ...],
 _SETTINGS_KIND = "user_config"
 _SETTINGS_PREFERENCES = "@global-user-config"
 _SETTINGS_LIMIT = 2_000_000
+_SETTINGS_RECOVERY_MARKER = ".olympus-user-config-recovery"
 
 
 def _settings_absolute(path: Path) -> Path:
@@ -1220,6 +1320,8 @@ def _settings_absolute(path: Path) -> Path:
 
 def _settings_parent(path: Path, *, create: bool = False) -> tuple[Path, os.stat_result]:
     """Resolve a global preferences parent without accepting links or reparse points."""
+    from . import user_config
+
     path = _settings_absolute(path)
     if not path.is_absolute() or not path.name:
         raise TransactionError("Global user configuration path is not a safe file path", 4)
@@ -1250,61 +1352,41 @@ def _settings_parent(path: Path, *, create: bool = False) -> tuple[Path, os.stat
             or getattr(metadata, "st_file_attributes", 0) & _REPARSE_POINT
             or not metadata.st_ino):
         raise TransactionError("Global user configuration parent identity is unsafe or unavailable", 4)
+    try:
+        handle, identity = user_config._open_parent_directory(path)
+        try:
+            if identity != (metadata.st_dev, metadata.st_ino):
+                raise TransactionError("Global user configuration parent changed while opening", 4)
+        finally:
+            user_config._close_parent_directory(handle)
+    except OSError as error:
+        raise TransactionError(f"Cannot bind global user configuration parent: {error}", 4) from error
     return parent, metadata
 
 
 def _settings_external_read(path: Path, parent_identity: tuple[int, int] | None = None):
-    path = _settings_absolute(path)
-    parent, parent_metadata = _settings_parent(path)
-    identity = (parent_metadata.st_dev, parent_metadata.st_ino)
-    if parent_identity is not None and identity != parent_identity:
-        raise TransactionError("Global user configuration parent identity changed; preserve recovery evidence", 4)
     try:
-        before = os.lstat(path)
-    except FileNotFoundError:
-        return None, None
+        from . import user_config
+
+        return user_config._read_atomic_target(path, parent_identity)
     except OSError as error:
-        raise TransactionError(f"Cannot inspect global user configuration: {error}", 4) from error
-    if (not stat.S_ISREG(before.st_mode) or stat.S_ISLNK(before.st_mode)
-            or getattr(before, "st_file_attributes", 0) & _REPARSE_POINT or before.st_nlink != 1
-            or before.st_size > _SETTINGS_LIMIT):
-        raise TransactionError("Global user configuration is linked, oversized, or not a private regular file", 4)
-    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0)
+        raise TransactionError(f"Cannot safely inspect global user configuration: {error}", 4) from error
+
+
+def _settings_sync_directory(path: Path, expected_identity: tuple[int, int] | None = None) -> None:
+    """Require a POSIX directory-entry barrier; Windows is limited to identity checks."""
+    from . import user_config
+
+    path = Path(os.path.abspath(os.fspath(path)))
+    handle, identity = user_config._open_parent_directory(path / ".olympus-sync-target")
     try:
-        descriptor = os.open(path, flags)
-    except OSError as error:
-        raise TransactionError(f"Cannot safely open global user configuration: {error}", 4) from error
-    try:
-        opened = os.fstat(descriptor)
-        if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
-                or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
-                or getattr(opened, "st_file_attributes", 0) & _REPARSE_POINT):
-            raise TransactionError("Global user configuration changed identity while opening", 4)
-        chunks = []
-        total = 0
-        while True:
-            block = os.read(descriptor, min(1024 * 1024, _SETTINGS_LIMIT + 1 - total))
-            if not block:
-                break
-            chunks.append(block)
-            total += len(block)
-            if total > _SETTINGS_LIMIT:
-                raise TransactionError("Global user configuration exceeds the safety limit", 4)
-        after = os.fstat(descriptor)
-        try:
-            path_after = os.lstat(path)
-        except OSError as error:
-            raise TransactionError("Global user configuration disappeared while reading", 4) from error
-        _, parent_after = _settings_parent(path)
-        if ((opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
-                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
-                or (after.st_dev, after.st_ino) != (path_after.st_dev, path_after.st_ino)
-                or (parent_after.st_dev, parent_after.st_ino) != identity):
-            raise TransactionError("Global user configuration changed while reading", 4)
-        return b"".join(chunks), after
+        if expected_identity is not None and identity != expected_identity:
+            raise OSError("Transaction directory identity changed before synchronization")
+        if os.name == "posix":
+            os.fsync(handle)
+        user_config._verify_parent_directory(path / ".olympus-sync-target", identity)
     finally:
-        os.close(descriptor)
+        user_config._close_parent_directory(handle)
 
 
 def _settings_preference_descriptor(scope: str, target: Path, path: Path, *, create_parent: bool = False) -> dict:
@@ -1322,6 +1404,311 @@ def _settings_preference_descriptor(scope: str, target: Path, path: Path, *, cre
         "parent": str(parent),
         "parent_identity": {"st_dev": metadata.st_dev, "st_ino": metadata.st_ino},
     }
+
+
+def _settings_marker_payload(record: dict, state: str = "pending") -> dict:
+    return {
+        "schema_version": 1,
+        "state": state,
+        "operation_id": record["operation_id"],
+        "scope": record["scope"],
+        "target_root": record["target_root"],
+        "lock_identity": record["lock_identity"],
+        "preference_target": record["preference_target"],
+    }
+
+
+def _settings_marker_read(path: Path) -> tuple[dict | None, bytes | None]:
+    from . import user_config
+
+    marker_path = _settings_absolute(path).parent / _SETTINGS_RECOVERY_MARKER
+    try:
+        raw, _ = user_config._read_atomic_target(marker_path)
+    except OSError as error:
+        raise TransactionError(
+            f"Cannot safely inspect shared user-settings recovery evidence: {error}", 4,
+        ) from error
+    if raw is None:
+        return None, None
+    try:
+        marker = json.loads(raw.decode("utf-8"), object_pairs_hook=source_edit._json_object_no_duplicates)
+    except (UnicodeError, ValueError, TypeError) as error:
+        raise TransactionError(
+            "Shared user-settings recovery evidence is invalid; preserve it and do not change preferences", 4,
+        ) from error
+    if not isinstance(marker, dict) or set(marker) != {
+            "schema_version", "state", "operation_id", "scope", "target_root",
+            "lock_identity", "preference_target",
+    }:
+        raise TransactionError(
+            "Shared user-settings recovery evidence has missing or unexpected fields; preserve it", 4,
+        )
+    lock_identity = marker["lock_identity"]
+    if (type(marker["schema_version"]) is not int or marker["schema_version"] != 1
+            or marker["state"] not in ("pending", "resolved")
+            or marker["scope"] not in ("project", "global")
+            or not isinstance(marker["operation_id"], str)
+            or re.fullmatch(r"[0-9a-f]{32}", marker["operation_id"]) is None
+            or not isinstance(marker["target_root"], str)
+            or not Path(marker["target_root"]).is_absolute()
+            or not isinstance(lock_identity, dict)
+            or set(lock_identity) != {"path", "st_dev", "st_ino"}
+            or lock_identity.get("path") != source_edit._LOCK_NAME
+            or type(lock_identity.get("st_dev")) is not int
+            or type(lock_identity.get("st_ino")) is not int):
+        raise TransactionError(
+            "Shared user-settings recovery evidence is unsafe; preserve it and do not change preferences", 4,
+        )
+    preference_target = marker["preference_target"]
+    if marker["scope"] == "project":
+        if preference_target != {"relative": ".opencode/olympus-config.json"}:
+            raise TransactionError(
+                "Shared project user-settings recovery evidence names an unsupported preference path", 4,
+            )
+    else:
+        if (not isinstance(preference_target, dict)
+                or set(preference_target) != {"path", "parent", "parent_identity"}
+                or not isinstance(preference_target.get("path"), str)
+                or not isinstance(preference_target.get("parent"), str)
+                or not Path(preference_target["path"]).is_absolute()
+                or not Path(preference_target["parent"]).is_absolute()
+                or os.path.normcase(str(Path(preference_target["path"]).parent))
+                != os.path.normcase(preference_target["parent"])
+                or not isinstance(preference_target.get("parent_identity"), dict)
+                or set(preference_target["parent_identity"]) != {"st_dev", "st_ino"}
+                or any(type(value) is not int for value in preference_target["parent_identity"].values())):
+            raise TransactionError(
+                "Shared global user-settings recovery evidence names an unsafe preference path", 4,
+            )
+    return marker, raw
+
+
+def _settings_marker_write(path: Path, marker: dict, expected_raw: bytes | None) -> None:
+    from . import user_config
+
+    marker_path = _settings_absolute(path).parent / _SETTINGS_RECOVERY_MARKER
+    parent_handle = None
+    try:
+        parent_handle, parent_identity = user_config._open_parent_directory(path)
+        user_config._write_atomic(
+            marker_path, _canonical_record(marker), mode=0o666 if os.name == "nt" else 0o600,
+            expected_old=expected_raw,
+            parent_identity=parent_identity,
+        )
+    except OSError as error:
+        raise TransactionError(
+            f"Cannot confirm shared user-settings recovery evidence; preserve it: {error}", 4,
+        ) from error
+    finally:
+        if parent_handle is not None:
+            user_config._close_parent_directory(parent_handle)
+
+
+def _legacy_project_settings_pending(path: Path, source: Path) -> bool:
+    """Detect one markerless project settings journal only when this is its canonical preference path."""
+    from . import config_apply, install_routing
+
+    path = _settings_absolute(path)
+    if os.path.normcase(path.name) != os.path.normcase("olympus-config.json"):
+        return False
+    try:
+        preference_parent = path.parent.resolve(strict=True)
+        target = preference_parent.parent.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    if (os.path.normcase(preference_parent.name) != os.path.normcase(".opencode")
+            or os.path.normcase(str(preference_parent))
+            != os.path.normcase(str(target / ".opencode"))):
+        return False
+
+    scratch = target / _SCRATCH
+    try:
+        candidate_scratch_metadata = os.lstat(scratch)
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise TransactionError(f"Cannot inspect candidate project settings recovery: {error}", 4) from error
+
+    try:
+        target = install_routing._validate_project_target(source, target)
+    except config_apply.PreviewFault as error:
+        if error.issue_code in ("invalid_target", "source_is_target"):
+            return False
+        raise TransactionError(
+            f"Cannot confirm the managed project associated with pending preferences: {error}", 4,
+        ) from error
+    except (OSError, RuntimeError) as error:
+        raise TransactionError(
+            f"Cannot confirm the managed project associated with pending preferences: {error}", 4,
+        ) from error
+    project, _, blockers = config_apply._manifest_record(target)
+    if blockers:
+        if all(item.get("code") == "manifest_missing" for item in blockers):
+            return False
+        raise TransactionError(
+            "Cannot safely confirm the managed project associated with pending preferences; preserve its evidence", 4,
+        )
+    if (project is None or project.relative_path != ".opencode/orchestrator-install.json"
+            or "opencode" not in project.installed_harnesses):
+        return False
+
+    try:
+        scratch_metadata = os.lstat(scratch)
+        if ((candidate_scratch_metadata.st_dev, candidate_scratch_metadata.st_ino)
+                != (scratch_metadata.st_dev, scratch_metadata.st_ino)
+                or not stat.S_ISDIR(scratch_metadata.st_mode) or stat.S_ISLNK(scratch_metadata.st_mode)
+                or getattr(scratch_metadata, "st_file_attributes", 0) & _REPARSE_POINT):
+            raise TransactionError("Candidate project settings scratch is unsafe; preserve its evidence", 4)
+        top = set(os.listdir(scratch))
+    except TransactionError:
+        raise
+    except OSError as error:
+        raise TransactionError(f"Cannot inspect candidate project settings scratch: {error}", 4) from error
+    record_name = _RECORD if _RECORD in top else ".record.json.tmp" if ".record.json.tmp" in top else None
+    if record_name is None:
+        return False
+    raw, _ = _bounded_read(target, f"{_SCRATCH}/{record_name}", 6_000_000)
+    try:
+        record = json.loads(raw.decode("utf-8"), object_pairs_hook=source_edit._json_object_no_duplicates)
+    except (UnicodeError, ValueError, TypeError) as error:
+        raise TransactionError(
+            "Candidate project recovery record is invalid; preserve it and do not change preferences", 4,
+        ) from error
+    if not isinstance(record, dict):
+        raise TransactionError("Candidate project recovery record is not an object; preserve it", 4)
+    if "kind" not in record:
+        files = record.get("files")
+        if (isinstance(files, list)
+                and all(isinstance(item, dict) and isinstance(item.get("path"), str) for item in files)
+                and ".opencode/olympus-config.json" not in {item["path"] for item in files}):
+            return False
+        raise TransactionError(
+            "Cannot safely distinguish the pending project journal from shared user-settings recovery; preserve it",
+            4,
+        )
+    if record.get("kind") != _SETTINGS_KIND:
+        raise TransactionError("Candidate project recovery record has an unknown transaction kind; preserve it", 4)
+
+    lock_record = record.get("lock_identity")
+    scratch_identity = record.get("scratch_identity")
+    if (raw != _canonical_record(record)
+            or type(record.get("schema_version")) is not int or record["schema_version"] != 1
+            or record.get("scope") != "project" or record.get("target_root") != str(target)
+            or record.get("state") not in (("PREPARING",) if record_name == ".record.json.tmp"
+                                          else ("PREPARING", "PREPARED", "COMMITTED"))
+            or not isinstance(record.get("operation_id"), str)
+            or re.fullmatch(r"[0-9a-f]{32}", record["operation_id"]) is None
+            or record.get("preference_target") != {"relative": ".opencode/olympus-config.json"}
+            or not isinstance(lock_record, dict)
+            or set(lock_record) != {"path", "st_dev", "st_ino"}
+            or lock_record.get("path") != source_edit._LOCK_NAME
+            or type(lock_record.get("st_dev")) is not int
+            or type(lock_record.get("st_ino")) is not int
+            or not isinstance(scratch_identity, dict)
+            or set(scratch_identity) != {"st_dev", "st_ino"}
+            or type(scratch_identity.get("st_dev")) is not int
+            or type(scratch_identity.get("st_ino")) is not int
+            or (scratch_identity["st_dev"], scratch_identity["st_ino"])
+            != (scratch_metadata.st_dev, scratch_metadata.st_ino)):
+        raise TransactionError(
+            "Candidate project settings recovery identity is unsafe or mismatched; preserve its evidence", 4,
+        )
+    try:
+        lock_metadata = os.lstat(target / source_edit._LOCK_NAME)
+        lock_identity = source_edit._file_identity(lock_metadata, str(target / source_edit._LOCK_NAME))
+    except (OSError, source_edit.LockError) as error:
+        raise TransactionError(
+            f"Cannot confirm the candidate project settings lock identity: {error}", 4,
+        ) from error
+    if (lock_record["st_dev"], lock_record["st_ino"]) != lock_identity:
+        raise TransactionError(
+            "Candidate project settings journal does not match its stable root lock; preserve its evidence", 4,
+        )
+    return True
+
+
+def check_preference_recovery(path: Path, source: Path) -> None:
+    """Refuse a setter while its shared directory has a pending owner or canonical legacy project journal."""
+    marker, _ = _settings_marker_read(path)
+    if marker is not None and marker["state"] == "pending":
+        raise TransactionError(
+            "A pending shared user-settings recovery blocks preference changes; recover its matching transaction first",
+            3,
+        )
+    if _legacy_project_settings_pending(path, source):
+        raise TransactionError(
+            "A pending markerless project user-settings journal blocks shared preference changes; "
+            "recover that project first",
+            3,
+        )
+
+
+def _begin_settings_recovery(path: Path, record: dict) -> None:
+    marker, raw = _settings_marker_read(path)
+    if marker is not None and marker["state"] == "pending":
+        raise TransactionError(
+            "A pending shared user-settings recovery blocks preference changes; recover its matching transaction first",
+            3,
+        )
+    _settings_marker_write(path, _settings_marker_payload(record), raw)
+
+
+def _check_settings_recovery_owner(path: Path, record: dict) -> bool:
+    marker, _ = _settings_marker_read(path)
+    if marker is None:
+        return False
+    if marker != _settings_marker_payload(record):
+        raise TransactionError(
+            "Shared user-settings recovery evidence does not match this journal; preserve both records", 4,
+        )
+    return True
+
+
+def _finish_settings_recovery(path: Path, record: dict) -> None:
+    marker, raw = _settings_marker_read(path)
+    if marker is None:
+        return
+    pending = _settings_marker_payload(record)
+    if marker == _settings_marker_payload(record, "resolved"):
+        return
+    if marker != pending:
+        raise TransactionError(
+            "Shared user-settings recovery evidence changed or belongs to another journal; preserve it", 4,
+        )
+    _settings_marker_write(path, _settings_marker_payload(record, "resolved"), raw)
+
+
+def _finish_orphan_settings_recovery(path: Path, target: Path, scope: str, lock) -> None:
+    from . import user_config
+
+    marker, raw = _settings_marker_read(path)
+    if marker is None or marker["state"] == "resolved":
+        return
+    identity = source_edit._lock_identity(lock)
+    if (marker["scope"] != scope or marker["target_root"] != str(target)
+            or marker["lock_identity"] != {
+                "path": source_edit._LOCK_NAME, "st_dev": identity[0], "st_ino": identity[1],
+            }):
+        raise TransactionError(
+            "Pending shared user-settings recovery belongs to another root or scope; preserve its evidence", 4,
+        )
+    if scope == "project":
+        expected_preference = {"relative": ".opencode/olympus-config.json"}
+    else:
+        try:
+            expected_preference = _settings_preference_descriptor(
+                "global", target, user_config.config_path("global"),
+            )
+        except (OSError, RuntimeError, TransactionError) as error:
+            raise TransactionError(
+                f"Cannot bind the orphaned shared user-settings recovery evidence: {error}", 4,
+            ) from error
+    if marker["preference_target"] != expected_preference:
+        raise TransactionError(
+            "Pending shared user-settings recovery preference path differs from this recovery request; preserve it",
+            4,
+        )
+    _settings_marker_write(path, _settings_marker_payload(marker, "resolved"), raw)
 
 
 def _settings_agent_paths(record: dict) -> tuple[str, ...]:
@@ -1644,12 +2031,30 @@ def _settings_initial_temp(target: Path, source: Path, lock, scope: str):
     try:
         os.replace(temp_path, record_path)
     except OSError as error:
+        try:
+            promoted, promoted_metadata = _read(target, f"{_SCRATCH}/{_RECORD}")
+            if (promoted == raw and (promoted_metadata.st_dev, promoted_metadata.st_ino)
+                    == (metadata.st_dev, metadata.st_ino)):
+                raise TransactionUnconfirmed(
+                    f"Verified user-settings record promotion occurred but returned an error; "
+                    f"preserve recovery evidence: {error}"
+                ) from error
+        except TransactionUnconfirmed:
+            raise
+        except Exception:
+            pass
         raise TransactionError(f"Cannot promote verified user-settings record: {error}", 4) from error
-    source_edit._sync_directory(scratch)
-    promoted, promoted_metadata = _read(target, f"{_SCRATCH}/{_RECORD}")
-    if (promoted != raw or (promoted_metadata.st_dev, promoted_metadata.st_ino)
-            != (metadata.st_dev, metadata.st_ino)):
-        raise TransactionError("Promoted user-settings record failed identity verification", 4)
+    try:
+        scratch_identity = record["scratch_identity"]
+        _settings_sync_directory(scratch, (scratch_identity["st_dev"], scratch_identity["st_ino"]))
+        promoted, promoted_metadata = _read(target, f"{_SCRATCH}/{_RECORD}")
+        if (promoted != raw or (promoted_metadata.st_dev, promoted_metadata.st_ino)
+                != (metadata.st_dev, metadata.st_ino)):
+            raise OSError("Promoted user-settings record failed identity verification")
+    except (OSError, TransactionError) as error:
+        raise TransactionUnconfirmed(
+            f"Promoted user-settings record is unconfirmed; preserve recovery evidence: {error}"
+        ) from error
     return record, promoted, promoted_metadata
 
 
@@ -2029,11 +2434,62 @@ def _settings_final_state(target: Path, record: dict, file_map: dict[str, dict],
             raise TransactionError(f"User-settings destination changed during cleanup: {relative}", 4)
 
 
+def _settings_confirm_published_preference(target: Path, record: dict,
+                                           preference_entry: dict) -> None:
+    preference_path = (Path(record["preference_target"]["path"]) if record["scope"] == "global"
+                       else target / ".opencode/olympus-config.json")
+    current, metadata = _settings_read_target(
+        target, record, _SETTINGS_PREFERENCES if record["scope"] == "global"
+        else ".opencode/olympus-config.json",
+    )
+    if (current is None or _hash(current) != preference_entry["new_sha256"] or metadata is None
+            or stat.S_IMODE(metadata.st_mode) != preference_entry["mode"]):
+        raise TransactionError(
+            "Committed user preferences are missing, changed, or have the wrong mode; preserve recovery evidence",
+            4,
+        )
+    if record["scope"] == "global":
+        parent = record["preference_target"]["parent_identity"]
+        parent_identity = (parent["st_dev"], parent["st_ino"])
+    else:
+        parent_metadata = os.lstat(preference_path.parent)
+        parent_identity = (parent_metadata.st_dev, parent_metadata.st_ino)
+    try:
+        _settings_sync_directory(preference_path.parent, parent_identity)
+        verified, verified_metadata = _settings_read_target(
+            target, record, _SETTINGS_PREFERENCES if record["scope"] == "global"
+            else ".opencode/olympus-config.json",
+        )
+    except (OSError, TransactionError) as error:
+        raise TransactionUnconfirmed(
+            f"Committed preferences could not be durably revalidated; preserve recovery evidence: {error}"
+        ) from error
+    if (verified != current or verified_metadata is None
+            or (verified_metadata.st_dev, verified_metadata.st_ino)
+            != (metadata.st_dev, metadata.st_ino)
+            or stat.S_IMODE(verified_metadata.st_mode) != preference_entry["mode"]):
+        raise TransactionUnconfirmed(
+            "Committed preference path changed during final durability verification; preserve recovery evidence",
+        )
+
+
 def _settings_cleanup(target: Path, source: Path, lock, record: dict, record_raw: bytes,
                       record_metadata: os.stat_result, file_map: dict[str, dict],
                       expected_states: dict[str, str]) -> None:
     identity = source_edit._lock_identity(lock)
     scratch = target / _SCRATCH
+    settings_record = record.get("kind") == _SETTINGS_KIND
+    scratch_identity = (record["scratch_identity"]["st_dev"], record["scratch_identity"]["st_ino"])
+
+    def sync(path: Path, expected_identity: tuple[int, int] | None = None) -> None:
+        try:
+            _settings_sync_directory(path, expected_identity)
+        except OSError as error:
+            raise TransactionUnconfirmed(
+                f"User-settings cleanup changed directory entries but synchronization failed; "
+                f"preserve the remaining recovery evidence: {path}: {error}"
+            ) from error
+
     _ensure_scratch_identity(target, record)
     live = _settings_inspect(
         target, source, lock, record, record_raw, record_metadata,
@@ -2042,6 +2498,11 @@ def _settings_cleanup(target: Path, source: Path, lock, record: dict, record_raw
     artifacts = live["artifacts"]
     for relative, (raw, metadata) in artifacts.items():
         _safe_remove(target, relative, raw, stat.S_IMODE(metadata.st_mode), lock, identity)
+    if settings_record:
+        for directory in ("backups", "staged"):
+            if (scratch / directory).is_dir():
+                sync(scratch / directory)
+        sync(scratch, scratch_identity)
     for directory in ("staged", "backups"):
         try:
             os.lstat(scratch / directory)
@@ -2058,6 +2519,8 @@ def _settings_cleanup(target: Path, source: Path, lock, record: dict, record_raw
             os.rmdir(scratch / directory)
         except OSError as error:
             raise TransactionError(f"Cannot remove nonempty user-settings directory {directory}", 4) from error
+        if settings_record:
+            sync(scratch, scratch_identity)
     current, metadata = _read(target, f"{_SCRATCH}/{_RECORD}")
     if (current != record_raw or (metadata.st_dev, metadata.st_ino)
             != (record_metadata.st_dev, record_metadata.st_ino)):
@@ -2068,6 +2531,24 @@ def _settings_cleanup(target: Path, source: Path, lock, record: dict, record_raw
     )
     _settings_final_state(target, record, file_map, expected_states)
     _safe_remove(target, f"{_SCRATCH}/{_RECORD}", record_raw, stat.S_IMODE(record_metadata.st_mode), lock, identity)
+    if settings_record:
+        try:
+            sync(scratch, scratch_identity)
+        except TransactionUnconfirmed as error:
+            try:
+                _, restored_raw, _ = _persist_record(target, scratch, record, lock, identity)
+                if restored_raw != record_raw:
+                    raise TransactionError("Restored user-settings record differs from the removed record", 4)
+            except (OSError, TransactionError, source_edit.BatchError) as restore_error:
+                raise TransactionUnconfirmed(
+                    "User-settings final record-removal synchronization failed and exact recovery "
+                    f"record restoration could not be confirmed; preserve remaining evidence: "
+                    f"{error}; {restore_error}"
+                ) from error
+            raise TransactionUnconfirmed(
+                "User-settings final record-removal synchronization failed; recovery record was "
+                f"restored for normal recovery; preserve recovery evidence: {error}"
+            ) from error
     source_edit._lock_identity(lock, identity)
     scratch_metadata = os.lstat(scratch)
     if ((scratch_metadata.st_dev, scratch_metadata.st_ino)
@@ -2078,7 +2559,10 @@ def _settings_cleanup(target: Path, source: Path, lock, record: dict, record_raw
         os.rmdir(scratch)
     except OSError as error:
         raise TransactionError(f"Cannot remove empty user-settings scratch: {error}", 4) from error
-    source_edit._sync_directory(target)
+    if settings_record:
+        sync(target)
+    else:
+        source_edit._sync_directory(target)
 
 
 def _settings_publish(target: Path, source: Path, lock, record: dict, relative: str,
@@ -2103,6 +2587,12 @@ def _settings_publish(target: Path, source: Path, lock, record: dict, relative: 
     staged, staged_metadata = _read(target, stage_relative)
     if staged != content or stat.S_IMODE(staged_metadata.st_mode) != mode:
         raise TransactionError(f"User-settings staged bytes changed: {relative}", 4)
+    destination_parent = (target / relative).parent
+    staged_parent = (target / stage_relative).parent
+    destination_parent_metadata = os.lstat(destination_parent)
+    staged_parent_metadata = os.lstat(staged_parent)
+    destination_parent_identity = (destination_parent_metadata.st_dev, destination_parent_metadata.st_ino)
+    staged_parent_identity = (staged_parent_metadata.st_dev, staged_parent_metadata.st_ino)
     current, metadata = _global_target(target, relative)
     if current != expected_old or (
             current is not None and (metadata is None or stat.S_IMODE(metadata.st_mode) != mode)):
@@ -2111,11 +2601,35 @@ def _settings_publish(target: Path, source: Path, lock, record: dict, relative: 
     try:
         os.replace(target / stage_relative, target / relative)
     except OSError as error:
+        try:
+            replaced, replaced_metadata = _global_target(target, relative)
+            if (replaced == content and replaced_metadata is not None
+                    and (replaced_metadata.st_dev, replaced_metadata.st_ino)
+                    == (staged_metadata.st_dev, staged_metadata.st_ino)):
+                raise TransactionUnconfirmed(
+                    f"User-settings target replacement occurred but returned an error; preserve "
+                    f"recovery evidence: {relative}: {error}"
+                ) from error
+        except TransactionUnconfirmed:
+            raise
+        except Exception:
+            pass
         raise TransactionError(f"Cannot replace user-settings target {relative}: {error}", 4) from error
-    replaced, replaced_metadata = _global_target(target, relative)
-    if replaced != content or replaced_metadata is None or stat.S_IMODE(replaced_metadata.st_mode) != mode:
-        raise TransactionError(f"Replaced user-settings target failed verification: {relative}", 4)
-    source_edit._sync_directory((target / relative).parent)
+    try:
+        _settings_sync_directory(destination_parent, destination_parent_identity)
+        if staged_parent_identity != destination_parent_identity:
+            _settings_sync_directory(staged_parent, staged_parent_identity)
+        replaced, replaced_metadata = _global_target(target, relative)
+        if (replaced != content or replaced_metadata is None
+                or stat.S_IMODE(replaced_metadata.st_mode) != mode
+                or (replaced_metadata.st_dev, replaced_metadata.st_ino)
+                != (staged_metadata.st_dev, staged_metadata.st_ino)):
+            raise OSError("Published user-settings target failed byte, mode, or identity verification")
+    except (OSError, TransactionError) as error:
+        raise TransactionUnconfirmed(
+            f"User-settings target was replaced but its namespace barrier or verification failed; "
+            f"preserve recovery evidence: {relative}: {error}"
+        ) from error
 
 
 def _recover_settings_cycle(target: Path, source: Path, lock, record: dict, record_raw: bytes,
@@ -2131,6 +2645,10 @@ def _recover_settings_cycle(target: Path, source: Path, lock, record: dict, reco
         expected = _settings_expected_state(file_map, new=True)
         _settings_inspect(target, source, lock, record, record_raw, record_metadata,
                           expected_states=expected)
+        preference_relative = (
+            ".opencode/olympus-config.json" if scope == "project" else _SETTINGS_PREFERENCES
+        )
+        _settings_confirm_published_preference(target, record, file_map[preference_relative])
         _settings_cleanup(target, source, lock, record, record_raw, record_metadata, file_map, expected)
         return "committed_cleanup"
 
@@ -2148,6 +2666,7 @@ def _recover_settings_cycle(target: Path, source: Path, lock, record: dict, reco
             raise TransactionError(
                 "Preferences reached their commit point before all managed resources reached the new state", 4,
             )
+        _settings_confirm_published_preference(target, record, preference)
         expected = _settings_expected_state(file_map, new=True)
         _settings_cleanup(target, source, lock, record, record_raw, record_metadata, file_map, expected)
         return "committed_cleanup"
@@ -2205,6 +2724,10 @@ def _settings_commit_preferences(target: Path, source: Path, lock, record: dict,
     path = (target / entry["path"] if record["scope"] == "project"
             else Path(record["preference_target"]["path"]))
     mode = entry["mode"]
+    parent_identity = None
+    if record["scope"] == "global":
+        parent = record["preference_target"]["parent_identity"]
+        parent_identity = (parent["st_dev"], parent["st_ino"])
     identity = source_edit._lock_identity(lock)
 
     def verify_old() -> None:
@@ -2222,12 +2745,25 @@ def _settings_commit_preferences(target: Path, source: Path, lock, record: dict,
         root_check()
     verify_old()
     try:
-        user_config._write_atomic(path, content, mode=mode)
+        user_config._write_atomic(
+            path, content, mode=mode, expected_old=expected_old, parent_identity=parent_identity,
+        )
+    except user_config.AtomicWriteUnconfirmed as error:
+        raise TransactionUnconfirmed(
+            f"User preferences may have been replaced but their post-publication state is unconfirmed; "
+            f"preserve recovery evidence: {error}"
+        ) from error
     except OSError as error:
         raise TransactionError(f"Cannot atomically commit user preferences: {error}", 4) from error
-    current, metadata = _settings_read_target(target, record, entry["path"])
-    if current != content or metadata is None or stat.S_IMODE(metadata.st_mode) != mode:
-        raise TransactionError("Atomically committed user preferences failed verification", 4)
+    try:
+        current, metadata = _settings_read_target(target, record, entry["path"])
+        if current != content or metadata is None or stat.S_IMODE(metadata.st_mode) != mode:
+            raise OSError("Published user preferences changed after verification")
+    except (OSError, TransactionError) as error:
+        raise TransactionUnconfirmed(
+            f"User preferences were replaced but final path verification failed; preserve recovery "
+            f"evidence: {error}"
+        ) from error
 
 
 def commit_user_config(target: Path, source: Path, lock, scope: str, preference_path: Path,
@@ -2314,12 +2850,17 @@ def commit_user_config(target: Path, source: Path, lock, scope: str, preference_
             target, source, record, preference_old, preference_new, agent_changes,
             manifest_old, manifest_new,
         )
+    marker_path = (
+        target / ".opencode/olympus-config.json" if scope == "project" else preference_path
+    )
+    _begin_settings_recovery(marker_path, record)
     record, record_raw, record_metadata = _write_record_new(target, record, lock, identity)
     scratch = target / _SCRATCH
     prepared = False
     try:
         source_edit._make_directory(scratch / "backups", target, lock, identity)
         source_edit._make_directory(scratch / "staged", target, lock, identity)
+        _settings_sync_directory(scratch)
         for (relative, old, new, file_mode), entry in zip(changes, files):
             source_edit._lock_identity(lock, identity)
             current, metadata = _settings_read_target(target, record, relative)
@@ -2343,6 +2884,8 @@ def commit_user_config(target: Path, source: Path, lock, scope: str, preference_
             staged, staged_metadata = _read(target, staged_path)
             if staged != new or stat.S_IMODE(staged_metadata.st_mode) != file_mode:
                 raise TransactionError(f"User-settings staged output failed verification: {relative}", 4)
+        _settings_sync_directory(scratch / "backups")
+        _settings_sync_directory(scratch / "staged")
         record, record_raw, record_metadata = _persist_record(
             target, scratch, {**record, "state": "PREPARED"}, lock, identity,
             previous=(record, record_raw, record_metadata),
@@ -2402,8 +2945,11 @@ def commit_user_config(target: Path, source: Path, lock, scope: str, preference_
             target, source, lock, record, record_raw, record_metadata, expected_states=expected,
         )
         _settings_cleanup(target, source, lock, record, record_raw, record_metadata, file_map, expected)
+        _finish_settings_recovery(marker_path, record)
         return "committed"
     except Exception as error:
+        if isinstance(error, TransactionUnconfirmed):
+            raise
         try:
             context = (_global_record_context(target, lock, {}, source=source) if scope == "global"
                        else _record_context(target, lock, settings_source=source))
@@ -2418,10 +2964,12 @@ def commit_user_config(target: Path, source: Path, lock, scope: str, preference_
                     root_check=root_check,
                 )
                 if result in ("rolled_back", "discarded_uncommitted", "discarded_incomplete_prepare"):
+                    _finish_settings_recovery(marker_path, current_record)
                     raise TransactionError(
                         f"User-settings update failed; rollback was confirmed: {error}", 1,
                     ) from error
                 if result == "committed_cleanup":
+                    _finish_settings_recovery(marker_path, current_record)
                     return "committed"
         except TransactionError as recovery_error:
             if "rollback was confirmed" in str(recovery_error):
@@ -2496,6 +3044,7 @@ def recover_global(target: Path, source: Path, *, load_renderer) -> str:
     except source_edit.LockError as error:
         raise TransactionError(f"Global recovery requires the existing stable target lock: {error}",
                                4 if isinstance(error, source_edit.LockIdentityError) else 3) from error
+    preference_lock = None
     try:
         try:
             os.lstat(target / source_edit._SCRATCH_NAME)
@@ -2512,11 +3061,75 @@ def recover_global(target: Path, source: Path, *, load_renderer) -> str:
         expected = _global_expected(source, load_renderer)
         context = _global_record_context(target, lock, expected, source=source)
         if context is None:
+            from . import user_config
+
+            preference_path = user_config.config_path("global")
+            marker, _ = _settings_marker_read(preference_path)
+            if marker is not None and marker["state"] == "pending":
+                try:
+                    preference_lock = user_config._acquire_preference_lock(
+                        preference_path, create_parent=False,
+                    )
+                except (source_edit.LockError, OSError) as error:
+                    raise TransactionError(
+                        f"Global recovery cannot acquire the shared preferences lock: {error}",
+                        4 if isinstance(error, source_edit.LockIdentityError) else 3,
+                    ) from error
+                _finish_orphan_settings_recovery(preference_path, target, "global", lock)
             return "no_changes"
         record, record_raw, record_metadata = context
-        return _recover_cycle(target, source, lock, record, record_raw, record_metadata,
-                              expected=expected)
+        if record.get("kind") == _SETTINGS_KIND and record.get("scope") == "global":
+            descriptor = record.get("preference_target")
+            if isinstance(descriptor, dict) and isinstance(descriptor.get("path"), str):
+                from . import user_config
+
+                preference_path = Path(descriptor["path"])
+                configured = _settings_absolute(user_config.config_path("global"))
+                if os.path.normcase(str(configured)) == os.path.normcase(str(_settings_absolute(preference_path))):
+                    current_descriptor = _settings_preference_descriptor(
+                        "global", target, preference_path,
+                    )
+                    if current_descriptor == descriptor:
+                        try:
+                            preference_lock = user_config._acquire_preference_lock(preference_path)
+                        except source_edit.LockError as error:
+                            raise TransactionError(
+                                f"Global recovery cannot acquire the shared preferences lock: {error}",
+                                4 if isinstance(error, source_edit.LockIdentityError) else 3,
+                            ) from error
+                        except OSError as error:
+                            raise TransactionError(
+                                f"Global recovery cannot safely bind the shared preferences lock: {error}", 4,
+                            ) from error
+                        confirmed_context = _global_record_context(target, lock, expected, source=source)
+                        if (confirmed_context is None or confirmed_context[1] != record_raw
+                                or (confirmed_context[2].st_dev, confirmed_context[2].st_ino)
+                                != (record_metadata.st_dev, record_metadata.st_ino)):
+                            raise TransactionError(
+                                "Global user-settings record changed while acquiring its shared lock; "
+                                "preserve recovery evidence",
+                                4,
+                            )
+                        record, record_raw, record_metadata = confirmed_context
+                        _check_settings_recovery_owner(preference_path, record)
+        result = _recover_cycle(target, source, lock, record, record_raw, record_metadata,
+                                expected=expected)
+        if (record.get("kind") == _SETTINGS_KIND and record.get("scope") == "global"
+                and preference_lock is not None):
+            _finish_settings_recovery(preference_path, record)
+        return result
     finally:
+        try:
+            if preference_lock is not None:
+                source_edit._release_lock(preference_lock)
+        except source_edit.LockError as error:
+            try:
+                source_edit._release_lock(lock)
+            except source_edit.LockError:
+                pass
+            raise TransactionError(
+                f"Shared preferences lock identity became unconfirmed during recovery: {error}", 4,
+            ) from error
         try:
             source_edit._release_lock(lock)
         except source_edit.LockError as error:

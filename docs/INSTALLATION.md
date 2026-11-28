@@ -148,7 +148,16 @@ These project-scoped CLI operations do not install project resources.
 
 Global model and effort setters resolve the safe OpenCode root and coordinate
 with the installer and Python writers through the shared
-`.olympus-cli-edit.lock`. They refuse to read or update override/managed data
+`.olympus-cli-edit.lock`. Global preference writers also acquire the persistent
+empty `.olympus-user-config.lock` beside the selected preference file, so
+cooperating writers serialize even when they use different global OpenCode
+roots. Lock order is target-root lock, then preference lock; recovery follows
+the same order and only acquires the preference lock when the recorded path,
+current selection, and parent identity agree. Project preferences continue to
+use their project target lock. These locks coordinate Olympus writers only.
+They do not exclude unrelated processes running as the same user.
+
+Setters refuse to read or update override/managed data
 while `.olympus-cli-config-apply`, `.olympus-cli-edit`, or
 `olympus/opencode-guard-pending.json` indicates pending recovery; setters do not
 recover or remove these controls. If the root cannot be resolved safely, the
@@ -160,15 +169,50 @@ configuration.
 When a setter must update both preferences and a managed agent/manifest, it
 records exact recovery evidence under the same writer lock. If the process is
 interrupted, use the matching `olympus config recover` command before retrying.
-The atomic preference replacement is the commit point: if preferences still
-match their old bytes (or remain absent), recovery restores only transaction-owned
-managed files; if they match the exact new bytes, recovery keeps the committed
-preferences and managed outputs and only cleans the journal. Recovery never
-rewrites or removes preferences. Changed preference bytes, managed files, paths,
-or modes leave the evidence untouched for inspection. Keep the recorded global
-`OLYMPUS_CONFIG_FILE` selection in place until recovery finishes. Preference-only
-or single-file updates continue to use one atomic replacement without a journal.
-This covers process interruption, not power loss or hardware durability.
+The atomic preference replacement is the transaction commit point, but it is
+reported as committed only after exact bytes/mode and the recorded parent
+identity are revalidated. On Linux, the temporary preference file is flushed
+before replacement and the actual containing directory is `fsync`ed afterward;
+transaction journal transitions and managed-file namespace changes use the same
+required directory barriers before normal `COMMITTED` and cleanup. A post-
+replacement sync or verification failure is unconfirmed: the operation does not
+report success or automatically discard its recovery evidence. Recovery checks
+the recorded state and re-establishes the Linux preference-directory barrier
+before cleaning a committed journal. If the final journal-record removal barrier
+fails, Olympus attempts to restore and synchronize the exact recovery record; if
+that cannot be confirmed, the operation remains unconfirmed and any remaining
+evidence is preserved for inspection.
+
+On Windows, preference file data is flushed and the rename is performed relative
+to the opened parent-directory handle through the documented native
+`NtSetInformationFile` `FileRenameInformation` operation, then the resulting
+path and identity are checked. The Win32
+`SetFileInformationByHandle(FileRenameInfo)` wrapper returned
+`ERROR_INVALID_PARAMETER` for the relative-root form on the qualified host,
+although its current structure documentation permits a non-null `RootDirectory`;
+the native entry point succeeded with the documented relative-name structure.
+Olympus does not claim a Windows directory-entry flush or physical power-loss
+durability equivalent to Linux directory `fsync`; the Windows guarantee is
+atomic publication and recoverability across process interruption, subject to
+the filesystem's documented behavior.
+
+If preferences still match their old bytes (or remain absent), recovery restores
+only transaction-owned managed files; if they match the exact new bytes,
+recovery keeps the committed preferences and managed outputs and only cleans
+the journal. Recovery never rewrites or removes preferences. Changed preference
+bytes, managed files, paths, or modes leave the evidence untouched for
+inspection. Keep the recorded global `OLYMPUS_CONFIG_FILE` selection in place
+until recovery finishes. Preference-only or single-file updates continue to
+use one atomic replacement without a transaction journal.
+
+The expected-state check is not an atomic compare-and-swap. A non-cooperating
+process with the same credentials, an administrator, or another actor able to
+change the filesystem may race a check/use boundary; a resulting identity or
+state mismatch is rejected where observable, but Olympus does not claim
+absolute exclusion. The lock and directory checks do not impose a general ACL
+or preference-directory layout restriction. These guarantees cover process
+interruption and the stated Linux filesystem barriers, not universal hardware
+or power-loss durability.
 
 An incomplete or unsupported format is rejected without automatic conversion,
 adoption, or deletion. A complete current-format installation remains valid

@@ -9,6 +9,7 @@ import contextlib
 import io
 import os
 import shutil
+import stat
 import subprocess
 import struct
 import sys
@@ -896,6 +897,153 @@ class LinuxGlobalBackend(unittest.TestCase):
         )
         self.assertTrue((self.root / source_edit._LOCK_NAME).is_file())
         self.assertFalse((self.root / ".olympus-cli-config-apply").exists())
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Directory durability checks require Linux.")
+    def test_standalone_preferences_do_not_return_success_when_parent_sync_fails(self):
+        settings = self.preferences
+        real_fsync = os.fsync
+        failed_syncs = []
+
+        def fail_preferences_directory(descriptor):
+            metadata = os.fstat(descriptor)
+            try:
+                parent = settings.parent.stat()
+            except FileNotFoundError:
+                parent = None
+            if (parent is not None and stat.S_ISDIR(metadata.st_mode)
+                    and (metadata.st_dev, metadata.st_ino) == (parent.st_dev, parent.st_ino)
+                    and settings.exists()):
+                failed_syncs.append((metadata.st_dev, metadata.st_ino))
+                raise OSError(errno.EIO, "injected preferences-directory sync failure")
+            real_fsync(descriptor)
+
+        with mock.patch("os.fsync", side_effect=fail_preferences_directory):
+            with self.assertRaises(OSError):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+
+        self.assertTrue(failed_syncs, "the published preference parent must be synchronized before success")
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Directory durability checks require Linux.")
+    def test_transactional_preferences_keep_recovery_evidence_after_parent_sync_failure(self):
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        settings = self.preferences
+        real_fsync = os.fsync
+        failed_syncs = []
+
+        def fail_preferences_directory(descriptor):
+            metadata = os.fstat(descriptor)
+            try:
+                parent = settings.parent.stat()
+            except FileNotFoundError:
+                parent = None
+            if (parent is not None and stat.S_ISDIR(metadata.st_mode)
+                    and (metadata.st_dev, metadata.st_ino) == (parent.st_dev, parent.st_ino)
+                    and settings.exists()):
+                failed_syncs.append((metadata.st_dev, metadata.st_ino))
+                raise OSError(errno.EIO, "injected preferences-directory sync failure")
+            real_fsync(descriptor)
+
+        with mock.patch("os.fsync", side_effect=fail_preferences_directory):
+            with self.assertRaises(user_config.UserConfigError):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+
+        self.assertTrue(failed_syncs, "the preference namespace barrier must be attempted after replacement")
+        record_path = self.root / ".olympus-cli-config-apply/record.json"
+        self.assertTrue(record_path.is_file())
+        self.assertEqual("PREPARED", json.loads(record_path.read_bytes())["state"])
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+        self.assertEqual(
+            "committed_cleanup",
+            config_apply_transaction.recover_global(self.root, ROOT, load_renderer=load_renderer),
+        )
+        self.assertFalse((self.root / ".olympus-cli-config-apply").exists())
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Directory durability checks require Linux.")
+    def test_committed_record_sync_failure_is_unconfirmed_and_recoverable(self):
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        settings = self.preferences
+        scratch = self.root / ".olympus-cli-config-apply"
+        real_fsync = os.fsync
+        failed_syncs = []
+
+        def fail_committed_record_directory(descriptor):
+            metadata = os.fstat(descriptor)
+            record_path = scratch / "record.json"
+            if (stat.S_ISDIR(metadata.st_mode) and record_path.is_file()
+                    and (metadata.st_dev, metadata.st_ino)
+                    == (scratch.stat().st_dev, scratch.stat().st_ino)):
+                record = json.loads(record_path.read_bytes())
+                if record.get("state") == "COMMITTED":
+                    failed_syncs.append((metadata.st_dev, metadata.st_ino))
+                    raise OSError(errno.EIO, "injected COMMITTED journal-directory sync failure")
+            real_fsync(descriptor)
+
+        with mock.patch("os.fsync", side_effect=fail_committed_record_directory):
+            with self.assertRaisesRegex(user_config.UserConfigError, "COMMITTED record.*preserve recovery evidence"):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+
+        self.assertTrue(failed_syncs, "COMMITTED must be directory-synchronized before success")
+        record = json.loads((scratch / "record.json").read_bytes())
+        self.assertEqual("COMMITTED", record["state"])
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+        self.assertEqual(
+            "committed_cleanup",
+            config_apply_transaction.recover_global(self.root, ROOT, load_renderer=load_renderer),
+        )
+        self.assertFalse(scratch.exists())
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Directory durability checks require Linux.")
+    def test_record_removal_sync_failure_restores_committed_recovery_journal(self):
+        global_install.install(ROOT, version="local", commit="fixture-local")
+        settings = self.preferences
+        scratch = self.root / ".olympus-cli-config-apply"
+        record_path = scratch / "record.json"
+        real_sync = config_apply_transaction._settings_sync_directory
+        observed_committed = []
+        failed_syncs = []
+
+        def fail_after_record_removal(path, expected_identity=None):
+            if Path(path) == scratch:
+                if record_path.is_file():
+                    record = json.loads(record_path.read_bytes())
+                    if record.get("state") == "COMMITTED":
+                        observed_committed.append(True)
+                elif observed_committed and not failed_syncs:
+                    failed_syncs.append(path)
+                    raise OSError(errno.EIO, "injected final journal-removal sync failure")
+            real_sync(path, expected_identity)
+
+        with mock.patch(
+                "olympus.config_apply_transaction._settings_sync_directory",
+                side_effect=fail_after_record_removal):
+            with self.assertRaisesRegex(
+                    user_config.UserConfigError,
+                    "final record-removal synchronization failed; recovery record was restored"):
+                user_config.set_override(ROOT, "nox", "effort", "high")
+
+        self.assertTrue(observed_committed, "the COMMITTED journal must be observed before cleanup")
+        self.assertEqual([scratch], failed_syncs, "only the post-COMMITTED record-removal barrier may fail")
+        record = json.loads(record_path.read_bytes())
+        self.assertEqual("COMMITTED", record["state"])
+        self.assertEqual(
+            {"schema_version": 1, "overrides": {"nox": {"effort": "high"}}},
+            json.loads(settings.read_text(encoding="utf-8")),
+        )
+        self.assertEqual(
+            "committed_cleanup",
+            config_apply_transaction.recover_global(self.root, ROOT, load_renderer=load_renderer),
+        )
+        self.assertFalse(scratch.exists())
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "Linux global settings recovery requires Linux.")
     def test_global_user_settings_recovery_rolls_back_interrupted_setters(self):
